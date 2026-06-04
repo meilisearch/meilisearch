@@ -9,7 +9,7 @@ use actix_http::header::{
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::{DeserializeError, Deserr, ValuePointerRef};
+use deserr::{DeserializeError, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError};
 use meilisearch_types::error::deserr_codes::{
@@ -44,20 +44,14 @@ use crate::extractors::authentication::GuardedData;
 pub struct WebhooksApi;
 
 /// Configuration for a webhook endpoint
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_webhook)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(deny_unknown_fields = deny_immutable_fields_webhook)]
+#[derive(Debug)]
 pub(super) struct WebhookSettings {
     /// URL endpoint to call when tasks complete.
-    #[schema(value_type = Option<String>, example = "https://your.site/on-tasks-completed")]
-    #[deserr(default, error = DeserrJsonError<InvalidWebhookUrl>)]
-    #[serde(default)]
+    #[request(default, error = DeserrJsonError<InvalidWebhookUrl>, schema_type = Option<String>, example = "https://your.site/on-tasks-completed")]
     url: Setting<String>,
     /// HTTP headers to include in webhook requests.
-    #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
-    #[deserr(default, error = DeserrJsonError<InvalidWebhookHeaders>)]
-    #[serde(default)]
+    #[request(default, error = DeserrJsonError<InvalidWebhookHeaders>, schema_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
     headers: Setting<BTreeMap<String, Setting<String>>>,
 }
 

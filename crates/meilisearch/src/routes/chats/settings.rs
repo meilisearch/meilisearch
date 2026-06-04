@@ -1,6 +1,5 @@
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
-use deserr::Deserr;
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -14,8 +13,6 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use super::ChatsParam;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -286,49 +283,38 @@ pub async fn reset_settings(
 }
 
 /// Settings for a chat workspace
-#[derive(Debug, Clone, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Debug, Clone)]
 pub struct ChatWorkspaceSettings {
     /// LLM provider to use for chat completions
-    #[deserr(default)]
-    #[schema(value_type = Option<ChatCompletionSource>)]
+    #[request(default, schema_type = Option<ChatCompletionSource>)]
     pub source: Setting<ChatCompletionSource>,
     /// Organization ID for the LLM provider
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionOrgId>)]
-    #[schema(value_type = Option<String>, example = json!("dcba4321..."))]
+    #[request(default, error = DeserrJsonError<InvalidChatCompletionOrgId>, schema_type = Option<String>, example = json!("dcba4321..."))]
     pub org_id: Setting<String>,
     /// Project ID for the LLM provider
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionProjectId>)]
-    #[schema(value_type = Option<String>, example = json!("4321dcba..."))]
+    #[request(default, error = DeserrJsonError<InvalidChatCompletionProjectId>, schema_type = Option<String>, example = json!("4321dcba..."))]
     pub project_id: Setting<String>,
     /// API version for the LLM provider
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiVersion>)]
-    #[schema(value_type = Option<String>, example = json!("2024-02-01"))]
+    #[request(default, error = DeserrJsonError<InvalidChatCompletionApiVersion>, schema_type = Option<String>, example = json!("2024-02-01"))]
     pub api_version: Setting<String>,
     /// Deployment ID for Azure OpenAI
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionDeploymentId>)]
-    #[schema(value_type = Option<String>, example = json!("1234abcd..."))]
+    #[request(default, error = DeserrJsonError<InvalidChatCompletionDeploymentId>, schema_type = Option<String>, example = json!("1234abcd..."))]
     pub deployment_id: Setting<String>,
     /// Base URL for the LLM API
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>)]
-    #[schema(value_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]
+    #[request(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>, schema_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]
     pub base_url: Setting<String>,
     /// API key for authentication with the LLM provider
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiKey>)]
-    #[schema(value_type = Option<String>, example = json!("abcd1234..."))]
+    #[request(default, error = DeserrJsonError<InvalidChatCompletionApiKey>, schema_type = Option<String>, example = json!("abcd1234..."))]
     pub api_key: Setting<String>,
     /// Custom prompts for chat completions
-    #[deserr(default)]
-    #[schema(inline, value_type = Option<ChatPrompts>)]
+    #[request(default, inline, schema_type = Option<ChatPrompts>)]
     pub prompts: Setting<ChatPrompts>,
 }
 
 /// LLM provider for chat completions
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request]
+#[derive(Default, Debug, Clone, Copy)]
 pub enum ChatCompletionSource {
     /// OpenAI API
     #[default]
@@ -354,33 +340,21 @@ impl From<ChatCompletionSource> for DbChatCompletionSource {
 }
 
 /// Custom prompts for chat completions
-#[derive(Debug, Clone, Deserialize, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Debug, Clone)]
 pub struct ChatPrompts {
     /// System prompt for the LLM
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSystemPrompt>)]
-    #[schema(value_type = Option<String>, example = json!("You are a helpful assistant..."))]
+    #[request(default, schema_type = Option<String>, example = json!("You are a helpful assistant..."), error = DeserrJsonError<InvalidChatCompletionSystemPrompt>)]
     pub system: Setting<String>,
     /// Description of the search function for the LLM
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchDescriptionPrompt>)]
-    #[schema(value_type = Option<String>, example = json!("This is the search function..."))]
+    #[request(default, schema_type = Option<String>, example = json!("This is the search function..."), error = DeserrJsonError<InvalidChatCompletionSearchDescriptionPrompt>)]
     pub search_description: Setting<String>,
     /// Description of the query parameter for search
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchQueryParamPrompt>)]
-    #[schema(value_type = Option<String>, example = json!("This is query parameter..."))]
+    #[request(default, schema_type = Option<String>, example = json!("This is query parameter..."), error = DeserrJsonError<InvalidChatCompletionSearchQueryParamPrompt>)]
     pub search_q_param: Setting<String>,
     /// Description of the filter parameter for search
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchFilterParamPrompt>)]
-    #[schema(value_type = Option<String>, example = json!("This is filter parameter..."))]
+    #[request(default, schema_type = Option<String>, example = json!("This is filter parameter..."), error = DeserrJsonError<InvalidChatCompletionSearchFilterParamPrompt>)]
     pub search_filter_param: Setting<String>,
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchIndexUidParamPrompt>)]
-    #[schema(value_type = Option<String>, example = json!("This is index you want to search in..."))]
+    #[request(default, schema_type = Option<String>, example = json!("This is index you want to search in..."), error = DeserrJsonError<InvalidChatCompletionSearchIndexUidParamPrompt>)]
     pub search_index_uid_param: Setting<String>,
 }

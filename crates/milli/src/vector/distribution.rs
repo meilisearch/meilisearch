@@ -24,6 +24,9 @@ pub struct DistributionShift {
     pub current_sigma: OrderedFloat<f32>,
 }
 
+// no support for serde_from and serde_into at this time
+impl routes::RequestBody for DistributionShift {}
+
 impl<E> Deserr<E> for DistributionShift
 where
     E: DeserializeError,

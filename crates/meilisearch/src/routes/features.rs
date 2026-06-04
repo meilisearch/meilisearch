@@ -1,14 +1,12 @@
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -74,46 +72,44 @@ async fn get_features(
 }
 
 /// Experimental features that can be toggled at runtime
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(response)]
+#[derive(Debug)]
 pub struct RuntimeTogglableFeatures {
     /// Enable the /metrics endpoint for Prometheus metrics
-    #[deserr(default)]
+    #[request(default)]
     pub metrics: Option<bool>,
     /// Enable the /logs route for log configuration
-    #[deserr(default)]
+    #[request(default)]
     pub logs_route: Option<bool>,
     /// Enable document editing via JavaScript functions
-    #[deserr(default)]
+    #[request(default)]
     pub edit_documents_by_function: Option<bool>,
     /// Enable the CONTAINS filter operator
-    #[deserr(default)]
+    #[request(default)]
     pub contains_filter: Option<bool>,
     /// Enable dynamic search rules and the `/dynamic-search-rules` routes
-    #[deserr(default)]
+    #[request(default)]
     pub dynamic_search_rules: Option<bool>,
     /// Enable network features for distributed search
-    #[deserr(default)]
+    #[request(default)]
     pub network: Option<bool>,
     /// Enable the route to get documents from tasks
-    #[deserr(default)]
+    #[request(default)]
     pub get_task_documents_route: Option<bool>,
     /// Enable the route to compact the task queue database
-    #[deserr(default)]
+    #[request(default)]
     pub task_queue_compaction_route: Option<bool>,
     /// Enable composite embedders for multi-source embeddings
-    #[deserr(default)]
+    #[request(default)]
     pub composite_embedders: Option<bool>,
     /// Enable chat completion capabilities
-    #[deserr(default)]
+    #[request(default)]
     pub chat_completions: Option<bool>,
     /// Enable multimodal search with images and other media
-    #[deserr(default)]
+    #[request(default)]
     pub multimodal: Option<bool>,
     /// Enable foreign key support for document hydration
-    #[deserr(default)]
+    #[request(default)]
     pub foreign_keys: Option<bool>,
     /// Enable queue documents fetch
     #[deserr(default)]

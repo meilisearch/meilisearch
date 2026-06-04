@@ -1,11 +1,7 @@
-use deserr::Deserr;
 use milli::OrderBy;
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Deserr, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[deserr(rename_all = camelCase)]
+#[routes::request(setting, no_error)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum FacetValuesSort {
     /// Facet values are sorted in alphabetical order, ascending from A to Z.
     #[default]

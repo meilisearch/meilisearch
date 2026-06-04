@@ -2,41 +2,48 @@ use std::error::Error;
 use std::fmt;
 
 use deserr::errors::JsonError;
-use deserr::Deserr;
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::index::{self, ChatConfig, MatchingStrategy, RankingScoreThreshold, SearchParameters};
 use crate::prompt::{default_max_bytes, PromptData};
 use crate::update::Setting;
 
 /// [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: how the index is described to the LLM and how it is queried.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(error = JsonError, deny_unknown_fields, rename_all = camelCase)]
+#[routes::request(setting, override_error = JsonError)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ChatSettings {
     /// Index description shown to the LLM so it can decide when and how to query this index.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<String>, default = json!(""), example = json!("A comprehensive movie database containing titles, overviews, genres, and release dates"))]
+    #[request(
+        schema_type = Option<String>,
+        schema_default = json!(""), example = json!("A comprehensive movie database containing titles, overviews, genres, and release dates"),
+        skip_serializing_if = "Setting::is_not_set"
+    )]
     pub description: Setting<String>,
 
     /// Liquid template that defines the text sent to the LLM for each document.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<String>, example = json!("{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}"))]
+    #[request(
+        schema_type = Option<String>,
+        default,
+        example = json!("{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}"),
+        skip_serializing_if = "Setting::is_not_set"
+    )]
     pub document_template: Setting<String>,
 
     /// Maximum size in bytes of the rendered document template. Longer text is truncated.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<usize>, default = 400, example = json!(400))]
+    #[request(
+        schema_type = Option<usize>,
+        schema_default = 400,
+        example = json!(400),
+        skip_serializing_if = "Setting::is_not_set"
+    )]
     pub document_template_max_bytes: Setting<usize>,
 
     /// Search parameters used when the LLM queries this index (`hybrid`, `limit`, `sort`, `distinct`, etc.).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<ChatSearchParams>, default = json!({}), example = json!({ "limit": 20 }))]
+    #[request(
+        schema_type = Option<ChatSearchParams>,
+        schema_default = json!({}),
+        example = json!({ "limit": 20 }),
+        skip_serializing_if = "Setting::is_not_set"
+    )]
     pub search_parameters: Setting<ChatSearchParams>,
 }
 
@@ -83,70 +90,87 @@ impl From<ChatConfig> for ChatSettings {
 }
 
 /// Search parameters applied when the LLM queries this index.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(error = JsonError, deny_unknown_fields, rename_all = camelCase)]
+#[routes::request(override_error = JsonError, setting)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ChatSearchParams {
     /// Hybrid search: mix of keyword and semantic search. Requires an embedder (set via `embedder` and optionally `semanticRatio`).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<HybridQuery>, example = json!({ "embedder": "default", "semanticRatio": 0.5 }))]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!({ "embedder": "default", "semanticRatio": 0.5 })
+    )]
     pub hybrid: Setting<HybridQuery>,
 
     /// Maximum number of documents returned per search performed by the LLM.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<usize>, example = json!(20))]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!(20)
+    )]
     pub limit: Setting<usize>,
 
     /// Sort order: array of strings like `attribute:asc` or `attribute:desc`.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<Vec<String>>, example = json!(["price:asc", "rating:desc"]))]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!(["price:asc", "rating:desc"])
+    )]
     pub sort: Setting<Vec<String>>,
 
     /// Attribute used to return at most one document per distinct value.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<String>, example = json!("sku"))]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!("sku")
+    )]
     pub distinct: Setting<String>,
 
     /// How query terms are matched: `last`, `all`, or `frequency`.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<MatchingStrategy>)]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!("last")
+    )]
     pub matching_strategy: Setting<MatchingStrategy>,
 
     /// Attributes on which to run the search. If unset, all searchable attributes are used.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<Vec<String>>, example = json!(["title", "description"]))]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!(["title", "description"])
+    )]
     pub attributes_to_search_on: Setting<Vec<String>>,
 
     /// Minimum ranking score (0.0–1.0) for a document to be included. Lower scores are excluded.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<RankingScoreThreshold>, example = json!(0.5))]
+    #[request(
+        default,
+        skip_serializing_if = "Setting::is_not_set",
+        schema_type = Option<HybridQuery>,
+        example = json!(0.5)
+    )]
     pub ranking_score_threshold: Setting<RankingScoreThreshold>,
 }
 
 /// Hybrid search: balance between keyword and semantic search.
-#[derive(Debug, Clone, Default, Deserr, ToSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[deserr(error = JsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(setting, override_error = JsonError)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
     /// Balance between keyword (0.0) and semantic (1.0) search.
-    #[deserr(default)]
-    #[serde(default)]
-    #[schema(default, value_type = f32, example = json!(0.5))]
+    #[request(default, schema_type = f32, example = json!(0.5))]
     pub semantic_ratio: SemanticRatio,
     /// Name of the embedder from the index embedders setting (`embedder` in JSON). Used to vectorize the query.
-    #[schema(value_type = String, example = json!("default"))]
+    #[request(required, example = json!("default"))]
     pub embedder: String,
 }
 
-#[derive(Debug, Clone, Copy, Deserr, ToSchema, PartialEq, Serialize, Deserialize)]
-#[deserr(try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
+#[routes::request(setting, no_error, try_from(f32) = TryFrom::try_from -> InvalidSearchSemanticRatio)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SemanticRatio(f32);
 
 impl Default for SemanticRatio {

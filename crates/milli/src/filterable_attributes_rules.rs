@@ -15,6 +15,9 @@ pub enum FilterableAttributesRule {
     Pattern(FilterableAttributesPatterns),
 }
 
+// deserr hard to implement here
+impl routes::RequestBody for FilterableAttributesRule {}
+
 impl FilterableAttributesRule {
     /// Match a field against the filterable attributes rule.
     pub fn match_str(&self, field: &str) -> PatternMatch {

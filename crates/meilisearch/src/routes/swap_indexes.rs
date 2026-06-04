@@ -1,7 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidSwapIndexes, InvalidSwapRename};
@@ -9,7 +8,6 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
-use utoipa::ToSchema;
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::{Aggregate, Analytics};
@@ -28,16 +26,14 @@ use crate::Opt;
 pub struct SwapIndexesApi;
 
 /// Request body for swapping two indexes
-#[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(proxied)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SwapIndexesPayload {
     /// Array of the two index names to be swapped
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
+    #[request(required, error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
     /// If true, rename the first index to the second instead of swapping
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSwapRename>)]
+    #[request(default, error = DeserrJsonError<InvalidSwapRename>)]
     rename: bool,
 }
 

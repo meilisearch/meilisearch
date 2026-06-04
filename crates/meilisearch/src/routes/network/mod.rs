@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use actix_web::web::{self, Data, Json};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
@@ -19,7 +18,6 @@ use meilisearch_types::network::{
 };
 use serde::Serialize;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
@@ -87,29 +85,21 @@ async fn get_network(
 }
 
 /// Configuration for a remote Meilisearch instance
-#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError<InvalidNetworkRemotes>, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied, override_error = DeserrJsonError<InvalidNetworkRemotes>)]
+#[derive(Clone, Debug)]
 pub struct Remote {
     /// URL of the remote instance
     ///
     /// - If the URL of the remote instance is resolving to a non-global IP, make sure that
     ///   `--experimental-allowed-ip-networks` allows it. For details on how use this parameter,
     ///   refer to [this documentation](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#allow-requests-to-private-networks).
-    #[schema(value_type = Option<String>, example = "http://localhost:7700")]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkUrl>)]
-    #[serde(default)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkUrl>, schema_type = Option<String>, example = "http://localhost:7700")]
     pub url: Setting<String>,
     /// API key for search operations on this remote
-    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSearchApiKey>)]
-    #[serde(default)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkSearchApiKey>, schema_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
     pub search_api_key: Setting<String>,
     /// API key for write operations on this remote
-    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkWriteApiKey>)]
-    #[serde(default)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkWriteApiKey>, schema_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
     pub write_api_key: Setting<String>,
 }
 
@@ -117,19 +107,15 @@ pub struct Remote {
 ///
 /// Documents are distributed among the various declared shards.
 /// Remotes own shards, meaning they own the documents that belong to these shards.
-#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError<InvalidNetworkShards>, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied, override_error = DeserrJsonError<InvalidNetworkShards>)]
+#[derive(Clone, Debug)]
 pub struct Shard {
     /// List of remotes that own this shard.
     ///
     /// - The remotes must be part of the network's configuration
     /// - Setting this to a non-`null` value will replace all existing remotes for this shard.
     /// - `addRemotes` and `removeRemotes` are applied after `remotes` if multiple options are present.
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
-    #[schema(required = false)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     pub remotes: Option<BTreeSet<String>>,
     /// Remotes to add to the list of owners of this shard.
     ///
@@ -137,9 +123,7 @@ pub struct Shard {
     /// - Setting this to non-`null` will append the listed remotes to the list of owners of this shard.
     /// - `remotes` is applied before `addRemotes`
     /// - `removeRemotes` is applied after `addRemotes`
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
-    #[schema(required = false)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     pub add_remotes: Option<BTreeSet<String>>,
     /// Remotes to remove from the list of owners of this shard.
     ///
@@ -148,9 +132,7 @@ pub struct Shard {
     /// - `remotes` and `addRemotes` are applied before `removeRemotes`
     /// - Remotes removed from the configuration are automatically removed from all shards and it is not necessary
     ///   to explicitly pass them as `removeRemotes`.
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
-    #[schema(required = false)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     pub remove_remotes: Option<BTreeSet<String>>,
 }
 
@@ -172,17 +154,15 @@ impl Shard {
 }
 
 /// Network topology configuration for distributed Meilisearch
-#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Clone, Debug)]
 pub struct Network {
     /// Map of remote instance names to their configurations
     ///
     /// - Pass `null` as a value for a remote to remove it from the configuration.
     /// - Removing a remote will also remove it from all shards.
     /// - Remotes that don't appear in this list will be unmodified by the network call.
-    #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
+    #[request(default, error = DeserrJsonError<InvalidNetworkRemotes>, schema_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
         },
@@ -190,46 +170,36 @@ pub struct Network {
             "url": "http://localhost:7701"
         }
     }))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
     /// Map of shard names to their configurations.
     ///
     /// - Pass `null` as a value for a shard to remove it from the configuration.
     /// - Shards that don't appear in this list will be unmodified by the network call.
-    #[schema(required = false, value_type = Option<BTreeMap<String, Shard>>, example = json!({
+    #[request(default, error = DeserrJsonError<InvalidNetworkShards>, schema_type = Option<BTreeMap<String, Shard>>, example = json!({
         "shard-00": {
             "remotes": ["ms-00", "ms-01"]
         }
     }))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkShards>)]
-    #[serde(default)]
     pub shards: Setting<BTreeMap<String, Option<Shard>>>,
     /// Previous shard configurations
     ///
     /// This field should not be passed by end-users. It is used in internal communications between Meilisearch instances
-    #[schema(required = false, value_type = Option<BTreeMap<String, Shard>>, example = json!({
+    #[request(default, error = DeserrJsonError<InvalidNetworkShards>, schema_type = Option<BTreeMap<String, Shard>>, example = json!({
         "shard-00": {
             "remotes": ["ms-00", "ms-01"]
         }
     }))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkShards>)]
-    #[serde(default)]
     pub previous_shards: Setting<BTreeMap<String, Option<Shard>>>,
     /// Name of this instance in the network
-    #[schema(required = false, value_type = Option<String>, example = json!("ms-00"), rename = "self")]
-    #[serde(default, rename = "self")]
-    #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkSelf>, schema_type = Option<String>, example = json!("ms-00"), rename = "self")]
     pub local: Setting<String>,
     /// Name of the leader instance in the network
-    #[schema(required = false, value_type = Option<String>, example = json!("ms-00"))]
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
+    #[request(default, error = DeserrJsonError<InvalidNetworkLeader>, schema_type = Option<String>, example = json!("ms-00"))]
     pub leader: Setting<String>,
     /// Previous remote configurations
     ///
     /// This field should not be passed by end-users. It is used in internal communications between Meilisearch instances
-    #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
+    #[request(default, error = DeserrJsonError<InvalidNetworkRemotes>, schema_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
         },
@@ -237,8 +207,6 @@ pub struct Network {
             "url": "http://localhost:7701"
         }
     }))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
     pub previous_remotes: Setting<BTreeMap<String, Option<Remote>>>,
 }
 

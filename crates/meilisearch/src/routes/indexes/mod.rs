@@ -174,18 +174,14 @@ pub async fn list_indexes(
 }
 
 /// Request body for creating a new index
-#[derive(Deserr, Serialize, Debug, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct IndexCreateRequest {
     /// Unique identifier for the index
-    #[schema(required = true, example = "movies")]
-    #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
+    #[request(required, example = "movies", error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
     /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
-    #[schema(required = false, example = "id")]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[request(default, example = "id", error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
@@ -374,18 +370,14 @@ impl Aggregate for IndexUpdatedAggregate {
 }
 
 /// Request body for updating an existing index
-#[derive(Deserr, Serialize, Debug, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(deny_unknown_fields = deny_immutable_fields_index, proxied)]
+#[derive(Debug)]
 pub struct UpdateIndexRequest {
     /// New [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
     /// New uid for the index (for renaming)
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexUid>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexUid>)]
     uid: Option<String>,
 }
 

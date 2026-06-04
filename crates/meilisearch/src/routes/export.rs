@@ -6,7 +6,6 @@ use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use byte_unit::Byte;
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
@@ -17,7 +16,6 @@ use meilisearch_types::tasks::{ExportIndexSettings as DbExportIndexSettings, Kin
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -105,25 +103,20 @@ async fn export(
 }
 
 /// Request body for exporting data to a remote Meilisearch instance
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Debug)]
 pub struct Export {
     /// URL of the destination Meilisearch instance
-    #[schema(required = false, value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
-    #[deserr(default, error = DeserrJsonError<InvalidExportUrl>)]
+    #[request(default, error = DeserrJsonError<InvalidExportUrl>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
     pub url: String,
     /// API key for authenticating with the destination instance
-    #[schema(required = false, value_type = Option<String>, example = json!("1234abcd"))]
-    #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
+    #[request(default, error = DeserrJsonError<InvalidExportApiKey>, example = json!("1234abcd"))]
     pub api_key: Option<String>,
     /// Maximum payload size per request
-    #[schema(required = false, value_type = Option<String>, example = json!("24MiB"))]
-    #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
+    #[request(default, error = DeserrJsonError<InvalidExportPayloadSize>, example = json!("24MiB"), schema_type = Option<String>)]
     pub payload_size: Option<ByteWithDeserr>,
     /// Index patterns to export with their settings
-    #[schema(required = false, value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
-    #[deserr(default)]
+    #[request(default, example = json!({ "*": { "filter": null } }), schema_type = Option<BTreeMap<String, ExportIndexSettings>>)]
     pub indexes: Option<BTreeMap<IndexUidPattern, ExportIndexSettings>>,
 }
 
@@ -163,19 +156,13 @@ where
 }
 
 /// Export settings for a specific index
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Debug)]
 pub struct ExportIndexSettings {
     /// Filter expression to select which documents to export
-    #[schema(value_type = Option<String>, example = json!("genres = action"))]
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
+    #[request(default, error = DeserrJsonError<InvalidExportIndexFilter>, schema_type = Option<String>, example = json!("genres = action"))]
     pub filter: Option<Value>,
     /// Whether to override settings on the destination index
-    #[schema(value_type = Option<bool>, example = json!(true))]
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidExportIndexOverrideSettings>)]
+    #[request(default, error = DeserrJsonError<InvalidExportIndexOverrideSettings>, schema_type = Option<bool>, example = json!(true))]
     pub override_settings: bool,
 }
