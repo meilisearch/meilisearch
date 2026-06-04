@@ -21,7 +21,7 @@ pub fn merge_and_send_rtree<'extractor, MSP>(
     datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
     rtxn: &RoTxn,
     index: &Index,
-    geo_sender: GeoSender<'_, '_>,
+    geo_sender: GeoSender<'_>,
     must_stop_processing: &MSP,
 ) -> Result<()>
 where

@@ -36,8 +36,8 @@ use crate::{
     InternalError, PatternMatch, Result, UserError, MAX_FACET_VALUE_LENGTH,
 };
 
-pub struct FacetedExtractorData<'a, 'b> {
-    sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+pub struct FacetedExtractorData<'a> {
+    sender: &'a FieldIdDocidFacetSender<'a>,
     grenad_parameters: &'a GrenadParameters,
     buckets: usize,
     filterable_attributes: &'a [FilterableAttributesRule],
@@ -47,7 +47,7 @@ pub struct FacetedExtractorData<'a, 'b> {
     is_geo_enabled: bool,
 }
 
-impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
+impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_> {
     type Data = RefCell<BalancedCaches<'extractor>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
@@ -564,12 +564,12 @@ impl FacetedDocidsExtractor {
         Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, 'b, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, SD, MSP>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+        fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a>,
         step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
@@ -695,15 +695,15 @@ impl FacetedDocidsExtractor {
     }
 }
 
-struct FacetsSettingsExtractorsData<'a, 'b, SD> {
-    fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+struct FacetsSettingsExtractorsData<'a, SD> {
+    fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a>,
     max_memory_by_thread: Option<usize>,
     buckets: usize,
     settings_delta: &'a SD,
 }
 
 impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for FacetsSettingsExtractorsData<'_, '_, SD>
+    for FacetsSettingsExtractorsData<'_, SD>
 {
     type Data = RefCell<BalancedCaches<'extractor>>;
 

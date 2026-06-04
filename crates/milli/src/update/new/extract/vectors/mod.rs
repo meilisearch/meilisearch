@@ -33,19 +33,19 @@ use crate::{
     UserError,
 };
 
-pub struct EmbeddingExtractor<'a, 'b> {
+pub struct EmbeddingExtractor<'a> {
     embedders: &'a RuntimeEmbedders,
-    sender: EmbeddingSender<'a, 'b>,
+    sender: EmbeddingSender<'a>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     embedder_stats: &'a EmbedderStats,
     threads: &'a ThreadPoolNoAbort,
     failure_modes: EmbedderFailureModes,
 }
 
-impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
+impl<'a> EmbeddingExtractor<'a> {
     pub fn new(
         embedders: &'a RuntimeEmbedders,
-        sender: EmbeddingSender<'a, 'b>,
+        sender: EmbeddingSender<'a>,
         field_distribution: &'a FieldDistribution,
         embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
@@ -69,7 +69,7 @@ pub struct EmbeddingExtractorData<'extractor>(
 
 unsafe impl MostlySend for EmbeddingExtractorData<'_> {}
 
-impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
+impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_> {
     type Data = RefCell<EmbeddingExtractorData<'extractor>>;
 
     fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
@@ -275,21 +275,21 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
     }
 }
 
-pub struct SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
+pub struct SettingsChangeEmbeddingExtractor<'a, SD> {
     settings_delta: &'a SD,
     embedder_stats: &'a EmbedderStats,
-    sender: EmbeddingSender<'a, 'b>,
+    sender: EmbeddingSender<'a>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     threads: &'a ThreadPoolNoAbort,
     failure_modes: EmbedderFailureModes,
 }
 
-impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
+impl<'a, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, SD> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         settings_delta: &'a SD,
         embedder_stats: &'a EmbedderStats,
-        sender: EmbeddingSender<'a, 'b>,
+        sender: EmbeddingSender<'a>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
@@ -308,7 +308,7 @@ impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
 }
 
 impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for SettingsChangeEmbeddingExtractor<'_, '_, SD>
+    for SettingsChangeEmbeddingExtractor<'_, SD>
 {
     type Data = RefCell<EmbeddingExtractorData<'extractor>>;
 
@@ -479,13 +479,13 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
     }
 }
 
-pub struct OnEmbeddingDocumentUpdates<'doc, 'b> {
+pub struct OnEmbeddingDocumentUpdates<'doc> {
     embedder_id: u8,
-    sender: EmbeddingSender<'doc, 'b>,
+    sender: EmbeddingSender<'doc>,
     possible_embedding_mistakes: &'doc PossibleEmbeddingMistakes,
 }
 
-impl OnEmbeddingDocumentUpdates<'_, '_> {
+impl OnEmbeddingDocumentUpdates<'_> {
     fn clear_vectors(&self, docid: DocumentId) {
         self.sender.set_vectors(docid, self.embedder_id, vec![]).unwrap();
     }
@@ -495,7 +495,7 @@ impl OnEmbeddingDocumentUpdates<'_, '_> {
     }
 }
 
-impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
+impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc> {
     type ErrorMetadata = UnusedVectorsDistributionBump<'doc>;
     fn process_embedding_response(
         &mut self,
@@ -566,26 +566,26 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
     }
 }
 
-struct Chunks<'a, 'b, 'extractor> {
+struct Chunks<'a, 'extractor> {
     dimensions: usize,
     status_delta: &'a RefCell<EmbeddingExtractorData<'extractor>>,
     status: EmbeddingStatus,
-    kind: ChunkType<'a, 'b>,
+    kind: ChunkType<'a>,
 }
 
-enum ChunkType<'a, 'b> {
+enum ChunkType<'a> {
     DocumentTemplate {
         document_template: &'a Prompt,
         ignore_document_template_failures: bool,
-        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, &'a str>,
+        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a>, &'a str>,
     },
     Fragments {
         fragments: &'a [RuntimeFragment],
-        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, serde_json::Value>,
+        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a>, serde_json::Value>,
     },
 }
 
-impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
+impl<'a, 'extractor> Chunks<'a, 'extractor> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         runtime: &'a RuntimeEmbedder,
@@ -595,7 +595,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         possible_embedding_mistakes: &'a PossibleEmbeddingMistakes,
         embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
-        sender: EmbeddingSender<'a, 'b>,
+        sender: EmbeddingSender<'a>,
         doc_alloc: &'a Bump,
         failure_modes: EmbedderFailureModes,
     ) -> Self {
@@ -1106,7 +1106,7 @@ fn update_autogenerated<'doc, 'a: 'doc, 'b, E, OD, ND>(
     meta: &E::DocumentMetadata,
     old_must_regenerate: bool,
     mut must_clear_on_generation: bool,
-    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
+    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
 ) -> Result<()>
 where
@@ -1163,7 +1163,7 @@ fn insert_autogenerated<'doc, 'a: 'doc, 'b, E, D: Document<'doc> + Debug>(
     extractors: impl IntoIterator<Item = E>,
     new_document: D,
     meta: &E::DocumentMetadata,
-    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
+    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
 ) -> Result<()>
 where

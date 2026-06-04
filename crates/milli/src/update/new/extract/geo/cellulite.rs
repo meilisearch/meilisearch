@@ -20,12 +20,12 @@ use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
 use crate::{Index, Result, UserError};
 
-pub struct GeoJsonExtractor<'a, 'b> {
-    sender: GeoJsonSender<'a, 'b>,
+pub struct GeoJsonExtractor<'a> {
+    sender: GeoJsonSender<'a>,
 }
 
-impl<'a, 'b> GeoJsonExtractor<'a, 'b> {
-    pub fn new(rtxn: &RoTxn, index: &Index, sender: GeoJsonSender<'a, 'b>) -> Result<Option<Self>> {
+impl<'a> GeoJsonExtractor<'a> {
+    pub fn new(rtxn: &RoTxn, index: &Index, sender: GeoJsonSender<'a>) -> Result<Option<Self>> {
         if index.is_geojson_filtering_enabled(rtxn)? {
             Ok(Some(GeoJsonExtractor { sender }))
         } else {
@@ -38,7 +38,7 @@ impl<'a, 'b> GeoJsonExtractor<'a, 'b> {
         documents: &'indexer DocumentsIndentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        geojson_sender: GeoJsonSender<'_, '_>,
+        geojson_sender: GeoJsonSender<'_>,
         step: IndexingStep,
     ) -> Result<()>
     where
@@ -62,7 +62,7 @@ impl<'a, 'b> GeoJsonExtractor<'a, 'b> {
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<()>,
         settings_delta: &SD,
-        geojson_sender: &GeoJsonSender<'_, '_>,
+        geojson_sender: &GeoJsonSender<'_>,
     ) -> Result<()>
     where
         SD: SettingsDelta,
@@ -88,7 +88,7 @@ impl<'a, 'b> GeoJsonExtractor<'a, 'b> {
     }
 }
 
-impl<'extractor> Extractor<'extractor> for GeoJsonExtractor<'_, '_> {
+impl<'extractor> Extractor<'extractor> for GeoJsonExtractor<'_> {
     type Data = ();
 
     fn init_data<'doc>(&'doc self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
@@ -163,13 +163,13 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor<'_, '_> {
     }
 }
 
-pub struct GeoJsonSettingsExtractor<'a, 'b, SD> {
+pub struct GeoJsonSettingsExtractor<'a, SD> {
     settings_delta: &'a SD,
-    geojson_sender: GeoJsonSender<'a, 'b>,
+    geojson_sender: GeoJsonSender<'a>,
 }
 
 impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for GeoJsonSettingsExtractor<'_, '_, SD>
+    for GeoJsonSettingsExtractor<'_, SD>
 {
     type Data = ();
 

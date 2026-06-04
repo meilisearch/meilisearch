@@ -102,7 +102,7 @@ steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
 rustc-hash = "2.1.1"
 enum-iterator = "2.3.0"
-bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
+bbqueue = { version = "0.7.0", default-features = false, features = ["std"] }
 flume = { version = "0.11.1", default-features = false }
 utoipa = { version = "5.4.0", features = [
     "macros",

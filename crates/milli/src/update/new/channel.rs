@@ -9,8 +9,14 @@ use std::sync::atomic::{self, AtomicUsize};
 use std::sync::Arc;
 use std::time::Duration;
 
-use bbqueue::framed::{FrameGrantR, FrameProducer};
-use bbqueue::BBBuffer;
+use bbqueue::nicknames::GogiGui;
+use bbqueue::prod_cons::framed::FramedGrantR;
+use bbqueue::prod_cons::framed::{FramedConsumer, FramedProducer};
+use bbqueue::traits::coordination::cas::AtomicCoord;
+use bbqueue::traits::coordination::{ReadGrantError, WriteGrantError};
+use bbqueue::traits::notifier::polling::Polling;
+use bbqueue::traits::storage::BoxedSlice;
+use bbqueue::BBQueue;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use flume::{RecvTimeoutError, SendError};
 use heed::types::Bytes;
@@ -29,18 +35,12 @@ use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
 use crate::{CboRoaringBitmapCodec, DocumentId, Error, Index, InternalError};
 
-/// Note that the FrameProducer requires up to 9 bytes to
-/// encode the length, the max grant has been computed accordingly.
-///
-/// <https://docs.rs/bbqueue/latest/bbqueue/framed/index.html#frame-header>
-const MAX_FRAME_HEADER_SIZE: usize = 9;
-
 /// Creates a tuple of senders/receiver to be used by
 /// the extractors and the writer loop.
 ///
 /// The `total_bbbuffer_capacity` represents the number of bytes
 /// allocated to all BBQueue buffers. It will be split by the
-/// number of threads.
+/// number of threads and clamped to a minimum of 2 * 2^16 bytes.
 ///
 /// The `channel_capacity` parameter defines the number of
 /// too-large-to-fit-in-BBQueue entries that can be sent through
@@ -52,23 +52,26 @@ const MAX_FRAME_HEADER_SIZE: usize = 9;
 /// a message in this queue only if it is empty to avoid filling
 /// the channel *and* the BBQueue.
 pub fn extractor_writer_bbqueue(
-    bbbuffers: &'_ mut Vec<BBBuffer>,
+    bbbuffers: &'_ mut Vec<GogiGui>,
     total_bbbuffer_capacity: usize,
     channel_capacity: usize,
-) -> (ExtractorBbqueueSender<'_>, WriterBbqueueReceiver<'_>) {
+) -> (ExtractorBbqueueSender, WriterBbqueueReceiver) {
     let current_num_threads = rayon::current_num_threads();
-    let bbbuffer_capacity = total_bbbuffer_capacity.checked_div(current_num_threads).unwrap();
-    bbbuffers.resize_with(current_num_threads, || BBBuffer::new(bbbuffer_capacity));
-
-    let capacity = bbbuffers.first().unwrap().capacity();
-    // 1. Due to fragmentation in the bbbuffer, we can only accept up to half the capacity in a single message.
-    // 2. Read the documentation for `MAX_FRAME_HEADER_SIZE` for more information about why it is here.
-    let max_grant = capacity.saturating_div(2).checked_sub(MAX_FRAME_HEADER_SIZE).unwrap();
+    let bbbuffer_capacity = total_bbbuffer_capacity
+        .checked_div(current_num_threads)
+        .unwrap()
+        // We make sure that the bbqueue capacity if always twice as large as the maximum grant.
+        // <https://docs.rs/bbqueue/0.7.0/bbqueue/prod_cons/framed/trait.LenHeader.html>
+        .max(u16::MAX as usize * 2);
+    bbbuffers.resize_with(current_num_threads, || {
+        GogiGui::new_with_storage(BoxedSlice::new(bbbuffer_capacity))
+    });
 
     let producers = ThreadLocal::with_capacity(bbbuffers.len());
     let consumers = rayon::broadcast(|bi| {
         let bbqueue = &bbbuffers[bi.index()];
-        let (producer, consumer) = bbqueue.try_split_framed().unwrap();
+        let producer = bbqueue.framed_producer();
+        let consumer = bbqueue.framed_consumer();
         producers.get_or(|| FullySend(RefCell::new(producer)));
         consumer
     });
@@ -80,7 +83,6 @@ pub fn extractor_writer_bbqueue(
     let sender = ExtractorBbqueueSender {
         sender,
         producers,
-        max_grant,
         sent_messages_attempts: sent_messages_attempts.clone(),
         blocking_sent_messages_attempts: blocking_sent_messages_attempts.clone(),
     };
@@ -94,17 +96,15 @@ pub fn extractor_writer_bbqueue(
     (sender, receiver)
 }
 
-pub struct ExtractorBbqueueSender<'a> {
+pub struct ExtractorBbqueueSender {
     /// This channel is used to wake-up the receiver and
     /// send large entries that cannot fit in the BBQueue.
     sender: flume::Sender<ReceiverAction>,
     /// A memory buffer, one by thread, is used to serialize
     /// the entries directly in this shared, lock-free space.
-    producers: ThreadLocal<FullySend<RefCell<FrameProducer<'a>>>>,
-    /// The maximum frame grant that a producer can reserve.
-    /// It will never be able to store more than that as the
-    /// buffer cannot split data into two parts.
-    max_grant: usize,
+    producers: ThreadLocal<
+        FullySend<RefCell<FramedProducer<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>>>,
+    >,
     /// The total number of attempts to send messages
     /// over the bbqueue channel.
     sent_messages_attempts: Arc<AtomicUsize>,
@@ -113,7 +113,7 @@ pub struct ExtractorBbqueueSender<'a> {
     blocking_sent_messages_attempts: Arc<AtomicUsize>,
 }
 
-pub struct WriterBbqueueReceiver<'a> {
+pub struct WriterBbqueueReceiver {
     /// Used to wake up when new entries are available either in
     /// any BBQueue buffer or directly sent throught this channel
     /// (still written to disk).
@@ -122,7 +122,7 @@ pub struct WriterBbqueueReceiver<'a> {
     /// ensures fair distribution of work among consumers.
     look_at_consumer: Cycle<Range<usize>>,
     /// The BBQueue frames to read when waking-up.
-    consumers: Vec<bbqueue::framed::FrameConsumer<'a>>,
+    consumers: Vec<FramedConsumer<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>>,
     /// The total number of attempts to send messages
     /// over the bbqueue channel.
     sent_messages_attempts: Arc<AtomicUsize>,
@@ -202,7 +202,7 @@ pub struct LargeGeoJson {
     pub geojson: Mmap,
 }
 
-impl<'a> WriterBbqueueReceiver<'a> {
+impl WriterBbqueueReceiver {
     /// Tries to receive an action to do until the timeout occurs
     /// and if it does, consider it as a spurious wake up.
     pub fn recv_action(&mut self) -> Option<ReceiverAction> {
@@ -214,10 +214,15 @@ impl<'a> WriterBbqueueReceiver<'a> {
     }
 
     /// Reads all the BBQueue buffers and selects the first available frame.
-    pub fn recv_frame(&mut self) -> Option<FrameWithHeader<'a>> {
+    pub fn recv_frame(&mut self) -> Option<FrameWithHeader> {
         for index in self.look_at_consumer.by_ref().take(self.consumers.len()) {
-            if let Some(frame) = self.consumers[index].read() {
-                return Some(FrameWithHeader::from(frame));
+            match self.consumers[index].read() {
+                Ok(frame) => return Some(FrameWithHeader::from(frame)),
+                Err(ReadGrantError::Empty) => (),
+                Err(
+                    e @ ReadGrantError::GrantInProgress
+                    | e @ ReadGrantError::InconsistentFrameHeader,
+                ) => unreachable!("{e:?}"),
             }
         }
         None
@@ -234,25 +239,35 @@ impl<'a> WriterBbqueueReceiver<'a> {
     }
 }
 
-pub struct FrameWithHeader<'a> {
+pub struct FrameWithHeader {
     header: EntryHeader,
-    frame: FrameGrantR<'a>,
+    frame: Option<FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>>,
 }
 
-impl FrameWithHeader<'_> {
+impl FrameWithHeader {
     pub fn header(&self) -> EntryHeader {
         self.header
     }
 
-    pub fn frame(&self) -> &FrameGrantR<'_> {
-        &self.frame
+    pub fn frame(&self) -> &FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>> {
+        self.frame.as_ref().unwrap()
     }
 }
 
-impl<'a> From<FrameGrantR<'a>> for FrameWithHeader<'a> {
-    fn from(mut frame: FrameGrantR<'a>) -> Self {
-        frame.auto_release(true);
-        FrameWithHeader { header: EntryHeader::from_slice(&frame[..]), frame }
+impl From<FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>> for FrameWithHeader {
+    fn from(frame: FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>) -> Self {
+        FrameWithHeader { header: EntryHeader::from_slice(&frame[..]), frame: Some(frame) }
+    }
+}
+
+// We need to implement Drop to be able to release the frame as there
+// is no longer a way to tell the bbqueue frame to do that by itself.
+// <https://docs.rs/bbqueue/0.7.0/bbqueue/prod_cons/framed/struct.FramedGrantR.html#method.release>
+impl Drop for FrameWithHeader {
+    fn drop(&mut self) {
+        if let Some(f) = self.frame.take() {
+            f.release()
+        }
     }
 }
 
@@ -399,7 +414,10 @@ pub struct DbOperation {
 }
 
 impl DbOperation {
-    pub fn key_value<'a>(&self, frame: &'a FrameGrantR<'_>) -> (&'a [u8], Option<&'a [u8]>) {
+    pub fn key_value<'a>(
+        &self,
+        frame: &'a FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>,
+    ) -> (&'a [u8], Option<&'a [u8]>) {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         match self.key_length {
             Some(key_length) => {
@@ -428,7 +446,9 @@ pub struct SetVectors {
 }
 
 impl SetVectors {
-    fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
+    fn embeddings_bytes(
+        frame: &FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>,
+    ) -> &[u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
     }
@@ -436,7 +456,7 @@ impl SetVectors {
     /// Read all the embeddings and write them into an aligned `f32` Vec.
     pub fn read_all_embeddings_into_vec<'v>(
         &self,
-        frame: &FrameGrantR<'_>,
+        frame: &FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>,
         vec: &'v mut Vec<f32>,
     ) -> &'v [f32] {
         let embeddings_bytes = Self::embeddings_bytes(frame);
@@ -459,7 +479,9 @@ pub struct SetVector {
 }
 
 impl SetVector {
-    fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
+    fn embeddings_bytes(
+        frame: &FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>,
+    ) -> &[u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
     }
@@ -467,7 +489,7 @@ impl SetVector {
     /// Read the embedding and write it into an aligned `f32` Vec.
     pub fn read_all_embeddings_into_vec<'v>(
         &self,
-        frame: &FrameGrantR<'_>,
+        frame: &FramedGrantR<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>,
         vec: &'v mut Vec<f32>,
     ) -> &'v [f32] {
         let embeddings_bytes = Self::embeddings_bytes(frame);
@@ -558,50 +580,50 @@ impl From<FacetKind> for Database {
     }
 }
 
-impl<'b> ExtractorBbqueueSender<'b> {
-    pub fn docids<'a, D: DatabaseType>(&'a self) -> WordDocidsSender<'a, 'b, D> {
+impl ExtractorBbqueueSender {
+    pub fn docids<D: DatabaseType>(&self) -> WordDocidsSender<'_, D> {
         WordDocidsSender { sender: self, _marker: PhantomData }
     }
 
-    pub fn facet_docids<'a>(&'a self) -> FacetDocidsSender<'a, 'b> {
+    pub fn facet_docids(&self) -> FacetDocidsSender<'_> {
         FacetDocidsSender { sender: self }
     }
 
-    pub fn field_id_docid_facet_sender<'a>(&'a self) -> FieldIdDocidFacetSender<'a, 'b> {
+    pub fn field_id_docid_facet_sender(&self) -> FieldIdDocidFacetSender<'_> {
         FieldIdDocidFacetSender(self)
     }
 
-    pub fn documents<'a>(&'a self) -> DocumentsSender<'a, 'b> {
+    pub fn documents(&self) -> DocumentsSender<'_> {
         DocumentsSender(self)
     }
 
-    pub fn embeddings<'a>(&'a self) -> EmbeddingSender<'a, 'b> {
+    pub fn embeddings(&self) -> EmbeddingSender<'_> {
         EmbeddingSender(self)
     }
 
-    pub fn geo<'a>(&'a self) -> GeoSender<'a, 'b> {
+    pub fn geo(&self) -> GeoSender<'_> {
         GeoSender(self)
     }
 
-    pub fn geojson<'a>(&'a self) -> GeoJsonSender<'a, 'b> {
+    pub fn geojson(&self) -> GeoJsonSender<'_> {
         GeoJsonSender(self)
     }
 
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
-        let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let payload_header = EntryHeader::DeleteVector(DeleteVector { docid });
         let total_length = EntryHeader::total_delete_vector_size();
-        if total_length > max_grant {
-            panic!("The entry is larger ({total_length} bytes) than the BBQueue max grant ({max_grant} bytes)");
-        }
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(e) => panic!("The entry is larger ({total_length} bytes) than the maximum grant we can have in a BBQueue u16::MAX: {e}"),
+        };
 
         // Spin loop to have a frame the size we requested.
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.sender,
             &self.sent_messages_attempts,
             &self.blocking_sent_messages_attempts,
@@ -620,7 +642,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
         embedder_id: u8,
         embeddings: &[Vec<f32>],
     ) -> crate::Result<()> {
-        let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
@@ -631,26 +652,29 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let set_vectors = SetVectors { docid, embedder_id, _padding: [0; 3] };
         let payload_header = EntryHeader::SetVectors(set_vectors);
         let total_length = EntryHeader::total_set_vectors_size(embeddings.len(), dimensions);
-        if total_length > max_grant {
-            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
-            for embedding in embeddings {
-                let mut embedding_bytes = bytemuck::cast_slice(embedding);
-                io::copy(&mut embedding_bytes, &mut value_file)?;
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(_) => {
+                let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+                for embedding in embeddings {
+                    let mut embedding_bytes = bytemuck::cast_slice(embedding);
+                    io::copy(&mut embedding_bytes, &mut value_file)?;
+                }
+
+                let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+                let embeddings = unsafe { Mmap::map(&value_file)? };
+
+                let large_vectors = LargeVectors { docid, embedder_id, embeddings };
+                self.sender.send(ReceiverAction::LargeVectors(large_vectors)).unwrap();
+
+                return Ok(());
             }
-
-            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
-            let embeddings = unsafe { Mmap::map(&value_file)? };
-
-            let large_vectors = LargeVectors { docid, embedder_id, embeddings };
-            self.sender.send(ReceiverAction::LargeVectors(large_vectors)).unwrap();
-
-            return Ok(());
-        }
+        };
 
         // Spin loop to have a frame the size we requested.
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.sender,
             &self.sent_messages_attempts,
             &self.blocking_sent_messages_attempts,
@@ -681,7 +705,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
         extractor_id: u8,
         embedding: Option<Embedding>,
     ) -> crate::Result<()> {
-        let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
@@ -692,26 +715,29 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let set_vector = SetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
         let payload_header = EntryHeader::SetVector(set_vector);
         let total_length = EntryHeader::total_set_vector_size(dimensions);
-        if total_length > max_grant {
-            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
-            let embedding = embedding.expect("set_vector without a vector does not fit in RAM");
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(_) => {
+                let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+                let embedding = embedding.expect("set_vector without a vector does not fit in RAM");
 
-            let mut embedding_bytes = bytemuck::cast_slice(&embedding);
-            io::copy(&mut embedding_bytes, &mut value_file)?;
+                let mut embedding_bytes = bytemuck::cast_slice(&embedding);
+                io::copy(&mut embedding_bytes, &mut value_file)?;
 
-            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
-            let embedding = unsafe { Mmap::map(&value_file)? };
+                let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+                let embedding = unsafe { Mmap::map(&value_file)? };
 
-            let large_vectors = LargeVector { docid, embedder_id, extractor_id, embedding };
-            self.sender.send(ReceiverAction::LargeVector(large_vectors)).unwrap();
+                let large_vectors = LargeVector { docid, embedder_id, extractor_id, embedding };
+                self.sender.send(ReceiverAction::LargeVector(large_vectors)).unwrap();
 
-            return Ok(());
-        }
+                return Ok(());
+            }
+        };
 
         // Spin loop to have a frame the size we requested.
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.sender,
             &self.sent_messages_attempts,
             &self.blocking_sent_messages_attempts,
@@ -775,36 +801,38 @@ impl<'b> ExtractorBbqueueSender<'b> {
     where
         F: FnOnce(&mut [u8], &mut [u8]) -> crate::Result<()>,
     {
-        let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let operation = DbOperation { database, key_length: Some(key_length) };
         let payload_header = EntryHeader::DbOperation(operation);
         let total_length = EntryHeader::total_key_value_size(key_length, value_length);
-        if total_length > max_grant {
-            let mut key_buffer = vec![0; key_length.get() as usize].into_boxed_slice();
-            let value_file = tempfile::tempfile()?;
-            value_file.set_len(value_length.try_into().unwrap())?;
-            let mut mmap_mut = unsafe { MmapMut::map_mut(&value_file)? };
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(_) => {
+                let mut key_buffer = vec![0; key_length.get() as usize].into_boxed_slice();
+                let value_file = tempfile::tempfile()?;
+                value_file.set_len(value_length.try_into().unwrap())?;
+                let mut mmap_mut = unsafe { MmapMut::map_mut(&value_file)? };
 
-            key_value_writer(&mut key_buffer, &mut mmap_mut)?;
+                key_value_writer(&mut key_buffer, &mut mmap_mut)?;
 
-            self.sender
-                .send(ReceiverAction::LargeEntry(LargeEntry {
-                    database,
-                    key: key_buffer,
-                    value: mmap_mut.make_read_only()?,
-                }))
-                .unwrap();
+                self.sender
+                    .send(ReceiverAction::LargeEntry(LargeEntry {
+                        database,
+                        key: key_buffer,
+                        value: mmap_mut.make_read_only()?,
+                    }))
+                    .unwrap();
 
-            return Ok(());
-        }
+                return Ok(());
+            }
+        };
 
         // Spin loop to have a frame the size we requested.
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.sender,
             &self.sent_messages_attempts,
             &self.blocking_sent_messages_attempts,
@@ -843,7 +871,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
     where
         F: FnOnce(&mut [u8]) -> crate::Result<()>,
     {
-        let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
@@ -852,14 +879,15 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let operation = DbOperation { database, key_length: None };
         let payload_header = EntryHeader::DbOperation(operation);
         let total_length = EntryHeader::total_key_size(key_length);
-        if total_length > max_grant {
-            panic!("The entry is larger ({total_length} bytes) than the BBQueue max grant ({max_grant} bytes)");
-        }
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(e) => panic!("The entry is larger ({total_length} bytes) than the maximum grant we can have in a BBQueue u16::MAX: {e}"),
+        };
 
         // Spin loop to have a frame the size we requested.
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.sender,
             &self.sent_messages_attempts,
             &self.blocking_sent_messages_attempts,
@@ -879,8 +907,8 @@ impl<'b> ExtractorBbqueueSender<'b> {
 /// looping on the BBQueue buffer, panics if the receiver
 /// has been disconnected or send a WakeUp message if necessary.
 fn reserve_and_write_grant<F>(
-    producer: &mut FrameProducer,
-    total_length: usize,
+    producer: &mut FramedProducer<Arc<BBQueue<BoxedSlice, AtomicCoord, Polling>>>,
+    total_length: u16,
     sender: &flume::Sender<ReceiverAction>,
     sent_messages_attempts: &AtomicUsize,
     blocking_sent_messages_attempts: &AtomicUsize,
@@ -909,8 +937,8 @@ where
 
                     return Ok(());
                 }
-                Err(bbqueue::Error::InsufficientSize) => continue,
-                Err(e) => unreachable!("{e:?}"),
+                Err(WriteGrantError::InsufficientSize) => continue,
+                Err(e @ WriteGrantError::GrantInProgress) => unreachable!("{e:?}"),
             }
         }
         if sender.is_disconnected() {
@@ -964,12 +992,12 @@ impl DatabaseType for WordPositionDocids {
 }
 
 #[derive(Clone, Copy)]
-pub struct WordDocidsSender<'a, 'b, D> {
-    sender: &'a ExtractorBbqueueSender<'b>,
+pub struct WordDocidsSender<'a, D> {
+    sender: &'a ExtractorBbqueueSender,
     _marker: PhantomData<D>,
 }
 
-impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
+impl<D: DatabaseType> WordDocidsSender<'_, D> {
     pub fn write(&self, key: &[u8], bitmap: &RoaringBitmap) -> crate::Result<()> {
         let value_length = CboRoaringBitmapCodec::serialized_size(bitmap);
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
@@ -998,11 +1026,11 @@ impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
 }
 
 #[derive(Clone, Copy)]
-pub struct FacetDocidsSender<'a, 'b> {
-    sender: &'a ExtractorBbqueueSender<'b>,
+pub struct FacetDocidsSender<'a> {
+    sender: &'a ExtractorBbqueueSender,
 }
 
-impl FacetDocidsSender<'_, '_> {
+impl FacetDocidsSender<'_> {
     pub fn write(&self, key: &[u8], bitmap: &RoaringBitmap) -> crate::Result<()> {
         let (facet_kind, key) = FacetKind::extract_from_key(key);
         let database = Database::from(facet_kind);
@@ -1056,9 +1084,9 @@ impl FacetDocidsSender<'_, '_> {
 }
 
 #[derive(Clone, Copy)]
-pub struct FieldIdDocidFacetSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+pub struct FieldIdDocidFacetSender<'a>(&'a ExtractorBbqueueSender);
 
-impl FieldIdDocidFacetSender<'_, '_> {
+impl FieldIdDocidFacetSender<'_> {
     pub fn write_facet_string(&self, key: &[u8], value: &[u8]) -> crate::Result<()> {
         debug_assert!(FieldDocIdFacetStringCodec::bytes_decode(key).is_ok());
         self.0.write_key_value(Database::FieldIdDocidFacetStrings, key, value)
@@ -1081,9 +1109,9 @@ impl FieldIdDocidFacetSender<'_, '_> {
 }
 
 #[derive(Clone, Copy)]
-pub struct DocumentsSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+pub struct DocumentsSender<'a>(&'a ExtractorBbqueueSender);
 
-impl DocumentsSender<'_, '_> {
+impl DocumentsSender<'_> {
     /// TODO do that efficiently
     pub fn uncompressed(
         &self,
@@ -1107,9 +1135,9 @@ impl DocumentsSender<'_, '_> {
 }
 
 #[derive(Clone, Copy)]
-pub struct EmbeddingSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+pub struct EmbeddingSender<'a>(&'a ExtractorBbqueueSender);
 
-impl EmbeddingSender<'_, '_> {
+impl EmbeddingSender<'_> {
     pub fn set_vectors(
         &self,
         docid: DocumentId,
@@ -1139,9 +1167,9 @@ impl EmbeddingSender<'_, '_> {
 }
 
 #[derive(Clone, Copy)]
-pub struct GeoSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+pub struct GeoSender<'a>(&'a ExtractorBbqueueSender);
 
-impl GeoSender<'_, '_> {
+impl GeoSender<'_> {
     pub fn set_rtree(&self, value: Mmap) -> StdResult<(), SendError<()>> {
         self.0
             .sender
@@ -1180,34 +1208,36 @@ impl GeoSender<'_, '_> {
 }
 
 #[derive(Clone, Copy)]
-pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+pub struct GeoJsonSender<'a>(&'a ExtractorBbqueueSender);
 
-impl GeoJsonSender<'_, '_> {
+impl GeoJsonSender<'_> {
     pub fn insert_geojson(&self, docid: DocumentId, mut value: &[u8]) -> crate::Result<()> {
-        let max_grant = self.0.max_grant;
         let refcell = self.0.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
         let payload_header = EntryHeader::CelluliteItem(docid);
         let value_length = value.len();
         let total_length = EntryHeader::total_cellulite_item_size(value_length);
-        if total_length > max_grant {
-            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
-            io::copy(&mut value, &mut value_file)?;
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(_) => {
+                let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+                io::copy(&mut value, &mut value_file)?;
 
-            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
-            let geojson = unsafe { Mmap::map(&value_file)? }; // Safe because the file is never modified
+                let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+                let geojson = unsafe { Mmap::map(&value_file)? }; // Safe because the file is never modified
 
-            let large_geojson = LargeGeoJson { docid, geojson };
-            self.0.sender.send(ReceiverAction::LargeGeoJson(large_geojson)).unwrap();
+                let large_geojson = LargeGeoJson { docid, geojson };
+                self.0.sender.send(ReceiverAction::LargeGeoJson(large_geojson)).unwrap();
 
-            return Ok(());
-        }
+                return Ok(());
+            }
+        };
 
         // Spin loop to have a frame the size we requested.
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.0.sender,
             &self.0.sent_messages_attempts,
             &self.0.blocking_sent_messages_attempts,
@@ -1229,10 +1259,14 @@ impl GeoJsonSender<'_, '_> {
 
         let payload_header = EntryHeader::CelluliteRemove(docid);
         let total_length = EntryHeader::total_cellulite_remove_size();
+        let grant_length = match u16::try_from(total_length) {
+            Ok(grant_length) => grant_length,
+            Err(e) => unreachable!("{e}"),
+        };
 
         reserve_and_write_grant(
             &mut producer,
-            total_length,
+            grant_length,
             &self.0.sender,
             &self.0.sent_messages_attempts,
             &self.0.blocking_sent_messages_attempts,

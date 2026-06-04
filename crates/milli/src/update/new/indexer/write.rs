@@ -20,7 +20,7 @@ use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
 use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
-    mut writer_receiver: WriterBbqueueReceiver<'_>,
+    mut writer_receiver: WriterBbqueueReceiver,
     finished_extraction: &AtomicBool,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
@@ -189,7 +189,7 @@ pub(super) fn update_index(
 /// It reads all the available frames, do the corresponding database operations
 /// and stops when no frame are available.
 pub fn write_from_bbqueue(
-    writer_receiver: &mut WriterBbqueueReceiver<'_>,
+    writer_receiver: &mut WriterBbqueueReceiver,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     vector_stores: &HashMap<u8, (&str, &crate::vector::Embedder, VectorStore, usize)>,
