@@ -1,6 +1,7 @@
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use deserr::Deserr;
+use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
@@ -126,8 +127,10 @@ pub async fn patch_settings(
         Data<IndexScheduler>,
     >,
     chats_param: web::Path<ChatsParam>,
-    web::Json(new): web::Json<ChatWorkspaceSettings>,
+    new: AwebJson<ChatWorkspaceSettings, DeserrJsonError>,
 ) -> Result<HttpResponse, ResponseError> {
+    let new = new.into_inner();
+
     index_scheduler.features().check_chat_completions("using the /chats/settings route")?;
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
@@ -282,48 +285,40 @@ pub async fn reset_settings(
 }
 
 /// Settings for a chat workspace
-#[derive(Debug, Clone, Deserialize, Deserr, ToSchema)]
+#[derive(Debug, Clone, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ChatWorkspaceSettings {
     /// LLM provider to use for chat completions
-    #[serde(default)]
     #[deserr(default)]
     #[schema(value_type = Option<ChatCompletionSource>)]
     pub source: Setting<ChatCompletionSource>,
     /// Organization ID for the LLM provider
-    #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionOrgId>)]
     #[schema(value_type = Option<String>, example = json!("dcba4321..."))]
     pub org_id: Setting<String>,
     /// Project ID for the LLM provider
-    #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionProjectId>)]
     #[schema(value_type = Option<String>, example = json!("4321dcba..."))]
     pub project_id: Setting<String>,
     /// API version for the LLM provider
-    #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiVersion>)]
     #[schema(value_type = Option<String>, example = json!("2024-02-01"))]
     pub api_version: Setting<String>,
     /// Deployment ID for Azure OpenAI
-    #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionDeploymentId>)]
     #[schema(value_type = Option<String>, example = json!("1234abcd..."))]
     pub deployment_id: Setting<String>,
     /// Base URL for the LLM API
-    #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>)]
     #[schema(value_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]
     pub base_url: Setting<String>,
     /// API key for authentication with the LLM provider
-    #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiKey>)]
     #[schema(value_type = Option<String>, example = json!("abcd1234..."))]
     pub api_key: Setting<String>,
     /// Custom prompts for chat completions
-    #[serde(default)]
     #[deserr(default)]
     #[schema(inline, value_type = Option<ChatPrompts>)]
     pub prompts: Setting<ChatPrompts>,
