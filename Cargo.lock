@@ -1874,7 +1874,6 @@ dependencies = [
 name = "dump"
 version = "1.45.2"
 dependencies = [
- "anyhow",
  "big_s",
  "flate2",
  "http 1.4.1",
@@ -2313,17 +2312,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "futures-retry"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fde5a672a61f96552aa5ed9fd9c81c3fbdae4be9b1e205d6eaf17c83705adc0f"
-dependencies = [
- "futures",
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]
@@ -3410,15 +3398,11 @@ dependencies = [
  "anyhow",
  "backoff",
  "big_s",
- "bincode 1.3.3",
  "bumpalo",
- "bumparaw-collections",
  "byte-unit",
  "bytes",
  "convert_case 0.9.0",
  "crossbeam-channel",
- "csv",
- "derive_builder",
  "dump",
  "enum-iterator",
  "file-store",
@@ -3445,7 +3429,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "urlencoding",
  "uuid",
 ]
 
@@ -4186,7 +4169,6 @@ dependencies = [
  "actix-cors",
  "actix-http",
  "actix-rt",
- "actix-utils",
  "actix-web",
  "actix-web-lab",
  "anyhow",
@@ -4207,7 +4189,6 @@ dependencies = [
  "either",
  "file-store",
  "flate2",
- "fst",
  "futures",
  "futures-util",
  "hex",
@@ -4232,33 +4213,25 @@ dependencies = [
  "num_cpus",
  "obkv",
  "once_cell",
- "ordered-float 5.3.0",
- "parking_lot",
  "permissive-json-pointer",
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
  "rand 0.8.6",
- "rayon",
  "regex",
  "reqwest",
  "roaring 0.10.12",
  "routes",
  "rustls",
  "rustls-pemfile",
- "rustls-pki-types",
  "secrecy",
  "segment",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "sha-1",
- "sha2",
- "siphasher",
- "slice-group-by",
  "static-files",
  "sysinfo",
- "tar",
  "temp-env",
  "tempfile",
  "termcolor",
@@ -4291,7 +4264,6 @@ dependencies = [
  "maplit",
  "meilisearch-types",
  "rand 0.8.6",
- "roaring 0.10.12",
  "serde",
  "serde_json",
  "sha2",
@@ -4313,7 +4285,6 @@ dependencies = [
  "convert_case 0.9.0",
  "csv",
  "deserr",
- "either",
  "enum-iterator",
  "file-store",
  "flate2",
@@ -4333,7 +4304,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "time",
- "tokio",
  "urlencoding",
  "utoipa",
  "uuid",
@@ -5106,12 +5076,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pin-utils"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
-
-[[package]]
 name = "pinyin"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5682,14 +5646,12 @@ dependencies = [
  "eventsource-stream",
  "futures",
  "futures-core",
- "futures-retry",
  "futures-timer",
  "futures-util",
  "http-client",
  "mime",
  "nom",
  "pin-project-lite",
- "pin-utils",
  "rocket",
  "thiserror 1.0.69",
  "tokio",
@@ -8407,7 +8369,6 @@ dependencies = [
  "build-info",
  "cargo_metadata",
  "clap",
- "futures-core",
  "futures-util",
  "reqwest",
  "semver",

@@ -32,6 +32,4 @@ thiserror = "1.0.30"
 [dev-dependencies]
 futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-futures-retry = "0.6"
-pin-utils = "0.1"
-rocket = "0.5.0"
+rocket = "0.5.1"

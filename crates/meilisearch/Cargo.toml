@@ -19,8 +19,7 @@ actix-http = { version = "3.12.1", default-features = false, features = [
     "compress-gzip",
     "rustls-0_23",
 ] }
-actix-utils = "3.0.1"
-actix-web = { version = "4.12.0", default-features = false, features = [
+actix-web = { version = "4.13.0", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
@@ -38,8 +37,7 @@ deserr = { version = "0.6.4", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.15.0"
 file-store = { path = "../file-store" }
-flate2 = "1.1.5"
-fst = "0.4.7"
+flate2 = "1.1.9"
 futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
 futures-util = "0.3.32"
 index-scheduler = { path = "../index-scheduler" }
@@ -56,28 +54,22 @@ mimalloc = { workspace = true }
 mime = "0.3.17"
 num_cpus = "1.17.0"
 obkv = "0.3.0"
-once_cell = "1.21.3"
-ordered-float = "5.1.0"
-parking_lot = "0.12.5"
+once_cell = "1.21.4"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.16"
 platform-dirs = "0.3.0"
 prometheus = { version = "0.14.0", default-features = false, features = ["process"] }
 rand = "0.8.6"
-rayon = "1.12.0"
+
 regex = "1.12.3"
 rustls = { version = "0.23.40", features = ["ring"], default-features = false }
-rustls-pki-types = { version = "1.14.1", features = ["alloc"] }
+
 rustls-pemfile = "2.2.0"
 segment = { version = "0.2.6" }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-sha2 = "0.10.9"
-siphasher = "1.0.1"
-slice-group-by = "0.3.1"
+serde_json = { version = "1.0.150", features = ["preserve_order"] }
 static-files = { version = "0.3.1", optional = true }
 sysinfo = { version = "0.38.4", default-features = false, features = ["system", "disk"] }
-tar = { version = "0.4.46", default-features = false }
 tempfile = "3.27.0"
 thiserror = "2.0.18"
 time = { version = "0.3.47", features = [
