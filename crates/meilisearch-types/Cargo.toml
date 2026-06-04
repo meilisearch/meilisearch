@@ -33,10 +33,10 @@ roaring = { version = "0.10.12", features = ["serde"] }
 rustc-hash = "2.1.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde-cs = "0.2.4"
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-tar = "0.4.46"
-tempfile = "3.23.0"
-thiserror = "2.0.17"
+serde_json = { version = "1.0.150", features = ["preserve_order"] }
+tar = { version = "0.4.46", default-features = false }
+tempfile = "3.27.0"
+thiserror = "2.0.18"
 time = { version = "0.3.47", features = [
     "serde-well-known",
     "formatting",

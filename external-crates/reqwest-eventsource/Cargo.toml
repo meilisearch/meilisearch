@@ -30,7 +30,7 @@ futures-timer = "3.0.2"
 thiserror = "1.0.30"
 
 [dev-dependencies]
-futures = "0.3.5"
+futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures-retry = "0.6"
 pin-utils = "0.1"

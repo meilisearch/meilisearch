@@ -23,7 +23,7 @@ cellulite = "0.3.2"
 concat-arrays = "0.1.2"
 convert_case = "0.9.0"
 crossbeam-channel = "0.5.15"
-ureq = { version = "3.3.0", features = ["json"] }
+ureq = { version = "3.3.0", default-features = false, features = ["json", "gzip", "rustls"] }
 deserr = "0.6.4"
 either = { version = "1.15.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }

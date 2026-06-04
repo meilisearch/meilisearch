@@ -40,14 +40,14 @@ either = "1.15.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.5"
 fst = "0.4.7"
-futures = "0.3.31"
-futures-util = "0.3.31"
+futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
+futures-util = "0.3.32"
 index-scheduler = { path = "../index-scheduler" }
 http-client = { path = "../http-client" }
 indexmap = { version = "2.12.0", features = ["serde"] }
 is-terminal = "0.4.17"
 itertools = "0.14.0"
-jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.4.0", default-features = false, features = ["hmac", "sha2", "rand"] }
 lazy_static = "1.5.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
@@ -62,12 +62,12 @@ parking_lot = "0.12.5"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.16"
 platform-dirs = "0.3.0"
-prometheus = { version = "0.14.0", features = ["process"] }
-rand = "0.8.5"
-rayon = "1.11.0"
-regex = "1.12.2"
-rustls = { version = "0.23.36", features = ["ring"], default-features = false }
-rustls-pki-types = { version = "1.13.0", features = ["alloc"] }
+prometheus = { version = "0.14.0", default-features = false, features = ["process"] }
+rand = "0.8.6"
+rayon = "1.12.0"
+regex = "1.12.3"
+rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+rustls-pki-types = { version = "1.14.1", features = ["alloc"] }
 rustls-pemfile = "2.2.0"
 segment = { version = "0.2.6" }
 serde = { version = "1.0.228", features = ["derive"] }
@@ -76,10 +76,10 @@ sha2 = "0.10.9"
 siphasher = "1.0.1"
 slice-group-by = "0.3.1"
 static-files = { version = "0.3.1", optional = true }
-sysinfo = "0.38.4"
-tar = "0.4.46"
-tempfile = "3.23.0"
-thiserror = "2.0.17"
+sysinfo = { version = "0.38.4", default-features = false, features = ["system", "disk"] }
+tar = { version = "0.4.46", default-features = false }
+tempfile = "3.27.0"
+thiserror = "2.0.18"
 time = { version = "0.3.47", features = [
     "serde-well-known",
     "formatting",
@@ -87,7 +87,7 @@ time = { version = "0.3.47", features = [
     "macros",
 ] }
 tokio = { version = "1.52.3", features = ["full"] }
-toml = "0.9.8"
+toml = { version = "1.1.2", default-features = false, features = ["std", "serde", "parse"] }
 uuid = { version = "1.23.2", features = ["serde", "v4", "v7"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
@@ -141,7 +141,7 @@ reqwest = { version = "0.12.24", features = [
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.3.1", optional = true }
 tempfile = { version = "3.27.0", optional = true }
-zip = { version = "6.0.0", optional = true }
+zip = { version = "6.0.0", optional = true, default-features = false, features = ["deflate-flate2"] }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
