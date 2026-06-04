@@ -545,22 +545,21 @@ pub async fn search_with_url_query(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let request_uid = Uuid::now_v7();
-    debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
-    let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-
-    let mut query: SearchQuery = params.into_inner().try_into()?;
-
-    let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
-
-    let include_metadata = parse_include_metadata_header(&req);
-
     let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
-    let search_result = if use_documents_retrieval {
+    if use_documents_retrieval {
+        let request_uid = Uuid::now_v7();
+        debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+        let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+        let query: SearchQuery = params.into_inner().try_into()?;
+
+        let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
+
+        let include_metadata = parse_include_metadata_header(&req);
         let is_proxy = false;
         let document_retrieval = DocumentSearch {
             request_uid,
@@ -575,7 +574,7 @@ pub async fn search_with_url_query(
             personalization_service: (*personalization_service).clone(),
         };
 
-        document_retrieval
+        let search_result = document_retrieval
             .execute(index_scheduler, &progress)
             .await
             .map(|result| {
@@ -585,27 +584,73 @@ pub async fn search_with_url_query(
 
                 search_results.pop().unwrap().result
             })
-            .map_err(|(err, _)| err)
-    } else {
-        // Tenant token search_rules.
-        if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-            add_search_rules(&mut query.filter, search_rules);
+            .map_err(|(err, _)| err);
+
+        permit.drop().await;
+
+        if let Ok(search_result) = search_result.as_ref() {
+            aggregate.succeed(search_result);
         }
+        analytics.publish(aggregate, &req);
 
-        let search_result = search(
-            query,
-            index_scheduler.clone(),
+        let search_result = search_result?;
+
+        debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
+
+        Ok(HttpResponse::Ok().json(search_result))
+    } else {
+        legacy_search_with_url_query(
+            index_scheduler,
+            search_queue,
+            personalization_service,
             index_uid,
-            request_uid,
-            include_metadata,
-            &progress,
-            &personalization_service,
-            StatusCode::NOT_FOUND,
+            params,
+            req,
+            analytics,
         )
-        .await;
+        .await
+    }
+}
 
-        search_result
-    };
+pub async fn legacy_search_with_url_query(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<PersonalizationService>,
+    index_uid: web::Path<String>,
+    params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let request_uid = Uuid::now_v7();
+    debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
+    let progress = Progress::default();
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+    let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+    let mut query: SearchQuery = params.into_inner().try_into()?;
+
+    let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
+
+    let include_metadata = parse_include_metadata_header(&req);
+
+    // Tenant token search_rules.
+    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+        add_search_rules(&mut query.filter, search_rules);
+    }
+
+    let search_result = search(
+        query,
+        index_scheduler.clone(),
+        index_uid,
+        request_uid,
+        include_metadata,
+        &progress,
+        &personalization_service,
+        StatusCode::NOT_FOUND,
+    )
+    .await;
 
     permit.drop().await;
 
@@ -789,22 +834,22 @@ pub async fn search_with_post(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let request_uid = Uuid::now_v7();
-
-    let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
-
-    let mut query = params.into_inner();
-    debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
-
-    let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
-
-    let include_metadata = parse_include_metadata_header(&req);
     let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
-    let search_result = if use_documents_retrieval {
+    if use_documents_retrieval {
+        let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+        let request_uid = Uuid::now_v7();
+
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+
+        let query = params.into_inner();
+        debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
+
+        let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
+
+        let include_metadata = parse_include_metadata_header(&req);
         let is_proxy = false;
         let document_retrieval = DocumentSearch {
             request_uid,
@@ -819,7 +864,7 @@ pub async fn search_with_post(
             personalization_service: (*personalization_service).clone(),
         };
 
-        document_retrieval
+        let search_result = document_retrieval
             .execute(index_scheduler, &progress)
             .await
             .map(|result| {
@@ -829,25 +874,73 @@ pub async fn search_with_post(
 
                 search_results.pop().unwrap().result
             })
-            .map_err(|(err, _)| err)
-    } else {
-        // Tenant token search_rules.
-        if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-            add_search_rules(&mut query.filter, search_rules);
-        }
+            .map_err(|(err, _)| err);
 
-        search(
-            query,
-            index_scheduler.clone(),
+        permit.drop().await;
+
+        if let Ok(search_result) = search_result.as_ref() {
+            aggregate.succeed(search_result);
+        }
+        analytics.publish(aggregate, &req);
+
+        let search_result = search_result?;
+
+        debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
+
+        Ok(HttpResponse::Ok().json(search_result))
+    } else {
+        legacy_search_with_post(
+            index_scheduler,
+            search_queue,
+            personalization_service,
             index_uid,
-            request_uid,
-            include_metadata,
-            &progress,
-            &personalization_service,
-            StatusCode::NOT_FOUND,
+            params,
+            req,
+            analytics,
         )
         .await
-    };
+    }
+}
+
+pub async fn legacy_search_with_post(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    index_uid: web::Path<String>,
+    params: AwebJson<SearchQuery, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let request_uid = Uuid::now_v7();
+
+    let progress = Progress::default();
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+    let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
+
+    let mut query = params.into_inner();
+    debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
+
+    let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
+
+    let include_metadata = parse_include_metadata_header(&req);
+    // Tenant token search_rules.
+    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+        add_search_rules(&mut query.filter, search_rules);
+    }
+
+    let search_result = search(
+        query,
+        index_scheduler.clone(),
+        index_uid,
+        request_uid,
+        include_metadata,
+        &progress,
+        &personalization_service,
+        StatusCode::NOT_FOUND,
+    )
+    .await;
 
     permit.drop().await;
 
