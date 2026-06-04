@@ -14,10 +14,9 @@ license.workspace = true
 anyhow = "1.0.100"
 build-info = { version = "1.7.0", path = "../build-info" }
 cargo_metadata = "0.23.1"
-clap = { version = "4.5.52", features = ["derive"] }
-futures-core = "0.3.31"
-futures-util = "0.3.31"
-reqwest = { version = "0.12.24", features = [
+clap = { version = "4.6.1", features = ["derive"] }
+futures-util = "0.3.32"
+reqwest = { version = "0.12.28", features = [
     "stream",
     "json",
     "rustls-tls",
@@ -26,7 +25,7 @@ semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
-sysinfo = "0.38.4"
+sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 time = { version = "0.3.47", features = [
     "serde",
     "serde-human-readable",
