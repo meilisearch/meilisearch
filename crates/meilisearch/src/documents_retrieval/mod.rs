@@ -15,16 +15,6 @@ use crate::{
     },
 };
 
-pub trait DocumentRetrieval {
-    type RetrievedItem;
-
-    fn execute(
-        self,
-        index_scheduler: Data<IndexScheduler>,
-        progress: &Progress,
-    ) -> Result<Self::RetrievedItem, ResponseError>;
-}
-
 pub struct DocumentSearch {
     pub queries: Vec<SearchQueryWithIndex>,
     pub federation: Option<Federation>,
