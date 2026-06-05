@@ -135,14 +135,8 @@ fn handle_item_attrs(
         }
     }
 
-    let RequestItemAttr {
-        unknown_fields_policy,
-        error,
-        where_predicate,
-        deserr_attrs,
-        uses,
-        serde_attrs,
-    } = item_attr;
+    let RequestItemAttr { unknown_fields_policy, error, deserr_attrs, uses, serde_attrs } =
+        item_attr;
 
     serde_attrs.push(quote!(rename_all = "camelCase"));
 
@@ -164,10 +158,6 @@ fn handle_item_attrs(
             UnknownFieldPolicy::Allow => (),
         };
 
-        if let Some(where_predicate) = where_predicate {
-            deserr_attrs.push(quote!(where_predicate = #where_predicate));
-        }
-
         if let Some(error) = error {
             deserr_attrs.push(quote!(error = #error));
         }
@@ -175,8 +165,7 @@ fn handle_item_attrs(
     };
     item_attrs.push(deserr_attr);
     if has_named_fields {
-        let attr = syn::parse_quote!(#[schema(rename_all = "camelCase")]);
-        item_attrs.push(attr);
+        item_attrs.push(parse_quote!(#[schema(rename_all = "camelCase")]));
     }
 
     if uses.needs_serde() {
@@ -549,7 +538,6 @@ impl RequestFieldAttr {
 struct RequestItemAttr {
     pub unknown_fields_policy: UnknownFieldPolicy,
     pub error: Option<syn::Type>,
-    pub where_predicate: Option<syn::GenericParam>,
     pub deserr_attrs: Vec<proc_macro2::TokenStream>,
     pub serde_attrs: Vec<proc_macro2::TokenStream>,
     pub uses: Uses,
@@ -565,7 +553,6 @@ impl Default for RequestItemAttr {
         Self {
             unknown_fields_policy: UnknownFieldPolicy::Deny(None),
             error: Some(parse_quote!(DeserrJsonError)),
-            where_predicate: None,
             deserr_attrs: Default::default(),
             serde_attrs: Default::default(),
             uses: Default::default(),
@@ -577,7 +564,6 @@ impl RequestItemAttr {
     fn from_token_stream(tokens: TokenStream) -> syn::Result<Self> {
         let mut unknown_fields_policy = UnknownFieldPolicy::Deny(None);
         let mut error = Some(parse_quote!(DeserrJsonError));
-        let mut where_predicate = None;
         let mut deserr_attrs = Vec::new();
         let mut serde_attrs = Vec::new();
         let mut uses = Default::default();
@@ -585,7 +571,6 @@ impl RequestItemAttr {
             parse_request_item_attr_arg(
                 &mut unknown_fields_policy,
                 &mut error,
-                &mut where_predicate,
                 &mut deserr_attrs,
                 &mut serde_attrs,
                 &mut uses,
@@ -595,14 +580,13 @@ impl RequestItemAttr {
 
         parser.parse(tokens)?;
 
-        Ok(Self { unknown_fields_policy, error, where_predicate, deserr_attrs, uses, serde_attrs })
+        Ok(Self { unknown_fields_policy, error, deserr_attrs, uses, serde_attrs })
     }
 }
 
 fn parse_request_item_attr_arg(
     unknown_fields_policy: &mut UnknownFieldPolicy,
     error: &mut Option<syn::Type>,
-    where_predicate: &mut Option<syn::GenericParam>,
     deserr_attrs: &mut Vec<proc_macro2::TokenStream>,
     serde_attrs: &mut Vec<proc_macro2::TokenStream>,
     uses: &mut Uses,
@@ -634,9 +618,9 @@ fn parse_request_item_attr_arg(
             *error = None;
         }
         ident if ident == "where_predicate" => {
-            let _: Token![=] = meta.input.parse()?;
+            let eq: Token![=] = meta.input.parse()?;
             let bound: syn::GenericParam = meta.input.parse()?;
-            *where_predicate = Some(bound);
+            deserr_attrs.push(quote!(where_predicate #eq #bound));
         }
         ident if ident == "try_from" => {
             let content;
