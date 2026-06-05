@@ -209,9 +209,7 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 /// Used as the request body for PATCH settings. Only the fields you send are updated; pass `null` to reset a setting to its default.
 ///
 /// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
-#[routes::request(
-    setting
-)]
+#[routes::request(setting)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Settings<T> {
     /// Fields returned in search results. Affects only search endpoints, not get-document endpoints. See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
