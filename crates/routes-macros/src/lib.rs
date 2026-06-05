@@ -122,16 +122,68 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// # Item parameters
 ///
-/// ## `sharded`
+/// ## `allow_unknown_fields`
 ///
-/// Set to `true` if the request body is used in sharding. This will make the type `serde::Serialize`, so that sharding code
-/// can send these types easily.
+/// Allow unknown fields for `deserr` and `serde`. The default is to deny.
+///
+/// ## `deny_unknown_fields`
+///
+/// Deny unknown fields for `deserr` and `serde`. Default.
+///
+/// ## `proxied`
+///
+/// Specifies that this type is proxied, for instance for sharding.
+/// This will make the type `serde::Serialize`, so that sharding code can send these types easily.
 ///
 /// Additionally, a `serde` attribute will be applied to the item, with `rename_all = "camelCase"` and `deny_unknown_fields`.
 ///
-/// Optional. Defaults to `false`.
+/// ## `db`
+///
+/// Specifies that this type is stored in DB.
+/// This will make the type `serde::Serialize` and `serde::Deserialize`. It will also propagate the `rename_all` but **not**
+/// the `deny_unknown_fields`, to preserve backward compatibility.
+///
+/// ## `response`
+///
+/// Specifies that this type is also used in responses.
+/// This will make the type `serde::Serialize` so that the type can be returned as a response. It will also propagate the casing to serde.
+///
+/// ## `setting`
+///
+/// Specifies that this type is part of the settings.
+/// This will make the type `serde::Serialize` and `serde::Deserialize`, because settings type are stored in DB and proxied.
+///
+/// Implies `db`, `response` and `proxied`
+///
+/// ## `override_error`
+///
+/// Specifies the type of the deserr Error. If not specified, defaults to `DeserrJsonError` (which must be in scope).
+///
+/// ## `no_error`
+///
+/// Specifies that there is no deserr Error type.
+///
+/// ## `where_predicate`
+///
+/// See deserr's `where_predicate`
+///
+/// ## `try_from`
+///
+/// See deserr's try_from. The attribute **is not** applied to serde.
+///
+/// ## `validate``
+///
+/// See deserr's `validate`
+///
+/// ## `serde_bound`
+///
+/// See serde's `bound`
 ///
 /// # Variant parameters
+///
+/// ## `rename`
+///
+/// Rename the variant. Applies to serde, deserr and schema.
 ///
 /// # Field parameters
 ///
@@ -145,6 +197,56 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ## `required`
 ///
 /// If provided, then the field is mandatory and assumes no default value.
+///
+/// ## `schema_default`
+///
+/// Specifies a default value for use by `schema`. Will be interpreted exactly as `default` in the `schema` attribute.
+/// Implies `default`.
+///
+/// ## `skip`
+///
+/// Skips the attribute for serde, deserr and ignore the attribute in schema.
+///
+/// ## `rename`
+///
+/// Changes the attribute's name for serde, deserr and schema.
+///
+/// ## `example`
+///
+/// See schema's `example`
+///
+/// ## `schema_type`
+///
+/// Propagates the type to schema's `value_type`, and requires the RequestBody trait on the target
+/// of `schema_type` rather than on the natural type of the field;
+///
+/// ## `serde_with`
+///
+/// See serde's `with`
+///
+/// ## `inline`
+///
+/// See schema's `inline`
+///
+/// ## `error`
+///
+/// See deserr's `error`
+///
+/// ## `missing_field_error`
+///
+/// See deserr's `missing_field_error`
+///
+/// ## `try_from`
+///
+/// See deserr's `try_from`. **Not** propagated to `serde`.
+///
+/// ## `nullable`
+///
+/// See schema's `nullable`.
+///
+/// ## `skip_serializing_if`
+///
+/// See serde's `skip_serializing_if`.
 #[proc_macro_attribute]
 pub fn request(attr: TokenStream, item: TokenStream) -> TokenStream {
     match try_request(attr, item) {
