@@ -2123,8 +2123,9 @@ pub struct PrefixSettings {
     pub compute_prefixes: PrefixSearch,
 }
 
-/// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
-/// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
+// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
+// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
+/// Strategy used to match query terms within documents
 #[routes::request(no_error, setting)]
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MatchingStrategy {

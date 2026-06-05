@@ -106,7 +106,7 @@ pub struct ChatSearchParams {
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
-        schema_type = Option<HybridQuery>,
+        schema_type = Option<usize>,
         example = json!(20)
     )]
     pub limit: Setting<usize>,
@@ -115,7 +115,7 @@ pub struct ChatSearchParams {
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
-        schema_type = Option<HybridQuery>,
+        schema_type = Option<Vec<String>>,
         example = json!(["price:asc", "rating:desc"])
     )]
     pub sort: Setting<Vec<String>>,
@@ -124,7 +124,7 @@ pub struct ChatSearchParams {
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
-        schema_type = Option<HybridQuery>,
+        schema_type = Option<String>,
         example = json!("sku")
     )]
     pub distinct: Setting<String>,
@@ -133,7 +133,7 @@ pub struct ChatSearchParams {
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
-        schema_type = Option<HybridQuery>,
+        schema_type = Option<MatchingStrategy>,
         example = json!("last")
     )]
     pub matching_strategy: Setting<MatchingStrategy>,
@@ -142,7 +142,7 @@ pub struct ChatSearchParams {
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
-        schema_type = Option<HybridQuery>,
+        schema_type = Option<Vec<String>>,
         example = json!(["title", "description"])
     )]
     pub attributes_to_search_on: Setting<Vec<String>>,
@@ -151,7 +151,7 @@ pub struct ChatSearchParams {
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
-        schema_type = Option<HybridQuery>,
+        schema_type = Option<RankingScoreThreshold>,
         example = json!(0.5)
     )]
     pub ranking_score_threshold: Setting<RankingScoreThreshold>,

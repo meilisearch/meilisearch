@@ -60,8 +60,6 @@ pub enum Setting<T> {
     NotSet,
 }
 
-impl<T> routes::RequestBody for Setting<T> where T: routes::RequestBody {}
-
 impl<T, E> Deserr<E> for Setting<T>
 where
     T: Deserr<E>,

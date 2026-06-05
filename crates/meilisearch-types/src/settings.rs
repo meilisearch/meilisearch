@@ -210,8 +210,7 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 ///
 /// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
 #[routes::request(
-    setting,
-    serde_bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
+    setting
 )]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Settings<T> {
