@@ -278,6 +278,9 @@ fn handle_named_fields(
         match default_or_required {
             DefaultOrRequired::Default { deserr, schema } => {
                 let deserr_default = if let Some(deserr) = deserr {
+                    if item_attr.uses.needs_deserialize() {
+                        return Err(deserr.span().error("#[routes::request] does not support `default = value` when Deserialize is required"));
+                    }
                     quote!(default = #deserr)
                 } else {
                     quote!(default)
