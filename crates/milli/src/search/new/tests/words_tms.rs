@@ -508,8 +508,10 @@ fn test_words_tms_attribute_rank_word_position_order_keeps_hits() {
     ]);
 
     // Sanity check: word-dropping returns the partial matches, not just the
-    // documents containing every term.
-    assert!(words_first > 1);
+    // documents containing every term. The fixture yields 22 hits for this
+    // query under `Last`; only document 9 contains every term, so a regression
+    // to whole-query matching would drop this to 1.
+    assert_eq!(words_first, 22);
     // Reordering must not drop hits.
     assert_eq!(words_first, attribute_rank_first);
     assert_eq!(words_first, word_position_first);
