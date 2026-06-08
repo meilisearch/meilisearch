@@ -584,7 +584,14 @@ pub async fn search_with_url_query(
 
                 search_results.pop().unwrap().result
             })
-            .map_err(|(err, _)| err);
+            .map_err(|(mut err, _)| match err.error_code.as_str() {
+                "index_not_found" => {
+                    // If the index is not found, return a 404 status code
+                    err.code = StatusCode::NOT_FOUND;
+                    err
+                }
+                _ => err,
+            });
 
         permit.drop().await;
 
@@ -874,7 +881,14 @@ pub async fn search_with_post(
 
                 search_results.pop().unwrap().result
             })
-            .map_err(|(err, _)| err);
+            .map_err(|(mut err, _)| match err.error_code.as_str() {
+                "index_not_found" => {
+                    // If the index is not found, return a 404 status code
+                    err.code = StatusCode::NOT_FOUND;
+                    err
+                }
+                _ => err,
+            });
 
         permit.drop().await;
 
