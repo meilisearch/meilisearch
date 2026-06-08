@@ -72,16 +72,15 @@ impl BytesDecodeOwned for RoaringBitmapLenCodec {
 
 #[cfg(test)]
 mod tests {
-    use heed::BytesEncode;
     use roaring::RoaringBitmap;
 
     use super::*;
-    use crate::heed_codec::RoaringBitmapCodec;
 
     #[test]
     fn deserialize_roaring_bitmap_length() {
         let bitmap: RoaringBitmap = (0..500).chain(800..800_000).chain(920_056..930_032).collect();
-        let bytes = RoaringBitmapCodec::bytes_encode(&bitmap).unwrap();
+        let mut bytes = Vec::new();
+        bitmap.serialize_into(&mut bytes).unwrap();
         let len = RoaringBitmapLenCodec::deserialize_from_slice(&bytes).unwrap();
         assert_eq!(bitmap.len(), len);
     }

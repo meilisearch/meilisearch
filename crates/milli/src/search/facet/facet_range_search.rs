@@ -8,7 +8,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValueCodec, FacetGroupValueCodec,
 };
 use crate::heed_codec::BytesRefCodec;
-use crate::{CboRoaringBitmapCodec, Result};
+use crate::{DeCboRoaringBitmapCodec, Result};
 
 /// Find all the document ids for which the given field contains a value contained within
 /// the two bounds.
@@ -83,6 +83,7 @@ impl<'t> FacetRangeSearch<'t, '_, '_> {
     fn run_level_0(&mut self, starting_left_bound: &'t [u8], group_size: usize) -> Result<()> {
         let left_key =
             FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_left_bound };
+        let mut tmp_buffer = Vec::new();
         let iter = self.db.range(self.rtxn, &(left_key..))?.take(group_size);
         for el in iter {
             let (key, value) = el?;
@@ -114,11 +115,12 @@ impl<'t> FacetRangeSearch<'t, '_, '_> {
 
             if RangeBounds::<&[u8]>::contains(&(self.left, self.right), &key.left_bound) {
                 *self.docids |= match self.universe {
-                    Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
+                    Some(universe) => DeCboRoaringBitmapCodec::intersection_with_serialized(
                         value.bitmap_bytes,
                         universe,
+                        &mut tmp_buffer,
                     )?,
-                    None => CboRoaringBitmapCodec::deserialize_from(value.bitmap_bytes)?,
+                    None => DeCboRoaringBitmapCodec::deserialize_from(value.bitmap_bytes)?,
                 };
             }
         }
@@ -157,6 +159,7 @@ impl<'t> FacetRangeSearch<'t, '_, '_> {
 
         let left_key =
             FacetGroupKey { field_id: self.field_id, level, left_bound: starting_left_bound };
+        let mut tmp_buffer = Vec::new();
         let mut iter = self.db.range(self.rtxn, &(left_key..))?.take(group_size);
 
         // We iterate over the range while keeping in memory the previous value
@@ -211,11 +214,12 @@ impl<'t> FacetRangeSearch<'t, '_, '_> {
             };
             if should_take_whole_group {
                 *self.docids |= match self.universe {
-                    Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
+                    Some(universe) => DeCboRoaringBitmapCodec::intersection_with_serialized(
                         previous_value.bitmap_bytes,
                         universe,
+                        &mut tmp_buffer,
                     )?,
-                    None => CboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
+                    None => DeCboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
                 };
                 previous_key = next_key;
                 previous_value = next_value;
@@ -313,11 +317,12 @@ impl<'t> FacetRangeSearch<'t, '_, '_> {
         };
         if should_take_whole_group {
             *self.docids |= match self.universe {
-                Some(universe) => CboRoaringBitmapCodec::intersection_with_serialized(
+                Some(universe) => DeCboRoaringBitmapCodec::intersection_with_serialized(
                     previous_value.bitmap_bytes,
                     universe,
+                    &mut tmp_buffer,
                 )?,
-                None => CboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
+                None => DeCboRoaringBitmapCodec::deserialize_from(previous_value.bitmap_bytes)?,
             };
         } else {
             let level = level - 1;

@@ -12,8 +12,8 @@ use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    self, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
-    CursorClonableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
+    self, merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    CursorClonableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdDeCboRoaringBitmaps,
     MergeIgnoreValues,
 };
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
@@ -29,7 +29,7 @@ use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
 use crate::vector::VectorStore;
 use crate::{
-    lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
+    lat_lng_to_xyz, DeCboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
     Result, SerializationError, U8StrStrCodec, UserError,
 };
 
@@ -241,7 +241,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_word_count_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdWordCountDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -256,7 +256,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.field_id_word_count_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -264,9 +264,9 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "word_docids");
             let _entered = span.enter();
 
-            let mut word_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-            let mut exact_word_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
-            let mut word_fid_docids_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut word_docids_builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
+            let mut exact_word_docids_builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
+            let mut word_fid_docids_builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             let mut fst_merger_builder = MergerBuilder::new(MergeIgnoreValues);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordDocids {
@@ -291,7 +291,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             let exact_word_docids_merger = exact_word_docids_builder.build();
@@ -300,7 +300,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.exact_word_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             let word_fid_docids_merger = word_fid_docids_builder.build();
@@ -309,7 +309,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_fid_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             // create fst from word docids
@@ -329,7 +329,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "word_position_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordPositionDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -344,7 +344,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_position_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -353,7 +353,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db","field_id_facet_number_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             let mut data_size = 0;
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetNumberDocids(facet_id_number_docids) = typed_chunk
@@ -375,7 +375,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_facet_string_docids");
             let _entered = span.enter();
 
-            let mut facet_id_string_builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut facet_id_string_builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             let mut normalized_facet_id_string_builder =
                 MergerBuilder::new(MergeDeladdBtreesetString);
             let mut data_size = 0;
@@ -411,7 +411,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_facet_exists_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetExistsDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -426,7 +426,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_exists_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -435,7 +435,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "field_id_facet_is_null_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetIsNullDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -450,7 +450,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_null_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -458,7 +458,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let span = tracing::trace_span!(target: "indexing::write_db", "field_id_facet_is_empty_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::FieldIdFacetIsEmptyDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -473,7 +473,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_empty_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -482,7 +482,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 tracing::trace_span!(target: "indexing::write_db", "word_pair_proximity_docids");
             let _entered = span.enter();
 
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             for typed_chunk in typed_chunks {
                 let TypedChunk::WordPairProximityDocids(chunk) = typed_chunk else {
                     unreachable!();
@@ -504,7 +504,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     &index.word_pair_proximity_docids,
                     wtxn,
                     deladd_serialize_add_side,
-                    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                    merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
                 )?;
             }
 
@@ -866,7 +866,7 @@ where
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 fn write_proximity_entries_into_database_additional_searchables<R, MF>(
     merger: Merger<R, MF>,
-    database: &heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
+    database: &heed::Database<U8StrStrCodec, DeCboRoaringBitmapCodec>,
     wtxn: &mut RwTxn<'_>,
 ) -> Result<()>
 where
@@ -881,7 +881,7 @@ where
                 U8StrStrCodec::bytes_decode(key).map_err(heed::Error::Decoding)?;
             let data_to_insert = match KvReaderDelAdd::from_slice(value).get(DelAdd::Addition) {
                 Some(value) => {
-                    CboRoaringBitmapCodec::bytes_decode(value).map_err(heed::Error::Decoding)?
+                    DeCboRoaringBitmapCodec::bytes_decode(value).map_err(heed::Error::Decoding)?
                 }
                 None => continue,
             };

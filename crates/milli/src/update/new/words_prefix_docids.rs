@@ -11,17 +11,17 @@ use roaring::MultiOps;
 
 use crate::heed_codec::StrBEU16Codec;
 use crate::update::new::indexer::MiniString;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{DeCboRoaringBitmapCodec, Index, Result};
 
 struct WordPrefixDocids {
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+    prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
 }
 
 impl WordPrefixDocids {
     fn new(
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
     ) -> WordPrefixDocids {
         WordPrefixDocids { database, prefix_database }
     }
@@ -55,6 +55,7 @@ impl WordPrefixDocids {
                 let mut entries = Vec::new();
                 let mut values = tempfile::tempfile().map(BufWriter::new)?;
 
+                let mut tmp_buffer = Vec::new();
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -67,11 +68,19 @@ impl WordPrefixDocids {
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
 
-                    let serialized_length = CboRoaringBitmapCodec::serialized_size(&output);
+                    let serialized_length =
+                        DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(
+                            &output,
+                            &mut tmp_buffer,
+                        );
                     // safety: the serialized length will never exceed u32::MAX (4GiB).
                     let serialized_length = serialized_length.try_into().unwrap();
 
-                    CboRoaringBitmapCodec::serialize_into_writer(&output, &mut values)?;
+                    DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                        &output,
+                        &mut values,
+                        &mut tmp_buffer,
+                    )?;
                     entries.push(PrefixEntry {
                         prefix: prefix.clone(),
                         serialized_length: NonZeroU32::new(serialized_length),
@@ -119,14 +128,14 @@ struct PrefixEntry {
 }
 
 struct WordPrefixIntegerDocids {
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+    prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
 }
 
 impl WordPrefixIntegerDocids {
     fn new(
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
     ) -> WordPrefixIntegerDocids {
         WordPrefixIntegerDocids { database, prefix_database }
     }
@@ -164,6 +173,7 @@ impl WordPrefixIntegerDocids {
                 // Represents the offsets at which prefixes computations were stored in the `values` file.
                 let mut entries = Vec::new();
                 let mut values = tempfile::tempfile().map(BufWriter::new)?;
+                let mut tmp_buffer = Vec::new();
 
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
@@ -207,14 +217,27 @@ impl WordPrefixIntegerDocids {
                         } else {
                             let output = bitmaps_bytes
                                 .into_iter()
-                                .map(CboRoaringBitmapCodec::deserialize_from)
+                                .map(|bytes| {
+                                    DeCboRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
+                                        bytes,
+                                        &mut tmp_buffer,
+                                    )
+                                })
                                 .union()?;
 
-                            let serialized_length = CboRoaringBitmapCodec::serialized_size(&output);
+                            let serialized_length =
+                                DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(
+                                    &output,
+                                    &mut tmp_buffer,
+                                );
                             // safety: the serialized length will never exceed u32::MAX (4GiB).
                             let serialized_length = serialized_length.try_into().unwrap();
 
-                            CboRoaringBitmapCodec::serialize_into_writer(&output, &mut values)?;
+                            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                                &output,
+                                &mut values,
+                                &mut tmp_buffer,
+                            )?;
                             entries.push(PrefixIntegerEntry {
                                 prefix: prefix.clone(),
                                 pos,
@@ -272,7 +295,7 @@ struct PrefixIntegerEntry {
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 fn delete_prefixes(
     wtxn: &mut RwTxn,
-    prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
+    prefix_database: &Database<Bytes, DeCboRoaringBitmapCodec>,
     prefixes: &BTreeSet<MiniString>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
