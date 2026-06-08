@@ -544,9 +544,13 @@ pub async fn documents_by_query_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<BrowseQuery, DeserrJsonError>,
+    search_queue: web::Data<crate::search_queue::SearchQueue>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let use_queue = index_scheduler.features().runtime_features().queue_documents_fetch;
+    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
+
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
@@ -568,7 +572,11 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    documents_by_query(index_scheduler.clone(), index_uid, body).await
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, body).await;
+    if let Some(permit) = permit {
+        permit.drop().await;
+    }
+    ret
 }
 
 /// List documents with GET
@@ -626,10 +634,14 @@ pub async fn get_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
+    search_queue: web::Data<crate::search_queue::SearchQueue>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
+
+    let use_queue = !index_scheduler.features().runtime_features().queue_documents_fetch;
+    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
         params.into_inner();
@@ -670,7 +682,13 @@ pub async fn get_documents(
         &req,
     );
 
-    documents_by_query(index_scheduler.clone(), index_uid, query).await
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, query).await;
+
+    if let Some(permit) = permit {
+        permit.drop().await;
+    }
+
+    ret
 }
 
 async fn documents_by_query(
