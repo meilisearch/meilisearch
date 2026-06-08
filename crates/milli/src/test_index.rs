@@ -23,8 +23,8 @@ use crate::update::{
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
 use crate::{
-    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index, Search,
-    SearchResult,
+    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index,
+    MustStopProcessing, Search, SearchResult,
 };
 
 pub(crate) struct TempIndex {
@@ -101,7 +101,7 @@ impl TempIndex {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )?;
@@ -121,7 +121,7 @@ impl TempIndex {
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -158,7 +158,7 @@ impl TempIndex {
         let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
         update(&mut builder);
         builder.execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -200,7 +200,7 @@ impl TempIndex {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )?;
@@ -220,7 +220,7 @@ impl TempIndex {
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -251,12 +251,9 @@ impl TempIndex {
 
 #[test]
 fn aborting_indexation() {
-    use std::sync::atomic::AtomicBool;
-    use std::sync::atomic::Ordering::Relaxed;
-
     let index = TempIndex::new();
     let mut wtxn = index.inner.write_txn().unwrap();
-    let should_abort = AtomicBool::new(false);
+    let should_abort = MustStopProcessing::default();
 
     let indexer_config = &index.indexer_config;
     let pool = &indexer_config.thread_pool;
@@ -282,13 +279,13 @@ fn aborting_indexation() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
         .unwrap();
 
-    should_abort.store(true, Relaxed);
+    should_abort.must_stop();
 
     let err = pool
         .install(|| {
@@ -302,7 +299,7 @@ fn aborting_indexation() {
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| should_abort.load(Relaxed),
+                &should_abort,
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),

@@ -11,7 +11,9 @@ use crate::sharding::Shards;
 use crate::update::new::indexer;
 use crate::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use crate::vector::RuntimeEmbedders;
-use crate::{db_snap, CreateOrOpen, Criterion, FilterableAttributesRule, Index};
+use crate::{
+    db_snap, CreateOrOpen, Criterion, FilterableAttributesRule, Index, MustStopProcessing,
+};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 
@@ -48,7 +50,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<S
     builder.set_searchable_fields(vec![S("title"), S("description")]);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -84,7 +86,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<S
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -104,7 +106,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<S
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),

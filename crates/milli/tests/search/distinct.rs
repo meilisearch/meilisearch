@@ -22,7 +22,7 @@ macro_rules! test_distinct {
             builder.set_distinct_field(S(stringify!($distinct)));
             builder
                 .execute(
-                    &|| false,
+                    &milli::MustStopProcessing::default(),
                     &Progress::default(),
                     // NO DANGER: test
                     &http_client::policy::IpPolicy::danger_always_allow(),

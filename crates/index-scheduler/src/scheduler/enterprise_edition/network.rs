@@ -498,7 +498,7 @@ impl IndexScheduler {
             None, // document deletion never changes primary key
             &document_changes,
             embedders,
-            &|| must_stop_processing.get(),
+            must_stop_processing,
             progress,
             self.ip_policy(),
             &EmbedderStats::default(),

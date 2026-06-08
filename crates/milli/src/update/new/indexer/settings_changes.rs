@@ -75,7 +75,6 @@ pub fn settings_change_extract<
     'data,      // invariant on EX::Data lifetime of datastore
     'index,     // covariant lifetime of the index
     EX: SettingsChangeExtractor<'extractor>,
-    MSP: Fn() -> bool + Sync,
 >(
     documents: &'indexer DocumentsIndentifiers<'indexer>,
     extractor: &EX,
@@ -88,7 +87,7 @@ pub fn settings_change_extract<
         must_stop_processing,
         progress,
         grenad_parameters: _,
-    }: IndexingContext<'fid, 'indexer, 'index, MSP>,
+    }: IndexingContext<'fid, 'indexer, 'index>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
     step: IndexingStep,
@@ -120,7 +119,7 @@ pub fn settings_change_extract<
             )
         },
         |context, items| {
-            if (must_stop_processing)() {
+            if must_stop_processing.get() {
                 return Err(Arc::new(InternalError::AbortedIndexation.into()));
             }
 

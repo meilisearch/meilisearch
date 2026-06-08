@@ -41,7 +41,8 @@ use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocume
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{
     CboRoaringBitmapCodec, Error, FieldsIdsMap, FilterFeatures, FilterableAttributesFeatures,
-    GlobalFieldsIdsMap, Index, InternalError, PatternMatch, Result, ThreadPoolNoAbort,
+    GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing, PatternMatch, Result,
+    ThreadPoolNoAbort,
 };
 
 pub(crate) mod de;
@@ -64,7 +65,7 @@ static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
 ///
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
 #[allow(clippy::too_many_arguments)] // clippy: 😝
-pub fn index<'pl, 'indexer, 'index, DC, MSP>(
+pub fn index<'pl, 'indexer, 'index, DC>(
     wtxn: &mut RwTxn,
     index: &'index Index,
     pool: &ThreadPoolNoAbort,
@@ -74,14 +75,13 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     new_primary_key: Option<PrimaryKey<'pl>>,
     document_changes: &DC,
     embedders: RuntimeEmbedders,
-    must_stop_processing: &'indexer MSP,
+    must_stop_processing: &'indexer MustStopProcessing,
     progress: &'indexer Progress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: &'indexer EmbedderStats,
 ) -> Result<ChannelCongestion>
 where
     DC: DocumentChanges<'pl>,
-    MSP: Fn() -> bool + Sync,
 {
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
@@ -195,7 +195,7 @@ where
                 vector_memory,
                 &mut vector_stores,
                 None,
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )
         })
         .unwrap()?;
@@ -214,7 +214,7 @@ where
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
-            &indexing_context.must_stop_processing,
+            &|| indexing_context.must_stop_processing.get(),
             indexing_context.progress,
         )?;
 
@@ -246,19 +246,18 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn reindex<'indexer, 'index, MSP, SD>(
+pub fn reindex<'indexer, 'index, SD>(
     wtxn: &mut RwTxn<'index>,
     index: &'index Index,
     pool: &ThreadPoolNoAbort,
     grenad_parameters: GrenadParameters,
     settings_delta: &'indexer SD,
-    must_stop_processing: &'indexer MSP,
+    must_stop_processing: &'indexer MustStopProcessing,
     progress: &'indexer Progress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: Arc<EmbedderStats>,
 ) -> Result<ChannelCongestion>
 where
-    MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
 {
     delete_old_embedders_and_fragments(wtxn, index, settings_delta)?;
@@ -387,7 +386,7 @@ where
                 vector_memory,
                 &mut vector_stores,
                 Some(embedder_actions),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )
         })
         .unwrap()?;
@@ -435,7 +434,7 @@ where
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
-            &indexing_context.must_stop_processing,
+            &|| indexing_context.must_stop_processing.get(),
             indexing_context.progress,
         )?;
 
@@ -562,16 +561,15 @@ where
     Ok(())
 }
 
-fn delete_old_geo_databases<SD, MSP>(
+fn delete_old_geo_databases<SD>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     settings_delta: &SD,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     progress: &Progress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
-    MSP: Fn() -> bool + Sync,
 {
     let _step = progress.update_progress_scoped(IndexingStep::DeletingFromGeoDatabases);
 
@@ -585,7 +583,7 @@ where
         index.cellulite.clear(wtxn)?;
     }
 
-    if must_stop_processing() {
+    if must_stop_processing.get() {
         return Err(Error::InternalError(InternalError::AbortedIndexation));
     }
 
@@ -728,16 +726,15 @@ pub fn migrate_word_docids(
     Ok(())
 }
 
-pub fn delete_old_fid_from_facet_databases<SD, MSP>(
+pub fn delete_old_fid_from_facet_databases<SD>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     settings_delta: &SD,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     progress: &Progress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
-    MSP: Fn() -> bool + Sync,
 {
     let mut remove_from_everywhere = BTreeSet::new();
     let mut remove_from_facet_search = BTreeSet::new();
@@ -832,7 +829,7 @@ where
         progress.update_progress(db_progress_obj);
 
         for database in databases {
-            if must_stop_processing() {
+            if must_stop_processing.get() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
@@ -859,7 +856,7 @@ where
 
         // TODO merge with the above code
         for database in databases {
-            if must_stop_processing() {
+            if must_stop_processing.get() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
@@ -887,7 +884,7 @@ where
 
         // TODO merge with the above code (or not?)
         for database in databases {
-            if must_stop_processing() {
+            if must_stop_processing.get() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 
@@ -915,16 +912,15 @@ where
 
 /// Deletes entries refering the provided
 /// fids from the fid-based databases.
-pub fn delete_old_fid_based_databases<SD, MSP>(
+pub fn delete_old_fid_based_databases<SD>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     settings_delta: &SD,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     progress: &Progress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
-    MSP: Fn() -> bool + Sync,
 {
     // Get the fids to delete from the settings delta.
     // Compare the old and new fields ids map to find the fids that are no longer searchable.
@@ -962,16 +958,13 @@ where
 
 /// Deletes entries related to field IDs that must no longer exist in the database.
 /// Uses parallel fetching to speed up the deletion process.
-pub fn delete_old_fid_based_databases_from_fids<MSP>(
+pub fn delete_old_fid_based_databases_from_fids(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
     progress: &Progress,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<()> {
     let bounds = compute_fst_bounds(wtxn, index)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
@@ -1097,24 +1090,21 @@ fn fetch_keys_to_delete_in_parallel(
 
 /// Parallel version of delete_old_word_fid_docids that fetches keys in parallel
 /// and then deletes them sequentially.
-fn delete_old_word_fid_docids_parallel<MSP>(
+fn delete_old_word_fid_docids_parallel(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     database: Database<StrBEU16Codec, Unit>,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
     bounds: &[Option<Box<[u8]>>],
-) -> crate::Result<usize>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> crate::Result<usize> {
     let results = fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete, bounds)?;
 
     let database = database.remap_key_type::<Bytes>();
     let mut count = 0;
     for result in results.into_iter().flatten() {
         let keys = result?;
-        if must_stop_processing() {
+        if must_stop_processing.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
         keys.into_iter().try_for_each(|key| {
@@ -1127,18 +1117,15 @@ where
     Ok(count)
 }
 
-fn delete_old_fid_word_count_docids<MSP>(
+fn delete_old_fid_word_count_docids(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
-) -> Result<(), Error>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<(), Error> {
     let db = index.field_id_word_count_docids.remap_data_type::<DecodeIgnore>();
     for &fid_to_delete in fids_to_delete {
-        if must_stop_processing() {
+        if must_stop_processing.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 

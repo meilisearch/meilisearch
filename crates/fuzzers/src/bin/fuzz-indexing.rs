@@ -15,7 +15,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy};
 use milli::vector::RuntimeEmbedders;
-use milli::{CreateOrOpen, Index};
+use milli::{CreateOrOpen, Index, MustStopProcessing};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -134,7 +134,7 @@ fn main() {
                                     &rtxn,
                                     None,
                                     &mut new_fields_ids_map,
-                                    &|| false,
+                                    &MustStopProcessing::default(),
                                     Progress::default(),
                                     None,
                                 )
@@ -150,7 +150,7 @@ fn main() {
                                 primary_key,
                                 &document_changes,
                                 embedders,
-                                &|| false,
+                                &MustStopProcessing::default(),
                                 &Progress::default(),
                                 &IpPolicy::deny_all_local_ips(),
                                 &Default::default(),

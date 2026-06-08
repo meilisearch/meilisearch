@@ -31,9 +31,9 @@ use crate::vector::RuntimeEmbedders;
 use crate::{Index, InternalError, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
+pub(super) fn extract_all<'pl, 'extractor, DC>(
     document_changes: &DC,
-    indexing_context: IndexingContext<MSP>,
+    indexing_context: IndexingContext,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
     embedders: &RuntimeEmbedders,
@@ -47,7 +47,6 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
 ) -> Result<(FacetFieldIdsDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
-    MSP: Fn() -> bool + Sync,
 {
     let span =
         tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
@@ -162,7 +161,7 @@ where
                     }
                     Ok(())
                 },
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -177,7 +176,7 @@ where
                 index.word_fid_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordFidDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -192,7 +191,7 @@ where
                 index.exact_word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<ExactWordDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -207,7 +206,7 @@ where
                 index.word_position_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordPositionDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -222,7 +221,7 @@ where
                 index.field_id_word_count_docids.remap_types(),
                 index,
                 extractor_sender.docids::<FidWordCountDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
     }
@@ -253,7 +252,7 @@ where
                 index.word_pair_proximity_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordPairProximityDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
     }
@@ -332,7 +331,7 @@ where
             &rtxn,
             index,
             extractor_sender.geo(),
-            &indexing_context.must_stop_processing,
+            indexing_context.must_stop_processing,
         )?;
     }
 
@@ -363,8 +362,8 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn extract_all_settings_changes<MSP, SD>(
-    indexing_context: IndexingContext<MSP>,
+pub(super) fn extract_all_settings_changes<SD>(
+    indexing_context: IndexingContext,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
     settings_delta: &SD,
@@ -375,7 +374,6 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     embedder_stats: &EmbedderStats,
 ) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta, FacetFieldIdsDelta)>
 where
-    MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
 {
     // Create the list of document ids to extract
@@ -473,7 +471,7 @@ where
                     }
                     Ok(())
                 },
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -488,7 +486,7 @@ where
                 index.word_fid_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordFidDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -503,7 +501,7 @@ where
                 index.exact_word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<ExactWordDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -518,7 +516,7 @@ where
                 index.word_position_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordPositionDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
 
@@ -533,7 +531,7 @@ where
                 index.field_id_word_count_docids.remap_types(),
                 index,
                 extractor_sender.docids::<FidWordCountDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
     }
@@ -564,7 +562,7 @@ where
                 index.word_pair_proximity_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordPairProximityDocids>(),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )?;
         }
     }
@@ -656,7 +654,7 @@ where
             &rtxn,
             index,
             extractor_sender.geo(),
-            &indexing_context.must_stop_processing,
+            indexing_context.must_stop_processing,
         )?;
     }
 

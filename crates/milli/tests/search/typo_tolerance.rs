@@ -8,7 +8,9 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{CreateOrOpen, Criterion, Index, Object, Search, TermsMatchingStrategy};
+use milli::{
+    CreateOrOpen, Criterion, Index, MustStopProcessing, Object, Search, TermsMatchingStrategy,
+};
 use serde_json::{from_value, json};
 use tempfile::tempdir;
 use Criterion::*;
@@ -50,7 +52,7 @@ fn test_typo_tolerance_one_typo() {
     builder.set_min_word_len_one_typo(4);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -107,7 +109,7 @@ fn test_typo_tolerance_two_typo() {
     builder.set_min_word_len_two_typos(7);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -158,7 +160,7 @@ fn test_typo_disabled_on_word() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -174,7 +176,7 @@ fn test_typo_disabled_on_word() {
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
@@ -209,7 +211,7 @@ fn test_typo_disabled_on_word() {
     builder.set_exact_words(exact_words);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -257,7 +259,7 @@ fn test_disable_typo_on_attribute() {
     builder.set_exact_attributes(vec!["description".to_string()].into_iter().collect());
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),

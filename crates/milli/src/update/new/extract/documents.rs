@@ -256,15 +256,14 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
 /// modifies them by adding or removing vector fields based on embedder actions,
 /// and then updates the database.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents::extract")]
-pub fn update_database_documents<'indexer, MSP, SD>(
+pub fn update_database_documents<'indexer, SD>(
     documents: &'indexer DocumentsIndentifiers<'indexer>,
-    indexing_context: IndexingContext<MSP>,
+    indexing_context: IndexingContext,
     extractor_sender: &ExtractorBbqueueSender,
     settings_delta: &SD,
     extractor_allocs: &mut ThreadLocal<FullySend<Bump>>,
 ) -> Result<()>
 where
-    MSP: Fn() -> bool + Sync,
     SD: SettingsDelta,
 {
     if !must_update_database(settings_delta) {

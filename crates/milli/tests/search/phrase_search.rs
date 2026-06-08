@@ -1,7 +1,7 @@
 use http_client::policy::IpPolicy;
 use milli::progress::Progress;
 use milli::update::{IndexerConfig, Settings};
-use milli::{Criterion, Index, Search, TermsMatchingStrategy};
+use milli::{Criterion, Index, MustStopProcessing, Search, TermsMatchingStrategy};
 
 use crate::search::Criterion::{Attribute, Exactness, Proximity};
 
@@ -14,7 +14,7 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     builder.set_stop_words(stop_words);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
