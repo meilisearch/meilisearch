@@ -144,14 +144,14 @@ async fn reset_embedder_documents() {
           "name": "kefir",
           "_vectors": {
             "manual": {
+              "regenerate": false,
               "embeddings": [
                 [
                   0.0,
                   0.0,
                   0.0
                 ]
-              ],
-              "regenerate": false
+              ]
             }
           }
         },
@@ -160,14 +160,14 @@ async fn reset_embedder_documents() {
           "name": "echo",
           "_vectors": {
             "manual": {
+              "regenerate": false,
               "embeddings": [
                 [
                   1.0,
                   1.0,
                   1.0
                 ]
-              ],
-              "regenerate": false
+              ]
             }
           }
         },
@@ -176,6 +176,7 @@ async fn reset_embedder_documents() {
           "name": "billou",
           "_vectors": {
             "manual": {
+              "regenerate": false,
               "embeddings": [
                 [
                   2.0,
@@ -187,8 +188,7 @@ async fn reset_embedder_documents() {
                   2.0,
                   3.0
                 ]
-              ],
-              "regenerate": false
+              ]
             }
           }
         },
@@ -197,14 +197,14 @@ async fn reset_embedder_documents() {
           "name": "intel",
           "_vectors": {
             "manual": {
+              "regenerate": false,
               "embeddings": [
                 [
                   3.0,
                   3.0,
                   3.0
                 ]
-              ],
-              "regenerate": false
+              ]
             }
           }
         },
@@ -213,6 +213,7 @@ async fn reset_embedder_documents() {
           "name": "max",
           "_vectors": {
             "manual": {
+              "regenerate": false,
               "embeddings": [
                 [
                   4.0,
@@ -224,8 +225,7 @@ async fn reset_embedder_documents() {
                   4.0,
                   5.0
                 ]
-              ],
-              "regenerate": false
+              ]
             }
           }
         }
