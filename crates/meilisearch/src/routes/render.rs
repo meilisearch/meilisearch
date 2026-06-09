@@ -7,7 +7,6 @@ use actix_web::{HttpRequest, HttpResponse};
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderTemplate};
@@ -996,14 +995,13 @@ impl ErrorCode for RenderError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderQuery {
     /// Template/fragment to fetch for rendering.
     ///
     /// Use its `kind` parameter to determine the type of template or fragment to fetch.
-    #[deserr(error = DeserrJsonError<InvalidRenderTemplate>)]
-    #[schema(required = true)]
+    #[request(required, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub template: RenderQueryTemplate,
     /// Input for the template to fetch.
     ///
@@ -1012,39 +1010,38 @@ pub struct RenderQuery {
     /// If `null` or missing, the template will not be rendered.
     ///
     /// Use its `kind` parameter to determine the type of document to fetch.
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
-    #[schema(required = false)]
+    #[request(default, error = DeserrJsonError<InvalidRenderInput>)]
     pub input: Option<RenderQueryInput>,
 }
 
 // implementation note: this is a set as a struct because deserr does not support untagged enums
-#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidRenderTemplate>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(override_error = DeserrJsonError<InvalidRenderTemplate>)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderQueryTemplate {
     /// Kind of template or fragment to fetch.
     ///
     /// Determines which other parameters are allowed and mandatory.
-    #[deserr(error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[request(required, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub kind: RenderQueryTemplateKind,
     /// Index to fetch the template or fragment from.
     ///
     /// - Mandatory for `kind`s: `documentTemplate`, `chatDocumentTemplate`, `indexingFragment` and `searchFragment`.
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub index_uid: Option<IndexUid>,
     /// Embedder to fetch the template or fragment from.
     ///
     /// - Mandatory for `kind`s: `documentTemplate`, `chatDocumentTemplate`, `indexingFragment` and `searchFragment`.
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub embedder: Option<String>,
     /// Name of the fragment to fetch.
     ///
     /// - Mandatory for `kind`s: `indexingFragment` and `searchFragment`.
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub fragment: Option<String>,
     /// Inline value of the template or fragment.
     ///
     /// - Mandatory for `kind`s: `inlineDocumentTemplate` and `inlineFragment`.
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub inline: Option<Value>,
     /// If present, truncate document template rendering to the specified number of bytes.
     ///
@@ -1052,13 +1049,12 @@ pub struct RenderQueryTemplate {
     /// - If present for `documentTemplate` overrides the setting of the index.
     /// - If missing for `documentTemplate`, the setting of the index is used.
     /// - If missing for `inlineDocumentTemplate`, the default value of 400 bytes is used.
-    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
-    #[schema(value_type = Option<u64>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderTemplate>, schema_type = Option<u64>)]
     pub document_template_max_bytes: Option<NonZeroUsize>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidRenderTemplate>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(override_error = DeserrJsonError<InvalidRenderTemplate>)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderQueryTemplateKind {
     /// Fetches the fragment associated with the `embedders.embedder.documentTemplate` setting of the specified index
     ///
@@ -1105,21 +1101,21 @@ impl std::fmt::Display for RenderQueryTemplateKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(override_error = DeserrJsonError<InvalidRenderInput>)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RenderQueryInput {
-    #[deserr(error = DeserrJsonError<InvalidRenderInput>)]
+    #[request(required, error = DeserrJsonError<InvalidRenderInput>)]
     pub kind: RenderQueryInputKind,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderInput>)]
     pub index_uid: Option<IndexUid>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderInput>)]
     pub id: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    #[request(default, error = DeserrJsonError<InvalidRenderInput>)]
     pub inline: Option<Value>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(override_error = DeserrJsonError<InvalidRenderInput>)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderQueryInputKind {
     /// Fetches the document associated with the `id` setting of the specified index
     ///
