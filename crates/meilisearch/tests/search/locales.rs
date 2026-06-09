@@ -842,12 +842,16 @@ async fn settings_change() {
             |response, code| {
                 snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
-                  "hits": [],
+                  "hits": [
+                    {
+                      "id": 852
+                    }
+                  ],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0,
+                  "estimatedTotalHits": 1,
                   "requestUid": "[uuid]"
                 }
                 "###);
@@ -907,12 +911,16 @@ async fn settings_change() {
             |response, code| {
                 snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
-                  "hits": [],
+                  "hits": [
+                    {
+                      "id": 852
+                    }
+                  ],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0,
+                  "estimatedTotalHits": 1,
                   "requestUid": "[uuid]"
                 }
                 "###);
