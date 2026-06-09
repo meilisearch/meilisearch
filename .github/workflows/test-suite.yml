@@ -15,7 +15,7 @@ env:
 
 jobs:
   test-linux:
-    name: Tests on ${{ matrix.runner }} ${{ matrix.features }} 
+    name: Tests on ${{ matrix.runner }} ${{ matrix.features }}
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -267,12 +267,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo fmt
-        # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
-        # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
-        # we are going to create an empty file where rustfmt expects it.
-        run: |
-          echo -ne "\n" > crates/benchmarks/benches/datasets_paths.rs
-          cargo fmt --all -- --check
+        run: cargo fmt --all -- --check
 
   declarative-tests:
     name: Run declarative tests

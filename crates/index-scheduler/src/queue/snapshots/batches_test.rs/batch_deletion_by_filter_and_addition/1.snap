@@ -1,0 +1,101 @@
+---
+source: crates/index-scheduler/src/queue/batches_test.rs
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("id"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "docs", primary_key: Some("id") }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { settings: Settings { displayed_attributes: WildcardSetting(NotSet), searchable_attributes: WildcardSetting(NotSet), filterable_attributes: Set([Field("id")]), sortable_attributes: NotSet, foreign_keys: NotSet, ranking_rules: NotSet, stop_words: NotSet, non_separator_tokens: NotSet, separator_tokens: NotSet, dictionary: NotSet, synonyms: NotSet, distinct_attribute: NotSet, proximity_precision: NotSet, typo_tolerance: NotSet, faceting: NotSet, pagination: NotSet, embedders: NotSet, search_cutoff_ms: NotSet, localized_attributes: NotSet, facet_search: NotSet, prefix_search: NotSet, chat: NotSet, _kind: PhantomData<meilisearch_types::settings::Unchecked> } }, kind: SettingsUpdate { index_uid: "docs", new_settings: Settings { displayed_attributes: WildcardSetting(NotSet), searchable_attributes: WildcardSetting(NotSet), filterable_attributes: Set([Field("id")]), sortable_attributes: NotSet, foreign_keys: NotSet, ranking_rules: NotSet, stop_words: NotSet, non_separator_tokens: NotSet, separator_tokens: NotSet, dictionary: NotSet, synonyms: NotSet, distinct_attribute: NotSet, proximity_precision: NotSet, typo_tolerance: NotSet, faceting: NotSet, pagination: NotSet, embedders: NotSet, search_cutoff_ms: NotSet, localized_attributes: NotSet, facet_search: NotSet, prefix_search: NotSet, chat: NotSet, _kind: PhantomData<meilisearch_types::settings::Unchecked> }, is_deletion: false, allow_index_creation: true }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "docs", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true, on_missing_document: Create }}
+3 {uid: 3, batch_uid: 3, status: succeeded, details: { original_filter: "id = 1", deleted_documents: Some(1) }, kind: DocumentDeletionByFilter { index_uid: "docs", filter_expr: String("id = 1") }}
+4 {uid: 4, batch_uid: 3, status: succeeded, details: { original_filter: "NOT id = 3", deleted_documents: Some(1) }, kind: DocumentDeletionByFilter { index_uid: "docs", filter_expr: String("NOT id = 3") }}
+5 {uid: 5, batch_uid: 3, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "docs", primary_key: Some("id"), method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true, on_missing_document: Skip }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [2,5,]
+"documentDeletion" [3,4,]
+"settingsUpdate" [1,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+docs [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Index Mapper:
+docs: { number_of_documents: 0, field_distribution: {} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,4,5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,4,5,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"docs":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
+1 {uid: 1, details: {"filterableAttributes":["id"]}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"settingsUpdate":1},"indexUids":{"docs":1}}, stop reason: "batched all enqueued tasks", }
+2 {uid: 2, details: {"receivedDocuments":1,"indexedDocuments":1}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"docs":1}}, stop reason: "stopped before task with id 3 because it is a deletion by filter which cannot be batched with document operations", }
+3 {uid: 3, details: {"receivedDocuments":1,"indexedDocuments":1,"providedIds":0,"deletedDocuments":2,"originalFilter":"\"id = 1\"&\"NOT id = 3\""}, stats: {"totalNbTasks":3,"status":{"succeeded":3},"types":{"documentAdditionOrUpdate":1,"documentDeletion":2},"indexUids":{"docs":3}}, stop reason: "batched all enqueued tasks", }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,]
+2 [2,]
+3 [3,4,5,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,2,3,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [2,3,]
+"documentDeletion" [3,]
+"settingsUpdate" [1,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+docs [0,1,2,3,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

@@ -19,6 +19,9 @@ pub struct AttributePatterns {
     pub patterns: Vec<String>,
 }
 
+// manual impl: transparent + manual deserr impl
+impl routes::RequestBody for AttributePatterns {}
+
 impl<E: deserr::DeserializeError> Deserr<E> for AttributePatterns {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,

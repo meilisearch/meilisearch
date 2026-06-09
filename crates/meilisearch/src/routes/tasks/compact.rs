@@ -58,6 +58,7 @@ pub struct TaskCompactionSummary {
 /// safely resume normal writes.
 #[routes::path(
     security(("Bearer" = ["tasks.compact", "tasks.*", "*"])),
+    no_request_body,
     responses(
         (status = 200, description = "Task queue compaction successfully completed.", body = TaskCompactionSummary, content_type = "application/json", example = json!(
             {

@@ -23,8 +23,10 @@ jobs:
       - name: Check tag format
         if: github.event_name == 'release'
         id: check-tag-format
+        env:
+          GH_REF_NAME: ${{ github.ref_name }}
         run: |
-          escaped_tag=$(printf "%q" ${{ github.ref_name }})
+          escaped_tag=$(printf "%q" "$GH_REF_NAME")
 
           if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "stable=true" >> $GITHUB_OUTPUT

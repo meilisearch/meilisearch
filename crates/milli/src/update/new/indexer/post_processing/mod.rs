@@ -34,16 +34,13 @@ use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
 mod facet_bulk;
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
-pub(super) fn post_process<MSP>(
-    indexing_context: IndexingContext<MSP>,
+pub(super) fn post_process(
+    indexing_context: IndexingContext,
     wtxn: &mut RwTxn<'_>,
     mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
     word_delta: &WordDelta,
     facet_field_ids_delta: FacetFieldIdsDelta,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<()> {
     let index = indexing_context.index;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingFacets);
     compute_facet_level_database(
@@ -81,17 +78,35 @@ fn compute_prefix_database(
     let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
+    compute_prefix_database_from_sources(index, wtxn, &modified, &deleted, progress)
+}
+
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing",
+    name = "prefix_from_sources"
+)]
+pub(crate) fn compute_prefix_database_from_sources(
+    index: &Index,
+    wtxn: &mut RwTxn,
+    modified: &BTreeSet<MiniString>,
+    deleted: &BTreeSet<MiniString>,
+    progress: &Progress,
+) -> Result<()> {
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+    compute_word_prefix_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
-    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+    compute_exact_word_prefix_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixFieldIdDocids);
-    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
+    compute_word_prefix_fid_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixPositionDocids);
-    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
+    compute_word_prefix_position_docids(wtxn, index, modified, deleted)?;
+
+    Ok(())
 }
 
 /// The words must be sorted.

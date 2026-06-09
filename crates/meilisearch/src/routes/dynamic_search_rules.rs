@@ -1,7 +1,6 @@
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction, RuleUid};
@@ -17,7 +16,6 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::{AttributePatterns, PatternMatch};
 use serde::Serialize;
-use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -37,61 +35,52 @@ use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
 )]
 pub struct DynamicSearchRulesApi;
 
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Debug)]
 struct UpdateOrCreateDynamicSearchRuleRequest {
     /// Human-readable description of the dynamic search rule.
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleDescription>)]
-    #[schema(value_type = Option<String>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleDescription>, schema_type = Option<String>)]
     description: Setting<String>,
     /// Precedence of the dynamic search rule. Lower numeric values take precedence over higher
     /// ones. If omitted, the rule is treated as having the lowest precedence. This precedence is
     /// used to resolve conflicts between matching rules:
     /// - If the same document is selected by multiple rules, the smallest `priority` number wins
     /// - If different documents are pinned to the same position, they are ordered by ascending `priority`
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRulePriority>)]
-    #[schema(value_type = Option<u64>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRulePriority>, schema_type = Option<u64>)]
     priority: Setting<u64>,
     /// Whether the dynamic search rule is active.
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleActive>)]
-    #[schema(value_type = Option<bool>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleActive>, schema_type = Option<bool>)]
     active: Setting<bool>,
     /// Conditions that must match before the dynamic search rule applies.
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
-    #[schema(value_type = Option<Vec<Condition>>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>, schema_type = Option<Vec<Condition>>)]
     conditions: Setting<Vec<Condition>>,
     /// Actions to apply when the dynamic search rule matches.
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleActions>)]
-    #[schema(value_type = Option<Vec<RuleAction>>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleActions>, schema_type = Option<Vec<RuleAction>>)]
     actions: Setting<Vec<RuleAction>>,
 }
 
-#[derive(Deserr, Debug, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidDynamicSearchRuleFilter>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(override_error = DeserrJsonError<InvalidDynamicSearchRuleFilter>)]
+#[derive(Debug)]
 pub struct ListRulesFilter {
     /// Only include rules whose names match these patterns (e.g. `["black-friday", "promo*"]`).
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilterAttributePatterns>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilterAttributePatterns>)]
     pub attribute_patterns: Option<AttributePatterns>,
     /// Only include rules that are active (true) or not active (false).
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilterActive>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilterActive>)]
     pub active: Option<bool>,
 }
 
-#[derive(Deserr, Debug, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request]
+#[derive(Debug)]
 pub struct ListRules {
     /// Number of rules to skip. Defaults to 0.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
     pub offset: usize,
     /// Maximum number of rules to return. Default to 20.
-    #[schema(required = false)]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDynamicSearchRuleLimit>)]
+    #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDynamicSearchRuleLimit>)]
     pub limit: usize,
     /// Optional filter to restrict which rules are returned (e.g. by attribute patterns or by properties like if the rule is active or not)
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilter>)]
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilter>)]
     pub filter: Option<ListRulesFilter>,
 }
 

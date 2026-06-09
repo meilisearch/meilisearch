@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2_diagnostics::{Diagnostic, SpanDiagnosticExt};
 use quote::quote;
-use syn::parse::Parser;
+use syn::parse::{Parse as _, Parser};
 use syn::spanned::Spanned as _;
 use syn::{parenthesized, ItemFn, LitStr, Path, Token};
 
@@ -12,6 +12,8 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
     let mut proxy_attrs: Vec<proc_macro2::TokenStream> = Vec::new();
     let mut has_security = false;
     let mut override_tag: Option<LitStr> = None;
+    let mut request_body: Option<syn::Type> = None;
+    let mut has_no_request_body = false;
 
     if attr.is_empty() {
         return Err(attr.span().error("Attribute list cannot be empty"));
@@ -41,6 +43,10 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
             override_tag = Some(attr_arg.value()?.parse()?);
 
             Ok(())
+        } else if path.is_ident("no_request_body") {
+            has_no_request_body = true;
+
+            Ok(())
         } else {
             if path.is_ident("security") {
                 has_security = true;
@@ -60,14 +66,38 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
                 // ident ()
                 let content;
                 parenthesized!(content in attr_arg.input);
-                let content: proc_macro2::TokenStream = content.parse()?;
+                let quote = if path.is_ident("request_body") {
+                    let request_body_args: Vec<RequestBodyArg> = content
+                        .parse_terminated(RequestBodyArg::parse, Token![,])?
+                        .into_iter()
+                        .collect();
 
-                quote! { #path(#content) }
+                    for content in request_body_args.iter() {
+                        if let RequestBodyArg::Content { ident: _, eq: _, right_hand } = content {
+                            request_body.replace(right_hand.clone());
+                        }
+                    }
+
+                    quote! { #path(#(#request_body_args),*) }
+                } else {
+                    let content: proc_macro2::TokenStream = content.parse()?;
+
+                    quote! { #path(#content) }
+                };
+                quote
             } else if lookahead.peek(Token![=]) {
                 // ident = expr
                 attr_arg.input.parse::<Token![=]>()?;
-                let right_hand: syn::Expr = attr_arg.input.parse()?;
-                quote! { #path = #right_hand }
+
+                if path.is_ident("request_body") {
+                    let right_hand: syn::Type = attr_arg.input.parse()?;
+                    request_body.replace(right_hand.clone());
+
+                    quote! {#path = #right_hand }
+                } else {
+                    let right_hand: syn::Expr = attr_arg.input.parse()?;
+                    quote! { #path = #right_hand }
+                }
             } else {
                 return Err(lookahead.error());
             };
@@ -85,6 +115,22 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
     let fun_name = &item.sig.ident;
     let struct_name = quote::format_ident!("__path_{fun_name}");
 
+    let path_with_body = if let Some(request_body) = request_body {
+        quote! {
+            impl routes::PathWithBody for #struct_name {
+                fn implemented() {
+                    <#request_body as routes::RequestBody>::implemented();
+                }
+            }
+        }
+    } else if has_no_request_body {
+        quote! {
+            impl routes::PathWithBody for #struct_name {}
+        }
+    } else {
+        quote! {}
+    };
+
     let expanded = quote! {
         #[utoipa::path(
             post,
@@ -95,9 +141,47 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
         #item
 
         impl routes::Path for #struct_name {}
+        #path_with_body
     };
 
     Ok(TokenStream::from(expanded))
+}
+
+enum RequestBodyArg {
+    Content { ident: syn::Ident, eq: syn::token::Eq, right_hand: syn::Type },
+    Other { ident: syn::Ident, eq: syn::token::Eq, right_hand: proc_macro2::TokenStream },
+}
+
+impl quote::ToTokens for RequestBodyArg {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            RequestBodyArg::Content { ident, eq, right_hand } => {
+                ident.to_tokens(tokens);
+                eq.to_tokens(tokens);
+                right_hand.to_tokens(tokens);
+            }
+            RequestBodyArg::Other { ident, eq, right_hand } => {
+                ident.to_tokens(tokens);
+                eq.to_tokens(tokens);
+                right_hand.to_tokens(tokens);
+            }
+        }
+    }
+}
+
+impl syn::parse::Parse for RequestBodyArg {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let ident: syn::Ident = input.parse()?;
+        let eq = input.parse()?;
+
+        Ok(if ident == "content" {
+            let right_hand = input.parse()?;
+            Self::Content { ident, eq, right_hand }
+        } else {
+            let right_hand = input.parse()?;
+            Self::Other { ident, eq, right_hand }
+        })
+    }
 }
 
 fn is_method(path: &Path) -> bool {

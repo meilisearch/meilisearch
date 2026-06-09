@@ -118,7 +118,22 @@ impl IndexScheduler {
                                 .iter()
                                 .map(|s| &*indexer_alloc.alloc_str(s))
                                 .collect_in(&indexer_alloc);
-                            indexer.delete_documents(document_ids.into_bump_slice());
+                            indexer
+                                .delete_documents_by_external_ids(document_ids.into_bump_slice());
+                        }
+                        DocumentOperation::DeleteByFilter { filter } => {
+                            let filter = Filter::from_json(&filter)
+                                .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                            if let Some(filter) = filter {
+                                let filter = filter_into_index_filter(
+                                    filter, index, index_wtxn, self, progress, &index_uid,
+                                )?;
+                                let candidates =
+                                    filter.evaluate(index_wtxn, index).map_err(|err| {
+                                        Error::from_milli(err, Some(index_uid.clone()))
+                                    })?;
+                                indexer.delete_documents_by_internal_ids(candidates);
+                            }
                         }
                     }
                 }
@@ -134,7 +149,7 @@ impl IndexScheduler {
                         &rtxn,
                         primary_key.as_deref(),
                         &mut new_fields_ids_map,
-                        &|| must_stop_processing.get(),
+                        &must_stop_processing,
                         progress.clone(),
                         shards.as_ref(),
                     )
@@ -165,6 +180,12 @@ impl IndexScheduler {
                                 deleted_documents: Some(stats.document_count),
                             })
                         }
+                        Some(Details::DocumentDeletionByFilter { ref original_filter, .. }) => {
+                            Some(Details::DocumentDeletionByFilter {
+                                original_filter: original_filter.clone(),
+                                deleted_documents: Some(stats.document_count),
+                            })
+                        }
                         _ => {
                             // In the case of a `documentAdditionOrUpdate` or `DocumentDeletion`
                             // the details MUST be set to either addition or deletion
@@ -187,7 +208,7 @@ impl IndexScheduler {
                             primary_key,
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -307,7 +328,7 @@ impl IndexScheduler {
                             None, // cannot change primary key in DocumentEdition
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -461,7 +482,7 @@ impl IndexScheduler {
                             None, // document deletion never changes primary key
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -498,12 +519,7 @@ impl IndexScheduler {
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
                 let congestion = builder
-                    .execute(
-                        &|| must_stop_processing.get(),
-                        progress,
-                        self.ip_policy(),
-                        embedder_stats,
-                    )
+                    .execute(&must_stop_processing, progress, self.ip_policy(), embedder_stats)
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
                 Ok((tasks, congestion))

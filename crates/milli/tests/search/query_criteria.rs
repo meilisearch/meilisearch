@@ -11,7 +11,8 @@ use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{
-    AscDesc, CreateOrOpen, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy,
+    AscDesc, CreateOrOpen, Criterion, Index, Member, MustStopProcessing, Search, SearchResult,
+    TermsMatchingStrategy,
 };
 use rand::Rng;
 use Criterion::*;
@@ -242,7 +243,7 @@ fn criteria_mixup() {
         builder.set_criteria(criteria.clone());
         builder
             .execute(
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -291,7 +292,7 @@ fn criteria_ascdesc() {
     });
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -348,7 +349,7 @@ fn criteria_ascdesc() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -364,7 +365,7 @@ fn criteria_ascdesc() {
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
@@ -385,7 +386,7 @@ fn criteria_ascdesc() {
         builder.set_criteria(vec![criterion.clone()]);
         builder
             .execute(
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),

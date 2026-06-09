@@ -906,6 +906,9 @@ pub struct CreateChatCompletionRequest {
     pub functions: Option<Vec<ChatCompletionFunctions>>,
 }
 
+// manual implementation because this doesn't have deserr
+impl routes::RequestBody for CreateChatCompletionRequest {}
+
 /// Options for streaming response. Only set this when you set `stream: true`.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
 pub struct ChatCompletionStreamOptions {

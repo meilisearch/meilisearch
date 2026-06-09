@@ -26,6 +26,7 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 /// Trigger a snapshot creation process. When complete, a snapshot file is written to the snapshot directory. The directory is created if it does not exist.
 #[routes::path(
     security(("Bearer" = ["snapshots.create", "snapshots.*", "*"])),
+    no_request_body,
     responses(
         (status = 202, description = "Snapshot is being created.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

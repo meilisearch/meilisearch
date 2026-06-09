@@ -14,7 +14,6 @@ members = [
     "crates/filter-parser",
     "crates/flatten-serde-json",
     "crates/json-depth-checker",
-    "crates/benchmarks",
     "crates/fuzzers",
     "crates/tracing-trace",
     "crates/xtask",
@@ -28,7 +27,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.44.0"
+version = "1.46.1"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",

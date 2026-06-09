@@ -1,14 +1,12 @@
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -47,6 +45,7 @@ pub struct ExperimentalFeaturesApi;
             chat_completions: Some(false),
             multimodal: Some(false),
             foreign_keys: Some(false),
+            queue_documents_fetch: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -73,47 +72,48 @@ async fn get_features(
 }
 
 /// Experimental features that can be toggled at runtime
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(response)]
+#[derive(Debug)]
 pub struct RuntimeTogglableFeatures {
     /// Enable the /metrics endpoint for Prometheus metrics
-    #[deserr(default)]
+    #[request(default)]
     pub metrics: Option<bool>,
     /// Enable the /logs route for log configuration
-    #[deserr(default)]
+    #[request(default)]
     pub logs_route: Option<bool>,
     /// Enable document editing via JavaScript functions
-    #[deserr(default)]
+    #[request(default)]
     pub edit_documents_by_function: Option<bool>,
     /// Enable the CONTAINS filter operator
-    #[deserr(default)]
+    #[request(default)]
     pub contains_filter: Option<bool>,
     /// Enable dynamic search rules and the `/dynamic-search-rules` routes
-    #[deserr(default)]
+    #[request(default)]
     pub dynamic_search_rules: Option<bool>,
     /// Enable network features for distributed search
-    #[deserr(default)]
+    #[request(default)]
     pub network: Option<bool>,
     /// Enable the route to get documents from tasks
-    #[deserr(default)]
+    #[request(default)]
     pub get_task_documents_route: Option<bool>,
     /// Enable the route to compact the task queue database
-    #[deserr(default)]
+    #[request(default)]
     pub task_queue_compaction_route: Option<bool>,
     /// Enable composite embedders for multi-source embeddings
-    #[deserr(default)]
+    #[request(default)]
     pub composite_embedders: Option<bool>,
     /// Enable chat completion capabilities
-    #[deserr(default)]
+    #[request(default)]
     pub chat_completions: Option<bool>,
     /// Enable multimodal search with images and other media
-    #[deserr(default)]
+    #[request(default)]
     pub multimodal: Option<bool>,
     /// Enable foreign key support for document hydration
-    #[deserr(default)]
+    #[request(default)]
     pub foreign_keys: Option<bool>,
+    /// Enable queue documents fetch
+    #[request(default)]
+    pub queue_documents_fetch: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -131,6 +131,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             chat_completions,
             multimodal,
             foreign_keys,
+            queue_documents_fetch,
         } = value;
 
         Self {
@@ -146,6 +147,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
             foreign_keys: Some(foreign_keys),
+            queue_documents_fetch: Some(queue_documents_fetch),
         }
     }
 }
@@ -164,6 +166,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     chat_completions: bool,
     multimodal: bool,
     foreign_keys: bool,
+    queue_documents_fetch: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -185,6 +188,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
             foreign_keys: new.foreign_keys,
+            queue_documents_fetch: new.queue_documents_fetch,
         })
     }
 
@@ -198,6 +202,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Enable or disable experimental features at runtime.
 #[routes::path(
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
+    request_body = RuntimeTogglableFeatures,
     responses(
         (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
             metrics: Some(true),
@@ -212,6 +217,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             chat_completions: Some(false),
             multimodal: Some(false),
             foreign_keys: Some(false),
+            queue_documents_fetch: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -264,6 +270,10 @@ async fn patch_features(
         chat_completions: new_features.0.chat_completions.unwrap_or(old_features.chat_completions),
         multimodal: new_features.0.multimodal.unwrap_or(old_features.multimodal),
         foreign_keys: new_features.0.foreign_keys.unwrap_or(old_features.foreign_keys),
+        queue_documents_fetch: new_features
+            .0
+            .queue_documents_fetch
+            .unwrap_or(old_features.queue_documents_fetch),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -282,6 +292,7 @@ async fn patch_features(
         chat_completions,
         multimodal,
         foreign_keys,
+        queue_documents_fetch,
     } = new_features;
 
     analytics.publish(
@@ -298,6 +309,7 @@ async fn patch_features(
             chat_completions,
             multimodal,
             foreign_keys,
+            queue_documents_fetch,
         },
         &req,
     );

@@ -282,7 +282,7 @@ impl IndexScheduler {
 
                     builder
                         .execute(
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             &progress,
                             self.ip_policy(),
                             current_batch.embedder_stats.clone(),

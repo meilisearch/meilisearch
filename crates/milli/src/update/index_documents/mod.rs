@@ -40,7 +40,7 @@ use crate::update::{
 };
 use crate::vector::db::EmbedderInfo;
 use crate::vector::{RuntimeEmbedders, VectorStore};
-use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
+use crate::{CboRoaringBitmapCodec, Index, MustStopProcessing, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -82,14 +82,14 @@ pub enum MissingDocumentPolicy {
     Skip,
 }
 
-pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
+pub struct IndexDocuments<'t, 'i, 'a, FP> {
     wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,
     config: IndexDocumentsConfig,
     indexer_config: &'a IndexerConfig,
     transform: Option<Transform<'a, 'i>>,
     progress: FP,
-    should_abort: FA,
+    should_abort: &'a MustStopProcessing,
     added_documents: u64,
     deleted_documents: u64,
     embedders: RuntimeEmbedders,
@@ -104,10 +104,9 @@ pub struct IndexDocumentsConfig {
     pub autogenerate_docids: bool,
 }
 
-impl<'t, 'i, 'a, FP, FA> IndexDocuments<'t, 'i, 'a, FP, FA>
+impl<'t, 'i, 'a, FP> IndexDocuments<'t, 'i, 'a, FP>
 where
     FP: Fn(UpdateIndexingStep) + Sync + Send,
-    FA: Fn() -> bool + Sync + Send,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -116,10 +115,10 @@ where
         indexer_config: &'a IndexerConfig,
         config: IndexDocumentsConfig,
         progress: FP,
-        should_abort: FA,
+        should_abort: &'a MustStopProcessing,
         embedder_stats: &'t Arc<EmbedderStats>,
         embedder_ip_policy: &'a http_client::policy::IpPolicy,
-    ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
+    ) -> Result<IndexDocuments<'t, 'i, 'a, FP>> {
         let transform = Some(Transform::new(
             wtxn,
             index,
@@ -178,7 +177,7 @@ where
                 enriched_documents_reader,
                 self.wtxn,
                 &self.progress,
-                &self.should_abort,
+                self.should_abort,
             )? as u64;
 
         self.added_documents += indexed_documents;
@@ -224,7 +223,6 @@ where
     pub fn execute_raw(mut self, output: TransformOutput) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         let TransformOutput {
             primary_key,
@@ -370,7 +368,7 @@ where
                 });
 
                 loop {
-                    if (self.should_abort)() {
+                    if self.should_abort.get() {
                         return Err(Error::InternalError(InternalError::AbortedIndexation));
                     }
 
@@ -547,7 +545,7 @@ where
             .map_err(InternalError::from)??;
         }
 
-        self.index.cellulite.build(self.wtxn, &self.should_abort, &Progress::default())?;
+        self.index.cellulite.build(self.wtxn, &|| self.should_abort.get(), &Progress::default())?;
 
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),
@@ -563,7 +561,7 @@ where
             self.wtxn,
             self.index,
             &*settings_diff,
-            &self.should_abort,
+            self.should_abort,
             &Progress::default(),
         )?;
 
@@ -585,12 +583,11 @@ where
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         // Merged databases are already been indexed, we start from this count;
         let mut databases_seen = MERGED_DATABASE_COUNT;
 
-        if (self.should_abort)() {
+        if self.should_abort.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
@@ -600,7 +597,7 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        if (self.should_abort)() {
+        if self.should_abort.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
@@ -635,7 +632,7 @@ where
             return Ok(());
         }
 
-        if (self.should_abort)() {
+        if self.should_abort.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
@@ -677,7 +674,7 @@ where
             total_databases: TOTAL_POSTING_DATABASE_COUNT,
         });
 
-        if (self.should_abort)() {
+        if self.should_abort.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
@@ -707,7 +704,7 @@ where
             )?;
         }
 
-        if (self.should_abort)() {
+        if self.should_abort.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
@@ -755,7 +752,7 @@ where
             )?;
         }
 
-        if (self.should_abort)() {
+        if self.should_abort.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 
@@ -818,10 +815,6 @@ mod tests {
     use crate::update::Setting;
     use crate::vector::db::IndexEmbeddingConfig;
     use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
-
-    fn no_cancel() -> bool {
-        false
-    }
 
     #[test]
     fn simple_document_replacement() {
@@ -2012,7 +2005,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2065,7 +2058,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2084,7 +2077,7 @@ mod tests {
             primary_key,
             &document_changes,
             RuntimeEmbedders::default(),
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2156,7 +2149,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2175,7 +2168,7 @@ mod tests {
             primary_key,
             &document_changes,
             RuntimeEmbedders::default(),
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2340,7 +2333,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
         indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
-        indexer.delete_documents(&["2"]);
+        indexer.delete_documents_by_external_ids(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
                 &indexer_alloc,
@@ -2348,7 +2341,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2364,7 +2357,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2403,7 +2396,7 @@ mod tests {
             { "id": 3, "legs": 4 },
         ]);
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
-        indexer.delete_documents(&["1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
@@ -2414,7 +2407,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2430,7 +2423,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2471,7 +2464,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2487,7 +2480,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2518,7 +2511,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
-        indexer.delete_documents(&["1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2527,7 +2520,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2543,7 +2536,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2570,7 +2563,7 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
-        indexer.delete_documents(&["1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
@@ -2585,7 +2578,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2601,7 +2594,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2630,7 +2623,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
 
-        indexer.delete_documents(&["1", "2", "1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2", "1", "2"]);
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
@@ -2639,7 +2632,7 @@ mod tests {
         ]);
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
-        indexer.delete_documents(&["1", "2", "1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2", "1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2648,7 +2641,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2664,7 +2657,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2704,7 +2697,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2720,7 +2713,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2745,7 +2738,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
 
-        indexer.delete_documents(&["1"]);
+        indexer.delete_documents_by_external_ids(&["1"]);
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
@@ -2760,7 +2753,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2776,7 +2769,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -2980,7 +2973,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -2996,7 +2989,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -3029,7 +3022,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
 
-        indexer.delete_documents(&["1"]);
+        indexer.delete_documents_by_external_ids(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
@@ -3043,7 +3036,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -3059,7 +3052,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -3103,7 +3096,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &no_cancel,
+                &MustStopProcessing::default(),
                 Progress::default(),
                 None,
             )
@@ -3119,7 +3112,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &no_cancel,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),

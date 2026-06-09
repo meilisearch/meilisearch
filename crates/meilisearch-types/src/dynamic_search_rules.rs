@@ -81,6 +81,9 @@ pub enum Condition {
     },
 }
 
+// manual impl: no support for `with` and `tag`
+impl routes::RequestBody for Condition {}
+
 // We manually check the exclusivity of `is_empty` and `contains` because Deserr does not support
 // untagged enums
 fn validate_condition<E: DeserializeError>(
@@ -148,6 +151,9 @@ pub struct RuleAction {
     /// Action payload to apply to the selected document.
     pub action: DynamicSearchRuleAction,
 }
+
+// manual impl: no support for schema_type = Object
+impl routes::RequestBody for RuleAction {}
 
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[deserr(

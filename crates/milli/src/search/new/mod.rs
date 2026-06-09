@@ -506,10 +506,15 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut ranking_rules: Vec<BoxRankingRule<'ctx, QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
-        // Add Words before any of: typo, proximity, attribute
+        // Add Words before any of: typo, proximity, attribute, attribute rank,
+        // word position, exactness. Without this, placing one of the newer
+        // `attributeRank`/`wordPosition` rules before `words` would skip the
+        // word-dropping done by Words and silently return fewer hits.
         match rr {
             crate::Criterion::Typo
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => {
                 if !words {

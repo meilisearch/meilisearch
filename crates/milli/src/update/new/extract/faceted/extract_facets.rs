@@ -517,16 +517,13 @@ fn truncate_str(s: &str) -> &str {
 
 impl FacetedDocidsExtractor {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         sender: &FieldIdDocidFacetSender,
         step: IndexingStep,
-    ) -> Result<Vec<BalancedCaches<'extractor>>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<Vec<BalancedCaches<'extractor>>> {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;
         let filterable_attributes = index.filterable_attributes_rules(&rtxn)?;
@@ -564,17 +561,16 @@ impl FacetedDocidsExtractor {
         Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, 'b, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, 'b, SD>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
         step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         SD: SettingsDelta + Sync,
-        MSP: Fn() -> bool + Sync,
     {
         let span =
             tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");

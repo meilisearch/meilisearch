@@ -49,7 +49,7 @@ use crate::vector::{
 };
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
-    LocalizedAttributesRule, Result,
+    LocalizedAttributesRule, MustStopProcessing, Result,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
@@ -502,17 +502,16 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         skip(self, progress_callback, should_abort, settings_diff, embedder_stats),
         target = "indexing::documents"
     )]
-    fn reindex<FP, FA>(
+    fn reindex<FP>(
         &mut self,
         progress_callback: &FP,
-        should_abort: &FA,
+        should_abort: &MustStopProcessing,
         settings_diff: InnerIndexSettingsDiff,
         embedder_ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: &Arc<EmbedderStats>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
@@ -540,7 +539,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.indexer_config,
             IndexDocumentsConfig::default(),
             &progress_callback,
-            &should_abort,
+            should_abort,
             embedder_stats,
             embedder_ip_policy,
         )?;
@@ -1464,16 +1463,15 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    fn legacy_execute<FP, FA>(
+    fn legacy_execute<FP>(
         mut self,
         progress_callback: FP,
-        should_abort: FA,
+        should_abort: &MustStopProcessing,
         ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
@@ -1533,7 +1531,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         if inner_settings_diff.any_reindexing_needed() {
             self.reindex(
                 &progress_callback,
-                &should_abort,
+                should_abort,
                 inner_settings_diff,
                 ip_policy,
                 &embedder_stats,
@@ -1543,14 +1541,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn execute_vector_backend<'indexer, MSP>(
+    fn execute_vector_backend<'indexer>(
         &mut self,
-        must_stop_processing: &'indexer MSP,
+        must_stop_processing: &'indexer MustStopProcessing,
         progress: &'indexer Progress,
-    ) -> Result<()>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<()> {
         let old_backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
 
         let new_backend = match self.vector_store {
@@ -1577,7 +1572,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         let rtxn = self.index.read_txn()?;
 
         for (i, config) in embedding_configs.into_iter().enumerate() {
-            if must_stop_processing() {
+            if must_stop_processing.get() {
                 return Err(crate::InternalError::AbortedIndexation.into());
             }
             let embedder_name = &config.name;
@@ -1607,16 +1602,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    pub fn execute<'indexer, MSP>(
+    pub fn execute<'indexer>(
         mut self,
-        must_stop_processing: &'indexer MSP,
+        must_stop_processing: &'indexer MustStopProcessing,
         progress: &'indexer Progress,
         ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
-    ) -> Result<Option<ChannelCongestion>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<Option<ChannelCongestion>> {
         progress.update_progress(SettingsIndexerStep::ChangingVectorStore);
         // execute any pending vector store backend change
         self.execute_vector_backend(must_stop_processing, progress)?;
@@ -1661,9 +1653,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             embedder_settings: _,
             search_cutoff: _,
             localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
-            prefix_search: Setting::NotSet,              // TODO continue with this
+            prefix_search: _,
             facet_search: _,
-            disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
+            disable_on_numbers: _,
             chat: _,
             vector_store: Setting::NotSet,
             wtxn: _,
@@ -1700,6 +1692,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_search_cutoff()?;
             self.update_chat_config()?;
             self.update_facet_search()?;
+            self.update_prefix_search()?;
+            self.update_exact_words()?;
+            self.update_disabled_typos_terms()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.

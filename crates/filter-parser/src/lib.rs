@@ -61,7 +61,6 @@ use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
-use nom::Finish;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
@@ -445,7 +444,13 @@ impl<'a> FilterCondition<'a> {
             return Ok(None);
         }
         let span = Span::new_extra(input, input);
-        parse_filter(span).finish().map(|(_rem, output)| Some(output))
+        match parse_filter(span) {
+            Ok((_rem, output)) => Ok(Some(output)),
+            Err(nom::Err::Error(e) | nom::Err::Failure(e)) => Err(e),
+            Err(nom::Err::Incomplete(needed)) => {
+                Err(Error::new_from_kind(span.into(), ErrorKind::Incomplete(needed)))
+            }
+        }
     }
 }
 
@@ -1444,6 +1449,11 @@ pub mod tests {
         insta::assert_snapshot!(p("channel = ponce ORdog != 'bernese mountain'"), @r###"
         Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
         17:44 channel = ponce ORdog != 'bernese mountain'
+        "###);
+
+        insta::assert_snapshot!(p(r###"name = "\x""###), @r###"
+        The filter is incomplete and requires Unknown additional bytes to be parsed.
+        1:12 name = "\x"
         "###);
 
         insta::assert_snapshot!(p("colour IN blue, green]"), @r###"

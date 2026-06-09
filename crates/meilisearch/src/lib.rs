@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use ::routes::Routes;
 use actix_cors::Cors;
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
@@ -50,6 +51,7 @@ use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
     MissingDocumentPolicy,
 };
+use meilisearch_types::milli::MustStopProcessing;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -64,7 +66,6 @@ use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
-use ::routes::Routes;
 
 /// Default number of simultaneously opened indexes.
 ///
@@ -627,7 +628,7 @@ fn import_dump(
         apply_settings_to_builder(&settings, &mut builder);
         let embedder_stats: Arc<EmbedderStats> = Default::default();
         builder.execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &progress,
             index_scheduler.ip_policy(),
             embedder_stats.clone(),
@@ -656,6 +657,7 @@ fn import_dump(
 
             let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
             let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
+            let must_stop_processing = MustStopProcessing::default();
 
             let builder = milli::update::IndexDocuments::new(
                 &mut wtxn,
@@ -666,7 +668,7 @@ fn import_dump(
                     ..Default::default()
                 },
                 |indexing_step| tracing::trace!("update: {:?}", indexing_step),
-                || false,
+                &must_stop_processing,
                 &embedder_stats,
                 index_scheduler.ip_policy(),
             )?;
@@ -700,7 +702,7 @@ fn import_dump(
                 &rtxn,
                 primary_key,
                 &mut new_fields_ids_map,
-                &|| false, // never stop processing a dump
+                &MustStopProcessing::default(), // never stop processing a dump
                 progress.clone(),
                 None,
             )?;
@@ -720,7 +722,7 @@ fn import_dump(
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| false, // never stop processing a dump
+                &MustStopProcessing::default(), // never stop processing a dump
                 &progress,
                 index_scheduler.ip_policy(),
                 &embedder_stats,

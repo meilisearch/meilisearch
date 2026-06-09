@@ -48,21 +48,8 @@ pub struct EmbedderOptions {
     pub pooling: OverridePooling,
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    Hash,
-    PartialEq,
-    Eq,
-    serde::Deserialize,
-    serde::Serialize,
-    utoipa::ToSchema,
-    deserr::Deserr,
-)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[routes::request(no_error, setting)]
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub enum OverridePooling {
     UseModel,
     ForceCls,
@@ -251,7 +238,7 @@ impl Embedder {
             let pooling = match api.get("1_Pooling/config.json") {
                 Ok(pooling) => Some(pooling),
                 Err(hf_hub::api::sync::ApiError::RequestError(error))
-                    if matches!(*error, danger_ureq::Error::Status(404, _)) =>
+                    if matches!(*error, ureq::Error::StatusCode(404)) =>
                 {
                     // ignore the error if the file simply doesn't exist
                     None

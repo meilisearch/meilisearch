@@ -337,6 +337,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 /// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
 #[routes::path(
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
+    no_request_body,
     params(TaskDeletionOrCancelationQuery),
     responses(
         (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
