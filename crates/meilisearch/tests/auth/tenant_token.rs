@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
+use crate::auth::authorization::ALL_INDEX_SCOPED_ACTIONS;
 use crate::common::{Server, Value, DOCUMENTS};
 use crate::json;
 
@@ -71,7 +72,7 @@ static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
         }),
         json!({
             "indexes": ["sales"],
-            "actions": ALL_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
+            "actions": ALL_INDEX_SCOPED_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
             "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         // bad index
@@ -466,8 +467,8 @@ async fn error_access_forbidden_routes() {
     let web_token = generate_tenant_token(uid, key, tenant_token);
     server.use_api_key(&web_token);
 
-    for ((method, route), actions) in AUTHORIZATIONS.iter() {
-        if !actions.contains("search") {
+    for ((method, route, _), actions) in AUTHORIZATIONS.iter() {
+        if !actions.contains_key("search") {
             let (mut response, code) = server.dummy_request(method, route).await;
             response["message"] = serde_json::json!(null);
             assert_eq!(response, INVALID_RESPONSE.clone());
