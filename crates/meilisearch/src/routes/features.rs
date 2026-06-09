@@ -116,7 +116,7 @@ pub struct RuntimeTogglableFeatures {
     #[request(default)]
     pub queue_documents_fetch: Option<bool>,
     /// Enable legacy search pipeline
-    #[deserr(default)]
+    #[request(default)]
     pub legacy_search: Option<bool>,
 }
 

@@ -117,8 +117,7 @@ pub struct Federation {
     pub show_performance_details: bool,
 
     /// Personalize search results
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
-    #[serde(skip)]
+    #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none")]
     pub personalize: Option<Personalize>,
 }
 
