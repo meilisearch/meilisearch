@@ -66,7 +66,7 @@ impl DocumentSearch {
             )
             .await?;
 
-            return Ok(DocumentSearchResult::Federated(search_result));
+            return Ok(DocumentSearchResult::Federated(Box::new(search_result)));
         }
 
         // Multi-search
@@ -228,6 +228,6 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
 }
 
 pub enum DocumentSearchResult {
-    Federated(FederatedSearchResult),
+    Federated(Box<FederatedSearchResult>),
     Multi(Vec<SearchResultWithIndex>),
 }
