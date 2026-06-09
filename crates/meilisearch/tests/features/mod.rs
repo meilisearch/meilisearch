@@ -339,7 +339,7 @@ async fn multi_search_with_personalization_without_enabling_the_feature() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request",
+      "message": "Inside `.queries[0]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request\n - Hint: pass `federation.personalize` for personalization in federated search",
       "code": "invalid_multi_search_query_personalization",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_personalization"

@@ -42,7 +42,7 @@ pub enum MeilisearchHttpError {
     PaginationInFederatedQuery(&'static str),
     #[error("Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from the query or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{0}: {1:?}` for facets in federated search")]
     FacetsInFederatedQuery(String, Vec<String>),
-    #[error("Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request")]
+    #[error("Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request\n - Hint: pass `federation.personalize` for personalization in federated search")]
     PersonalizationInFederatedQuery,
     #[error("Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from the query or remove `federation` from the request")]
     ShowPerformanceDetailsInFederatedQuery,
