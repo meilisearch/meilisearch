@@ -112,7 +112,7 @@ pub struct RuntimeTogglableFeatures {
     #[request(default)]
     pub foreign_keys: Option<bool>,
     /// Enable queue documents fetch
-    #[deserr(default)]
+    #[request(default)]
     pub queue_documents_fetch: Option<bool>,
 }
 
