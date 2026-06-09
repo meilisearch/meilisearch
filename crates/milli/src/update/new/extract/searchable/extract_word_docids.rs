@@ -730,8 +730,7 @@ impl WordDocidsExtractors {
                             pos,
                             word,
                             old_exact == Match || old_disabled_typos_terms.is_exact(word),
-                            // We deleted the field globally
-                            FieldDbExtraction::Skip,
+                            FieldDbExtraction::Extract,
                             document.docid(),
                             doc_alloc,
                         ),
@@ -763,7 +762,7 @@ impl WordDocidsExtractors {
                                 pos,
                                 word,
                                 old_exact == Match || old_disabled_typos_terms.is_exact(word),
-                                // The field has already been extracted
+                                // Should we really have this specific case?
                                 FieldDbExtraction::Skip,
                                 document.docid(),
                                 doc_alloc,
@@ -773,7 +772,7 @@ impl WordDocidsExtractors {
                                 pos,
                                 word,
                                 new_exact == Match || new_disabled_typos_terms.is_exact(word),
-                                // The field has already been extracted
+                                // Should we really have this specific case?
                                 FieldDbExtraction::Skip,
                                 document.docid(),
                                 doc_alloc,
@@ -811,8 +810,7 @@ impl WordDocidsExtractors {
                             pos,
                             word,
                             old_exact == Match || old_disabled_typos_terms.is_exact(word),
-                            // We deleted the field globally
-                            FieldDbExtraction::Skip,
+                            FieldDbExtraction::Extract,
                             document.docid(),
                             doc_alloc,
                         ),
@@ -822,18 +820,16 @@ impl WordDocidsExtractors {
                         ) => {
                             unreachable!()
                         }
-                        (Metadata { exact: old_exact, .. }, Metadata { .. }) => {
-                            cached_sorter.insert_del_u32(
+                        (Metadata { exact: old_exact, .. }, Metadata { .. }) => cached_sorter
+                            .insert_del_u32(
                                 field_id,
                                 pos,
                                 word,
                                 old_exact == Match || old_disabled_typos_terms.is_exact(word),
-                                // The field has already been extracted
-                                FieldDbExtraction::Skip,
+                                FieldDbExtraction::Extract,
                                 document.docid(),
                                 doc_alloc,
-                            )
-                        }
+                            ),
                     }
                 };
 
@@ -872,18 +868,16 @@ impl WordDocidsExtractors {
                         ) => {
                             unreachable!()
                         }
-                        (Metadata { .. }, Metadata { exact: new_exact, .. }) => {
-                            cached_sorter.insert_add_u32(
+                        (Metadata { .. }, Metadata { exact: new_exact, .. }) => cached_sorter
+                            .insert_add_u32(
                                 field_id,
                                 pos,
                                 word,
                                 new_exact == Match || new_disabled_typos_terms.is_exact(word),
-                                // The field has already been extracted
-                                FieldDbExtraction::Skip,
+                                FieldDbExtraction::Extract,
                                 document.docid(),
                                 doc_alloc,
-                            )
-                        }
+                            ),
                     }
                 };
 
