@@ -21,13 +21,13 @@ use crate::vector::settings::EmbedderAction;
 use crate::vector::RuntimeEmbedders;
 use crate::Result;
 
-pub struct DocumentsExtractor<'a, 'b> {
-    document_sender: DocumentsSender<'a, 'b>,
+pub struct DocumentsExtractor<'a> {
+    document_sender: DocumentsSender<'a>,
     embedders: &'a RuntimeEmbedders,
 }
 
-impl<'a, 'b> DocumentsExtractor<'a, 'b> {
-    pub fn new(document_sender: DocumentsSender<'a, 'b>, embedders: &'a RuntimeEmbedders) -> Self {
+impl<'a> DocumentsExtractor<'a> {
+    pub fn new(document_sender: DocumentsSender<'a>, embedders: &'a RuntimeEmbedders) -> Self {
         Self { document_sender, embedders }
     }
 }
@@ -38,7 +38,7 @@ pub struct DocumentExtractorData {
     pub field_distribution_delta: HashMap<String, i64>,
 }
 
-impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
+impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_> {
     type Data = FullySend<RefCell<DocumentExtractorData>>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
@@ -186,21 +186,21 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
     }
 }
 
-pub struct SettingsChangeDocumentExtractor<'a, 'b> {
-    document_sender: DocumentsSender<'a, 'b>,
+pub struct SettingsChangeDocumentExtractor<'a> {
+    document_sender: DocumentsSender<'a>,
     embedder_actions: &'a BTreeMap<String, EmbedderAction>,
 }
 
-impl<'a, 'b> SettingsChangeDocumentExtractor<'a, 'b> {
+impl<'a> SettingsChangeDocumentExtractor<'a> {
     pub fn new(
-        document_sender: DocumentsSender<'a, 'b>,
+        document_sender: DocumentsSender<'a>,
         embedder_actions: &'a BTreeMap<String, EmbedderAction>,
     ) -> Self {
         Self { document_sender, embedder_actions }
     }
 }
 
-impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentExtractor<'_, '_> {
+impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentExtractor<'_> {
     type Data = FullySend<()>;
 
     fn init_data(&self, _extractor_alloc: &'extractor Bump) -> Result<Self::Data> {

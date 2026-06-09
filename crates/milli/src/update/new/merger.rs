@@ -23,7 +23,7 @@ pub fn merge_and_send_rtree<'extractor>(
     datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
     rtxn: &RoTxn,
     index: &Index,
-    geo_sender: GeoSender<'_, '_>,
+    geo_sender: GeoSender<'_>,
     must_stop_processing: &MustStopProcessing,
 ) -> Result<()> {
     let mut rtree = index.geo_rtree(rtxn)?.unwrap_or_default();
