@@ -30,6 +30,7 @@ memmap2 = "0.9.9"
 milli = { path = "../milli" }
 papaya = "0.2.4"
 roaring = { version = "0.10.12", features = ["serde"] }
+routes = { path = "../routes" }
 rustc-hash = "2.1.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde-cs = "0.2.4"

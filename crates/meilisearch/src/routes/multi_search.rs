@@ -51,7 +51,7 @@ pub struct SearchResults {
 ///
 /// Each query can target a different index, so you can search across several indexes at once and get one combined response.
 #[routes::path(
-    request_body(content = FederatedSearch),
+    request_body = FederatedSearch,
     security(("Bearer" = ["search", "*"])),
     responses(
         (status = OK, description = "Non federated multi-search.", body = SearchResults, content_type = "application/json", example = json!(

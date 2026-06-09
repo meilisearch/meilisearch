@@ -6,14 +6,12 @@ use std::fs::File;
 use std::path::Path;
 
 use cellulite::Cellulite;
-use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::database_stats::DatabaseStats;
@@ -2074,8 +2072,8 @@ pub struct SearchParameters {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Deserr, ToSchema)]
-#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
+#[routes::request(setting, no_error, try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct RankingScoreThreshold(f64);
 
 impl RankingScoreThreshold {
@@ -2125,11 +2123,11 @@ pub struct PrefixSettings {
     pub compute_prefixes: PrefixSearch,
 }
 
-/// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
-/// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize, Deserialize)]
-#[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
+// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
+// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
+/// Strategy used to match query terms within documents
+#[routes::request(no_error, setting)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     #[default]

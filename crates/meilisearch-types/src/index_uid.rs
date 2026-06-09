@@ -17,6 +17,9 @@ use crate::error::{Code, ErrorCode};
 #[schema(value_type = String, example = "movies")]
 pub struct IndexUid(String);
 
+// manual impl: don't want to botch the serde try_from
+impl routes::RequestBody for IndexUid {}
+
 impl IndexUid {
     pub fn new_unchecked(s: impl AsRef<str>) -> Self {
         Self(s.as_ref().to_string())

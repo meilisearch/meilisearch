@@ -226,4 +226,7 @@ pub mod route {
         /// Message to send to control the network topology change task.
         pub message: Message,
     }
+
+    // manual impl because Origin is hard to make deserr
+    impl routes::RequestBody for NetworkChange {}
 }

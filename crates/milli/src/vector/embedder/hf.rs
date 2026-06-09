@@ -48,21 +48,8 @@ pub struct EmbedderOptions {
     pub pooling: OverridePooling,
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    Hash,
-    PartialEq,
-    Eq,
-    serde::Deserialize,
-    serde::Serialize,
-    utoipa::ToSchema,
-    deserr::Deserr,
-)]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[routes::request(no_error, setting)]
+#[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub enum OverridePooling {
     UseModel,
     ForceCls,

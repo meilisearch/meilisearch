@@ -96,6 +96,7 @@ rand = "0.8.5"
 tracing = "0.1.41"
 url = "2.5.7"
 hashbrown = "0.15.5"
+routes = { path = "../routes" }
 bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
 steppe = { version = "0.4", default-features = false }
