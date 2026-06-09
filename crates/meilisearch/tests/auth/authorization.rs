@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
 use ::time::format_description::well_known::Rfc3339;
-use maplit::hashmap;
 use meilisearch::Opt;
 use once_cell::sync::Lazy;
 use tempfile::TempDir;
@@ -10,92 +9,112 @@ use time::{Duration, OffsetDateTime};
 use crate::common::{default_settings, Server, Value};
 use crate::json;
 
-macro_rules! hashset {
-    ( $( $val:tt ),* $(,)? ) => {{
-        let mut set: HashSet<&'static [&'static str]> = HashSet::new();
-        $(
-            hashset!(@insert set, $val);
-        )*
-        set
-    }};
+// redefine a maplit-like hashmap macro, because the maplit one interprets slice literals as arrays.
+macro_rules! str_hashmap {
+    (@single $($x:tt)*) => (());
+    (@count $($rest:expr),*) => (<[()]>::len(&[$(str_hashmap!(@single $rest)),*]));
 
-    // Match array-like input: ["a", "b"]
-    (@insert $set:ident, [ $($elem:literal),* ]) => {{
-        const ITEM: &[&str] = &[$($elem),*];
-        $set.insert(ITEM);
-    }};
-
-    // Match single literal: "a"
-    (@insert $set:ident, $val:literal) => {{
-        const ITEM: &[&str] = &[$val];
-        $set.insert(ITEM);
-    }};
+    ($($key:expr => $value:expr,)+) => { str_hashmap!($($key => $value),+) };
+    ($($key:expr => $value:expr),*) => {
+        {
+            let _cap = str_hashmap!(@count $($key),*);
+            let mut _map = ::std::collections::HashMap::with_capacity(_cap);
+            $(
+                let key: &[&str] = $key;
+                let _ = _map.insert(key, $value);
+            )*
+            _map
+        }
+    };
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum IndexScopePolicy {
+    Deny,
+    Allow,
+}
+
+type AuthorizationMap = HashMap<
+    (
+        // method
+        &'static str,
+        // URL
+        &'static str,
+        // allow/disallow route call
+        IndexScopePolicy,
+    ),
+    HashMap<
+        // action name
+        &'static [&'static str],
+        // allow/disallow key creation
+        IndexScopePolicy,
+    >,
+>;
+
 #[allow(clippy::type_complexity)]
-pub static AUTHORIZATIONS: Lazy<
-    HashMap<(&'static str, &'static str), HashSet<&'static [&'static str]>>,
-> = Lazy::new(|| {
-    let authorizations = hashmap! {
-        ("POST",    "/multi-search") =>                                    hashset!{"search", "*"},
-        ("POST",    "/render-template") =>                                 hashset!{["settings.get", "documents.get"], ["documents.*", "settings.get"], ["settings.*", "documents.get"], "*"},
-        ("POST",    "/indexes/products/search") =>                         hashset!{"search", "*"},
-        ("GET",     "/indexes/products/search") =>                         hashset!{"search", "*"},
-        ("POST",    "/indexes/products/documents") =>                      hashset!{"documents.add", "documents.*", "*"},
-        ("GET",     "/indexes/products/documents") =>                      hashset!{"documents.get", "documents.*", "*"},
-        ("POST",    "/indexes/products/documents/fetch") =>                hashset!{"documents.get", "documents.*", "*"},
-        ("GET",     "/indexes/products/documents/0") =>                    hashset!{"documents.get", "documents.*", "*"},
-        ("DELETE",  "/indexes/products/documents/0") =>                    hashset!{"documents.delete", "documents.*", "*"},
-        ("POST",    "/indexes/products/documents/delete-batch") =>         hashset!{"documents.delete", "documents.*", "*"},
-        ("POST",    "/indexes/products/documents/delete") =>               hashset!{"documents.delete", "documents.*", "*"},
-        ("GET",     "/tasks") =>                                           hashset!{"tasks.get", "tasks.*", "*"},
-        ("DELETE",  "/tasks") =>                                           hashset!{"tasks.delete", "tasks.*", "*"},
-        ("GET",     "/tasks?indexUid=products") =>                         hashset!{"tasks.get", "tasks.*", "*"},
-        ("GET",     "/tasks/0") =>                                         hashset!{"tasks.get", "tasks.*", "*"},
-            ("POST",    "/tasks/compact") =>                                   hashset!{"tasks.compact", "tasks.*", "*"},
-        ("PATCH",   "/indexes/products/") =>                               hashset!{"indexes.update", "indexes.*", "*"},
-        ("GET",     "/indexes/products/") =>                               hashset!{"indexes.get", "indexes.*", "*"},
-        ("DELETE",  "/indexes/products/") =>                               hashset!{"indexes.delete", "indexes.*", "*"},
-        ("POST",    "/indexes") =>                                         hashset!{"indexes.create", "indexes.*", "*"},
-        ("GET",     "/indexes") =>                                         hashset!{"indexes.get", "indexes.*", "*"},
-        ("POST",    "/swap-indexes") =>                                    hashset!{"indexes.swap", "indexes.*", "*"},
-        ("GET",     "/indexes/products/settings") =>                       hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/displayed-attributes") =>  hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/distinct-attribute") =>    hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/filterable-attributes") => hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/ranking-rules") =>         hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/searchable-attributes") => hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/sortable-attributes") =>   hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/stop-words") =>            hashset!{"settings.get", "settings.*", "*"},
-        ("GET",     "/indexes/products/settings/synonyms") =>              hashset!{"settings.get", "settings.*", "*"},
-        ("DELETE",  "/indexes/products/settings") =>                       hashset!{"settings.update", "settings.*", "*"},
-        ("PATCH",   "/indexes/products/settings") =>                       hashset!{"settings.update", "settings.*", "*"},
-        ("PATCH",   "/indexes/products/settings/typo-tolerance") =>        hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/displayed-attributes") =>  hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/distinct-attribute") =>    hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/filterable-attributes") => hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/ranking-rules") =>         hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/searchable-attributes") => hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/sortable-attributes") =>   hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/stop-words") =>            hashset!{"settings.update", "settings.*", "*"},
-        ("PUT",     "/indexes/products/settings/synonyms") =>              hashset!{"settings.update", "settings.*", "*"},
-        ("GET",     "/indexes/products/stats") =>                          hashset!{"stats.get", "stats.*", "*"},
-        ("GET",     "/stats") =>                                           hashset!{"stats.get", "stats.*", "*"},
-        ("POST",    "/dumps") =>                                           hashset!{"dumps.create", "dumps.*", "*"},
-        ("POST",    "/snapshots") =>                                       hashset!{"snapshots.create", "snapshots.*", "*"},
-        ("GET",     "/version") =>                                         hashset!{"version", "*"},
-        ("GET",     "/metrics") =>                                         hashset!{"metrics.get", "metrics.*", "*"},
-        ("POST",    "/logs/stream") =>                                     hashset!{"metrics.get", "metrics.*", "*"},
-        ("DELETE",  "/logs/stream") =>                                     hashset!{"metrics.get", "metrics.*", "*"},
-        ("PATCH",   "/keys/mykey/") =>                                     hashset!{"keys.update", "*"},
-        ("GET",     "/keys/mykey/") =>                                     hashset!{"keys.get", "*"},
-        ("DELETE",  "/keys/mykey/") =>                                     hashset!{"keys.delete", "*"},
-        ("POST",    "/keys") =>                                            hashset!{"keys.create", "*"},
-        ("GET",     "/keys") =>                                            hashset!{"keys.get", "*"},
-        ("GET",     "/experimental-features") =>                           hashset!{"experimental.get", "*"},
-        ("PATCH",   "/experimental-features") =>                           hashset!{"experimental.update", "*"},
-        ("GET",     "/network") =>                                         hashset!{"network.get", "*"},
-        ("PATCH",   "/network") =>                                         hashset!{"network.update", "*"},
+pub static AUTHORIZATIONS: Lazy<AuthorizationMap> = Lazy::new(|| {
+    use IndexScopePolicy::*;
+
+    let authorizations: AuthorizationMap = maplit::hashmap! {
+        ("POST",    "/multi-search", Allow) =>                                    str_hashmap!{&["search"] => Allow, &["*"] => Allow},
+        ("POST",    "/render-template", Allow) =>                                 str_hashmap!{&["settings.get", "documents.get"] => Allow, &["documents.*", "settings.get"] => Allow, &["settings.*", "documents.get"] => Allow, &["*"] => Allow},
+        ("POST",    "/indexes/products/search", Allow) =>                         str_hashmap!{&["search"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/search", Allow) =>                         str_hashmap!{&["search"] => Allow, &["*"] => Allow},
+        ("POST",    "/indexes/products/documents", Allow) =>                      str_hashmap!{&["documents.add"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/documents", Allow) =>                      str_hashmap!{&["documents.get"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/indexes/products/documents/fetch", Allow) =>                str_hashmap!{&["documents.get"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/documents/0", Allow) =>                    str_hashmap!{&["documents.get"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("DELETE",  "/indexes/products/documents/0", Allow) =>                    str_hashmap!{&["documents.delete"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/indexes/products/documents/delete-batch", Allow) =>         str_hashmap!{&["documents.delete"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/indexes/products/documents/delete", Allow) =>               str_hashmap!{&["documents.delete"] => Allow, &["documents.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/tasks", Allow) =>                                           str_hashmap!{&["tasks.get"] => Allow, &["tasks.*"] => Allow, &["*"] => Allow},
+        ("DELETE",  "/tasks", Allow) =>                                           str_hashmap!{&["tasks.delete"] => Allow, &["tasks.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/tasks?indexUid=products", Allow) =>                         str_hashmap!{&["tasks.get"] => Allow, &["tasks.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/tasks/0", Allow) =>                                         str_hashmap!{&["tasks.get"] => Allow, &["tasks.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/tasks/compact", Deny) =>                                    str_hashmap!{&["tasks.compact"] => Deny, &["tasks.*"] => Allow, &["*"] => Allow},
+        ("PATCH",   "/indexes/products/", Allow) =>                               str_hashmap!{&["indexes.update"] => Allow, &["indexes.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/", Allow) =>                               str_hashmap!{&["indexes.get"] => Allow, &["indexes.*"] => Allow, &["*"] => Allow},
+        ("DELETE",  "/indexes/products/", Allow) =>                               str_hashmap!{&["indexes.delete"] => Allow, &["indexes.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/indexes", Allow) =>                                         str_hashmap!{&["indexes.create"] => Allow, &["indexes.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes", Allow) =>                                         str_hashmap!{&["indexes.get"] => Allow, &["indexes.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/swap-indexes", Allow) =>                                    str_hashmap!{&["indexes.swap"] => Allow, &["indexes.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings", Allow) =>                       str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/displayed-attributes", Allow) =>  str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/distinct-attribute", Allow) =>    str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/filterable-attributes", Allow) => str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/ranking-rules", Allow) =>         str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/searchable-attributes", Allow) => str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/sortable-attributes", Allow) =>   str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/stop-words", Allow) =>            str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/settings/synonyms", Allow) =>              str_hashmap!{&["settings.get"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("DELETE",  "/indexes/products/settings", Allow) =>                       str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PATCH",   "/indexes/products/settings", Allow) =>                       str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PATCH",   "/indexes/products/settings/typo-tolerance", Allow) =>        str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/displayed-attributes", Allow) =>  str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/distinct-attribute", Allow) =>    str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/filterable-attributes", Allow) => str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/ranking-rules", Allow) =>         str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/searchable-attributes", Allow) => str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/sortable-attributes", Allow) =>   str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/stop-words", Allow) =>            str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("PUT",     "/indexes/products/settings/synonyms", Allow) =>              str_hashmap!{&["settings.update"] => Allow, &["settings.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/indexes/products/stats", Allow) =>                          str_hashmap!{&["stats.get"] => Allow, &["stats.*"] => Allow, &["*"] => Allow},
+        ("GET",     "/stats", Allow) =>                                           str_hashmap!{&["stats.get"] => Allow, &["stats.*"] => Allow, &["*"] => Allow},
+        ("POST",    "/dumps", Deny) =>                                           str_hashmap!{&["dumps.create"] => Deny, &["dumps.*"] => Deny, &["*"] => Allow},
+        ("POST",    "/snapshots", Deny) =>                                       str_hashmap!{&["snapshots.create"] => Deny, &["snapshots.*"] => Deny, &["*"] => Allow},
+        ("GET",     "/version", Deny) =>                                         str_hashmap!{&["version"] => Deny, &["*"] => Allow},
+        ("GET",     "/metrics", Deny) =>                                         str_hashmap!{&["metrics.get"] => Deny, &["metrics.*"] => Deny, &["*"] => Allow},
+        ("POST",    "/logs/stream", Deny) =>                                     str_hashmap!{&["metrics.get"] => Deny, &["metrics.*"] => Deny, &["*"] => Allow},
+        ("DELETE",  "/logs/stream", Deny) =>                                     str_hashmap!{&["metrics.get"] => Deny, &["metrics.*"] => Deny, &["*"] => Allow},
+        ("PATCH",   "/keys/mykey/", Deny) =>                                     str_hashmap!{&["keys.update"] => Deny, &["*"] => Allow},
+        ("GET",     "/keys/mykey/", Deny) =>                                     str_hashmap!{&["keys.get"] => Deny, &["*"] => Allow},
+        ("DELETE",  "/keys/mykey/", Deny) =>                                     str_hashmap!{&["keys.delete"] => Deny, &["*"] => Allow},
+        ("POST",    "/keys", Deny) =>                                            str_hashmap!{&["keys.create"] => Deny, &["*"] => Allow},
+        ("GET",     "/keys", Deny) =>                                            str_hashmap!{&["keys.get"] => Deny, &["*"] => Allow},
+        ("GET",     "/experimental-features", Deny) =>                           str_hashmap!{&["experimental.get"] => Deny, &["*"] => Allow},
+        ("PATCH",   "/experimental-features", Deny) =>                           str_hashmap!{&["experimental.update"] => Deny, &["*"] => Allow},
+        ("GET",   "/network", Deny) =>                                           str_hashmap!{&["network.get"] => Deny, &["*"] => Allow},
+        ("PATCH",   "/network", Deny) =>                                         str_hashmap!{&["network.update"] => Deny, &["*"] => Allow},
     };
 
     authorizations
@@ -104,10 +123,23 @@ pub static AUTHORIZATIONS: Lazy<
 pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     AUTHORIZATIONS
         .values()
-        .flat_map(|v| v.iter())
-        .flat_map(|v| v.iter())
+        .flat_map(|value| value.keys())
+        .flat_map(|actions| actions.iter())
         .copied()
-        .collect::<HashSet<_>>()
+        .collect()
+});
+
+pub static ALL_INDEX_SCOPED_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    AUTHORIZATIONS
+        .values()
+        .flat_map(|value| {
+            value.iter().filter_map(|(actions, key_policy)| {
+                (*key_policy == IndexScopePolicy::Allow).then_some(actions)
+            })
+        })
+        .flat_map(|actions| actions.iter())
+        .copied()
+        .collect()
 });
 
 static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
@@ -118,8 +150,8 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     })
 });
 
-static INVALID_METRICS_RESPONSE: Lazy<Value> = Lazy::new(|| {
-    json!({"message": "The provided API key is invalid. The API key for the `/metrics` route must allow access to all indexes.",
+static INVALID_ROUTE_POLICY_RESPONSE: Lazy<Value> = Lazy::new(|| {
+    json!({"message": "The provided API key is invalid.",
         "code": "invalid_api_key",
         "type": "auth",
         "link": "https://docs.meilisearch.com/errors#invalid_api_key"
@@ -136,7 +168,7 @@ async fn error_access_expired_key() {
     server.use_api_key(MASTER_KEY);
 
     let content = json!({
-        "indexes": ["products"],
+        "indexes": ["*"],
         "actions": ALL_ACTIONS.clone(),
         "expiresAt": (OffsetDateTime::now_utc() + Duration::seconds(1)).format(&Rfc3339).unwrap(),
     });
@@ -151,7 +183,7 @@ async fn error_access_expired_key() {
     // wait until the key is expired.
     thread::sleep(time::Duration::new(1, 0));
 
-    for (method, route) in AUTHORIZATIONS.keys() {
+    for (method, route, _) in AUTHORIZATIONS.keys() {
         let (mut response, code) = server.dummy_request(method, route).await;
         response["message"] = serde_json::json!(null);
 
@@ -167,7 +199,7 @@ async fn error_access_unauthorized_index() {
 
     let content = json!({
         "indexes": ["sales"],
-        "actions": ALL_ACTIONS.clone(),
+        "actions": ["*"],
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
 
@@ -178,10 +210,10 @@ async fn error_access_unauthorized_index() {
     let key = response["key"].as_str().unwrap();
     server.use_api_key(key);
 
-    for (method, route) in AUTHORIZATIONS
+    for (method, route, _) in AUTHORIZATIONS
         .keys()
         // filter `products` index routes
-        .filter(|(_, route)| route.starts_with("/indexes/products"))
+        .filter(|(_, route, _)| route.starts_with("/indexes/products"))
     {
         let (mut response, code) = server.dummy_request(method, route).await;
         response["message"] = serde_json::json!(null);
@@ -195,13 +227,15 @@ async fn error_access_unauthorized_index() {
 async fn error_access_unauthorized_action() {
     let mut server = Server::new_auth().await;
 
-    for ((method, route), actions) in AUTHORIZATIONS.iter() {
+    for ((method, route, _), actions) in AUTHORIZATIONS.iter() {
         // create a new API key letting only the needed action.
         server.use_api_key(MASTER_KEY);
 
-        let actions = actions.iter().flat_map(|s| s.iter()).copied().collect::<HashSet<_>>();
+        let actions =
+            actions.keys().flat_map(|action| action.iter()).copied().collect::<HashSet<_>>();
+
         let content = json!({
-            "indexes": ["products"],
+            "indexes": ["*"],
             "actions": ALL_ACTIONS.difference(&actions).collect::<Vec<_>>(),
             "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
         });
@@ -226,7 +260,7 @@ async fn access_authorized_master_key() {
     server.use_api_key(MASTER_KEY);
 
     // master key must have access to all routes.
-    for (method, route) in AUTHORIZATIONS.keys() {
+    for (method, route, _) in AUTHORIZATIONS.keys() {
         let (response, code) = server.dummy_request(method, route).await;
 
         assert_ne!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
@@ -239,9 +273,28 @@ async fn access_authorized_restricted_index() {
     let dir = TempDir::new().unwrap();
     let enable_metrics = Opt { experimental_enable_metrics: true, ..default_settings(dir.path()) };
     let mut server = Server::new_auth_with_options(enable_metrics, dir).await;
-    for ((method, route), actions) in AUTHORIZATIONS.iter() {
-        for actions in actions {
-            // create a new API key letting only the needed action.
+
+    // check that global actions are forbidden for index-scoped api keys
+    let all_actions_key = {
+        // create a new API key with all actions
+        server.use_api_key(MASTER_KEY);
+        let content = json!({
+            "indexes": ["products"],
+            "actions": ["*"],
+            "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
+        });
+
+        let (response, code) = server.add_api_key(content).await;
+        assert_eq!(201, code, "{:?}", &response);
+
+        assert!(response["key"].is_string());
+
+        response["key"].as_str().unwrap().to_string()
+    };
+
+    for ((method, route, route_policy), actions) in AUTHORIZATIONS.iter() {
+        for (action, key_policy) in actions {
+            // create a new API key letting only the needed actions.
             server.use_api_key(MASTER_KEY);
 
             let content = json!({
@@ -251,35 +304,99 @@ async fn access_authorized_restricted_index() {
             });
 
             let (response, code) = server.add_api_key(content).await;
-            assert_eq!(201, code, "{:?}", &response);
-            assert!(response["key"].is_string());
 
-            let key = response["key"].as_str().unwrap();
-            server.use_api_key(key);
+            if matches!(key_policy, IndexScopePolicy::Allow) {
+                // adding an API key is possible for this action
+                assert_eq!(201, code, "{:?}", &response);
+                assert!(response["key"].is_string());
 
-            let (response, code) = server.dummy_request(method, route).await;
+                let key = response["key"].as_str().unwrap();
+                server.use_api_key(key);
 
-            // The metrics route MUST have no limitation on the indexes
-            if *route == "/metrics" {
-                assert_eq!(
-                    response,
-                    INVALID_METRICS_RESPONSE.clone(),
-                    "on route: {:?} - {:?} with actions: {:?}",
-                    method,
-                    route,
-                    actions
-                );
-                assert_eq!(code, 403);
+                let (response, code) = server.dummy_request(method, route).await;
+
+                if matches!(route_policy, IndexScopePolicy::Allow) {
+                    assert_ne!(
+                        response,
+                        INVALID_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with action: {:?}",
+                        method,
+                        route,
+                        action
+                    );
+                    assert_ne!(code, 403);
+
+                    // it is possible to call this action with the all_actions API key
+                    server.use_api_key(&all_actions_key);
+
+                    let (response, code) = server.dummy_request(method, route).await;
+
+                    assert_ne!(
+                        response,
+                        INVALID_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with action: {:?}",
+                        method,
+                        route,
+                        action
+                    );
+
+                    assert_ne!(code, 403);
+                } else {
+                    // all_actions API key also doesn't work
+                    assert_eq!(
+                        response,
+                        INVALID_ROUTE_POLICY_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with actions: {:?}",
+                        method,
+                        route,
+                        actions
+                    );
+                    assert_eq!(code, 403);
+
+                    server.use_api_key(&all_actions_key);
+                    let (response, code) = server.dummy_request(method, route).await;
+
+                    // all_actions API key also doesn't work
+                    assert_eq!(
+                        response,
+                        INVALID_ROUTE_POLICY_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with action: {:?}",
+                        method,
+                        route,
+                        action
+                    );
+                    assert_eq!(code, 403);
+                }
             } else {
-                assert_ne!(
-                    response,
-                    INVALID_RESPONSE.clone(),
-                    "on route: {:?} - {:?} with actions: {:?}",
-                    method,
-                    route,
-                    actions
-                );
-                assert_ne!(code, 403);
+                // cannot add key for this action
+                assert_eq!(400, code, "{:?}", &response);
+
+                // test all_actions key
+                server.use_api_key(&all_actions_key);
+                let (response, code) = server.dummy_request(method, route).await;
+                if matches!(route_policy, IndexScopePolicy::Allow) {
+                    assert_ne!(
+                        response,
+                        INVALID_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with actions: {:?}",
+                        method,
+                        route,
+                        actions
+                    );
+
+                    assert_ne!(code, 403);
+                } else {
+                    // all_actions API key also doesn't work
+                    assert_eq!(
+                        response,
+                        INVALID_ROUTE_POLICY_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with action: {:?}",
+                        method,
+                        route,
+                        action
+                    );
+                    assert_eq!(code, 403);
+                }
             }
         }
     }
@@ -298,10 +415,14 @@ async fn unauthorized_partial_actions() {
     server.wait_task(task_id).await.succeeded();
 
     // When multiple actions are necessary, the server mustn't accept any combination with one action missing.
-    for ((method, route), actions) in AUTHORIZATIONS.iter() {
-        for actions in actions {
+    for ((method, route, _route_policy), actions) in AUTHORIZATIONS.iter() {
+        for (actions, key_policy) in actions {
             if 2 <= actions.len() {
                 for excluded_action in *actions {
+                    // scope by index only if the key_policy allows it
+                    let indexes =
+                        if key_policy == &IndexScopePolicy::Allow { ["products"] } else { ["*"] };
+
                     // create a new API key letting all actions except one.
                     server.use_api_key(MASTER_KEY);
 
@@ -311,7 +432,7 @@ async fn unauthorized_partial_actions() {
                         .copied()
                         .collect::<HashSet<_>>();
                     let content = json!({
-                        "indexes": ["products"],
+                        "indexes": indexes,
                         "actions": actions,
                         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
                     });
@@ -345,8 +466,8 @@ async fn unauthorized_partial_actions() {
 async fn access_authorized_no_index_restriction() {
     let mut server = Server::new_auth().await;
 
-    for ((method, route), actions) in AUTHORIZATIONS.iter() {
-        for actions in actions {
+    for ((method, route, _), actions) in AUTHORIZATIONS.iter() {
+        for actions in actions.keys() {
             // create a new API key letting only the needed action.
             server.use_api_key(MASTER_KEY);
 
@@ -816,16 +937,16 @@ async fn error_creating_index_without_action() {
 
     // create key with access on all indexes.
     let create_index_actions = AUTHORIZATIONS
-        .get(&("POST", "/indexes"))
+        .get(&("POST", "/indexes", IndexScopePolicy::Allow))
         .unwrap()
         .iter()
-        .flat_map(|s| s.iter())
+        .flat_map(|(s, _)| s.iter())
         .cloned()
         .collect::<HashSet<_>>();
     let content = json!({
         "indexes": ["*"],
         // Give all action but the ones allowing to create an index.
-        "actions": ALL_ACTIONS.iter().cloned().filter(|a| !create_index_actions.contains(a)).collect::<Vec<_>>(),
+        "actions": ALL_ACTIONS.difference(&create_index_actions).collect::<Vec<_>>(),
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
