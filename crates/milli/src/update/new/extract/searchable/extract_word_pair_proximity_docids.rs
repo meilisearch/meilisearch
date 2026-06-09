@@ -437,11 +437,10 @@ impl WordPairProximityDocidsExtractor {
             VecDeque::with_capacity(MAX_DISTANCE as usize);
 
         let (old_document_tokenizer, new_document_tokenizer) = match tokenizers {
-            OneOrTwoTokenizers::OneTokenizer(old) => (old, None),
-            OneOrTwoTokenizers::TwoTokenizer { old, new } => (old, Some(new)),
+            OneOrTwoTokenizers::OneTokenizer(this) => (this, this),
+            OneOrTwoTokenizers::TwoTokenizer { old, new } => (old, new),
         };
 
-        // TODO we use a match to check if we have one or two tokenizers and call once or twice the functions
         process_document_tokens(
             current_document,
             &old_document_tokenizer,
@@ -455,20 +454,18 @@ impl WordPairProximityDocidsExtractor {
             },
         )?;
 
-        if let Some(new_document_tokenizer) = new_document_tokenizer {
-            process_document_tokens(
-                current_document,
-                &new_document_tokenizer,
-                &mut word_positions,
-                &mut |field_name| match new_fields_ids_map.id_with_metadata(field_name) {
-                    Some(field_id) => Ok(field_id),
-                    None => panic!("Expected field `{field_name}` in the fields IDs map"),
-                },
-                &mut |(w1, w2), prox| {
-                    add_word_pair_proximity.push(((w1, w2), prox));
-                },
-            )?;
-        }
+        process_document_tokens(
+            current_document,
+            &new_document_tokenizer,
+            &mut word_positions,
+            &mut |field_name| match new_fields_ids_map.id_with_metadata(field_name) {
+                Some(field_id) => Ok(field_id),
+                None => panic!("Expected field `{field_name}` in the fields IDs map"),
+            },
+            &mut |(w1, w2), prox| {
+                add_word_pair_proximity.push(((w1, w2), prox));
+            },
+        )?;
 
         let mut key_buffer = bumpalo::collections::Vec::new_in(doc_alloc);
 
