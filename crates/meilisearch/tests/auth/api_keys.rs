@@ -229,6 +229,29 @@ async fn error_add_api_key_bad_key() {
 }
 
 #[actix_rt::test]
+async fn error_add_index_scoped_api_key_with_global_action() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": json!(null),
+        "indexes": ["products"],
+        "actions": ["version"],
+        "expiresAt": "2050-11-13T00:00:00"
+    });
+    let (response, code) = server.add_api_key(content).await;
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "cannot create index-scoped API key with global action `\"version\"`\n  - Hint: remove action `\"version\"` from the action list, or remove `indexes` to make the key global",
+      "code": "index_scoped_api_key_with_global_action",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_scoped_api_key_with_global_action"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn error_add_api_key_missing_parameter() {
     let mut server = Server::new_auth().await;
     server.use_api_key("MASTER_KEY");
