@@ -54,7 +54,6 @@ fn parse_struct(
         syn::Fields::Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.iter().map(|field| field.ty.clone()).collect()
         }
-        // deserr doesn't support unit structs...
         syn::Fields::Unit => {
             vec![]
         }
