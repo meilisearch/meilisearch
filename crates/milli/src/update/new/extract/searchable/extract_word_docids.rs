@@ -792,35 +792,10 @@ impl WordDocidsExtractors {
                 new: new_document_tokenizer,
             } => {
                 let mut old_token_fn = |_field_name: &str, field_id, pos, word: &str| {
-                    use PatternMatch::{Match, NoMatch, Parent};
+                    use PatternMatch::Match;
 
-                    let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
-                    let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
-
-                    match (old_field_metadata, new_field_metadata) {
-                        (
-                            Metadata { searchable: (Match, _), exact: old_exact, .. },
-                            Metadata { searchable: (NoMatch, _), .. },
-                        )
-                        | (
-                            Metadata { searchable: (Match, _), exact: old_exact, .. },
-                            Metadata { searchable: (Parent, _), .. },
-                        ) => cached_sorter.insert_del_u32(
-                            field_id,
-                            pos,
-                            word,
-                            old_exact == Match || old_disabled_typos_terms.is_exact(word),
-                            FieldDbExtraction::Extract,
-                            document.docid(),
-                            doc_alloc,
-                        ),
-                        (
-                            Metadata { searchable: (NoMatch, _), .. },
-                            Metadata { searchable: (NoMatch, _), .. },
-                        ) => {
-                            unreachable!()
-                        }
-                        (Metadata { exact: old_exact, .. }, Metadata { .. }) => cached_sorter
+                    match old_fields_ids_map.metadata(field_id).unwrap() {
+                        Metadata { searchable: (Match, _), exact: old_exact, .. } => cached_sorter
                             .insert_del_u32(
                                 field_id,
                                 pos,
@@ -830,6 +805,7 @@ impl WordDocidsExtractors {
                                 document.docid(),
                                 doc_alloc,
                             ),
+                        _ => Ok(()),
                     }
                 };
 
@@ -840,35 +816,10 @@ impl WordDocidsExtractors {
                 )?;
 
                 let mut new_token_fn = |_field_name: &str, field_id, pos, word: &str| {
-                    use PatternMatch::{Match, NoMatch, Parent};
+                    use PatternMatch::Match;
 
-                    let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
-                    let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
-
-                    match (old_field_metadata, new_field_metadata) {
-                        (
-                            Metadata { searchable: (NoMatch, _), .. },
-                            Metadata { searchable: (Match, _), exact: new_exact, .. },
-                        )
-                        | (
-                            Metadata { searchable: (Parent, _), .. },
-                            Metadata { searchable: (Match, _), exact: new_exact, .. },
-                        ) => cached_sorter.insert_add_u32(
-                            field_id,
-                            pos,
-                            word,
-                            new_exact == Match || new_disabled_typos_terms.is_exact(word),
-                            FieldDbExtraction::Extract,
-                            document.docid(),
-                            doc_alloc,
-                        ),
-                        (
-                            Metadata { searchable: (NoMatch, _), .. },
-                            Metadata { searchable: (NoMatch, _), .. },
-                        ) => {
-                            unreachable!()
-                        }
-                        (Metadata { .. }, Metadata { exact: new_exact, .. }) => cached_sorter
+                    match new_fields_ids_map.metadata(field_id).unwrap() {
+                        Metadata { searchable: (Match, _), exact: new_exact, .. } => cached_sorter
                             .insert_add_u32(
                                 field_id,
                                 pos,
@@ -878,6 +829,7 @@ impl WordDocidsExtractors {
                                 document.docid(),
                                 doc_alloc,
                             ),
+                        _ => Ok(()),
                     }
                 };
 
