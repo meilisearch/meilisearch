@@ -2193,7 +2193,7 @@ async fn import_dump_v6_containing_experimental_features() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -2325,7 +2325,7 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -2437,7 +2437,7 @@ async fn generate_and_import_dump_containing_vectors() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);

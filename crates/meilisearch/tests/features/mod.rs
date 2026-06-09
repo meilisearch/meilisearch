@@ -30,7 +30,7 @@ async fn experimental_features() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -52,7 +52,7 @@ async fn experimental_features() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -74,7 +74,7 @@ async fn experimental_features() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -97,7 +97,7 @@ async fn experimental_features() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -120,7 +120,7 @@ async fn experimental_features() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -150,7 +150,7 @@ async fn experimental_feature_metrics() {
       "chatCompletions": false,
       "multimodal": false,
       "foreignKeys": false,
-      "queueDocumentsFetch": false
+      "queueDocumentsFetch": false,
       "legacySearch": false
     }
     "###);
@@ -198,7 +198,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `queueDocumentsFetch`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `queueDocumentsFetch`, `legacySearch`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
