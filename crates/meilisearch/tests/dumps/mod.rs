@@ -2192,7 +2192,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "queueDocumentsFetch": false
     }
     "###);
 
@@ -2322,7 +2323,8 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "queueDocumentsFetch": false
     }
     "###);
 
@@ -2432,7 +2434,8 @@ async fn generate_and_import_dump_containing_vectors() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "queueDocumentsFetch": false
     }
     "###);
 
