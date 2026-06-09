@@ -5378,7 +5378,7 @@ async fn remote_auto_sharding_distinct() {
           "title": "Escape Room",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -5387,7 +5387,7 @@ async fn remote_auto_sharding_distinct() {
           "title": "Shazam!",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms2"
           }
@@ -5667,7 +5667,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5677,7 +5677,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5687,7 +5687,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5697,7 +5697,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -5732,7 +5732,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5742,7 +5742,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5752,7 +5752,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5762,7 +5762,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -5797,7 +5797,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5807,7 +5807,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5817,7 +5817,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5827,7 +5827,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -5871,7 +5871,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5881,7 +5881,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5891,7 +5891,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5901,7 +5901,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
