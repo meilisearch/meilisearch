@@ -493,7 +493,7 @@ async fn error_add_api_key_invalid_parameters_uid() {
 
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Invalid value at `.uid`: invalid length: expected length 32 for simple format, found 13",
+      "message": "Invalid value at `.uid`: invalid length: found 13",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"

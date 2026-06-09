@@ -63,7 +63,7 @@ async fn create_api_key_bad_uid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.uid`: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `o` at 2",
+      "message": "Invalid value at `.uid`: invalid character: found `o` at 1",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"

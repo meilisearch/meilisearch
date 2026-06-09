@@ -542,7 +542,7 @@ async fn invalid_uuid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "message": "Invalid UUID: invalid character: found `i` at 0",
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
@@ -555,7 +555,7 @@ async fn invalid_uuid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "message": "Invalid UUID: invalid character: found `i` at 0",
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
@@ -567,7 +567,7 @@ async fn invalid_uuid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "message": "Invalid UUID: invalid character: found `i` at 0",
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
