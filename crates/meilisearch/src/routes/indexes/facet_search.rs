@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BinaryHeap, HashSet, VecDeque};
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use index_scheduler::filter::filter_into_index_filter;
+use index_scheduler::filter::{filter_into_index_filter, parse_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools as _;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -23,11 +23,10 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
-    add_search_rules, fuse_filters, parse_filter, perform_facet_search, prepare_search,
-    FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery, Partition,
-    RankingScoreThreshold, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET,
+    add_search_rules, fuse_filters, perform_facet_search, prepare_search, FacetSearchResult,
+    HybridQuery, MatchingStrategy, NetworkableQuery, Partition, RankingScoreThreshold, SearchQuery,
+    SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
@@ -505,17 +504,17 @@ async fn search_multi_local(
 
         let filter = filter
             .as_ref()
-            .and_then(|f| parse_filter(f, Code::InvalidSearchFilter, features).transpose())
+            .and_then(|f| parse_filter(f, Code::InvalidSearchFilter, features, None).transpose())
             .map(|f| {
                 f.and_then(|f| {
-                    Ok(filter_into_index_filter(
+                    filter_into_index_filter(
                         f,
                         &index,
                         &rtxn,
                         &index_scheduler,
                         &progress_clone,
                         &index_uid,
-                    )?)
+                    )
                 })
             })
             .transpose()?;
@@ -558,7 +557,7 @@ async fn search_local(
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
         let filter = match &search_query.filter {
             Some(filter) => {
-                let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+                let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
                 filter
                     .map(|f| {
                         filter_into_index_filter(
