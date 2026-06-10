@@ -245,26 +245,20 @@ pub async fn legacy_multi_search_with_post(
 
     let FederatedSearch { mut queries, federation } = federated_search;
 
-    // check remote header
-    let is_proxy = req
-        .headers()
-        .get(PROXY_SEARCH_HEADER)
-        .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+    let features = index_scheduler.features();
 
-    let include_metadata = parse_include_metadata_header(&req);
-
-    let auth_filter = index_scheduler.filters();
     // regardless of federation, check authorization and apply search rules
     let auth = 'check_authorization: {
         for (query_index, federated_query) in queries.iter_mut().enumerate() {
             let index_uid = federated_query.index_uid.as_str();
             // Check index from API key
-            if !auth_filter.is_index_authorized(index_uid) {
+            if !index_scheduler.filters().is_index_authorized(index_uid) {
                 break 'check_authorization Err(AuthenticationError::InvalidToken)
                     .with_index(query_index);
             }
             // Apply search rules from tenant token
-            if let Some(search_rules) = auth_filter.get_index_search_rules(index_uid) {
+            if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(index_uid)
+            {
                 add_search_rules(&mut federated_query.filter, search_rules);
             }
         }
@@ -279,7 +273,7 @@ pub async fn legacy_multi_search_with_post(
         err
     })?;
 
-    let features = index_scheduler.features();
+    let include_metadata = parse_include_metadata_header(&req);
     let response = match federation {
         Some(federation) => {
             debug!(
@@ -289,6 +283,11 @@ pub async fn legacy_multi_search_with_post(
                 "Federated-search"
             );
 
+            // check remote header
+            let is_proxy = req
+                .headers()
+                .get(PROXY_SEARCH_HEADER)
+                .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
             let search_result = perform_federated_search(
                 index_scheduler.clone(),
                 queries,

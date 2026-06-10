@@ -638,14 +638,14 @@ pub async fn legacy_search_with_url_query(
 
     let mut query: SearchQuery = params.into_inner().try_into()?;
 
-    let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
-
-    let include_metadata = parse_include_metadata_header(&req);
-
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
+
+    let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
+
+    let include_metadata = parse_include_metadata_header(&req);
 
     let search_result = search(
         query,
@@ -711,17 +711,10 @@ pub(crate) async fn search(
             service,
             progress,
         )
-        .await;
+        .await
+        .map_err(|(err, _)| err);
 
-        let (search_result, deadline) = search_result.map_err(|(mut err, query_index)| {
-            // Add the query index that failed as context for the error message.
-            // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
-            // of result and we can benefit from static typing.
-            if let Some(query_index) = query_index {
-                err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
-            }
-            err
-        })?;
+        let (search_result, deadline) = search_result?;
         let search_result =
             search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
 
@@ -936,13 +929,14 @@ pub async fn legacy_search_with_post(
     let mut query = params.into_inner();
     debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
 
-    let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
-
-    let include_metadata = parse_include_metadata_header(&req);
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
+
+    let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
+
+    let include_metadata = parse_include_metadata_header(&req);
 
     let search_result = search(
         query,
