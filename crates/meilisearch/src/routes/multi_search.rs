@@ -151,7 +151,7 @@ pub async fn multi_search_with_post(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let use_documents_retrieval = !index_scheduler.features().runtime_features().legacy_search;
+    let use_documents_retrieval = !index_scheduler.features().legacy_search();
     if use_documents_retrieval {
         // Since we don't want to process half of the search requests and then get a permit refused
         // we're going to get one permit for the whole duration of the multi-search request.

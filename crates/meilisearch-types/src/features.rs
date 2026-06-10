@@ -24,7 +24,7 @@ pub struct RuntimeTogglableFeatures {
     pub multimodal: bool,
     pub foreign_keys: bool,
     pub queue_documents_fetch: bool,
-    pub legacy_search: bool,
+    pub legacy_search: Option<bool>,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -32,6 +32,7 @@ pub struct InstanceTogglableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
     pub contains_filter: bool,
+    pub legacy_search_as_default: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]

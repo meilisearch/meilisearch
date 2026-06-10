@@ -153,7 +153,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             multimodal: Some(multimodal),
             foreign_keys: Some(foreign_keys),
             queue_documents_fetch: Some(queue_documents_fetch),
-            legacy_search: Some(legacy_search),
+            legacy_search,
         }
     }
 }
@@ -283,7 +283,7 @@ async fn patch_features(
             .0
             .queue_documents_fetch
             .unwrap_or(old_features.queue_documents_fetch),
-        legacy_search: new_features.0.legacy_search.unwrap_or(old_features.legacy_search),
+        legacy_search: new_features.0.legacy_search.or(old_features.legacy_search),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -321,7 +321,7 @@ async fn patch_features(
             multimodal,
             foreign_keys,
             queue_documents_fetch,
-            legacy_search,
+            legacy_search: legacy_search.unwrap_or(false),
         },
         &req,
     );

@@ -2194,7 +2194,7 @@ async fn import_dump_v6_containing_experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false,
-      "legacySearch": false
+      "legacySearch": null
     }
     "###);
 
@@ -2326,7 +2326,7 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false,
-      "legacySearch": false
+      "legacySearch": null
     }
     "###);
 
