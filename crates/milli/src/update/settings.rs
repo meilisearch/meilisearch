@@ -1606,7 +1606,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_foreign_keys()?;
             self.update_criteria()?;
             self.update_displayed()?;
-            self.update_synonyms()?;
             self.update_primary_key()?;
             self.update_authorize_typos()?;
             self.update_min_typo_word_len()?;
@@ -1625,6 +1624,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_separator_tokens()?;
             self.update_dictionary()?;
             self.update_localized_attributes_rules()?;
+            // Make sure to update the synonyms *after* updating the dictionary
+            // as the dictionary is used by the synonyms to correctly parse them.
+            self.update_synonyms()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.
