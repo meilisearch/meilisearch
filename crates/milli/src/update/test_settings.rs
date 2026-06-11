@@ -461,6 +461,9 @@ fn set_and_reset_stop_words() {
         )
         .unwrap();
 
+    wtxn.commit().unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
     // In the same transaction we provide some stop_words
     let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
     index

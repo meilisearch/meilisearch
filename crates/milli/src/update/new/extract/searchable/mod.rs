@@ -6,6 +6,13 @@ pub use extract_word_docids::{WordDocidsCaches, WordDocidsExtractors};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
 
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
+use crate::update::new::extract::searchable::tokenize_document::DocumentTokenizer;
+
+#[derive(Clone, Copy)]
+enum OneOrTwoTokenizers<'a> {
+    OneTokenizer(DocumentTokenizer<'a>),
+    TwoTokenizer { old: DocumentTokenizer<'a>, new: DocumentTokenizer<'a> },
+}
 
 pub fn match_searchable_field(
     field_name: &str,
