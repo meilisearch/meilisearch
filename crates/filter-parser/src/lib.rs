@@ -173,6 +173,11 @@ impl<'a> Token<'a> {
         self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
     }
 
+    /// The fragment with escaped double quotes.
+    pub fn escaped_fragment(&self) -> String {
+        self.fragment().replace('"', r#"\""#)
+    }
+
     /// Returns the extra fragment of the token.
     pub fn extra(&self) -> &str {
         self.span.extra()
