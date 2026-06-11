@@ -6152,7 +6152,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
           "facette": "L'école",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -6173,6 +6173,16 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
     {
       "hits": [
         {
+          "id": "A",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          }
+        },
+        {
           "id": "D",
           "facette": "L'école",
           "_federation": {
@@ -6190,16 +6200,6 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms0"
-          }
-        },
-        {
-          "id": "A",
-          "facette": "L'école",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 1.0,
-            "remote": "ms1"
           }
         }
       ],
@@ -6240,7 +6240,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
           "facette": "\"Lécole",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -6261,6 +6261,16 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
     {
       "hits": [
         {
+          "id": "F",
+          "facette": "\"Lécole",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          }
+        },
+        {
           "id": "G",
           "facette": "\"Lécole",
           "_federation": {
@@ -6268,16 +6278,6 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms0"
-          }
-        },
-        {
-          "id": "F",
-          "facette": "\"Lécole",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 1.0,
-            "remote": "ms1"
           }
         }
       ],
