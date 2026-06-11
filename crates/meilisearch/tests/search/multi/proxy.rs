@@ -5955,6 +5955,343 @@ async fn remote_auto_sharding_auto_search() {
     "###);
 }
 
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
+    use crate::common::C_EST_FRANÇAIS_DOCUMENTS;
+
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+
+    // enable feature
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+
+    // set network
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          }
+        },
+        "shards": {
+            "ms0": {
+              "remotes": ["ms0"]
+            },
+            "ms1": {
+              "remotes": ["ms1"]
+            }
+        }
+      }
+    );
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+
+    let (response, status_code) = ms0.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms1.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    // add documents
+    let documents = C_EST_FRANÇAIS_DOCUMENTS.clone();
+    let documents = documents.as_array().unwrap();
+    let index0 = ms0.index("test");
+    let index1 = ms1.index("test");
+
+    let (task, _status_code) = index0.add_documents(json!(documents), None).await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+
+    let (task, _status_code) = index0
+        .update_settings(json!({
+          "filterableAttributes": ["facette"]
+        }))
+        .await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+
+    // perform search with network
+    let request = json!(
+    {
+        "filter": "facette = \"L'école\"",
+        "useNetwork": true,
+    });
+
+    let (response, code) = index0.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "D",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": "E",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": "A",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+    let (response, code) = index1.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "D",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": "E",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": "A",
+          "facette": "L'école",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+
+    // perform search with network
+    let request = json!(
+    {
+        "filter": "facette = '\"Lécole'",
+        "useNetwork": true,
+    });
+
+    let (response, code) = index0.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "G",
+          "facette": "\"Lécole",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": "F",
+          "facette": "\"Lécole",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+    let (response, code) = index1.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "G",
+          "facette": "\"Lécole",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": "F",
+          "facette": "\"Lécole",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+}
+
 #[cfg(not(feature = "enterprise"))]
 #[actix_rt::test]
 async fn sharding_not_enterprise() {
