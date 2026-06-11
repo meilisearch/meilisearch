@@ -523,13 +523,6 @@ impl Index {
             .get(rtxn, main_key::VECTOR_STORE_BACKEND)?)
     }
 
-    pub(crate) fn delete_vector_store(&self, wtxn: &mut RwTxn<'_>) -> Result<bool> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
-            .delete(wtxn, main_key::VECTOR_STORE_BACKEND)?)
-    }
-
     /* documents ids */
 
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
