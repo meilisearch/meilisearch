@@ -62,7 +62,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         )),
         (status = 404, description = "Template or document not found", body = ResponseError, content_type = "application/json", example = json!(
             {
-                "message": "Document with ID `9999` not found.",
+                "message": "Document with ID `9999` not found in index `movies`.",
                 "code": "render_document_not_found",
                 "type": "invalid_request",
                 "link": "https://docs.meilisearch.com/errors#render_document_not_found"
@@ -70,8 +70,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         )),
         (status = 400, description = "Parameters are incorrect", body = ResponseError, content_type = "application/json", example = json!(
             {
-                "message": "Indexing fragment `mistake` does not exist for embedder `rest`.\n  Hint: Available indexing fragments are `basic`, `withBreed`.",
-                "code": "invalid_render_template_id",
+                "message": "cannot find embedder `default` in index `movies`",
+                "code": "invalid_render_template",
                 "type": "invalid_request",
                 "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
             }
