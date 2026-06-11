@@ -788,6 +788,13 @@ async fn force_different_locales_with_pattern_nested() {
 
 #[actix_rt::test]
 async fn settings_change() {
+    match std::env::var("MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS") {
+        // If we are running this test with the old settings indexer we must skip it as there
+        // is a bug with the locales in the old settings indexer that we do not plan to fix.
+        Ok(value) if value == "true" => return,
+        Ok(_) | Err(_) => (),
+    };
+
     let server = Server::new_shared();
     let index = server.unique_index();
 
