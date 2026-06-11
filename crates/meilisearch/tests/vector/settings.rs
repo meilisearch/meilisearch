@@ -1,6 +1,6 @@
 use meili_snap::{json_string, snapshot};
 
-use crate::common::{GetAllDocumentsOptions, Server};
+use crate::common::{self, GetAllDocumentsOptions, Server};
 use crate::json;
 use crate::vector::generate_default_user_provided_documents;
 
@@ -136,47 +136,55 @@ async fn reset_embedder_documents() {
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
+
+    // Make sure the previous settings indexer and the new settings indexer
+    // returns documents fields in the same order.
+    let documents = match documents {
+        common::Value(serde_json::Value::Object(mut map)) => {
+            map.values_mut().for_each(serde_json::Value::sort_all_objects);
+            common::Value(serde_json::Value::Object(map))
+        }
+        otherwise => otherwise,
+    };
+
     snapshot!(json_string!(documents), @r###"
     {
       "results": [
         {
-          "id": 0,
-          "name": "kefir",
           "_vectors": {
             "manual": {
-              "regenerate": false,
               "embeddings": [
                 [
                   0.0,
                   0.0,
                   0.0
                 ]
-              ]
+              ],
+              "regenerate": false
             }
-          }
+          },
+          "id": 0,
+          "name": "kefir"
         },
         {
-          "id": 1,
-          "name": "echo",
           "_vectors": {
             "manual": {
-              "regenerate": false,
               "embeddings": [
                 [
                   1.0,
                   1.0,
                   1.0
                 ]
-              ]
+              ],
+              "regenerate": false
             }
-          }
+          },
+          "id": 1,
+          "name": "echo"
         },
         {
-          "id": 2,
-          "name": "billou",
           "_vectors": {
             "manual": {
-              "regenerate": false,
               "embeddings": [
                 [
                   2.0,
@@ -188,32 +196,32 @@ async fn reset_embedder_documents() {
                   2.0,
                   3.0
                 ]
-              ]
+              ],
+              "regenerate": false
             }
-          }
+          },
+          "id": 2,
+          "name": "billou"
         },
         {
-          "id": 3,
-          "name": "intel",
           "_vectors": {
             "manual": {
-              "regenerate": false,
               "embeddings": [
                 [
                   3.0,
                   3.0,
                   3.0
                 ]
-              ]
+              ],
+              "regenerate": false
             }
-          }
+          },
+          "id": 3,
+          "name": "intel"
         },
         {
-          "id": 4,
-          "name": "max",
           "_vectors": {
             "manual": {
-              "regenerate": false,
               "embeddings": [
                 [
                   4.0,
@@ -225,9 +233,12 @@ async fn reset_embedder_documents() {
                   4.0,
                   5.0
                 ]
-              ]
+              ],
+              "regenerate": false
             }
-          }
+          },
+          "id": 4,
+          "name": "max"
         }
       ],
       "offset": 0,
