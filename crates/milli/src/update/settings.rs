@@ -1552,126 +1552,79 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 .map(|_| None);
         }
 
-        // only use the new indexer when only the embedder possibly changed
-        if let Self {
-            searchable_fields: _,
-            displayed_fields: _,
-            filterable_fields: _,
-            sortable_fields: _,
-            foreign_keys: _,
-            criteria: _,
-            stop_words: _,
-            non_separator_tokens: _,
-            separator_tokens: _,
-            dictionary: _,
-            distinct_field: _,
-            synonyms: _,
-            primary_key: _,
-            authorize_typos: _,
-            min_word_len_two_typos: _,
-            min_word_len_one_typo: _,
-            exact_words: _,
-            exact_attributes: _,
-            max_values_per_facet: _,
-            sort_facet_values_by: _,
-            pagination_max_total_hits: _,
-            proximity_precision: _,
-            embedder_settings: _,
-            search_cutoff: _,
-            localized_attributes_rules: _,
-            prefix_search: _,
-            facet_search: _,
-            disable_on_numbers: _,
-            chat: _,
-            wtxn: _,
-            index: _,
-            indexer_config: _,
-        } = &self
-        {
-            progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
+        progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
 
-            self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-            let old_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
-            // Update index settings
-            let embedding_config_updates = self.update_embedding_configs()?;
-            self.update_user_defined_searchable_attributes()?;
-            self.update_exact_attributes()?;
-            self.update_proximity_precision()?;
-            self.update_filterable_attributes()?;
-            self.update_sortable_attributes()?;
-            self.update_distinct_attribute()?;
-            self.update_foreign_keys()?;
-            self.update_criteria()?;
-            self.update_displayed()?;
-            self.update_primary_key()?;
-            self.update_authorize_typos()?;
-            self.update_min_typo_word_len()?;
-            self.update_exact_words()?;
-            self.update_max_values_per_facet()?;
-            self.update_sort_facet_values_by()?;
-            self.update_pagination_max_total_hits()?;
-            self.update_search_cutoff()?;
-            self.update_chat_config()?;
-            self.update_facet_search()?;
-            self.update_prefix_search()?;
-            self.update_exact_words()?;
-            self.update_disabled_typos_terms()?;
-            self.update_stop_words()?;
-            self.update_non_separator_tokens()?;
-            self.update_separator_tokens()?;
-            self.update_dictionary()?;
-            self.update_localized_attributes_rules()?;
-            // Make sure to update the synonyms *after* updating the dictionary
-            // as the dictionary is used by the synonyms to correctly parse them.
-            self.update_synonyms()?;
+        // Update index settings
+        let embedding_config_updates = self.update_embedding_configs()?;
+        self.update_user_defined_searchable_attributes()?;
+        self.update_exact_attributes()?;
+        self.update_proximity_precision()?;
+        self.update_filterable_attributes()?;
+        self.update_sortable_attributes()?;
+        self.update_distinct_attribute()?;
+        self.update_foreign_keys()?;
+        self.update_criteria()?;
+        self.update_displayed()?;
+        self.update_primary_key()?;
+        self.update_authorize_typos()?;
+        self.update_min_typo_word_len()?;
+        self.update_exact_words()?;
+        self.update_max_values_per_facet()?;
+        self.update_sort_facet_values_by()?;
+        self.update_pagination_max_total_hits()?;
+        self.update_search_cutoff()?;
+        self.update_chat_config()?;
+        self.update_facet_search()?;
+        self.update_prefix_search()?;
+        self.update_exact_words()?;
+        self.update_disabled_typos_terms()?;
+        self.update_stop_words()?;
+        self.update_non_separator_tokens()?;
+        self.update_separator_tokens()?;
+        self.update_dictionary()?;
+        self.update_localized_attributes_rules()?;
+        // Make sure to update the synonyms *after* updating the dictionary
+        // as the dictionary is used by the synonyms to correctly parse them.
+        self.update_synonyms()?;
 
-            // Note that we don't need to update the searchables here,
-            // as it will be done after the settings update.
-            let new_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+        // Note that we don't need to update the searchables here,
+        // as it will be done after the settings update.
+        let new_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
-            let primary_key_id = self
-                .index
-                .primary_key(self.wtxn)?
-                .and_then(|name| new_inner_settings.fields_ids_map.id(name));
-            let settings_update_only = true;
-            let inner_settings_diff = InnerIndexSettingsDiff::new(
-                old_inner_settings,
-                new_inner_settings,
-                primary_key_id,
-                embedding_config_updates,
-                settings_update_only,
-            );
+        let primary_key_id = self
+            .index
+            .primary_key(self.wtxn)?
+            .and_then(|name| new_inner_settings.fields_ids_map.id(name));
+        let settings_update_only = true;
+        let inner_settings_diff = InnerIndexSettingsDiff::new(
+            old_inner_settings,
+            new_inner_settings,
+            primary_key_id,
+            embedding_config_updates,
+            settings_update_only,
+        );
 
-            if self.index.number_of_documents(self.wtxn)? > 0 {
-                reindex(
-                    self.wtxn,
-                    self.index,
-                    &self.indexer_config.thread_pool,
-                    self.indexer_config.grenad_parameters(),
-                    &inner_settings_diff,
-                    must_stop_processing,
-                    progress,
-                    ip_policy,
-                    embedder_stats,
-                )
-                .map(Some)
-            } else {
-                Ok(None)
-            }
-        } else {
-            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
-
-            self.legacy_execute(
-                |indexing_step| tracing::debug!(update = ?indexing_step),
+        if self.index.number_of_documents(self.wtxn)? > 0 {
+            reindex(
+                self.wtxn,
+                self.index,
+                &self.indexer_config.thread_pool,
+                self.indexer_config.grenad_parameters(),
+                &inner_settings_diff,
                 must_stop_processing,
+                progress,
                 ip_policy,
                 embedder_stats,
             )
-            .map(|_| None)
+            .map(Some)
+        } else {
+            Ok(None)
         }
     }
 }
