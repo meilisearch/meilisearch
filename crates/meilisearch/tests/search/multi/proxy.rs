@@ -27,7 +27,7 @@ async fn error_feature() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Performing a remote federated search requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
+      "message": "Inside `.queries[0]`: Performing a remote federated search requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -49,7 +49,7 @@ async fn error_feature() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Using `federationOptions.queryPosition` requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
+      "message": "Inside `.queries[0]`: Using `federationOptions.queryPosition` requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -539,7 +539,7 @@ async fn remote_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms1"
           }
@@ -569,7 +569,7 @@ async fn remote_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -579,7 +579,7 @@ async fn remote_sharding_auto_search() {
           "id": "D",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.23106060606060605,
             "remote": "ms2"
           }
@@ -605,7 +605,7 @@ async fn remote_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms1"
           }
@@ -635,7 +635,7 @@ async fn remote_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -645,7 +645,7 @@ async fn remote_sharding_auto_search() {
           "id": "D",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.23106060606060605,
             "remote": "ms2"
           }
@@ -671,7 +671,7 @@ async fn remote_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms1"
           }
@@ -701,7 +701,7 @@ async fn remote_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -711,7 +711,7 @@ async fn remote_sharding_auto_search() {
           "id": "D",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.23106060606060605,
             "remote": "ms2"
           }
@@ -844,7 +844,7 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
           "kind": "keep",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -1046,7 +1046,7 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
           "title": "Batman Returns",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -1154,7 +1154,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r###"
     {
       "hits": [
         {
@@ -1162,7 +1162,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "Batman Returns",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1172,7 +1172,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "Batman Forever",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1182,7 +1182,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "The Matrix",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1192,7 +1192,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "Superman",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1206,7 +1206,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 
     let (response, code) = ms0
         .index("test")
@@ -1218,7 +1218,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r###"
     {
       "hits": [
         {
@@ -1226,7 +1226,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "The Matrix",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1236,7 +1236,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "Superman",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1250,7 +1250,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1483,7 +1483,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1492,7 +1492,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
           "color": "blue",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -1503,7 +1503,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
           "color": "red",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -1524,7 +1524,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -2453,7 +2453,7 @@ async fn error_unregistered_remote() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
     {
-      "message": "Invalid `queries[2].federation_options.remote`: remote `ms2` is not registered",
+      "message": "Inside `.queries[2]`: Invalid `.federation_options.remote`: remote `ms2` is not registered",
       "code": "invalid_multi_search_remote",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_remote"
@@ -2463,7 +2463,7 @@ async fn error_unregistered_remote() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
     {
-      "message": "Invalid `queries[2].federation_options.remote`: remote `ms2` is not registered",
+      "message": "Inside `.queries[2]`: Invalid `.federation_options.remote`: remote `ms2` is not registered",
       "code": "invalid_multi_search_remote",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_remote"
@@ -3186,7 +3186,7 @@ async fn error_bad_request_facets_by_index_facet() {
       "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
-          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\\n - Note: index `test` used in `.queries[1]`\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
+          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\",\"code\":\"invalid_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
           "code": "remote_bad_request",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#remote_bad_request"
@@ -5378,7 +5378,7 @@ async fn remote_auto_sharding_distinct() {
           "title": "Escape Room",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms1"
           }
@@ -5387,7 +5387,7 @@ async fn remote_auto_sharding_distinct() {
           "title": "Shazam!",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 1.0,
             "remote": "ms2"
           }
@@ -5667,7 +5667,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5677,7 +5677,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5687,7 +5687,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5697,7 +5697,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -5732,7 +5732,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5742,7 +5742,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5752,7 +5752,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5762,7 +5762,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -5797,7 +5797,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5807,7 +5807,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5817,7 +5817,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5827,7 +5827,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -5871,7 +5871,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms2"
           }
@@ -5881,7 +5881,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "A",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5891,7 +5891,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "B",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.7028218694885362,
             "remote": "ms1"
           }
@@ -5901,7 +5901,7 @@ async fn remote_auto_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }

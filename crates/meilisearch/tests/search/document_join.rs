@@ -699,7 +699,7 @@ async fn federated_search_with_foreign_filter_on_author_profile() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n30:36 _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
+      "message": "Inside `.queries[0]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n30:36 _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -981,7 +981,7 @@ async fn foreign_filter_on_non_filterable_attribute() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n10:16 _foreign(author, id = a1)",
+      "message": "Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n_foreign(author, id = a1)",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

@@ -21,7 +21,7 @@ pub struct ResponseError {
     /// The error code.
     #[schema(value_type = Code)]
     #[serde(rename = "code")]
-    error_code: String,
+    pub error_code: String,
     /// The error type.
     #[schema(value_type = ErrorType)]
     #[serde(rename = "type")]

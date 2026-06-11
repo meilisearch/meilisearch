@@ -6,6 +6,7 @@ pub mod error;
 pub mod analytics;
 #[macro_use]
 pub mod extractors;
+pub mod documents_retrieval;
 pub mod metrics;
 pub mod middleware;
 pub mod option;

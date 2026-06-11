@@ -104,7 +104,7 @@ async fn invalid_federated_search() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]"}), @r###"
     {
-      "message": "Inside `.queries[0]`: Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from query #0 or remove `federation` from the request",
+      "message": "Inside `.queries[0]`: Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from the query or remove `federation` from the request",
       "code": "invalid_multi_search_query_show_performance_details",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_show_performance_details"
