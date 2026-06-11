@@ -882,11 +882,11 @@ fn serialize_index_filter_condition(
         IndexFilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
             write!(f, "_vectors")?;
             if let Some(embedder) = embedder {
-                write!(f, ".\"{:?}\"", embedder.escaped_fragment())?;
+                write!(f, ".\"{}\"", embedder.escaped_fragment())?;
             }
             match inner {
                 VectorFilter::Fragment(fragment) => {
-                    write!(f, ".fragments.\"{:?}\"", fragment.escaped_fragment())?
+                    write!(f, ".fragments.\"{}\"", fragment.escaped_fragment())?
                 }
                 VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                 VectorFilter::UserProvided => write!(f, ".userProvided")?,
