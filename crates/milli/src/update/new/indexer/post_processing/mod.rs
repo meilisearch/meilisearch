@@ -14,7 +14,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
-use crate::progress::Progress;
+use crate::progress::{AtomicWordStep, Progress};
 use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
@@ -165,8 +165,13 @@ fn compute_word_fst(
     let prefix_settings = index.prefix_settings(wtxn)?;
     word_fst_builder.with_prefix_settings(prefix_settings);
 
+    let (word_count, sub_step) =
+        AtomicWordStep::new((word_delta.added.len() + word_delta.deleted.len()) as u32);
+    progress.update_progress(sub_step);
+
     // we ignore modifications when rebuilding the FST
     for either in word_delta.added_or_deleted_words() {
+        word_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         match either {
             Either::Left(added_word) => {
                 word_fst_builder.register_word(DelAdd::Addition, added_word.as_ref())?;
@@ -200,9 +205,14 @@ pub fn recompute_word_fst_from_word_docids_database(
     progress.update_progress(PostProcessingWords::WordFst);
     let fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
     let mut word_fst_builder = WordFstBuilder::new(&fst)?;
+
+    let (word_count, sub_step) = AtomicWordStep::new(index.word_docids.len(wtxn)? as u32);
+    progress.update_progress(sub_step);
+
     let words = index.word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>();
     for res in words {
         let (word, _) = res?;
+        word_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
     }
     let (word_fst_mmap, _) = word_fst_builder.build()?;
