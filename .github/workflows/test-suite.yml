@@ -40,15 +40,9 @@ jobs:
         with:
           key: ${{ matrix.features }}
       - name: Run cargo build without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --no-default-features --all
+        run: cargo build --locked --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
+        run: cargo test --locked --all ${{ matrix.features }}
 
   test-windows:
     name: Tests on ${{ matrix.os }}
@@ -65,15 +59,9 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.1
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --no-default-features --all
+        run: cargo build --locked --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
+        run: cargo test --locked --all ${{ matrix.features }}
 
   test-macos:
     name: Tests on ${{ matrix.os }}
@@ -90,15 +78,9 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.1
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --no-default-features --all
+        run: cargo build --locked --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
+        run: cargo test --locked --all ${{ matrix.features }}
 
   test-all-features:
     name: Tests almost all features
@@ -153,10 +135,7 @@ jobs:
           ollama pull all-minilm
 
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked -p meilisearch --features test-ollama ollama
+        run: cargo test --locked -p meilisearch --features test-ollama ollama
 
   test-legacy-indexer:
     name: Test legacy settings indexer
@@ -180,10 +159,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all
+        run: cargo test --locked --all
 
   test-disabled-tokenization:
     name: Test disabled tokenization
@@ -245,10 +221,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
+        run: cargo clippy --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
 
   fmt:
     name: Run Rustfmt
