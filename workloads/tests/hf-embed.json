@@ -459,8 +459,9 @@
     },
     {
       "binary": {
-        "description": "current binary migrates arroy indexes to hannoy indexes, no upgrade task",
-        "source": "build",
+        "description": "last version without ranking score breakings, no update task",
+        "source": "release",
+        "version": "1.47.0",
         "edition": "community",
         "extraCliArgs": [
           "--experimental-dumpless-upgrade",
@@ -522,12 +523,11 @@
     },
     {
       "binary": {
-        "description": "apply upgrade task",
-        "source": "build",
+        "description": "last version without ranking score breakings",
+        "source": "release",
+        "version": "1.47.0",
         "edition": "community",
-        "extraCliArgs": [
-          "--experimental-dumpless-upgrade"
-        ]
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
