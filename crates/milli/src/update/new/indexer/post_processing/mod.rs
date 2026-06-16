@@ -92,34 +92,15 @@ fn compute_prefix_database(
     let exact_modified = compute_prefixes(&prefix_fst, exact_word_delta.added_or_modified_words())?;
     let exact_deleted = compute_prefixes(&prefix_fst, exact_word_delta.deleted_words())?;
 
-    let mut modified_for_fid_prefixes = tolerant_modified.clone();
-    modified_for_fid_prefixes.extend(exact_modified.iter().cloned());
-    let mut deleted_for_fid_prefixes = tolerant_deleted.clone();
-    deleted_for_fid_prefixes.extend(exact_deleted.iter().cloned());
-
-    progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    compute_word_prefix_docids(wtxn, index, &tolerant_modified, &tolerant_deleted)?;
-
-    progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
-    compute_exact_word_prefix_docids(wtxn, index, &exact_modified, &exact_deleted)?;
-
-    progress.update_progress(PostProcessingWords::WordPrefixFieldIdDocids);
-    compute_word_prefix_fid_docids(
-        wtxn,
+    compute_prefix_database_from_sources(
         index,
-        &modified_for_fid_prefixes,
-        &deleted_for_fid_prefixes,
-    )?;
-
-    progress.update_progress(PostProcessingWords::WordPrefixPositionDocids);
-    compute_word_prefix_position_docids(
         wtxn,
-        index,
-        &modified_for_fid_prefixes,
-        &deleted_for_fid_prefixes,
-    )?;
-
-    Ok(())
+        &tolerant_modified,
+        &tolerant_deleted,
+        &exact_modified,
+        &exact_deleted,
+        progress,
+    )
 }
 
 #[tracing::instrument(

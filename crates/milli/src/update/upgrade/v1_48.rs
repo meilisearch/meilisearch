@@ -19,7 +19,7 @@ impl UpgradeIndex for RecomputeExactWordPrefixDocids {
     }
 
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
-        initial_version < (1, 46, 0)
+        initial_version < (1, 48, 0)
     }
 
     fn description(&self) -> &'static str {
