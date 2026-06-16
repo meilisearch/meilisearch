@@ -129,6 +129,12 @@ impl Prompt {
                 liquid_error,
             )
         })?;
+        // `with_capacity_in` above only sizes the initial allocation; `render_to`
+        // can still write past it, so enforce the byte budget here the same way
+        // `render_kvdeladd` does for the other indexing path.
+        if let Some(max_bytes) = self.max_bytes {
+            truncate_bytes(&mut rendered, max_bytes.get());
+        }
         Ok(std::str::from_utf8(rendered.into_bump_slice())
             .expect("render can only write UTF-8 because all inputs and processing preserve utf-8"))
     }
@@ -162,6 +168,21 @@ fn truncate(s: &mut String, max_bytes: usize) {
             break;
         }
     }
+}
+
+/// Truncate a UTF-8 byte buffer to at most `max_bytes`, cutting on a `char`
+/// boundary so the result stays valid UTF-8. This is the bump-allocated
+/// counterpart of [`truncate`] used by [`Prompt::render_document`].
+fn truncate_bytes(bytes: &mut bumpalo::collections::Vec<'_, u8>, max_bytes: usize) {
+    if max_bytes >= bytes.len() {
+        return;
+    }
+    // Walk back off any UTF-8 continuation byte (0b10xx_xxxx) to a char boundary.
+    let mut end = max_bytes;
+    while end > 0 && (bytes[end] & 0b1100_0000) == 0b1000_0000 {
+        end -= 1;
+    }
+    bytes.truncate(end);
 }
 
 #[cfg(test)]
@@ -270,5 +291,30 @@ mod test {
         assert_eq!(s, "イ");
         truncate(&mut s, 2);
         assert_eq!(s, "");
+    }
+
+    #[test]
+    fn template_truncation_bytes() {
+        use bumpalo::Bump;
+
+        let bump = Bump::new();
+        let input = "インテル ザー ビーグル";
+
+        let truncated = |max_bytes: usize| {
+            let mut v = bumpalo::collections::Vec::new_in(&bump);
+            v.extend_from_slice(input.as_bytes());
+            super::truncate_bytes(&mut v, max_bytes);
+            std::str::from_utf8(&v).unwrap().to_string()
+        };
+
+        // byte-buffer truncation must match `truncate` on the same input: never
+        // split a multi-byte char, and never write past the budget.
+        assert_eq!(truncated(42), "インテル ザー ビーグル");
+        assert_eq!(truncated(32), "インテル ザー ビーグル");
+        assert_eq!(truncated(31), "インテル ザー ビーグ");
+        assert_eq!(truncated(30), "インテル ザー ビーグ");
+        assert_eq!(truncated(28), "インテル ザー ビー");
+        assert_eq!(truncated(3), "イ");
+        assert_eq!(truncated(2), "");
     }
 }
