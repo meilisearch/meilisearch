@@ -52,6 +52,10 @@ impl RoFeatures {
         self.runtime.legacy_search.unwrap_or(false)
     }
 
+    pub fn queue_documents_fetch(&self) -> bool {
+        !self.runtime.disable_documents_fetch_queue
+    }
+
     pub fn check_metrics(&self) -> Result<()> {
         if self.runtime.metrics {
             Ok(())

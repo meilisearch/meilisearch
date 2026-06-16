@@ -327,7 +327,7 @@ impl Infos {
             chat_completions,
             multimodal,
             foreign_keys,
-            queue_documents_fetch,
+            disable_documents_fetch_queue,
             legacy_search,
         } = features;
 
@@ -358,7 +358,7 @@ impl Infos {
             experimental_no_edition_2024_for_dumps,
             experimental_allowed_ip_networks: !experimental_allowed_ip_networks.is_empty(),
             experimental_foreign_keys: foreign_keys,
-            experimental_queue_documents_fetch: queue_documents_fetch,
+            experimental_queue_documents_fetch: !disable_documents_fetch_queue,
             experimental_legacy_search: legacy_search.unwrap_or(experimental_legacy_search_default),
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != Path::new("./data.ms"),

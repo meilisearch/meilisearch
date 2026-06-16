@@ -45,7 +45,7 @@ pub struct ExperimentalFeaturesApi;
             chat_completions: Some(false),
             multimodal: Some(false),
             foreign_keys: Some(false),
-            queue_documents_fetch: Some(false),
+            disable_documents_fetch_queue: Some(false),
             legacy_search: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -112,9 +112,9 @@ pub struct RuntimeTogglableFeatures {
     /// Enable foreign key support for document hydration
     #[request(default)]
     pub foreign_keys: Option<bool>,
-    /// Enable queue documents fetch
+    /// Disable documents fetch queue
     #[request(default)]
-    pub queue_documents_fetch: Option<bool>,
+    pub disable_documents_fetch_queue: Option<bool>,
     /// Enable legacy search pipeline
     #[request(default)]
     pub legacy_search: Option<bool>,
@@ -135,7 +135,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             chat_completions,
             multimodal,
             foreign_keys,
-            queue_documents_fetch,
+            disable_documents_fetch_queue,
             legacy_search,
         } = value;
 
@@ -152,7 +152,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
             foreign_keys: Some(foreign_keys),
-            queue_documents_fetch: Some(queue_documents_fetch),
+            disable_documents_fetch_queue: Some(disable_documents_fetch_queue),
             legacy_search,
         }
     }
@@ -172,7 +172,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     chat_completions: bool,
     multimodal: bool,
     foreign_keys: bool,
-    queue_documents_fetch: bool,
+    disable_documents_fetch_queue: bool,
     legacy_search: bool,
 }
 
@@ -195,7 +195,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
             foreign_keys: new.foreign_keys,
-            queue_documents_fetch: new.queue_documents_fetch,
+            disable_documents_fetch_queue: new.disable_documents_fetch_queue,
             legacy_search: new.legacy_search,
         })
     }
@@ -225,7 +225,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             chat_completions: Some(false),
             multimodal: Some(false),
             foreign_keys: Some(false),
-            queue_documents_fetch: Some(false),
+            disable_documents_fetch_queue: Some(false),
             legacy_search: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -279,10 +279,10 @@ async fn patch_features(
         chat_completions: new_features.0.chat_completions.unwrap_or(old_features.chat_completions),
         multimodal: new_features.0.multimodal.unwrap_or(old_features.multimodal),
         foreign_keys: new_features.0.foreign_keys.unwrap_or(old_features.foreign_keys),
-        queue_documents_fetch: new_features
+        disable_documents_fetch_queue: new_features
             .0
-            .queue_documents_fetch
-            .unwrap_or(old_features.queue_documents_fetch),
+            .disable_documents_fetch_queue
+            .unwrap_or(old_features.disable_documents_fetch_queue),
         legacy_search: new_features.0.legacy_search.or(old_features.legacy_search),
     };
 
@@ -302,7 +302,7 @@ async fn patch_features(
         chat_completions,
         multimodal,
         foreign_keys,
-        queue_documents_fetch,
+        disable_documents_fetch_queue,
         legacy_search,
     } = new_features;
 
@@ -320,7 +320,7 @@ async fn patch_features(
             chat_completions,
             multimodal,
             foreign_keys,
-            queue_documents_fetch,
+            disable_documents_fetch_queue,
             legacy_search: legacy_search.unwrap_or(false),
         },
         &req,
