@@ -693,7 +693,7 @@ pub(crate) async fn search(
     let network = index_scheduler.network();
     let remote_availability = index_scheduler.remote_availability();
 
-    let (mut search_result, deadline) = if query.must_use_network(&network, &features)? {
+    if query.must_use_network(&network, &features)? {
         let mut federation = Federation::default();
         let queries = Partition::new(network, remote_availability)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
@@ -714,11 +714,11 @@ pub(crate) async fn search(
         .await
         .map_err(|(err, _)| err);
 
-        let (search_result, deadline) = search_result?;
+        let (search_result, _deadline) = search_result?;
         let search_result =
             search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
 
-        (search_result, deadline)
+        Ok(search_result)
     } else {
         let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
@@ -733,6 +733,7 @@ pub(crate) async fn search(
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
+        let show_performance_details = query.show_performance_details;
         let search_result = tokio::task::spawn_blocking(move || {
             perform_search(
                 SearchParams {
@@ -751,23 +752,30 @@ pub(crate) async fn search(
         })
         .await;
 
-        search_result??
-    };
+        let (mut search_result, deadline) = search_result??;
 
-    // Apply personalization if requested
-    if let Some(personalize) = personalize {
-        search_result.hits = service
-            .rerank_search_results(
-                std::mem::take(&mut search_result.hits),
-                &personalize,
-                personalize_query.as_deref(),
-                &deadline,
-                progress,
-            )
-            .await?;
+        // Apply personalization if requested
+        // in the legacy search, personalization is applied after pinning hits,
+        // the new implementation applies personalization before pinning hits.
+        if let Some(personalize) = personalize {
+            search_result.hits = service
+                .rerank_search_results(
+                    std::mem::take(&mut search_result.hits),
+                    &personalize,
+                    personalize_query.as_deref(),
+                    &deadline,
+                    progress,
+                )
+                .await?;
+        }
+
+        // Add performance details at the end if requested
+        if show_performance_details {
+            search_result.performance_details = Some(progress.accumulated_durations());
+        }
+
+        Ok(search_result)
     }
-
-    Ok(search_result)
 }
 
 /// Search with POST
