@@ -1066,3 +1066,102 @@ async fn test_summarized_dump_creation() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn export_foreign_filter() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+    let (task, _) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let mut indexes = serde_json::Map::new();
+    indexes.insert(
+        index.uid.to_string(),
+        serde_json::json!({ "filter": "_foreign(author, id = a1)" }),
+    );
+    let (task, code) = server
+        .service
+        .post("/export", json!({ "url": "https://example.com", "indexes": indexes }))
+        .await;
+    snapshot!(code, @"200 OK");
+
+    let response = server.wait_task(task.uid()).await.failed();
+    snapshot!(json_string!(response, {
+      ".uid" => "[uid]",
+      ".batchUid" => "[batch_uid]",
+      ".duration" => "[duration]",
+      ".enqueuedAt" => "[date]",
+      ".startedAt" => "[date]",
+      ".finishedAt" => "[date]",
+      ".details.indexes" => "[index_details]"
+    }), @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": null,
+      "status": "failed",
+      "type": "export",
+      "canceledBy": null,
+      "details": {
+        "url": "https://example.com",
+        "indexes": "[index_details]"
+      },
+      "error": {
+        "message": "Index `[uuid]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+        "code": "feature_not_enabled",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    server.set_features(json!({ "foreignKeys": true })).await;
+    let mut indexes = serde_json::Map::new();
+    indexes.insert(
+        index.uid.to_string(),
+        serde_json::json!({ "filter": "_foreign(author, id = a1)" }),
+    );
+    let (task, code) = server
+        .service
+        .post("/export", json!({ "url": "https://example.com", "indexes": indexes }))
+        .await;
+    snapshot!(code, @"200 OK");
+
+    let response = server.wait_task(task.uid()).await.failed();
+    snapshot!(json_string!(response, {
+      ".uid" => "[uid]",
+      ".batchUid" => "[batch_uid]",
+      ".duration" => "[duration]",
+      ".enqueuedAt" => "[date]",
+      ".startedAt" => "[date]",
+      ".finishedAt" => "[date]",
+      ".details.indexes" => "[index_details]"
+    }), @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": null,
+      "status": "failed",
+      "type": "export",
+      "canceledBy": null,
+      "details": {
+        "url": "https://example.com",
+        "indexes": "[index_details]"
+      },
+      "error": {
+        "message": "Index `[uuid]`: Filter condition `_foreign` is not supported for this endpoint.\n10:16 _foreign(author, id = a1)",
+        "code": "invalid_document_filter",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+}

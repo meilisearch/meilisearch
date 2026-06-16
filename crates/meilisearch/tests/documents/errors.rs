@@ -650,6 +650,75 @@ async fn delete_document_by_filter() {
 }
 
 #[actix_rt::test]
+async fn delete_documents_by_filter_foreign_filter() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let foreign_filter = "_foreign(author, id = a1)";
+
+    let (response, code) =
+        index.delete_document_by_filter(json!({ "filter": foreign_filter })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    server.set_features(json!({ "foreignKeys": true })).await;
+    let (response, code) =
+        index.delete_document_by_filter(json!({ "filter": foreign_filter })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Filter condition `_foreign` is not supported for this endpoint.\n10:16 _foreign(author, id = a1)",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn edit_documents_by_function_foreign_filter() {
+    let foreign_filter = "_foreign(author, id = a1)";
+    let body = json!({ "filter": foreign_filter, "function": "1" });
+
+    let server = Server::new().await;
+    server.set_features(json!({ "editDocumentsByFunction": true })).await;
+    let index = server.unique_index();
+    let (task, _) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let url = format!("/indexes/{}/documents/edit", encode(index.uid.as_ref()));
+    let (response, code) = server.service.post(url.clone(), body.clone()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "Index `[uuid]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    server.set_features(json!({ "foreignKeys": true })).await;
+    let (response, code) = server.service.post(url, body).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Index `[uuid]`: Filter condition `_foreign` is not supported for this endpoint.\n10:16 _foreign(author, id = a1)",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn fetch_document_by_filter() {
     let server = Server::new_shared();
     let index = server.unique_index();
