@@ -635,3 +635,66 @@ fn test_typo_synonyms() {
     ]
     "###);
 }
+
+fn prefix_search_exact_attribute_documents() -> Vec<serde_json::Value> {
+    (0..100)
+        .map(|id| {
+            serde_json::json!({
+                "id": id,
+                "title": "Hello many",
+                "content": "Goodbye many",
+            })
+        })
+        .collect()
+}
+
+fn assert_prefix_search_on_exact_attribute(index: &TempIndex) {
+    let txn = index.read_txn().unwrap();
+
+    let mut s = index.search(&txn);
+    s.query("ma");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    assert!(!documents_ids.is_empty(), "prefix search should match tolerant content");
+
+    let mut s = index.search(&txn);
+    s.query("hel");
+    let SearchResult { documents_ids, .. } = s.execute().unwrap();
+    assert!(!documents_ids.is_empty(), "prefix search should match exact-attribute title");
+}
+
+fn configure_prefix_search_exact_attribute_settings(index: &TempIndex) {
+    index
+        .update_settings(|s| {
+            s.set_primary_key("id".to_owned());
+            s.set_searchable_fields(vec!["title".to_owned(), "content".to_owned()]);
+            s.set_exact_attributes(["title"].iter().map(ToString::to_string).collect());
+            s.set_disable_on_numbers(true);
+            s.set_criteria(vec![Criterion::Words]);
+        })
+        .unwrap();
+}
+
+#[test]
+fn test_prefix_search_on_exact_attribute_and_disable_on_numbers() {
+    let index = TempIndex::new();
+    configure_prefix_search_exact_attribute_settings(&index);
+    let docs = prefix_search_exact_attribute_documents();
+    index.add_documents(documents!(docs)).unwrap();
+    assert_prefix_search_on_exact_attribute(&index);
+}
+
+#[test]
+fn test_prefix_search_on_exact_attribute_settings_after_documents() {
+    let index = TempIndex::new();
+    index
+        .update_settings(|s| {
+            s.set_primary_key("id".to_owned());
+            s.set_searchable_fields(vec!["title".to_owned(), "content".to_owned()]);
+            s.set_criteria(vec![Criterion::Words]);
+        })
+        .unwrap();
+    let docs = prefix_search_exact_attribute_documents();
+    index.add_documents(documents!(docs)).unwrap();
+    configure_prefix_search_exact_attribute_settings(&index);
+    assert_prefix_search_on_exact_attribute(&index);
+}
