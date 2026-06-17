@@ -211,6 +211,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_render_route(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.render_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "render_route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/888",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {

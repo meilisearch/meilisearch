@@ -99,6 +99,7 @@ pub async fn render_post(
     debug!(parameters = ?query, "Render document");
     let mut aggregate = RenderAggregator::from_query(&query);
     let features = index_scheduler.features();
+    features.check_render_route("calling the /render-template route")?;
 
     let RenderQuery { template, input } = query;
 

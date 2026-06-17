@@ -25,6 +25,7 @@ pub struct RuntimeTogglableFeatures {
     pub foreign_keys: bool,
     pub disable_documents_fetch_queue: bool,
     pub legacy_search: Option<bool>,
+    pub render_route: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
