@@ -14,5 +14,5 @@ license.workspace = true
 time = { version = "0.3.47", features = ["parsing"] }
 
 [build-dependencies]
-anyhow = "1.0.100"
+anyhow = "1.0.102"
 vergen-gitcl = "1.0.8"
