@@ -1906,8 +1906,6 @@ pub fn perform_search(
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
         .unzip();
 
-    let performance_details =
-        query.show_performance_details.then(|| progress.accumulated_durations());
     let result = SearchResult {
         hits: documents,
         hits_info,
@@ -1922,7 +1920,7 @@ pub fn perform_search(
         request_uid: Some(request_uid),
         metadata,
         remote_errors: None,
-        performance_details,
+        performance_details: None,
     };
     Ok((result, deadline))
 }
