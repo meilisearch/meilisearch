@@ -217,6 +217,13 @@ pub fn format_documents<'doc>(
     doc_alloc: &'doc Bump,
     internal_docids: Vec<DocumentId>,
 ) -> Result<Vec<&'doc str>, ResponseError> {
+    // `external_id_of` requires the index to have a primary key set (i.e. at least one document
+    // was ever indexed). An empty `internal_docids` slice means the search found nothing, so
+    // skip the primary-key lookup entirely rather than surfacing an internal error.
+    if internal_docids.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let ChatConfig { prompt: PromptData { template, max_bytes }, .. } = index.chat_config(rtxn)?;
 
     let prompt = Prompt::new(template, max_bytes).map_err(|e| {
