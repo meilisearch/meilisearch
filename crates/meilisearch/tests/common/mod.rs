@@ -665,7 +665,8 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     let server = Server::new().await;
     let index = server.unique_index();
 
-    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    let (_response, code) =
+        server.set_features(json!({"multimodal": true, "renderRoute": true})).await;
     assert_eq!(code, StatusCode::OK);
 
     // Configure the index to use our mock embedder

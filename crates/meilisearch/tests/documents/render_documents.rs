@@ -5,7 +5,23 @@ use crate::json;
 
 #[actix_rt::test]
 async fn wrong_params() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
+
+    // missing experimental feature
+    let (value, code) =
+        server.render_template(json! {{ "template": { "kind": "documentTemplate", "indexUid": "test", "embedder": "rest" }}}).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "calling the /render-template route requires enabling the `render_route` experimental feature. See https://github.com/orgs/meilisearch/discussions/888",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
 
     let (value, code) = server.render_template(json! {{}}).await;
 
@@ -193,6 +209,10 @@ async fn document_template_on_fragmented_embedder() {
 #[actix_rt::test]
 async fn fragment_on_document_template_embedder() {
     let server = Server::new().await;
+
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
+
     let index = server.unique_index();
     let (_response, _code) = server.set_features(json!({"multimodal": true})).await;
 
@@ -287,7 +307,9 @@ async fn chat_completions_template_retrieval() {
     let (task, _code) = index.create(None).await;
     server.wait_task(task).await.succeeded();
 
-    let (_response, _code) = server.set_features(json!({"chatCompletions": true})).await;
+    let (_response, code) =
+        server.set_features(json!({"chatCompletions": true, "renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
 
     let (value, code) = server
         .render_template(
@@ -305,7 +327,11 @@ async fn chat_completions_template_retrieval() {
 
 #[actix_rt::test]
 async fn retrieve_document_template() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
+
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
+
     let index = server.unique_index();
 
     let (response, code) = index
@@ -422,7 +448,10 @@ async fn render_inline_document_iko() {
 
 #[actix_rt::test]
 async fn render_doc_not_object() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
+
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
 
     let (value, code) = server
         .render_template(json! {{
@@ -460,7 +489,9 @@ async fn render_doc_not_object() {
 #[actix_rt::test]
 async fn render_search_not_object() {
     let server = Server::new().await;
-    let (_response, _code) = server.set_features(json!({"multimodal": true})).await;
+    let (_response, code) =
+        server.set_features(json!({"multimodal": true, "renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
 
     let (value, code) = server
         .render_template(json! {{
@@ -498,6 +529,10 @@ async fn render_search_not_object() {
 #[actix_rt::test]
 async fn chat_completions() {
     let server = Server::new().await;
+
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
+
     let index = server.unique_index();
     let (task, _code) = index.create(None).await;
     server.wait_task(task).await.succeeded();
@@ -601,6 +636,9 @@ async fn embedder_document_template() {
     let server = Server::new().await;
     let index = server.index("doggo");
 
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
+
     let (response, code) = index
         .update_settings(json!({
             "embedders": {
@@ -635,6 +673,10 @@ async fn embedder_document_template() {
 #[actix_rt::test]
 async fn ugly_embedder_and_fragment_names() {
     let server = Server::new().await;
+
+    let (_response, code) = server.set_features(json!({"renderRoute": true})).await;
+    snapshot!(code, @"200 OK");
+
     let index = server.unique_index();
 
     let (_response, code) = server.set_features(json!({"multimodal": true})).await;
