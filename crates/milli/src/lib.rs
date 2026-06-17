@@ -50,7 +50,6 @@ use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer}
 pub use documents::GeoSortStrategy;
 pub use filter_parser::{Condition, FilterCondition, IndexFilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
-pub use grenad::CompressionType;
 pub use must_stop_processing::MustStopProcessing;
 pub use search::new::{
     execute_search, filtered_universe, DefaultSearchLogger, SearchContext, SearchLogger,
