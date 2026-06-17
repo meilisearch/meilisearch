@@ -43,24 +43,11 @@ mod hnsw_params {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Default,
-    Serialize,
-    Deserialize,
-    deserr::Deserr,
-    utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum VectorStoreBackend {
     #[default]
-    #[deserr(rename = "stable")]
     #[serde(rename = "stable")]
     Arroy,
-    #[deserr(rename = "experimental")]
     #[serde(rename = "experimental")]
     Hannoy,
 }

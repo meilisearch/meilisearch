@@ -461,6 +461,9 @@ fn set_and_reset_stop_words() {
         )
         .unwrap();
 
+    wtxn.commit().unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
     // In the same transaction we provide some stop_words
     let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
     index
@@ -902,7 +905,6 @@ fn test_correct_settings_init() {
                 facet_search,
                 disable_on_numbers,
                 chat,
-                vector_store,
             } = settings;
             assert!(matches!(searchable_fields, Setting::NotSet));
             assert!(matches!(displayed_fields, Setting::NotSet));
@@ -933,7 +935,6 @@ fn test_correct_settings_init() {
             assert!(matches!(facet_search, Setting::NotSet));
             assert!(matches!(disable_on_numbers, Setting::NotSet));
             assert!(matches!(chat, Setting::NotSet));
-            assert!(matches!(vector_store, Setting::NotSet));
         })
         .unwrap();
 }

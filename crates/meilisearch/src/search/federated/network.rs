@@ -179,7 +179,7 @@ fn fixup_query_federation(
         attributes_to_search_on: _,
         ranking_score_threshold: _,
         locales: _,
-        personalize: _,
+        personalize,
         federation_options: _,
     } = &mut query;
 
@@ -192,6 +192,7 @@ fn fixup_query_federation(
         merge_facets: _,
         show_performance_details: federation_show_performance_details,
         distinct: federation_distinct,
+        personalize: federation_personalize,
     } = federation;
 
     if let Some(limit) = limit.take() {
@@ -212,6 +213,10 @@ fn fixup_query_federation(
 
     if let Some(show_performance_details) = show_performance_details.take() {
         *federation_show_performance_details = show_performance_details;
+    }
+
+    if let Some(personalize) = personalize.take() {
+        *federation_personalize = Some(personalize);
     }
 
     'facets: {

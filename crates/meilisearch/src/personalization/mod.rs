@@ -71,13 +71,13 @@ impl CohereService {
         Self { client, api_key }
     }
 
-    pub async fn rerank_search_results(
+    pub async fn rerank_search_results<H: RerankableSearchHit>(
         &self,
-        hits: Vec<SearchHit>,
+        hits: Vec<H>,
         personalize: &Personalize,
         query: Option<&str>,
-        deadline: Deadline,
-    ) -> Result<Vec<SearchHit>, ResponseError> {
+        deadline: &Deadline,
+    ) -> Result<Vec<H>, ResponseError> {
         if deadline.exceeded() {
             warn!("Could not rerank due to deadline");
             // If the deadline is exceeded, return the original search result instead of an error
@@ -98,7 +98,8 @@ impl CohereService {
             .iter()
             .map(|hit| {
                 // Convert the document to a string representation for reranking
-                serde_json::to_string(&hit.document).unwrap_or_else(|_| "{}".to_string())
+                serde_json::to_string(&hit.search_hit().document)
+                    .unwrap_or_else(|_| "{}".to_string())
             })
             .collect();
 
@@ -134,7 +135,7 @@ impl CohereService {
         &self,
         query: &str,
         documents: &[String],
-        deadline: Deadline,
+        deadline: &Deadline,
     ) -> Result<Vec<usize>, PersonalizationError> {
         let request_body = CohereRerankRequest {
             query: query.to_string(),
@@ -343,14 +344,14 @@ impl PersonalizationService {
         Self::Disabled
     }
 
-    pub async fn rerank_search_results(
+    pub async fn rerank_search_results<H: RerankableSearchHit>(
         &self,
-        hits: Vec<SearchHit>,
+        hits: Vec<H>,
         personalize: &Personalize,
         query: Option<&str>,
-        deadline: Deadline,
+        deadline: &Deadline,
         progress: &Progress,
-    ) -> Result<Vec<SearchHit>, ResponseError> {
+    ) -> Result<Vec<H>, ResponseError> {
         match self {
             Self::Cohere(cohere_service) => {
                 let _step = progress.update_progress_scoped(SearchStep::Personalization);
@@ -365,5 +366,21 @@ impl PersonalizationService {
             )
             .into()),
         }
+    }
+}
+
+pub trait RerankableSearchHit: Clone {
+    fn search_hit(&self) -> &SearchHit;
+}
+
+impl RerankableSearchHit for SearchHit {
+    fn search_hit(&self) -> &SearchHit {
+        self
+    }
+}
+
+impl RerankableSearchHit for (usize, SearchHit) {
+    fn search_hit(&self) -> &SearchHit {
+        &self.1
     }
 }

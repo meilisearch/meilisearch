@@ -18,6 +18,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -27,9 +28,10 @@ use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
     MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult,
+    SemanticRatio, ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -537,7 +539,90 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
-    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    personalization_service: web::Data<PersonalizationService>,
+    index_uid: web::Path<String>,
+    params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let use_documents_retrieval = !index_scheduler.features().legacy_search();
+    if use_documents_retrieval {
+        let request_uid = Uuid::now_v7();
+        debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+        let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+        let query: SearchQuery = params.into_inner().try_into()?;
+
+        let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
+
+        let include_metadata = parse_include_metadata_header(&req);
+        let is_proxy = false;
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries: vec![SearchQueryWithIndex::from_index_query_federation(
+                index_uid.clone(),
+                query,
+                None,
+            )],
+            federation: None,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
+
+        let search_result = document_retrieval
+            .execute(index_scheduler, &progress)
+            .await
+            .map(|result| {
+                let DocumentSearchResult::Multi(mut search_results) = result else {
+                    unreachable!()
+                };
+
+                search_results.pop().unwrap().result
+            })
+            .map_err(|(mut err, _)| match err.error_code.as_str() {
+                "index_not_found" => {
+                    // If the index is not found, return a 404 status code
+                    err.code = StatusCode::NOT_FOUND;
+                    err
+                }
+                _ => err,
+            });
+
+        permit.drop().await;
+
+        if let Ok(search_result) = search_result.as_ref() {
+            aggregate.succeed(search_result);
+        }
+        analytics.publish(aggregate, &req);
+
+        let search_result = search_result?;
+
+        debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
+
+        Ok(HttpResponse::Ok().json(search_result))
+    } else {
+        legacy_search_with_url_query(
+            index_scheduler,
+            search_queue,
+            personalization_service,
+            index_uid,
+            params,
+            req,
+            analytics,
+        )
+        .await
+    }
+}
+
+pub async fn legacy_search_with_url_query(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -622,9 +707,12 @@ pub(crate) async fn search(
             false,
             request_uid,
             include_metadata,
+            ShowFederationInfo::OnNetworkOnly,
+            service,
             progress,
         )
-        .await;
+        .await
+        .map_err(|(err, _)| err);
 
         let (search_result, deadline) = search_result?;
         let search_result =
@@ -673,7 +761,7 @@ pub(crate) async fn search(
                 std::mem::take(&mut search_result.hits),
                 &personalize,
                 personalize_query.as_deref(),
-                deadline,
+                &deadline,
                 progress,
             )
             .await?;
@@ -738,6 +826,90 @@ pub(crate) async fn search(
     )
 )]
 pub async fn search_with_post(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    index_uid: web::Path<String>,
+    params: AwebJson<SearchQuery, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let use_documents_retrieval = !index_scheduler.features().legacy_search();
+    if use_documents_retrieval {
+        let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+        let request_uid = Uuid::now_v7();
+
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+
+        let query = params.into_inner();
+        debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
+
+        let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
+
+        let include_metadata = parse_include_metadata_header(&req);
+        let is_proxy = false;
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries: vec![SearchQueryWithIndex::from_index_query_federation(
+                index_uid.clone(),
+                query,
+                None,
+            )],
+            federation: None,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
+
+        let search_result = document_retrieval
+            .execute(index_scheduler, &progress)
+            .await
+            .map(|result| {
+                let DocumentSearchResult::Multi(mut search_results) = result else {
+                    unreachable!()
+                };
+
+                search_results.pop().unwrap().result
+            })
+            .map_err(|(mut err, _)| match err.error_code.as_str() {
+                "index_not_found" => {
+                    // If the index is not found, return a 404 status code
+                    err.code = StatusCode::NOT_FOUND;
+                    err
+                }
+                _ => err,
+            });
+
+        permit.drop().await;
+
+        if let Ok(search_result) = search_result.as_ref() {
+            aggregate.succeed(search_result);
+        }
+        analytics.publish(aggregate, &req);
+
+        let search_result = search_result?;
+
+        debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
+
+        Ok(HttpResponse::Ok().json(search_result))
+    } else {
+        legacy_search_with_post(
+            index_scheduler,
+            search_queue,
+            personalization_service,
+            index_uid,
+            params,
+            req,
+            analytics,
+        )
+        .await
+    }
+}
+
+pub async fn legacy_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
     personalization_service: web::Data<crate::personalization::PersonalizationService>,

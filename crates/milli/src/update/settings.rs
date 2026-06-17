@@ -29,7 +29,7 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::{EmbedderStats, Progress, VariableNameStep};
+use crate::progress::{EmbedderStats, Progress};
 use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
@@ -45,7 +45,6 @@ use crate::vector::settings::{
 };
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
-    VectorStoreBackend,
 };
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
@@ -201,7 +200,6 @@ pub struct Settings<'a, 't, 'i> {
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
     chat: Setting<ChatSettings>,
-    vector_store: Setting<VectorStoreBackend>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -242,7 +240,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
             chat: Setting::NotSet,
-            vector_store: Setting::NotSet,
             indexer_config,
         }
     }
@@ -487,14 +484,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_chat(&mut self) {
         self.chat = Setting::Reset;
-    }
-
-    pub fn set_vector_store(&mut self, value: VectorStoreBackend) {
-        self.vector_store = Setting::Set(value);
-    }
-
-    pub fn reset_vector_store(&mut self) {
-        self.vector_store = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1541,67 +1530,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn execute_vector_backend<'indexer>(
-        &mut self,
-        must_stop_processing: &'indexer MustStopProcessing,
-        progress: &'indexer Progress,
-    ) -> Result<()> {
-        let old_backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
-
-        let new_backend = match self.vector_store {
-            Setting::Set(new_backend) => {
-                self.index.put_vector_store(self.wtxn, new_backend)?;
-                new_backend
-            }
-            Setting::Reset => {
-                self.index.delete_vector_store(self.wtxn)?;
-                VectorStoreBackend::default()
-            }
-            Setting::NotSet => return Ok(()),
-        };
-
-        if old_backend == new_backend {
-            return Ok(());
-        }
-
-        let embedders = self.index.embedding_configs();
-        let embedding_configs = embedders.embedding_configs(self.wtxn)?;
-        enum VectorStoreBackendChangeIndex {}
-        let embedder_count = embedding_configs.len();
-
-        let rtxn = self.index.read_txn()?;
-
-        for (i, config) in embedding_configs.into_iter().enumerate() {
-            if must_stop_processing.get() {
-                return Err(crate::InternalError::AbortedIndexation.into());
-            }
-            let embedder_name = &config.name;
-            progress.update_progress(VariableNameStep::<VectorStoreBackendChangeIndex>::new(
-                format!("Changing vector store backend for embedder `{embedder_name}`"),
-                i as u32,
-                embedder_count as u32,
-            ));
-            let quantized = config.config.quantized();
-            let embedder_id = embedders.embedder_id(self.wtxn, &config.name)?.unwrap();
-            let vector_store = crate::vector::VectorStore::new(
-                old_backend,
-                self.index.vector_store,
-                embedder_id,
-                quantized,
-            );
-
-            vector_store.change_backend(
-                &rtxn,
-                self.wtxn,
-                progress.clone(),
-                must_stop_processing,
-                self.indexer_config.max_memory,
-            )?;
-        }
-
-        Ok(())
-    }
-
     pub fn execute<'indexer>(
         mut self,
         must_stop_processing: &'indexer MustStopProcessing,
@@ -1610,8 +1538,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>> {
         progress.update_progress(SettingsIndexerStep::ChangingVectorStore);
-        // execute any pending vector store backend change
-        self.execute_vector_backend(must_stop_processing, progress)?;
 
         // force the old indexer if the environment says so
         if self.indexer_config.experimental_no_edition_2024_for_settings {
@@ -1626,120 +1552,79 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 .map(|_| None);
         }
 
-        // only use the new indexer when only the embedder possibly changed
-        if let Self {
-            searchable_fields: _,
-            displayed_fields: _,
-            filterable_fields: _,
-            sortable_fields: _,
-            foreign_keys: _,
-            criteria: _,
-            stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
-            non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
-            separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
-            dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
-            distinct_field: _,
-            synonyms: _,
-            primary_key: _,
-            authorize_typos: _,
-            min_word_len_two_typos: _,
-            min_word_len_one_typo: _,
-            exact_words: _,
-            exact_attributes: _,
-            max_values_per_facet: _,
-            sort_facet_values_by: _,
-            pagination_max_total_hits: _,
-            proximity_precision: _,
-            embedder_settings: _,
-            search_cutoff: _,
-            localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
-            prefix_search: _,
-            facet_search: _,
-            disable_on_numbers: _,
-            chat: _,
-            vector_store: Setting::NotSet,
-            wtxn: _,
-            index: _,
-            indexer_config: _,
-        } = &self
-        {
-            progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
+        progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
 
-            self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-            let old_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
-            // Update index settings
-            let embedding_config_updates = self.update_embedding_configs()?;
-            self.update_user_defined_searchable_attributes()?;
-            self.update_exact_attributes()?;
-            self.update_proximity_precision()?;
-            self.update_filterable_attributes()?;
-            self.update_sortable_attributes()?;
-            self.update_distinct_attribute()?;
-            self.update_foreign_keys()?;
-            self.update_criteria()?;
-            self.update_displayed()?;
-            self.update_synonyms()?;
-            self.update_primary_key()?;
-            self.update_authorize_typos()?;
-            self.update_min_typo_word_len()?;
-            self.update_exact_words()?;
-            self.update_max_values_per_facet()?;
-            self.update_sort_facet_values_by()?;
-            self.update_pagination_max_total_hits()?;
-            self.update_search_cutoff()?;
-            self.update_chat_config()?;
-            self.update_facet_search()?;
-            self.update_prefix_search()?;
-            self.update_exact_words()?;
-            self.update_disabled_typos_terms()?;
+        // Update index settings
+        let embedding_config_updates = self.update_embedding_configs()?;
+        self.update_user_defined_searchable_attributes()?;
+        self.update_exact_attributes()?;
+        self.update_proximity_precision()?;
+        self.update_filterable_attributes()?;
+        self.update_sortable_attributes()?;
+        self.update_distinct_attribute()?;
+        self.update_foreign_keys()?;
+        self.update_criteria()?;
+        self.update_displayed()?;
+        self.update_primary_key()?;
+        self.update_authorize_typos()?;
+        self.update_min_typo_word_len()?;
+        self.update_exact_words()?;
+        self.update_max_values_per_facet()?;
+        self.update_sort_facet_values_by()?;
+        self.update_pagination_max_total_hits()?;
+        self.update_search_cutoff()?;
+        self.update_chat_config()?;
+        self.update_facet_search()?;
+        self.update_prefix_search()?;
+        self.update_exact_words()?;
+        self.update_disabled_typos_terms()?;
+        self.update_stop_words()?;
+        self.update_non_separator_tokens()?;
+        self.update_separator_tokens()?;
+        self.update_dictionary()?;
+        self.update_localized_attributes_rules()?;
+        // Make sure to update the synonyms *after* updating the dictionary
+        // as the dictionary is used by the synonyms to correctly parse them.
+        self.update_synonyms()?;
 
-            // Note that we don't need to update the searchables here,
-            // as it will be done after the settings update.
-            let new_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+        // Note that we don't need to update the searchables here,
+        // as it will be done after the settings update.
+        let new_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
-            let primary_key_id = self
-                .index
-                .primary_key(self.wtxn)?
-                .and_then(|name| new_inner_settings.fields_ids_map.id(name));
-            let settings_update_only = true;
-            let inner_settings_diff = InnerIndexSettingsDiff::new(
-                old_inner_settings,
-                new_inner_settings,
-                primary_key_id,
-                embedding_config_updates,
-                settings_update_only,
-            );
+        let primary_key_id = self
+            .index
+            .primary_key(self.wtxn)?
+            .and_then(|name| new_inner_settings.fields_ids_map.id(name));
+        let settings_update_only = true;
+        let inner_settings_diff = InnerIndexSettingsDiff::new(
+            old_inner_settings,
+            new_inner_settings,
+            primary_key_id,
+            embedding_config_updates,
+            settings_update_only,
+        );
 
-            if self.index.number_of_documents(self.wtxn)? > 0 {
-                reindex(
-                    self.wtxn,
-                    self.index,
-                    &self.indexer_config.thread_pool,
-                    self.indexer_config.grenad_parameters(),
-                    &inner_settings_diff,
-                    must_stop_processing,
-                    progress,
-                    ip_policy,
-                    embedder_stats,
-                )
-                .map(Some)
-            } else {
-                Ok(None)
-            }
-        } else {
-            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
-
-            self.legacy_execute(
-                |indexing_step| tracing::debug!(update = ?indexing_step),
+        if self.index.number_of_documents(self.wtxn)? > 0 {
+            reindex(
+                self.wtxn,
+                self.index,
+                &self.indexer_config.thread_pool,
+                self.indexer_config.grenad_parameters(),
+                &inner_settings_diff,
                 must_stop_processing,
+                progress,
                 ip_policy,
                 embedder_stats,
             )
-            .map(|_| None)
+            .map(Some)
+        } else {
+            Ok(None)
         }
     }
 }
@@ -2668,6 +2553,18 @@ pub trait SettingsDelta {
     fn old_prefix_search(&self) -> &PrefixSearch;
     fn new_prefix_search(&self) -> &PrefixSearch;
 
+    fn old_stop_words(&self) -> &Option<fst::Set<Vec<u8>>>;
+    fn new_stop_words(&self) -> &Option<fst::Set<Vec<u8>>>;
+
+    fn old_dictionary(&self) -> &Option<BTreeSet<String>>;
+    fn new_dictionary(&self) -> &Option<BTreeSet<String>>;
+
+    fn old_allowed_separators(&self) -> &Option<BTreeSet<String>>;
+    fn new_allowed_separators(&self) -> &Option<BTreeSet<String>>;
+
+    fn old_localized_attributes_rules(&self) -> &[LocalizedAttributesRule];
+    fn new_localized_attributes_rules(&self) -> &[LocalizedAttributesRule];
+
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
 
@@ -2722,6 +2619,34 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_prefix_search(&self) -> &PrefixSearch {
         &self.new.prefix_search
+    }
+
+    fn old_stop_words(&self) -> &Option<fst::Set<Vec<u8>>> {
+        &self.old.stop_words
+    }
+    fn new_stop_words(&self) -> &Option<fst::Set<Vec<u8>>> {
+        &self.new.stop_words
+    }
+
+    fn old_dictionary(&self) -> &Option<BTreeSet<String>> {
+        &self.old.dictionary
+    }
+    fn new_dictionary(&self) -> &Option<BTreeSet<String>> {
+        &self.new.dictionary
+    }
+
+    fn old_allowed_separators(&self) -> &Option<BTreeSet<String>> {
+        &self.old.allowed_separators
+    }
+    fn new_allowed_separators(&self) -> &Option<BTreeSet<String>> {
+        &self.new.allowed_separators
+    }
+
+    fn old_localized_attributes_rules(&self) -> &[LocalizedAttributesRule] {
+        &self.old.localized_attributes_rules
+    }
+    fn new_localized_attributes_rules(&self) -> &[LocalizedAttributesRule] {
+        &self.new.localized_attributes_rules
     }
 
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {

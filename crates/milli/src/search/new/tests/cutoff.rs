@@ -558,7 +558,6 @@ fn degraded_search_and_score_details_vector() {
                 }),
             );
             settings.set_embedder_settings(embedders);
-            settings.set_vector_store(crate::vector::VectorStoreBackend::Hannoy);
         })
         .unwrap();
 

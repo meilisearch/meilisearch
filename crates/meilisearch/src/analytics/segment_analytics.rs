@@ -214,6 +214,7 @@ struct Infos {
     experimental_no_edition_2024_for_settings: bool,
     experimental_foreign_keys: bool,
     experimental_queue_documents_fetch: bool,
+    experimental_legacy_search: bool,
     experimental_personalization: bool,
     experimental_allowed_ip_networks: bool,
     gpu_enabled: bool,
@@ -254,6 +255,7 @@ impl Infos {
             db_path,
             experimental_contains_filter,
             experimental_enable_metrics,
+            experimental_legacy_search_default,
             experimental_search_queue_size,
             experimental_drop_search_after,
             experimental_nb_searches_per_core,
@@ -325,7 +327,8 @@ impl Infos {
             chat_completions,
             multimodal,
             foreign_keys,
-            queue_documents_fetch,
+            disable_documents_fetch_queue,
+            legacy_search,
         } = features;
 
         // We're going to override every sensible information.
@@ -355,7 +358,8 @@ impl Infos {
             experimental_no_edition_2024_for_dumps,
             experimental_allowed_ip_networks: !experimental_allowed_ip_networks.is_empty(),
             experimental_foreign_keys: foreign_keys,
-            experimental_queue_documents_fetch: queue_documents_fetch,
+            experimental_queue_documents_fetch: !disable_documents_fetch_queue,
+            experimental_legacy_search: legacy_search.unwrap_or(experimental_legacy_search_default),
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),

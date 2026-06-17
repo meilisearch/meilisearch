@@ -9,7 +9,8 @@ use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
     InvalidMultiSearchWeight, InvalidSearchDistinct, InvalidSearchHitsPerPage, InvalidSearchLimit,
-    InvalidSearchOffset, InvalidSearchPage, InvalidSearchShowPerformanceDetails,
+    InvalidSearchOffset, InvalidSearchPage, InvalidSearchPersonalize,
+    InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -21,7 +22,7 @@ use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
-use crate::search::{SearchMetadata, SearchResult};
+use crate::search::{Personalize, SearchMetadata, SearchResult};
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -114,6 +115,10 @@ pub struct Federation {
     /// Whether to include performance details in the response
     #[request(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
+
+    /// Personalize search results
+    #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none")]
+    pub personalize: Option<Personalize>,
 }
 
 impl Default for Federation {
@@ -127,6 +132,7 @@ impl Default for Federation {
             merge_facets: Default::default(),
             distinct: Default::default(),
             show_performance_details: Default::default(),
+            personalize: Default::default(),
         }
     }
 }
@@ -463,4 +469,10 @@ impl FederatedFacets {
             }
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShowFederationInfo {
+    OnNetworkOnly,
+    Always,
 }

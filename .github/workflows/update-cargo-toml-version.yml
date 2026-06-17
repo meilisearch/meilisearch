@@ -35,7 +35,7 @@ jobs:
       - name: Build Meilisearch to update Cargo.lock
         run: cargo build
       - name: Commit and push the changes to the ${{ env.NEW_BRANCH }} branch
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9
         with:
           message: "Update version for the next release (${{ env.NEW_VERSION }}) in Cargo.toml"
           new_branch: ${{ env.NEW_BRANCH }}

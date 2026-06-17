@@ -49,13 +49,13 @@ jobs:
 
       - name: Check for Command
         id: command
-        uses: xt0rted/slash-command-action@v2
+        uses: xt0rted/slash-command-action@bf51f8f5f4ea3d58abc7eca58f77104182b23e88 # v2
         with:
           command: bench
           reaction-type: "rocket"
           repo-token: ${{ env.GH_TOKEN }}
 
-      - uses: xt0rted/pull-request-comment-branch@v3
+      - uses: xt0rted/pull-request-comment-branch@e8b8daa837e8ea7331c0003c9c316a64c6d8b0b1 # v3
         id: comment-branch
         with:
           repo_token: ${{ env.GH_TOKEN }}

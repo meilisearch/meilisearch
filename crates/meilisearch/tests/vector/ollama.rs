@@ -274,18 +274,18 @@ async fn test_both_apis() {
         "breed": "Beagle"
       },
       {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
-      },
-      {
         "id": 3,
         "name": "Max",
         "gender": "M",
         "birthyear": 1995,
         "breed": "Labrador Retriever"
+      },
+      {
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
       }
     ]
     "###);
@@ -314,18 +314,18 @@ async fn test_both_apis() {
         "breed": "Beagle"
       },
       {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
-      },
-      {
         "id": 3,
         "name": "Max",
         "gender": "M",
         "birthyear": 1995,
         "breed": "Labrador Retriever"
+      },
+      {
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
       }
     ]
     "###);
@@ -354,18 +354,18 @@ async fn test_both_apis() {
         "breed": "Beagle"
       },
       {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
-      },
-      {
         "id": 0,
         "name": "kefir",
         "gender": "M",
         "birthyear": 2023,
         "breed": "Patou"
+      },
+      {
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
       }
     ]
     "###);
@@ -394,18 +394,18 @@ async fn test_both_apis() {
         "breed": "Beagle"
       },
       {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
-      },
-      {
         "id": 0,
         "name": "kefir",
         "gender": "M",
         "birthyear": 2023,
         "breed": "Patou"
+      },
+      {
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
       }
     ]
     "###);
@@ -420,13 +420,6 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
-        "id": 1,
-        "name": "Intel",
-        "gender": "M",
-        "birthyear": 2011,
-        "breed": "Beagle"
-      },
-      {
         "id": 0,
         "name": "kefir",
         "gender": "M",
@@ -434,11 +427,11 @@ async fn test_both_apis() {
         "breed": "Patou"
       },
       {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
+        "id": 1,
+        "name": "Intel",
+        "gender": "M",
+        "birthyear": 2011,
+        "breed": "Beagle"
       },
       {
         "id": 3,
@@ -446,6 +439,13 @@ async fn test_both_apis() {
         "gender": "M",
         "birthyear": 1995,
         "breed": "Labrador Retriever"
+      },
+      {
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
       }
     ]
     "###);
@@ -460,13 +460,6 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
-        "id": 1,
-        "name": "Intel",
-        "gender": "M",
-        "birthyear": 2011,
-        "breed": "Beagle"
-      },
-      {
         "id": 0,
         "name": "kefir",
         "gender": "M",
@@ -474,11 +467,11 @@ async fn test_both_apis() {
         "breed": "Patou"
       },
       {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
+        "id": 1,
+        "name": "Intel",
+        "gender": "M",
+        "birthyear": 2011,
+        "breed": "Beagle"
       },
       {
         "id": 3,
@@ -486,6 +479,13 @@ async fn test_both_apis() {
         "gender": "M",
         "birthyear": 1995,
         "breed": "Labrador Retriever"
+      },
+      {
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
       }
     ]
     "###);
@@ -500,6 +500,13 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
+        "id": 0,
+        "name": "kefir",
+        "gender": "M",
+        "birthyear": 2023,
+        "breed": "Patou"
+      },
+      {
         "id": 2,
         "name": "Vénus",
         "gender": "F",
@@ -519,13 +526,6 @@ async fn test_both_apis() {
         "gender": "M",
         "birthyear": 1995,
         "breed": "Labrador Retriever"
-      },
-      {
-        "id": 0,
-        "name": "kefir",
-        "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
       }
     ]
     "###);
@@ -540,6 +540,13 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
+        "id": 0,
+        "name": "kefir",
+        "gender": "M",
+        "birthyear": 2023,
+        "breed": "Patou"
+      },
+      {
         "id": 2,
         "name": "Vénus",
         "gender": "F",
@@ -559,13 +566,6 @@ async fn test_both_apis() {
         "gender": "M",
         "birthyear": 1995,
         "breed": "Labrador Retriever"
-      },
-      {
-        "id": 0,
-        "name": "kefir",
-        "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
       }
     ]
     "###);
@@ -580,18 +580,11 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
-        "id": 1,
-        "name": "Intel",
+        "id": 0,
+        "name": "kefir",
         "gender": "M",
-        "birthyear": 2011,
-        "breed": "Beagle"
-      },
-      {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
+        "birthyear": 2023,
+        "breed": "Patou"
       },
       {
         "id": 3,
@@ -601,11 +594,18 @@ async fn test_both_apis() {
         "breed": "Labrador Retriever"
       },
       {
-        "id": 0,
-        "name": "kefir",
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
+      },
+      {
+        "id": 1,
+        "name": "Intel",
         "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
+        "birthyear": 2011,
+        "breed": "Beagle"
       }
     ]
     "###);
@@ -620,18 +620,11 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
-        "id": 1,
-        "name": "Intel",
+        "id": 0,
+        "name": "kefir",
         "gender": "M",
-        "birthyear": 2011,
-        "breed": "Beagle"
-      },
-      {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
+        "birthyear": 2023,
+        "breed": "Patou"
       },
       {
         "id": 3,
@@ -641,11 +634,18 @@ async fn test_both_apis() {
         "breed": "Labrador Retriever"
       },
       {
-        "id": 0,
-        "name": "kefir",
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
+      },
+      {
+        "id": 1,
+        "name": "Intel",
         "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
+        "birthyear": 2011,
+        "breed": "Beagle"
       }
     ]
     "###);
@@ -660,18 +660,11 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
-        "id": 1,
-        "name": "Intel",
+        "id": 0,
+        "name": "kefir",
         "gender": "M",
-        "birthyear": 2011,
-        "breed": "Beagle"
-      },
-      {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
+        "birthyear": 2023,
+        "breed": "Patou"
       },
       {
         "id": 3,
@@ -681,11 +674,18 @@ async fn test_both_apis() {
         "breed": "Labrador Retriever"
       },
       {
-        "id": 0,
-        "name": "kefir",
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
+      },
+      {
+        "id": 1,
+        "name": "Intel",
         "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
+        "birthyear": 2011,
+        "breed": "Beagle"
       }
     ]
     "###);
@@ -700,18 +700,11 @@ async fn test_both_apis() {
     snapshot!(json_string!(response["hits"]), @r###"
     [
       {
-        "id": 1,
-        "name": "Intel",
+        "id": 0,
+        "name": "kefir",
         "gender": "M",
-        "birthyear": 2011,
-        "breed": "Beagle"
-      },
-      {
-        "id": 2,
-        "name": "Vénus",
-        "gender": "F",
-        "birthyear": 2003,
-        "breed": "Jack Russel Terrier"
+        "birthyear": 2023,
+        "breed": "Patou"
       },
       {
         "id": 3,
@@ -721,11 +714,18 @@ async fn test_both_apis() {
         "breed": "Labrador Retriever"
       },
       {
-        "id": 0,
-        "name": "kefir",
+        "id": 2,
+        "name": "Vénus",
+        "gender": "F",
+        "birthyear": 2003,
+        "breed": "Jack Russel Terrier"
+      },
+      {
+        "id": 1,
+        "name": "Intel",
         "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
+        "birthyear": 2011,
+        "breed": "Beagle"
       }
     ]
     "###);

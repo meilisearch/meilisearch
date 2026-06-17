@@ -541,7 +541,7 @@ pub async fn documents_by_query_post(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let use_queue = index_scheduler.features().runtime_features().queue_documents_fetch;
+    let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
     let body = body.into_inner();
@@ -633,7 +633,7 @@ pub async fn get_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
 
-    let use_queue = !index_scheduler.features().runtime_features().queue_documents_fetch;
+    let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =

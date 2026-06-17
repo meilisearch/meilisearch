@@ -298,6 +298,40 @@ pub static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+#[cfg(feature = "enterprise")] // only used in sharding tests for now
+pub static C_EST_FRANÇAIS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+        {
+            "id": "A",
+            "facette": "L'école"
+        },
+        {
+            "id": "B",
+            "facette": "L'avion"
+        },
+        {
+            "id": "C",
+            "facette": "L'aventure"
+        },
+        {
+            "id": "D",
+            "facette": "L'école"
+        },
+        {
+            "id": "E",
+            "facette": "L'école"
+        },
+        {
+            "id": "F",
+            "facette": "\"Lécole"
+        },
+        {
+            "id": "G",
+            "facette": "\"Lécole"
+        }
+    ])
+});
+
 pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shared> {
     static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
     INDEX.get_or_init(|| async {
