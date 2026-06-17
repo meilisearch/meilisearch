@@ -10,7 +10,7 @@ use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::filter::filter_into_index_filter;
+use index_scheduler::filter::{filter_into_index_filter, parse_filter, parse_local_index_filter};
 use index_scheduler::{IndexScheduler, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
@@ -52,7 +52,7 @@ use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
     PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
+use crate::search::{ExternalDocumentId, RetrieveVectors};
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -727,8 +727,12 @@ async fn documents_by_query(
 
         let filter = &filter;
         let filter = if let Some(filter) = filter {
-            let filter =
-                parse_filter(filter, Code::InvalidDocumentFilter, index_scheduler.features())?;
+            let filter = parse_filter(
+                filter,
+                Code::InvalidDocumentFilter,
+                index_scheduler.features(),
+                None,
+            )?;
             filter
                 .map(|f| {
                     filter_into_index_filter(
@@ -1483,10 +1487,11 @@ pub async fn delete_documents_by_filter(
     );
 
     // we ensure the filter is well formed before enqueuing it
-    crate::search::parse_filter(
+    parse_local_index_filter(
         &filter.filter,
-        Code::InvalidDocumentFilter,
+        None,
         index_scheduler.features(),
+        Code::InvalidDocumentFilter,
     )?
     .ok_or(MeilisearchHttpError::EmptyFilter)?;
 
@@ -1651,10 +1656,11 @@ pub async fn edit_documents_by_function(
 
     if let Some(ref filter) = body.filter {
         // we ensure the filter is well formed before enqueuing it
-        crate::search::parse_filter(
+        parse_local_index_filter(
             filter,
-            Code::InvalidDocumentFilter,
+            Some(index_uid.as_str()),
             index_scheduler.features(),
+            Code::InvalidDocumentFilter,
         )?
         .ok_or(MeilisearchHttpError::EmptyFilter)?;
     }

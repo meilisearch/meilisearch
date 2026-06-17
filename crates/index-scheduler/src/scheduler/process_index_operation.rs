@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
-use meilisearch_types::milli::{self, ChannelCongestion, Filter};
+use meilisearch_types::milli::{self, ChannelCongestion};
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
@@ -15,7 +16,7 @@ use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 
 use super::create_batch::{DocumentOperation, IndexOperation};
-use crate::filter::filter_into_index_filter;
+use crate::filter::parse_local_index_filter;
 use crate::processing::{
     DocumentDeletionProgress, DocumentEditionProgress, DocumentOperationProgress, SettingsProgress,
 };
@@ -122,12 +123,13 @@ impl IndexScheduler {
                                 .delete_documents_by_external_ids(document_ids.into_bump_slice());
                         }
                         DocumentOperation::DeleteByFilter { filter } => {
-                            let filter = Filter::from_json(&filter)
-                                .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                            let filter = parse_local_index_filter(
+                                &filter,
+                                Some(index_uid.as_str()),
+                                self.features(),
+                                Code::InvalidDocumentFilter,
+                            )?;
                             if let Some(filter) = filter {
-                                let filter = filter_into_index_filter(
-                                    filter, index, index_wtxn, self, progress, &index_uid,
-                                )?;
                                 let candidates =
                                     filter.evaluate(index_wtxn, index).map_err(|err| {
                                         Error::from_milli(err, Some(index_uid.clone()))
@@ -243,18 +245,23 @@ impl IndexScheduler {
                     unreachable!()
                 };
 
-                let candidates = match filter.as_ref().map(Filter::from_json) {
-                    Some(Ok(Some(filter))) => {
-                        let filter = filter_into_index_filter(
-                            filter, index, index_wtxn, self, progress, &index_uid,
-                        )?;
-
-                        filter
-                            .evaluate(index_wtxn, index)
-                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?
-                    }
-                    None | Some(Ok(None)) => index.documents_ids(index_wtxn)?,
-                    Some(Err(e)) => return Err(Error::from_milli(e, Some(index_uid.clone()))),
+                let candidates = match filter
+                    .as_ref()
+                    .and_then(|f| {
+                        parse_local_index_filter(
+                            f,
+                            Some(index_uid.as_str()),
+                            self.features(),
+                            Code::InvalidDocumentFilter,
+                        )
+                        .transpose()
+                    })
+                    .transpose()?
+                {
+                    Some(filter) => filter
+                        .evaluate(index_wtxn, index)
+                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    None => index.documents_ids(index_wtxn)?,
                 };
 
                 let (original_filter, context, function) = if let Some(Details::DocumentEdition {
@@ -397,21 +404,21 @@ impl IndexScheduler {
                         }
                         KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr } => {
                             let before = to_delete.len();
-                            let filter = match Filter::from_json(filter_expr) {
+                            let filter = match parse_local_index_filter(
+                                filter_expr,
+                                Some(index_uid.as_str()),
+                                self.features(),
+                                Code::InvalidDocumentFilter,
+                            ) {
                                 Ok(filter) => filter,
                                 Err(err) => {
                                     // theorically, this should be caught by deserr before reaching the index-scheduler and cannot happens
                                     task.status = Status::Failed;
-                                    task.error = Some(
-                                        Error::from_milli(err, Some(index_uid.clone())).into(),
-                                    );
+                                    task.error = Some(err.into());
                                     None
                                 }
                             };
                             if let Some(filter) = filter {
-                                let filter = filter_into_index_filter(
-                                    filter, index, index_wtxn, self, progress, index_uid,
-                                )?;
                                 let candidates = filter
                                     .evaluate(index_wtxn, index)
                                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())));

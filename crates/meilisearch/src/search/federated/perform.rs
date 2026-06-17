@@ -10,8 +10,8 @@ use std::vec::{IntoIter, Vec};
 use actix_http::StatusCode;
 use actix_web::web::Data;
 use index_scheduler::filter::{
-    filters_into_index_filters, filters_into_index_filters_unchecked,
-    retrieve_foreign_keys_settings, SourceIndexUid,
+    filters_into_index_filters, parse_local_index_filter, retrieve_foreign_keys_settings,
+    SourceIndexUid,
 };
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
@@ -127,7 +127,7 @@ pub async fn perform_federated_search(
             .enumerate()
             .map(|(query_index, (index_uid, filter))| match filter {
                 Some(filter) => {
-                    let filter = parse_filter(filter, Code::InvalidSearchFilter, features)
+                    let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)
                         .with_index(query_index)?;
 
                     Ok((index_uid.clone(), filter))
@@ -150,14 +150,13 @@ pub async fn perform_federated_search(
             .map(|(query_index, f)| {
                 f.as_ref()
                     .and_then(|f| {
-                        parse_filter(f, Code::InvalidSearchFilter, features)
+                        parse_local_index_filter(f, None, features, Code::InvalidSearchFilter)
                             .with_index(query_index)
                             .transpose()
                     })
                     .transpose()
             })
             .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
-        let filters: Vec<_> = filters_into_index_filters_unchecked(filters).without_index()?;
 
         (None, filters)
     };

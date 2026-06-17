@@ -16,7 +16,7 @@ use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
+use meilisearch_types::milli::{self, obkv_to_json, InternalError};
 use meilisearch_types::network::route;
 use meilisearch_types::settings::{self, SecretPolicy};
 use meilisearch_types::tasks::network::headers::SetHeader as _;
@@ -27,7 +27,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::MustStopProcessing;
-use crate::filter::filter_into_index_filter;
+use crate::filter::parse_local_index_filter;
 use crate::processing::AtomicDocumentStep;
 use crate::utils::UreqRequestWrapper;
 use crate::{Error, IndexScheduler, Result};
@@ -85,13 +85,19 @@ impl IndexScheduler {
 
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
-            let filter = filter.as_ref().map(Filter::from_json).transpose().map_err(err)?.flatten();
             let filter = filter
+                .as_ref()
                 .map(|f| {
-                    // evaluate foreign key filter
-                    filter_into_index_filter(f, &index, &index_rtxn, self, &progress, uid)
+                    // evaluate index filter
+                    parse_local_index_filter(
+                        f,
+                        Some(uid),
+                        self.features(),
+                        Code::InvalidDocumentFilter,
+                    )
                 })
-                .transpose()?;
+                .transpose()?
+                .flatten();
 
             let filter_universe =
                 filter.map(|f| f.evaluate(&index_rtxn, &index)).transpose().map_err(err)?;

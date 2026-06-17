@@ -493,6 +493,10 @@ impl IndexScheduler {
                 let stats = match ret {
                     Ok(Ok(stats)) => stats,
                     Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
+                    // If the error code has been set by the process_export function, we return the error
+                    err @ Ok(Err(Error::WithCustomErrorCode(_, _))) => {
+                        return Err(err.unwrap().unwrap_err())
+                    }
                     Ok(Err(e)) => return Err(Error::Export(Box::new(e))),
                     Err(e) => {
                         let msg = match e.downcast_ref::<&'static str>() {

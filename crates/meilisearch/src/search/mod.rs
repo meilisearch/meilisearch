@@ -7,8 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
-use either::Either;
-use index_scheduler::filter::filter_into_index_filter;
+use index_scheduler::filter::{filter_into_index_filter, parse_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -32,8 +31,8 @@ use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
-    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    AscDesc, FieldId, FieldsIdsMap, FormatOptions, Index, LocalizedAttributesRule, MatchBounds,
+    MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use permissive_json_pointer::contained_in;
 use regex::Regex;
@@ -1755,7 +1754,7 @@ pub fn perform_search(
 
     let filter = match &query.filter {
         Some(filter) => {
-            let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+            let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
             filter
                 .map(|f| {
                     filter_into_index_filter(f, index, &rtxn, index_scheduler, progress, &index_uid)
@@ -2540,7 +2539,7 @@ pub fn perform_similar(
     );
 
     if let Some(ref filter) = filter {
-        if let Some(filter) = parse_filter(filter, Code::InvalidSimilarFilter, features)? {
+        if let Some(filter) = parse_filter(filter, Code::InvalidSimilarFilter, features, None)? {
             let filter = filter_into_index_filter(
                 filter,
                 &index,
@@ -2900,103 +2899,4 @@ fn format_value(
         }
         value => value,
     }
-}
-
-pub(crate) fn parse_filter(
-    facets: &Value,
-    filter_parsing_error_code: Code,
-    features: RoFeatures,
-) -> Result<Option<Filter<'_>>, ResponseError> {
-    let filter = match facets {
-        Value::String(expr) => Filter::from_str(expr).map_err(|e| e.into()),
-        Value::Array(arr) => parse_filter_array(arr).map_err(|e| e.into()),
-        v => Err(MeilisearchHttpError::InvalidExpression(&["String", "Array"], v.clone()).into()),
-    };
-    let filter = filter.map_err(|err: ResponseError| {
-        ResponseError::from_msg(err.to_string(), filter_parsing_error_code)
-    })?;
-
-    check_filter_experimental_features(filter, features)
-}
-
-fn check_filter_experimental_features(
-    filter: Option<Filter<'_>>,
-    features: RoFeatures,
-) -> Result<Option<Filter<'_>>, ResponseError> {
-    if let Some(ref filter) = filter {
-        // If the contains operator is used while the contains filter feature is not enabled, errors out
-        if let Some((token, error)) =
-            filter.use_contains_operator().zip(features.check_contains_filter().err())
-        {
-            return Err(ResponseError::from_msg(
-                token.to_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-
-        // If a foreign filter is used while the foreign keys feature is not enabled, errors out
-        if let Some((token, error)) = filter
-            .use_foreign_filter()
-            .zip(features.check_foreign_keys_setting("using a foreign filter").err())
-        {
-            return Err(ResponseError::from_msg(
-                token.to_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-
-        // If a shard filter is used while the network feature is not enabled, errors out
-        if let Some((token, error)) =
-            filter.use_shard_filter().zip(features.check_network("using a shard filter").err())
-        {
-            return Err(ResponseError::from_msg(
-                token.to_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-
-        // If a vector filter is used while the multi modal feature is not enabled, errors out
-        if let Some((token, error)) =
-            filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())
-        {
-            return Err(ResponseError::from_msg(
-                token.to_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-    }
-
-    Ok(filter)
-}
-
-fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, MeilisearchHttpError> {
-    let mut ands = Vec::new();
-    for value in arr {
-        match value {
-            Value::String(s) => ands.push(Either::Right(s.as_str())),
-            Value::Array(arr) => {
-                let mut ors = Vec::new();
-                for value in arr {
-                    match value {
-                        Value::String(s) => ors.push(s.as_str()),
-                        v => {
-                            return Err(MeilisearchHttpError::InvalidExpression(
-                                &["String"],
-                                v.clone(),
-                            ));
-                        }
-                    }
-                }
-                ands.push(Either::Left(ors));
-            }
-            v => {
-                return Err(MeilisearchHttpError::InvalidExpression(
-                    &["String", "[String]"],
-                    v.clone(),
-                ));
-            }
-        }
-    }
-
-    Filter::from_array(ands).map_err(|e| MeilisearchHttpError::from_milli(e, None))
 }

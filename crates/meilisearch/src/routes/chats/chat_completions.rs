@@ -20,7 +20,9 @@ use async_openai::types::{
 use async_openai::Client;
 use bumpalo::Bump;
 use futures::StreamExt;
-use index_scheduler::filter::{filter_into_index_filter, filters_into_index_filters_unchecked};
+use index_scheduler::filter::{
+    filter_into_index_filter, filters_into_index_filters_unchecked, parse_filter,
+};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::{Code, ResponseError};
@@ -60,9 +62,7 @@ use crate::metrics::{
 };
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
-use crate::search::{
-    add_search_rules, parse_filter, prepare_search, search_from_kind, SearchQuery,
-};
+use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
 /// Request a chat completion
@@ -362,7 +362,12 @@ async fn process_search_request(
 
     let filter = match &query.filter {
         Some(filter) => {
-            let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+            let filter = parse_filter(
+                filter,
+                Code::InvalidSearchFilter,
+                features,
+                Some(index_uid.as_str()),
+            )?;
             filter
                 .map(|f| {
                     if features.runtime_features().foreign_keys && f.use_foreign_filter().is_some()
