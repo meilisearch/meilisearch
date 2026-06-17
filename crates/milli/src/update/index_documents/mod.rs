@@ -35,6 +35,7 @@ use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
 use crate::progress::{EmbedderStats, Progress};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
+use crate::update::new::indexer::url_fetcher_client;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
@@ -196,7 +197,10 @@ where
         target = "indexing::documents",
         name = "index_documents"
     )]
-    pub fn execute(mut self) -> Result<DocumentAdditionResult> {
+    pub fn execute(
+        mut self,
+        embedder_ip_policy: &http_client::policy::IpPolicy,
+    ) -> Result<DocumentAdditionResult> {
         if self.added_documents == 0 && self.deleted_documents == 0 {
             let number_of_documents = self.index.number_of_documents(self.wtxn)?;
             return Ok(DocumentAdditionResult { indexed_documents: 0, number_of_documents });
@@ -208,7 +212,7 @@ where
             .output_from_sorter(self.wtxn, &self.progress)?;
 
         let indexed_documents = output.documents_count as u64;
-        let number_of_documents = self.execute_raw(output)?;
+        let number_of_documents = self.execute_raw(output, embedder_ip_policy)?;
 
         Ok(DocumentAdditionResult { indexed_documents, number_of_documents })
     }
@@ -220,7 +224,11 @@ where
         target = "indexing::details",
         name = "index_documents_raw"
     )]
-    pub fn execute_raw(mut self, output: TransformOutput) -> Result<u64>
+    pub fn execute_raw(
+        mut self,
+        output: TransformOutput,
+        embedder_ip_policy: &http_client::policy::IpPolicy,
+    ) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
     {
@@ -315,6 +323,9 @@ where
         // Run extraction pipeline in parallel.
         let mut modified_docids = RoaringBitmap::new();
         let embedder_stats = self.embedder_stats.clone();
+
+        let client = url_fetcher_client(embedder_ip_policy);
+
         pool.install(|| {
                 let settings_diff_cloned = settings_diff.clone();
                 rayon::spawn(move || {
@@ -350,7 +361,8 @@ where
                             max_positions_per_attributes,
                             embedder_infos,
                             Arc::new(possible_embedding_mistakes),
-                            &embedder_stats
+                            &embedder_stats,
+                            client,
                         )
                     });
 

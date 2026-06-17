@@ -20,7 +20,7 @@ use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
-use crate::update::new::indexer::WordDelta;
+use crate::update::new::indexer::{url_fetcher_client, WordDelta};
 use crate::update::new::merger::{
     merge_and_send_rtree, merge_scan_and_send_docids, EntryStatus, Operation,
 };
@@ -44,6 +44,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC>(
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
     embedder_stats: &EmbedderStats,
+    embedder_ip_policy: &'extractor http_client::policy::IpPolicy,
 ) -> Result<(FacetFieldIdsDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
@@ -262,6 +263,8 @@ where
             break 'vectors;
         }
 
+        let client = url_fetcher_client(embedder_ip_policy);
+
         let embedding_sender = extractor_sender.embeddings();
         let extractor = EmbeddingExtractor::new(
             embedders,
@@ -269,6 +272,7 @@ where
             field_distribution,
             embedder_stats,
             request_threads(),
+            &client,
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
         {
@@ -372,6 +376,7 @@ pub(super) fn extract_all_settings_changes<SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
+    embedder_ip_policy: &http_client::policy::IpPolicy,
 ) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta, FacetFieldIdsDelta)>
 where
     SD: SettingsDelta + Sync,
@@ -572,6 +577,8 @@ where
             break 'vectors;
         }
 
+        let client = url_fetcher_client(embedder_ip_policy);
+
         let embedding_sender = extractor_sender.embeddings();
 
         // extract the remaining embeddings
@@ -581,6 +588,7 @@ where
             embedding_sender,
             field_distribution,
             request_threads(),
+            &client,
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
         {

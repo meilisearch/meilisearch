@@ -679,7 +679,7 @@ fn import_dump(
             let (builder, user_result) = builder.add_documents(reader)?;
             let user_result = user_result?;
             tracing::info!(documents_found = user_result, "{} documents found.", user_result);
-            builder.execute()?;
+            builder.execute(index_scheduler.ip_policy())?;
         } else {
             let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
             let primary_key = index.primary_key(&rtxn)?;

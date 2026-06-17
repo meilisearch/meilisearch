@@ -533,7 +533,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             embedder_ip_policy,
         )?;
 
-        indexing_builder.execute_raw(output)?;
+        indexing_builder.execute_raw(output, embedder_ip_policy)?;
 
         Ok(())
     }

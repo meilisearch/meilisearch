@@ -94,11 +94,36 @@ impl JsonTemplate {
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered with the given context.
-    pub fn render(&self, context: &dyn liquid::ObjectView) -> Result<Value, Error> {
+    pub fn render(
+        &self,
+        context: &dyn liquid::ObjectView,
+        client: &http_client::ureq::Agent,
+    ) -> Result<Value, Error> {
         let mut rendered = self.value.clone();
         for TemplateAtPath { template, path } in &self.templates {
-            let injected_value =
-                template.render(context).map_err(|err| error_with_path(err, path.clone()))?;
+            let (mut injected_value, tickets_urls) = template
+                .render_with(
+                    &context,
+                    |_| {},
+                    |runtime| {
+                        std::mem::take(
+                            &mut *runtime
+                                .registers()
+                                .get_mut::<crate::prompt::filters::fetch_url::FetchUrlTickets>(),
+                        )
+                    },
+                )
+                .map_err(|err| error_with_path(err, path.clone()))?;
+
+            injected_value = if let Some(replaced) =
+                tickets_urls.resolve_url(client, &injected_value).map_err(|err| {
+                    error_with_path(liquid::Error::with_msg(err.to_string()), path.clone())
+                })? {
+                replaced
+            } else {
+                injected_value
+            };
+
             inject_value(&mut rendered, path, Value::String(injected_value));
         }
         Ok(rendered)
@@ -113,10 +138,11 @@ impl JsonTemplate {
         &self,
         document: D,
         doc_alloc: &'doc Bump,
+        client: &http_client::ureq::Agent,
     ) -> Result<Value, Error> {
         let document = ParseableDocument::new(document, doc_alloc);
         let context = crate::prompt::Context::without_fields(&document);
-        self.render(&context)
+        self.render(&context, client)
     }
 
     /// Renders this value by replacing all its strings with the rendered version of the template they represent from the contents of the search query.
@@ -124,14 +150,19 @@ impl JsonTemplate {
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered from the contents of the search query
-    pub fn render_search(&self, q: Option<&str>, media: Option<&Value>) -> Result<Value, Error> {
+    pub fn render_search(
+        &self,
+        q: Option<&str>,
+        media: Option<&Value>,
+        client: &http_client::ureq::Agent,
+    ) -> Result<Value, Error> {
         let search_data = match (q, media) {
             (None, None) => liquid::object!({}),
             (None, Some(media)) => liquid::object!({ "media": media }),
             (Some(q), None) => liquid::object!({"q": q}),
             (Some(q), Some(media)) => liquid::object!({"q": q, "media": media}),
         };
-        self.render(&search_data)
+        self.render(&search_data, client)
     }
 
     /// The JSON value representing the underlying template
@@ -143,7 +174,10 @@ impl JsonTemplate {
 fn build_templates(value: &Value) -> Result<Vec<TemplateAtPath>, Error> {
     let mut current_path = ValuePath::new();
     let mut templates = Vec::new();
-    let compiler = liquid::ParserBuilder::with_stdlib().build().unwrap();
+    let compiler = liquid::ParserBuilder::with_stdlib()
+        .filter(crate::prompt::filters::fetch_url::FetchUrl)
+        .build()
+        .unwrap();
     parse_value(value, &mut current_path, &mut templates, &compiler)?;
     Ok(templates)
 }

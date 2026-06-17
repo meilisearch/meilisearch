@@ -53,6 +53,13 @@ impl RenderPromptError {
     pub(crate) fn missing_context(inner: liquid::Error) -> RenderPromptError {
         Self { kind: RenderPromptErrorKind::MissingContext(inner), fault: FaultSource::User }
     }
+
+    pub(crate) fn fetching_url_failed(url: String, err: String) -> RenderPromptError {
+        Self {
+            kind: RenderPromptErrorKind::FetchingUrlFailed { url, err },
+            fault: FaultSource::Runtime,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -61,6 +68,8 @@ pub enum RenderPromptErrorKind {
     MissingContext(liquid::Error),
     #[error("missing field in document `{0}`: {1}")]
     MissingContextWithExternalDocid(String, liquid::Error),
+    #[error("fetching url `{url}` failed: {err}")]
+    FetchingUrlFailed { url: String, err: String },
 }
 
 impl From<RenderPromptError> for crate::Error {
