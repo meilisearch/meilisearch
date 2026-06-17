@@ -515,7 +515,7 @@ pub(crate) mod test {
 
         // webhooks
         let webhooks = dump.webhooks().unwrap();
-        insta::assert_json_snapshot!(webhooks, @r#"
+        insta::assert_json_snapshot!(webhooks, @r###"
         {
           "webhooks": {
             "627ea538-733d-4545-8d2d-03526eb381ce": {
@@ -534,7 +534,7 @@ pub(crate) mod test {
             }
           }
         }
-        "#);
+        "###);
     }
 
     #[test]

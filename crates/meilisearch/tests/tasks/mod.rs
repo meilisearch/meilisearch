@@ -1081,7 +1081,7 @@ async fn export_foreign_filter() {
     );
     let (task, code) = server
         .service
-        .post("/export", json!({ "url": "https://example.com", "indexes": indexes }))
+        .post("/export", json!({ "url": "http://localhost:6666", "indexes": indexes }))
         .await;
     snapshot!(code, @"200 OK");
 
@@ -1103,7 +1103,7 @@ async fn export_foreign_filter() {
       "type": "export",
       "canceledBy": null,
       "details": {
-        "url": "https://example.com",
+        "url": "http://localhost:6666",
         "indexes": "[index_details]"
       },
       "error": {
@@ -1127,7 +1127,7 @@ async fn export_foreign_filter() {
     );
     let (task, code) = server
         .service
-        .post("/export", json!({ "url": "https://example.com", "indexes": indexes }))
+        .post("/export", json!({ "url": "http://localhost:6666", "indexes": indexes }))
         .await;
     snapshot!(code, @"200 OK");
 
@@ -1149,7 +1149,7 @@ async fn export_foreign_filter() {
       "type": "export",
       "canceledBy": null,
       "details": {
-        "url": "https://example.com",
+        "url": "http://localhost:6666",
         "indexes": "[index_details]"
       },
       "error": {
