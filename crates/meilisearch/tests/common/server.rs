@@ -528,6 +528,10 @@ impl<State> Server<State> {
     pub async fn get_webhooks(&self) -> (Value, StatusCode) {
         self.service.get("/webhooks").await
     }
+
+    pub async fn render_template(&self, query: Value) -> (Value, StatusCode) {
+        self.service.post("/render-template", query).await
+    }
 }
 
 pub fn default_settings(dir: impl AsRef<Path>) -> Opt {

@@ -4,14 +4,13 @@ mod huggingface;
 #[cfg(feature = "test-ollama")]
 mod ollama;
 mod openai;
-mod rest;
+pub mod rest;
 mod settings;
 
 use std::str::FromStr;
 
 use meili_snap::{json_string, snapshot};
 use meilisearch::option::MaxThreads;
-pub use rest::create_mock;
 
 use crate::common::index::Index;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};

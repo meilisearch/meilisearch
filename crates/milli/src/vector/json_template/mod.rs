@@ -61,20 +61,28 @@ pub struct Error {
 impl Error {
     /// Produces an error message when the error happened at rendering time.
     pub fn rendering_error(&self, root: &str) -> String {
-        format!(
-            "in `{}`, error while rendering template: {}",
-            path_with_root(root, self.path.iter()),
-            &self.template_error
-        )
+        if self.path.is_empty() {
+            format!("error while rendering template: {}", &self.template_error)
+        } else {
+            format!(
+                "in `{}`, error while rendering template: {}",
+                path_with_root(root, self.path.iter()),
+                &self.template_error
+            )
+        }
     }
 
     /// Produces an error message when the error happened at parsing time.
-    pub fn parsing(&self, root: &str) -> String {
-        format!(
-            "in `{}`, error while parsing template: {}",
-            path_with_root(root, self.path.iter()),
-            &self.template_error
-        )
+    pub fn parsing_error(&self, root: &str) -> String {
+        if self.path.is_empty() {
+            format!("error while parsing template: {}", &self.template_error)
+        } else {
+            format!(
+                "in `{}`, error while parsing template: {}",
+                path_with_root(root, self.path.iter()),
+                &self.template_error
+            )
+        }
     }
 }
 
@@ -135,8 +143,13 @@ impl JsonTemplate {
     }
 
     /// The JSON value representing the underlying template
-    pub fn template(&self) -> &Value {
+    pub fn as_template(&self) -> &Value {
         &self.value
+    }
+
+    /// Consumes the instance, returning its underlying template
+    pub fn into_template(self) -> Value {
+        self.value
     }
 }
 

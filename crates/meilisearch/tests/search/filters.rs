@@ -8,6 +8,7 @@ use crate::common::{
     shared_index_with_nested_documents, Server, DOCUMENTS, NESTED_DOCUMENTS,
 };
 use crate::json;
+use crate::vector::rest::create_mock;
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {
@@ -1060,7 +1061,7 @@ async fn vector_filter_document_template_but_fragments_used() {
 
 #[actix_rt::test]
 async fn vector_filter_document_template() {
-    let (_mock, setting) = crate::vector::create_mock().await;
+    let (_mock, setting) = create_mock().await;
     let server = crate::vector::get_server_vector().await;
     let index = server.index("doggo");
 

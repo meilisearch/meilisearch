@@ -2110,7 +2110,7 @@ fn embedders(
                     .into_iter()
                     .map(|fragment| {
                         let template = JsonTemplate::new(
-                            embedder_options.fragment(&fragment.name).unwrap().clone(),
+                            embedder_options.indexing_fragment(&fragment.name).unwrap().clone(),
                         )
                         .unwrap();
 

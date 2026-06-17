@@ -610,6 +610,11 @@ pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared>
 }
 
 pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
+    shared_server_and_index_for_fragments().await.1
+}
+
+pub async fn shared_server_and_index_for_fragments(
+) -> (&'static Server<Shared>, Index<'static, Shared>) {
     static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
     let (server, uid) = INDEX
         .get_or_init(|| async {
@@ -617,10 +622,10 @@ pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
             (server.into_shared(), uid)
         })
         .await;
-    server._index(uid).to_shared()
+    (server, server._index(uid).to_shared())
 }
 
-async fn fragment_mock_server() -> String {
+pub async fn fragment_mock_server() -> String {
     let text_to_embedding: BTreeMap<_, _> = vec![
         ("kefir", [0.5, -0.5, 0.0]),
         ("intel", [1.0, 1.0, 0.0]),
@@ -660,7 +665,8 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     let server = Server::new().await;
     let index = server.unique_index();
 
-    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    let (_response, code) =
+        server.set_features(json!({"multimodal": true, "renderRoute": true})).await;
     assert_eq!(code, StatusCode::OK);
 
     // Configure the index to use our mock embedder
