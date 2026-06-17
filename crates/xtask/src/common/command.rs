@@ -2,8 +2,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io::Read as _;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context as _};
+use jsonpath_rust::JsonPath;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -31,6 +33,8 @@ pub struct Command {
     pub api_key_variable: Option<String>,
     #[serde(default)]
     pub synchronous: SyncMode,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "humantime_serde::option")]
+    pub retry_for: Option<Duration>,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
@@ -237,6 +241,26 @@ fn json_eq_ignore(reference: &Value, value: &Value) -> bool {
     }
 }
 
+struct ExpectedResponseExtractor<'a> {
+    json_path: &'a str,
+    expected_response: Value,
+}
+
+fn parse_expected_response_extractor(value: &Value) -> Option<ExpectedResponseExtractor<'_>> {
+    let props = value.as_object()?;
+    let props = props.get("$extractor")?.as_object()?;
+    let json_path = props.get("path")?.as_str()?;
+
+    // jsonpath always returns an array. To improve UX, if `expectedValue` is an array, we do nothing.
+    // Otherwise, we promote the expected value to an array.
+    let expected_response = match props.get("expectedValue")? {
+        value @ Value::Array(_) => value.clone(),
+        other => Value::Array(vec![other.clone()]),
+    };
+
+    Some(ExpectedResponseExtractor { json_path, expected_response })
+}
+
 #[tracing::instrument(skip(client, command, assets, registered, asset_folder), fields(command = %command))]
 pub async fn run(
     client: &Client,
@@ -275,96 +299,135 @@ pub async fn run(
         .get(assets, &registered, asset_folder)
         .with_context(|| format!("while getting body for command {command}"))?;
 
-    let mut request = client.request(command.method.into(), route);
+    let retry_for_timeout =
+        command.retry_for.filter(|_| matches!(command.method, Method::Get)).unwrap_or_default();
 
-    // Replace the api key
-    if let Some(var_name) = &command.api_key_variable {
-        if let Some(api_key) = registered.get(var_name).and_then(|v| v.as_str()) {
-            request = request.header("Authorization", format!("Bearer {api_key}"));
-        } else {
-            bail!("could not find API key variable '{var_name}' in registered values");
-        }
-    }
+    let stopwatch = Instant::now();
+    let mut attempt = 1usize;
+    let mut last_run = None;
 
-    let request = if let Some((body, content_type)) = body {
-        request.body(body).header(reqwest::header::CONTENT_TYPE, content_type)
-    } else {
-        request
-    };
+    while attempt == 1 || stopwatch.elapsed() <= retry_for_timeout {
+        let mut request = client.request(command.method.into(), route);
 
-    let response =
-        request.send().await.with_context(|| format!("error sending command: {}", command))?;
-
-    let code = response.status();
-
-    if !return_value {
-        if let Some(expected_status) = command.expected_status {
-            if code.as_u16() != expected_status {
-                let response = response
-                    .text()
-                    .await
-                    .context("could not read response body as text")
-                    .context("reading response body when checking expected status")?;
-                bail!("command #{command_index} {command}: unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
+        // Replace the api key
+        if let Some(var_name) = &command.api_key_variable {
+            if let Some(api_key) = registered.get(var_name).and_then(|v| v.as_str()) {
+                request = request.header("Authorization", format!("Bearer {api_key}"));
+            } else {
+                bail!("could not find API key variable '{var_name}' in registered values");
             }
-        } else if code.is_client_error() {
-            tracing::error!(%command, %code, "error in workload file");
-            let response: serde_json::Value = response
-                .json()
-                .await
-                .context("could not deserialize response as JSON")
-                .context("parsing error in workload file when sending command")?;
-            bail!(
-                "command #{command_index} {command}: error in workload file: server responded with error code {code} and '{response}'"
-            )
-        } else if code.is_server_error() {
-            tracing::error!(%command, %code, "server error");
-            let response: serde_json::Value = response
-                .json()
-                .await
-                .context("could not deserialize response as JSON")
-                .context("parsing server error when sending command")?;
-            bail!("command #{command_index} {command}: server error: server responded with error code {code} and '{response}'")
         }
-    }
 
-    if let Some(expected_response) = &command.expected_response {
-        let mut evaluated_expected_response;
-
-        let expected_response = if !registered.is_empty() {
-            evaluated_expected_response = expected_response.clone();
-            insert_variables(&mut evaluated_expected_response, &registered);
-            &evaluated_expected_response
+        let request = if let Some((body, content_type)) = body.as_ref() {
+            request.body(body.clone()).header(reqwest::header::CONTENT_TYPE, *content_type)
         } else {
-            expected_response
+            request
         };
 
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing response when checking expected response")?;
-        if return_value {
+        let response =
+            request.send().await.with_context(|| format!("error sending command: {}", command))?;
+
+        let code = response.status();
+
+        if !return_value {
+            if let Some(expected_status) = command.expected_status {
+                if code.as_u16() != expected_status {
+                    let response = response
+                        .text()
+                        .await
+                        .context("could not read response body as text")
+                        .context("reading response body when checking expected status")?;
+                    bail!("command #{command_index} {command}: unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
+                }
+            } else if code.is_client_error() {
+                tracing::error!(%command, %code, "error in workload file");
+                let response: serde_json::Value = response
+                    .json()
+                    .await
+                    .context("could not deserialize response as JSON")
+                    .context("parsing error in workload file when sending command")?;
+                bail!(
+                "command #{command_index} {command}: error in workload file: server responded with error code {code} and '{response}'"
+            )
+            } else if code.is_server_error() {
+                tracing::error!(%command, %code, "server error");
+                let response: serde_json::Value = response
+                    .json()
+                    .await
+                    .context("could not deserialize response as JSON")
+                    .context("parsing server error when sending command")?;
+                bail!("command #{command_index} {command}: server error: server responded with error code {code} and '{response}'")
+            }
+        }
+
+        if let Some(expected_response) = &command.expected_response {
+            let response: serde_json::Value = response
+                .json()
+                .await
+                .context("could not deserialize response as JSON")
+                .context("parsing response when checking expected response")?;
+
+            let mut evaluated_expected_response;
+
+            let (expected_response, response) = if let Some(extractor) =
+                parse_expected_response_extractor(expected_response)
+            {
+                let extracted_response = match response.query(extractor.json_path) {
+                    Err(e) => bail!("json path query error with '{}': {e:?} ", extractor.json_path),
+                    Ok(value) => serde_json::to_value(value).expect("to be valid"),
+                };
+
+                (extractor.expected_response, extracted_response)
+            } else {
+                let expected_response = if !registered.is_empty() {
+                    evaluated_expected_response = expected_response.clone();
+                    insert_variables(&mut evaluated_expected_response, &registered);
+                    evaluated_expected_response
+                } else {
+                    expected_response.clone()
+                };
+
+                (expected_response, response)
+            };
+
+            if return_value {
+                return Ok(Some((response, code)));
+            }
+
+            if !json_eq_ignore(&expected_response, &response) {
+                last_run = Some((expected_response.clone(), response.clone()));
+
+                tracing::warn!(
+                    %command,
+                    command_index,
+                    attempt,
+                    "expected response check failed, retrying command"
+                );
+
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                attempt += 1;
+                continue;
+            }
+        } else if return_value {
+            let response: serde_json::Value = response
+                .json()
+                .await
+                .context("could not deserialize response as JSON")
+                .context("parsing response when recording expected response")?;
             return Ok(Some((response, code)));
         }
-        if !json_eq_ignore(expected_response, &response) {
-            let expected_pretty = serde_json::to_string_pretty(expected_response)
-                .context("serializing expected response as pretty JSON")?;
-            let response_pretty = serde_json::to_string_pretty(&response)
-                .context("serializing response as pretty JSON")?;
-            let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
-            bail!("command #{command_index} {command}: unexpected response:\n{diff}");
-        }
-    } else if return_value {
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing response when recording expected response")?;
-        return Ok(Some((response, code)));
+
+        return Ok(None);
     }
 
-    Ok(None)
+    let (expected_response, response) = last_run.expect("is always defined at that point");
+    let expected_pretty = serde_json::to_string_pretty(&expected_response)
+        .context("serializing expected response as pretty JSON")?;
+    let response_pretty =
+        serde_json::to_string_pretty(&response).context("serializing response as pretty JSON")?;
+    let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
+
+    bail!("command #{command_index} {command}: unexpected response:\n{diff}");
 }
 
 pub async fn run_commands(
@@ -409,6 +472,7 @@ pub fn health_command() -> Command {
         expected_status: None,
         expected_response: None,
         api_key_variable: None,
+        retry_for: None,
     }
 }
 
