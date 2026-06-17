@@ -85,85 +85,7 @@ impl HeedAuthStore {
         // create inverted database.
         let db = self.action_keyid_index_expiration;
 
-        let mut actions = HashSet::new();
-        for action in &key.actions {
-            match action {
-                Action::All => {
-                    actions.extend(enum_iterator::all::<Action>());
-                    actions.remove(&Action::AllGet);
-                }
-                Action::AllGet => {
-                    actions.extend(enum_iterator::all::<Action>().filter(|a| a.is_read()))
-                }
-                Action::DocumentsAll => {
-                    actions.extend(
-                        [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd]
-                            .iter(),
-                    );
-                }
-                Action::IndexesAll => {
-                    actions.extend(
-                        [
-                            Action::IndexesAdd,
-                            Action::IndexesDelete,
-                            Action::IndexesGet,
-                            Action::IndexesUpdate,
-                            Action::IndexesSwap,
-                            Action::IndexesCompact,
-                        ]
-                        .iter(),
-                    );
-                }
-                Action::SettingsAll => {
-                    actions.extend([Action::SettingsGet, Action::SettingsUpdate].iter());
-                }
-                Action::DumpsAll => {
-                    actions.insert(Action::DumpsCreate);
-                }
-                Action::SnapshotsAll => {
-                    actions.insert(Action::SnapshotsCreate);
-                }
-                Action::TasksAll => {
-                    actions.extend([
-                        Action::TasksGet,
-                        Action::TasksDelete,
-                        Action::TasksCancel,
-                        Action::TasksCompact,
-                    ]);
-                }
-                Action::StatsAll => {
-                    actions.insert(Action::StatsGet);
-                }
-                Action::MetricsAll => {
-                    actions.insert(Action::MetricsGet);
-                }
-                Action::ChatsAll => {
-                    actions.extend([Action::ChatsGet, Action::ChatsDelete]);
-                }
-                Action::ChatsSettingsAll => {
-                    actions.extend([Action::ChatsSettingsGet, Action::ChatsSettingsUpdate]);
-                }
-                Action::WebhooksAll => {
-                    actions.extend([
-                        Action::WebhooksGet,
-                        Action::WebhooksUpdate,
-                        Action::WebhooksDelete,
-                        Action::WebhooksCreate,
-                    ]);
-                }
-                Action::DynamicSearchRulesAll => {
-                    actions.extend([
-                        Action::DynamicSearchRulesGet,
-                        Action::DynamicSearchRulesCreate,
-                        Action::DynamicSearchRulesUpdate,
-                        Action::DynamicSearchRulesDelete,
-                    ]);
-                }
-                other => {
-                    actions.insert(*other);
-                }
-            }
-        }
+        let actions = expand_actions(&key.actions);
 
         let no_index_restriction = key.indexes.iter().any(|p| p.matches_all());
         for action in actions {
@@ -269,6 +191,23 @@ impl HeedAuthStore {
                         }
                     }
                 }
+                // The action was not found in the inverted DB. This can happen when a key was
+                // created with a wildcard action (e.g. Action::All) before new leaf actions were
+                // introduced in a later version. Re-expand the stored key's original action list
+                // against the current Action enum and grant access if it is covered.
+                if let Some(key) = self.keys.get(&rtxn, uid.as_bytes())? {
+                    if expand_actions(&key.actions).contains(&action) {
+                        let no_index_restriction = key.indexes.iter().any(|p| p.matches_all());
+                        let index_ok = no_index_restriction
+                            || match index {
+                                Some(idx) => key.indexes.iter().any(|p| p.matches_str(idx)),
+                                None => !key.indexes.is_empty(),
+                            };
+                        if index_ok {
+                            return Ok(Some(key.expires_at));
+                        }
+                    }
+                }
                 Ok(None)
             }
         }
@@ -288,7 +227,17 @@ impl HeedAuthStore {
             .transpose()?
             .map(|(_, expiration)| expiration);
 
-        Ok(exp)
+        if exp.is_some() {
+            return Ok(exp);
+        }
+
+        // Same fallback as get_expiration_date: re-expand stored actions for newly introduced ones.
+        if let Some(key) = self.keys.get(&rtxn, uid.as_bytes())? {
+            if expand_actions(&key.actions).contains(&action) {
+                return Ok(Some(key.expires_at));
+            }
+        }
+        Ok(None)
     }
 
     fn delete_key_from_inverted_db(&self, wtxn: &mut RwTxn, key: &KeyId) -> Result<()> {
@@ -303,6 +252,92 @@ impl HeedAuthStore {
 
         Ok(())
     }
+}
+
+/// Expands a slice of (possibly wildcard) [`Action`]s into the full set of leaf actions they
+/// cover, using the current [`Action`] enum variants. Called at key creation time to populate the
+/// inverted DB, and again at lookup time as a fallback for keys whose inverted DB entries predate
+/// newly introduced actions.
+fn expand_actions(actions: &[Action]) -> HashSet<Action> {
+    let mut expanded = HashSet::new();
+    for action in actions {
+        match action {
+            Action::All => {
+                expanded.extend(enum_iterator::all::<Action>());
+                expanded.remove(&Action::AllGet);
+            }
+            Action::AllGet => {
+                expanded.extend(enum_iterator::all::<Action>().filter(|a| a.is_read()))
+            }
+            Action::DocumentsAll => {
+                expanded.extend(
+                    [Action::DocumentsGet, Action::DocumentsDelete, Action::DocumentsAdd].iter(),
+                );
+            }
+            Action::IndexesAll => {
+                expanded.extend(
+                    [
+                        Action::IndexesAdd,
+                        Action::IndexesDelete,
+                        Action::IndexesGet,
+                        Action::IndexesUpdate,
+                        Action::IndexesSwap,
+                        Action::IndexesCompact,
+                    ]
+                    .iter(),
+                );
+            }
+            Action::SettingsAll => {
+                expanded.extend([Action::SettingsGet, Action::SettingsUpdate].iter());
+            }
+            Action::DumpsAll => {
+                expanded.insert(Action::DumpsCreate);
+            }
+            Action::SnapshotsAll => {
+                expanded.insert(Action::SnapshotsCreate);
+            }
+            Action::TasksAll => {
+                expanded.extend([
+                    Action::TasksGet,
+                    Action::TasksDelete,
+                    Action::TasksCancel,
+                    Action::TasksCompact,
+                ]);
+            }
+            Action::StatsAll => {
+                expanded.insert(Action::StatsGet);
+            }
+            Action::MetricsAll => {
+                expanded.insert(Action::MetricsGet);
+            }
+            Action::ChatsAll => {
+                expanded.extend([Action::ChatsGet, Action::ChatsDelete]);
+            }
+            Action::ChatsSettingsAll => {
+                expanded.extend([Action::ChatsSettingsGet, Action::ChatsSettingsUpdate]);
+            }
+            Action::WebhooksAll => {
+                expanded.extend([
+                    Action::WebhooksGet,
+                    Action::WebhooksUpdate,
+                    Action::WebhooksDelete,
+                    Action::WebhooksCreate,
+                ]);
+            }
+            Action::DynamicSearchRulesAll => {
+                expanded.extend([
+                    Action::DynamicSearchRulesGet,
+                    Action::DynamicSearchRulesCreate,
+                    Action::DynamicSearchRulesUpdate,
+                    Action::DynamicSearchRulesDelete,
+                ]);
+            }
+            other => {
+                expanded.insert(*other);
+            }
+        }
+    }
+    expanded
 }
 
 /// Codec allowing to retrieve the expiration date of an action,
@@ -463,5 +498,40 @@ mod tests {
 
         // Should not match with master_key2
         assert!(!verify_key_matches(uid, master_key2, key.as_bytes()));
+    }
+
+    #[test]
+    fn test_expand_actions_all_covers_new_leaf_actions() {
+        // Action::All must expand to every non-wildcard leaf action currently defined.
+        // This is the same logic used as a runtime fallback when a key was created before
+        // new leaf actions were introduced (e.g. ChatsGet added after dumpless upgrade).
+        let expanded = expand_actions(&[Action::All]);
+
+        // Spot-check: every known leaf (non-wildcard) action must be present.
+        for action in enum_iterator::all::<Action>() {
+            match action {
+                // Wildcards are never added to the expanded set.
+                Action::AllGet => {}
+                other => {
+                    assert!(
+                        expanded.contains(&other),
+                        "Action::All should expand to cover {other:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_expand_actions_all_get_covers_only_read_actions() {
+        let expanded = expand_actions(&[Action::AllGet]);
+        for action in enum_iterator::all::<Action>() {
+            if action.is_read() {
+                assert!(expanded.contains(&action), "AllGet should cover read action {action:?}");
+            }
+        }
+        // Non-read actions must not be included.
+        assert!(!expanded.contains(&Action::DocumentsAdd));
+        assert!(!expanded.contains(&Action::IndexesDelete));
     }
 }
