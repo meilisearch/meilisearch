@@ -9,7 +9,7 @@ use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
-use fst::{IntoStreamer, Streamer as _};
+use fst::Streamer as _;
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore, Str, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
@@ -36,9 +36,9 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::index::PrefixSearch;
 use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
-use crate::update::new::steps::{PostProcessingWords, SettingsIndexerStep};
+use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::settings::SettingsDelta;
-use crate::update::{GrenadParameters, WordsPrefixesFst};
+use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{
@@ -409,34 +409,13 @@ where
                 facet_field_ids_delta,
             )?;
 
-            // When the prefix search was disabled and is enabled we need to call the
-            // WordsPrefixesFst::execute to generate and write the words FST from scratch
-            // and call the compute_prefix_database_from_sources a second time to correctly
-            // generate the prefixes databases.
+            // When prefix search transitions Disabled → IndexingTime, rebuild the prefix FST
+            // from scratch (tolerant + exact words) and repopulate all prefix databases.
             if *settings_delta.old_prefix_search() == PrefixSearch::Disabled
                 && *settings_delta.new_prefix_search() == PrefixSearch::IndexingTime
             {
-                indexing_context.progress.update_progress(PostProcessingWords::ComputePrefixFst);
-                WordsPrefixesFst::new(wtxn, index).execute()?;
-                let prefixes_fst = index.words_prefixes_fst(wtxn)?;
-
-                let mut tolerant_modified = BTreeSet::new();
-                let deleted = BTreeSet::new();
-                let mut prefix_stream = prefixes_fst.into_stream();
-                while let Some(prefix) = prefix_stream.next() {
-                    let Ok(prefix) = std::str::from_utf8(prefix) else { continue };
-                    let Some(prefix) = MiniString::new(prefix) else { continue };
-                    tolerant_modified.insert(prefix);
-                }
-                let exact_modified = post_processing::exact_prefixes_from_database(index, wtxn)?;
-                post_processing::compute_prefix_database_from_sources(
-                    index,
-                    wtxn,
-                    &tolerant_modified,
-                    &deleted,
-                    &exact_modified,
-                    &deleted,
-                    progress,
+                post_processing::recompute_all_prefix_databases_from_database(
+                    index, wtxn, progress,
                 )?;
             }
 

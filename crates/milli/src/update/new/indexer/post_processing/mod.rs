@@ -149,6 +149,10 @@ pub(crate) fn compute_prefix_database_from_sources(
 }
 
 /// Recompute the exact-word prefix databases from the exact-word docids database.
+///
+/// Rebuilds the prefix FST to include exact-word prefixes (using the same
+/// [`WordFstBuilder::register_exact_word_for_prefixes`] path as normal indexing), then
+/// repopulates [`Index::exact_word_prefix_docids`] from the updated FST.
 pub fn recompute_exact_word_prefix_docids_from_database(
     index: &Index,
     wtxn: &mut RwTxn,
@@ -161,7 +165,39 @@ pub fn recompute_exact_word_prefix_docids_from_database(
 
     progress.update_progress(PostProcessingWords::ComputePrefixes);
 
-    let exact_modified = exact_prefixes_from_database(index, wtxn)?;
+    // Collect exact words first so that we can release the borrow on `wtxn` before
+    // the FST builder needs exclusive access to write.
+    let mut exact_words: Vec<String> = Vec::new();
+    for result in index.exact_word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>() {
+        let (word, _) = result?;
+        exact_words.push(word.to_string());
+    }
+
+    // Build a new prefix FST that contains both tolerant-word prefixes (via drain of the
+    // existing words FST) and exact-word prefixes (registered explicitly).
+    // `FstMergerBuilder::build` drains all remaining entries from the existing FST through
+    // the prefix callback, so we do not need to re-register tolerant words manually.
+    let prefix_data = {
+        let words_fst = index.words_fst(wtxn)?;
+        let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
+        word_fst_builder.with_prefix_settings(prefix_settings);
+        for word in &exact_words {
+            word_fst_builder.register_exact_word_for_prefixes(DelAdd::Addition, word.as_bytes())?;
+        }
+        word_fst_builder.build()?.1
+        // `words_fst` is dropped here, releasing the shared borrow on `wtxn`.
+    };
+
+    let Some(PrefixData { prefixes_fst_mmap }) = prefix_data else {
+        return Ok(());
+    };
+
+    // Persist the updated prefix FST (words FST is unchanged).
+    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_PREFIXES_FST_KEY, &prefixes_fst_mmap)?;
+
+    // Derive which exact prefixes changed and rebuild the docids database.
+    let prefix_fst = fst::Set::new(&prefixes_fst_mmap[..])?;
+    let exact_modified = compute_prefixes(&prefix_fst, exact_words.iter().map(|w| w.as_str()))?;
     let exact_deleted = BTreeSet::new();
 
     index.exact_word_prefix_docids.clear(wtxn)?;
@@ -177,71 +213,72 @@ pub fn recompute_exact_word_prefix_docids_from_database(
     )
 }
 
-/// Collect all prefixes that meet the threshold from the exact-word docids database.
-pub(crate) fn exact_prefixes_from_database(
+/// Rebuild the prefix FST and **all** prefix databases from the current word databases.
+///
+/// Used when prefix search transitions from `Disabled` to `IndexingTime` via a settings change.
+/// Unlike [`recompute_exact_word_prefix_docids_from_database`], this rebuilds the prefix FST
+/// from scratch (both tolerant and exact words) and repopulates every prefix database.
+pub(super) fn recompute_all_prefix_databases_from_database(
     index: &Index,
-    wtxn: &RwTxn,
-) -> Result<BTreeSet<MiniString>> {
+    wtxn: &mut RwTxn,
+    progress: &Progress,
+) -> Result<()> {
     let prefix_settings = index.prefix_settings(wtxn)?;
-    let mut words = Vec::new();
+    if prefix_settings.compute_prefixes != crate::index::PrefixSearch::IndexingTime {
+        return Ok(());
+    }
+
+    progress.update_progress(PostProcessingWords::ComputePrefixes);
+
+    // Collect all words first to avoid holding borrows on `wtxn` while the FST builder runs.
+    let mut tolerant_words: Vec<String> = Vec::new();
+    for result in index.word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>() {
+        let (word, _) = result?;
+        tolerant_words.push(word.to_string());
+    }
+    let mut exact_words: Vec<String> = Vec::new();
     for result in index.exact_word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>() {
         let (word, _) = result?;
-        words.push(word.to_string());
+        exact_words.push(word.to_string());
     }
 
-    prefixes_from_words(
-        words.iter().map(|word| word.as_str()),
-        prefix_settings.prefix_count_threshold,
-        prefix_settings.max_prefix_length,
+    // Build a fresh prefix FST from both tolerant and exact words.
+    // We start from an empty FST because prefix search was previously disabled and the
+    // existing prefix FST (if any) is stale.
+    let prefix_data = {
+        let empty_fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
+        let mut word_fst_builder = WordFstBuilder::new(&empty_fst)?;
+        word_fst_builder.with_prefix_settings(prefix_settings);
+        for word in &tolerant_words {
+            word_fst_builder.register_word(DelAdd::Addition, word.as_bytes())?;
+        }
+        for word in &exact_words {
+            word_fst_builder.register_exact_word_for_prefixes(DelAdd::Addition, word.as_bytes())?;
+        }
+        word_fst_builder.build()?.1
+    };
+
+    let Some(PrefixData { prefixes_fst_mmap }) = prefix_data else {
+        return Ok(());
+    };
+
+    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_PREFIXES_FST_KEY, &prefixes_fst_mmap)?;
+
+    let prefix_fst = fst::Set::new(&prefixes_fst_mmap[..])?;
+    let tolerant_modified =
+        compute_prefixes(&prefix_fst, tolerant_words.iter().map(|w| w.as_str()))?;
+    let exact_modified = compute_prefixes(&prefix_fst, exact_words.iter().map(|w| w.as_str()))?;
+    let deleted = BTreeSet::new();
+
+    compute_prefix_database_from_sources(
+        index,
+        wtxn,
+        &tolerant_modified,
+        &deleted,
+        &exact_modified,
+        &deleted,
+        progress,
     )
-}
-
-/// Collect all prefixes that meet the threshold from a sorted list of words.
-fn prefixes_from_words<'a, I>(
-    words: I,
-    prefix_count_threshold: usize,
-    max_prefix_length: usize,
-) -> Result<BTreeSet<MiniString>>
-where
-    I: IntoIterator<Item = &'a str>,
-{
-    let mut current_prefix = vec![String::new(); max_prefix_length];
-    let mut current_prefix_count = vec![0; max_prefix_length];
-    let mut builders: Vec<BTreeSet<String>> =
-        (0..max_prefix_length).map(|_| BTreeSet::new()).collect();
-
-    for word in words {
-        for n in 0..max_prefix_length {
-            let current_prefix = &mut current_prefix[n];
-            let current_prefix_count = &mut current_prefix_count[n];
-            let builder = &mut builders[n];
-
-            let prefix = match word.get(..=n) {
-                Some(prefix) => prefix,
-                None => continue,
-            };
-
-            if *current_prefix_count == 0 || prefix != current_prefix.as_str() {
-                *current_prefix = prefix.to_owned();
-                *current_prefix_count = 0;
-            }
-
-            *current_prefix_count += 1;
-
-            if *current_prefix_count == prefix_count_threshold {
-                builder.insert(prefix.to_owned());
-            }
-        }
-    }
-
-    let mut output = BTreeSet::new();
-    for prefix in builders.into_iter().flatten() {
-        if let Some(prefix) = MiniString::new(&prefix) {
-            output.insert(prefix);
-        }
-    }
-
-    Ok(output)
 }
 
 /// The words must be sorted.
