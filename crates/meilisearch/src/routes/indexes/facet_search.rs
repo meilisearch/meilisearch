@@ -100,8 +100,6 @@ pub struct FacetSearchQuery {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
-    ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
