@@ -40,7 +40,11 @@ pub const FEDERATION_EXTRA_DOCUMENT: &str = "extra_document";
 #[routes::request(proxied)]
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FederationOptions {
-    /// Weight to apply to results from this query (default: 1.0)
+    /// A multiplicative factor applied to the ranking score for hits from this query.
+    ///
+    /// Values less than 1.0 make hits from this query less likely to appear in final results; values greater than 1.0 make them more likely.
+    ///
+    /// Must be a positive number. Default: `1.0`.
     #[request(default, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
     pub weight: Weight,
 
@@ -168,6 +172,8 @@ pub struct FederatedSearch {
     /// different index and have its own parameters. When `federation` is
     /// `null`, results are returned separately for each query. When
     /// `federation` is set, results are merged.
+    ///
+    /// Each query object must include `indexUid` to specify which index to search.
     #[request(required)]
     pub queries: Vec<SearchQueryWithIndex>,
     /// Configuration for combining results from multiple queries into a

@@ -25,7 +25,7 @@ use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, fuse_filters, perform_facet_search, prepare_search, FacetSearchResult,
     HybridQuery, MatchingStrategy, NetworkableQuery, Partition, RankingScoreThreshold, SearchQuery,
-    SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
@@ -36,7 +36,7 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Facet Search",
-            description = "The `/facet-search` route allows you to search for facet values. Facet search supports prefix search and typo tolerance. The returned hits are sorted lexicographically in ascending order. You can configure how facets are sorted using the sortFacetValuesBy property of the faceting index settings.",
+            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n**Note:** Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n\n**Note:** Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
         ),
     ),
 )]
@@ -50,13 +50,13 @@ pub struct FacetSearchApi;
 )]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FacetSearchQuery {
-    /// Query string to search for facet values
+    /// Query string to search for matching facet values. If not specified, Meilisearch returns all facet values for the `facetName`, limited to 100 results. Note: only the first word is used for matching.
     #[request(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
-    /// Name of the facet to search
+    /// Name of the facet attribute to search. Must be present in the index's `filterableAttributes` list.
     #[request(required, error = DeserrJsonError<InvalidFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
     pub facet_name: String,
-    /// Query string to filter documents before facet search
+    /// Query string to filter the underlying documents before computing facet values. This affects which facet values appear and their counts, but does not filter the facet values themselves.
     #[request(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Custom query vector for semantic search
@@ -71,7 +71,7 @@ pub struct FacetSearchQuery {
     /// be configured in the index settings.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
-    /// Filter expression to apply before facet search
+    /// Filter expression to restrict which documents are considered when computing facet values. Attributes must be in `filterableAttributes` before they can be used in filters.
     #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Strategy used to match query terms
@@ -234,39 +234,38 @@ impl Aggregate for FacetSearchAggregator {
     }
 }
 
-/// Search in facets
+/// Search for facet values
 ///
-/// Search for facet values within a given facet.
+/// Search for facet values matching a query within a given facet attribute. Use this to build
+/// autocomplete or dropdown UIs for facet filters.
 ///
-/// > Use this to build autocomplete or refinement UIs for facet filters.
+/// **Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list.
+/// Facet search will not work without this configuration.
+///
+/// **Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
+/// returns `Jane Austen`, but searching for `Austen` does not.
+///
+/// **Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
+/// to search them as facets.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
-        (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(
+        (status = 200, description = "Facet values matching the query are returned.", body = FacetSearchResult, content_type = "application/json", example = json!(
             {
-              "hits": [
+              "facetHits": [
                 {
-                  "id": 2770,
-                  "title": "American Pie 2",
-                  "poster": "https://image.tmdb.org/t/p/w1280/q4LNgUnRfltxzp3gf1MAGiK5LhV.jpg",
-                  "overview": "The whole gang are back and as close as ever. They decide to get even closer by spending the summer together at a beach house. They decide to hold the biggest…",
-                  "release_date": 997405200
+                  "value": "action",
+                  "count": 273
                 },
                 {
-                  "id": 190859,
-                  "title": "American Sniper",
-                  "poster": "https://image.tmdb.org/t/p/w1280/svPHnYE7N5NAGO49dBmRhq0vDQ3.jpg",
-                  "overview": "U.S. Navy SEAL Chris Kyle takes his sole mission—protect his comrades—to heart and becomes one of the most lethal snipers in American history. His pinpoint accuracy not only saves countless lives but also makes him a prime…",
-                  "release_date": 1418256000
+                  "value": "animated",
+                  "count": 15
                 }
               ],
-              "offset": 0,
-              "limit": 2,
-              "estimatedTotalHits": 976,
-              "processingTimeMs": 35,
-              "query": "american "
+              "facetQuery": "ac",
+              "processingTimeMs": 0
             }
         )),
         (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(

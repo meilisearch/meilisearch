@@ -68,7 +68,7 @@ pub struct TasksFilterQuery {
     /// It's possible to specify several batch uids by separating them with
     /// the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidBatchUids>)]
-    #[param(required = false, value_type = Option<u32>, example = 12421)]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([1, 2, 3]))]
     pub batch_uids: OptionStarOrList<BatchId>,
 
     /// Permits to filter tasks by their uid. By default, when the uids query
@@ -335,6 +335,13 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 /// Cancel tasks
 ///
 /// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
+///
+/// **Note:** Task cancellation is atomic — either all matched tasks are canceled or none are.
+///
+/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
+///
+/// **Tip:** You can cancel `taskCancelation` type tasks as long as they are `enqueued` or `processing`,
+/// because cancellation tasks are processed in reverse order of enqueueing.
 #[routes::path(
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
     no_request_body,
@@ -420,6 +427,13 @@ async fn cancel_tasks(
 /// Delete tasks
 ///
 /// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
+///
+/// **Note:** Only finished tasks (`succeeded`, `failed`, or `canceled`) can be deleted.
+/// You cannot delete `enqueued` or `processing` tasks.
+///
+/// **Note:** Task deletion is atomic — either all matched tasks are deleted or none are.
+///
+/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
 #[routes::path(
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
@@ -519,7 +533,7 @@ pub struct AllTasks {
     pub limit: u32,
     /// The first task uid returned
     pub from: Option<u32>,
-    /// Value to send in from to fetch the next slice of results. Null when all data has been browsed
+    /// Value to pass as `from` parameter to get the next page. When `null`, there are no more tasks to retrieve.
     pub next: Option<u32>,
 }
 

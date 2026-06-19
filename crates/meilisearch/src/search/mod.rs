@@ -178,6 +178,8 @@ pub struct SearchQuery {
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
     ///
     /// Supported value types are string, number, array, and object.
+    ///
+    /// Note: highlights matches within all listed attributes, even those not in `searchableAttributes`.
     #[request(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
     /// String to insert before each highlighted term.
@@ -196,7 +198,7 @@ pub struct SearchQuery {
     ///
     /// This is useful when you need custom highlighting.
     ///
-    /// Note that positions are given in bytes, not characters.
+    /// Note: reports match positions in all attributes, even non-searchable ones. Positions are measured in bytes, not characters.
     #[request(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
     /// A [filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results.
@@ -280,6 +282,8 @@ pub struct SearchQuery {
     /// The `semanticRatio` field controls the balance: 0.0 means keyword-only results, 1.0 means semantic-only.
     ///
     /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// The `semanticRatio` field defaults to `0.5`. A value of `0.0` uses keyword-only results; `1.0` uses semantic-only results.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
@@ -1546,13 +1550,31 @@ pub struct FacetStats {
     pub max: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+/// Schema representation of a facet value hit (for OpenAPI documentation only).
+#[derive(ToSchema)]
+#[schema(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct FacetValueHitSchema {
+    /// The facet value that matched the query.
+    pub value: String,
+    /// Number of documents with this facet value among the search results.
+    pub count: u64,
+}
+
+/// Result of a facet search operation.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct FacetSearchResult {
+    /// Array of matching facet values with their document counts, sorted lexicographically
+    /// in ascending order (or by count if `sortFacetValuesBy` is set to `"count"`).
+    #[schema(value_type = Vec<FacetValueHitSchema>)]
     pub facet_hits: Vec<FacetValueHit>,
+    /// The original `facetQuery` from the request. `null` if no query was provided.
     pub facet_query: Option<String>,
+    /// Time in milliseconds Meilisearch took to process the request.
     pub processing_time_ms: u128,
-    /// Errors from remote shards. Federated search only.
+    /// Errors from remote shards. Only present in federated search when some remotes failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 }
