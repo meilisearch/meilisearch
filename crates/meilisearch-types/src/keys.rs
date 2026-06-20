@@ -54,6 +54,7 @@ pub struct CreateApiKey {
     /// `*` character can be used as a wildcard when located at the last
     /// position. e.g. `documents.*` to authorize access on all documents
     /// endpoints.
+    ///
     /// Valid actions include: `search`, `documents.add`,
     /// `documents.get`, `documents.delete`, `indexes.create`, `indexes.get`,
     /// `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.get`,
