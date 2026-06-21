@@ -281,7 +281,7 @@ where
 
             let document = match &attributes_to_retrieve {
                 Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    &document,
+                    document,
                     attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
                         (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
                     ),

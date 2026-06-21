@@ -719,9 +719,9 @@ async fn documents_by_query(
                 {
                     Ok(sorts) => sorts,
                     Err(asc_desc_error) => {
-                        return Err(
-                            milli::SortError::from(asc_desc_error).into_document_error().into()
-                        )
+                        return Err(milli::SortError::from(asc_desc_error)
+                            .into_document_error()
+                            .into())
                     }
                 };
                 Some(sorts)
@@ -730,41 +730,35 @@ async fn documents_by_query(
             };
 
             let index = index_scheduler.index(&index_uid)?;
-            let rtxn = index.read_txn()?;
-            let progress = Progress::default();
+            let (total, doc_ids) = {
+                let rtxn = index.read_txn()?;
+                let progress = Progress::default();
 
-            let filter = &filter;
-            let filter = if let Some(filter) = filter {
-                let filter = parse_filter(
-                    filter,
-                    Code::InvalidDocumentFilter,
-                    index_scheduler.features(),
-                    None,
-                )?;
-                filter
-                    .map(|f| {
-                        filter_into_index_filter(
-                            f,
-                            &index,
-                            &rtxn,
-                            &index_scheduler,
-                            &progress,
-                            &index_uid,
-                        )
-                    })
-                    .transpose()?
-            } else {
-                None
+                let filter = &filter;
+                let filter = if let Some(filter) = filter {
+                    let filter = parse_filter(
+                        filter,
+                        Code::InvalidDocumentFilter,
+                        index_scheduler.features(),
+                        None,
+                    )?;
+                    filter
+                        .map(|f| {
+                            filter_into_index_filter(
+                                f,
+                                &index,
+                                &rtxn,
+                                &index_scheduler,
+                                &progress,
+                                &index_uid,
+                            )
+                        })
+                        .transpose()?
+                } else {
+                    None
+                };
+                retrieve_document_ids(&index, &rtxn, offset, limit, ids, filter, sort_criteria)?
             };
-            let (total, doc_ids) = retrieve_document_ids(
-                &index,
-                &rtxn,
-                offset,
-                limit,
-                ids,
-                filter,
-                sort_criteria,
-            )?;
             Ok((index, total, doc_ids, fields))
         })
         .await
