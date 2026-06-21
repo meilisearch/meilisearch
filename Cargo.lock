@@ -2341,6 +2341,8 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
 dependencies = [
+ "futures-core",
+ "futures-sink",
  "spin 0.9.8",
 ]
 
@@ -4347,6 +4349,7 @@ dependencies = [
  "either",
  "file-store",
  "flate2",
+ "flume",
  "futures",
  "futures-util",
  "hex",
