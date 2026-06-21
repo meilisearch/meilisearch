@@ -1898,40 +1898,6 @@ fn retrieve_document_ids(
     Ok((number_of_documents, doc_ids))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn retrieve_documents<S: AsRef<str>>(
-    index: &Index,
-    rtxn: &RoTxn,
-    offset: usize,
-    limit: usize,
-    ids: Option<Vec<ExternalDocumentId>>,
-    filter: Option<IndexFilter>,
-    attributes_to_retrieve: Option<Vec<S>>,
-    retrieve_vectors: RetrieveVectors,
-    sort_criteria: Option<Vec<AscDesc>>,
-) -> Result<(u64, Vec<Document>), ResponseError> {
-    let (number_of_documents, doc_ids) =
-        retrieve_document_ids(index, rtxn, offset, limit, ids, filter, sort_criteria)?;
-
-    let it = some_documents(index, rtxn, doc_ids, retrieve_vectors)?;
-
-    let documents: Vec<_> = it
-        .map(|document| {
-            Ok(match &attributes_to_retrieve {
-                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
-                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
-                    ),
-                ),
-                None => document?,
-            })
-        })
-        .collect::<Result<_, ResponseError>>()?;
-
-    Ok((number_of_documents, documents))
-}
-
 fn retrieve_document<S: AsRef<str>>(
     index: &Index,
     doc_id: &str,
