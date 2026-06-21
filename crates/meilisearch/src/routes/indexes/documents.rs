@@ -48,6 +48,9 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
+use crate::routes::indexes::streaming::{
+    stream_documents, DocumentsPaginationHeader, StreamedJsonObject,
+};
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
     PAGINATION_DEFAULT_LIMIT_FN,
@@ -694,77 +697,85 @@ async fn documents_by_query(
 
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
 
-    let ret = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
-        let ids = if let Some(ids) = ids {
-            let mut parsed_ids = Vec::with_capacity(ids.len());
-            for (index, id) in ids.into_iter().enumerate() {
-                let id = id.try_into().map_err(|error| {
-                    let msg = format!("In `.ids[{index}]`: {error}");
-                    ResponseError::from_msg(msg, Code::InvalidDocumentIds)
-                })?;
-                parsed_ids.push(id)
-            }
-            Some(parsed_ids)
-        } else {
-            None
-        };
-
-        let sort_criteria = if let Some(sort) = &sort {
-            let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
-                Ok(sorts) => sorts,
-                Err(asc_desc_error) => {
-                    return Err(milli::SortError::from(asc_desc_error).into_document_error().into())
+    // Resolve candidate IDs on a blocking thread without loading full document bodies.
+    let (index, total, doc_ids, fields) =
+        tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+            let ids = if let Some(ids) = ids {
+                let mut parsed_ids = Vec::with_capacity(ids.len());
+                for (index, id) in ids.into_iter().enumerate() {
+                    let id = id.try_into().map_err(|error| {
+                        let msg = format!("In `.ids[{index}]`: {error}");
+                        ResponseError::from_msg(msg, Code::InvalidDocumentIds)
+                    })?;
+                    parsed_ids.push(id)
                 }
+                Some(parsed_ids)
+            } else {
+                None
             };
-            Some(sorts)
-        } else {
-            None
-        };
 
-        let index = index_scheduler.index(&index_uid)?;
-        let rtxn = index.read_txn()?;
-        let progress = Progress::default();
+            let sort_criteria = if let Some(sort) = &sort {
+                let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect()
+                {
+                    Ok(sorts) => sorts,
+                    Err(asc_desc_error) => {
+                        return Err(
+                            milli::SortError::from(asc_desc_error).into_document_error().into()
+                        )
+                    }
+                };
+                Some(sorts)
+            } else {
+                None
+            };
 
-        let filter = &filter;
-        let filter = if let Some(filter) = filter {
-            let filter = parse_filter(
+            let index = index_scheduler.index(&index_uid)?;
+            let rtxn = index.read_txn()?;
+            let progress = Progress::default();
+
+            let filter = &filter;
+            let filter = if let Some(filter) = filter {
+                let filter = parse_filter(
+                    filter,
+                    Code::InvalidDocumentFilter,
+                    index_scheduler.features(),
+                    None,
+                )?;
+                filter
+                    .map(|f| {
+                        filter_into_index_filter(
+                            f,
+                            &index,
+                            &rtxn,
+                            &index_scheduler,
+                            &progress,
+                            &index_uid,
+                        )
+                    })
+                    .transpose()?
+            } else {
+                None
+            };
+            let (total, doc_ids) = retrieve_document_ids(
+                &index,
+                &rtxn,
+                offset,
+                limit,
+                ids,
                 filter,
-                Code::InvalidDocumentFilter,
-                index_scheduler.features(),
-                None,
+                sort_criteria,
             )?;
-            filter
-                .map(|f| {
-                    filter_into_index_filter(
-                        f,
-                        &index,
-                        &rtxn,
-                        &index_scheduler,
-                        &progress,
-                        &index_uid,
-                    )
-                })
-                .transpose()?
-        } else {
-            None
-        };
-        let (total, documents) = retrieve_documents(
-            &index,
-            &rtxn,
-            offset,
-            limit,
-            ids,
-            filter,
-            fields,
-            retrieve_vectors,
-            sort_criteria,
-        )?;
-        Ok(PaginationView::new(offset, limit, total as usize, documents))
-    })
-    .await
-    .unwrap()?;
+            Ok((index, total, doc_ids, fields))
+        })
+        .await
+        .unwrap()?;
 
-    Ok(HttpResponse::Ok().json(ret))
+    let header = DocumentsPaginationHeader { offset, limit, total: total as usize };
+    let documents_stream = stream_documents(index, doc_ids, fields, retrieve_vectors);
+    let response_stream = StreamedJsonObject::new(header, documents_stream);
+
+    debug!(returns = "[streaming documents]", "Get documents");
+    Ok(HttpResponse::Ok().streaming(response_stream))
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -1844,18 +1855,16 @@ fn some_documents<'a, 't: 'a>(
     }))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn retrieve_documents<S: AsRef<str>>(
+/// Resolve filtered/sorted document IDs for a page without materializing full documents.
+fn retrieve_document_ids(
     index: &Index,
     rtxn: &RoTxn,
     offset: usize,
     limit: usize,
     ids: Option<Vec<ExternalDocumentId>>,
     filter: Option<IndexFilter>,
-    attributes_to_retrieve: Option<Vec<S>>,
-    retrieve_vectors: RetrieveVectors,
     sort_criteria: Option<Vec<AscDesc>>,
-) -> Result<(u64, Vec<Document>), ResponseError> {
+) -> Result<(u64, Vec<DocumentId>), ResponseError> {
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
         let mut candidates = RoaringBitmap::new();
@@ -1879,35 +1888,38 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let (it, number_of_documents) = if let Some(sort) = sort_criteria {
-        let number_of_documents = candidates.len();
+    let number_of_documents = candidates.len();
+    let doc_ids = if let Some(sort) = sort_criteria {
         let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
             documents.push(result?);
         }
-        (
-            itertools::Either::Left(some_documents(
-                index,
-                rtxn,
-                documents.into_iter(),
-                retrieve_vectors,
-            )?),
-            number_of_documents,
-        )
+        documents
     } else {
-        let number_of_documents = candidates.len();
-        (
-            itertools::Either::Right(some_documents(
-                index,
-                rtxn,
-                candidates.into_iter().skip(offset).take(limit),
-                retrieve_vectors,
-            )?),
-            number_of_documents,
-        )
+        candidates.into_iter().skip(offset).take(limit).collect()
     };
+
+    Ok((number_of_documents, doc_ids))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn retrieve_documents<S: AsRef<str>>(
+    index: &Index,
+    rtxn: &RoTxn,
+    offset: usize,
+    limit: usize,
+    ids: Option<Vec<ExternalDocumentId>>,
+    filter: Option<IndexFilter>,
+    attributes_to_retrieve: Option<Vec<S>>,
+    retrieve_vectors: RetrieveVectors,
+    sort_criteria: Option<Vec<AscDesc>>,
+) -> Result<(u64, Vec<Document>), ResponseError> {
+    let (number_of_documents, doc_ids) =
+        retrieve_document_ids(index, rtxn, offset, limit, ids, filter, sort_criteria)?;
+
+    let it = some_documents(index, rtxn, doc_ids, retrieve_vectors)?;
 
     let documents: Vec<_> = it
         .map(|document| {

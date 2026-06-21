@@ -40,6 +40,7 @@ file-store = { path = "../file-store" }
 flate2 = "1.1.9"
 futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
 futures-util = "0.3.32"
+flume = { version = "0.11.1", default-features = false, features = ["async"] }
 index-scheduler = { path = "../index-scheduler" }
 http-client = { path = "../http-client" }
 indexmap = { version = "2.12.0", features = ["serde"] }
@@ -168,3 +169,4 @@ turkish = ["meilisearch-types/turkish"]
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.4.1/build.zip"
 sha1 = "c4de9bfd4bd4ddb87a62cbe00a4150bdf0b6f9d1"
+
