@@ -20,17 +20,9 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "filterableAttributes": [
-            "genres",
-            "release_date"
-          ],
-          "searchableAttributes": [
-            "title",
-            "overview"
-          ],
-          "sortableAttributes": [
-            "release_date"
-          ],
+          "filterableAttributes": ["genres", "release_date"],
+          "searchableAttributes": ["title", "overview"],
+          "sortableAttributes": ["release_date"],
           "searchCutoffMs": 200000000
         }
       },
@@ -95,9 +87,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -173,9 +163,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -256,9 +244,7 @@
         "source": "release",
         "version": "1.35.1",
         "edition": "community",
-        "extraCliArgs": [
-          "--experimental-dumpless-upgrade"
-        ]
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
@@ -278,17 +264,9 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "filterableAttributes": [
-            "genres",
-            "release_date"
-          ],
-          "searchableAttributes": [
-            "title",
-            "overview"
-          ],
-          "sortableAttributes": [
-            "release_date"
-          ],
+          "filterableAttributes": ["genres", "release_date"],
+          "searchableAttributes": ["title", "overview"],
+          "sortableAttributes": ["release_date"],
           "embedders": {
             "default": {
               "source": "huggingFace",
@@ -335,9 +313,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -387,9 +363,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -475,9 +449,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -523,9 +495,151 @@
     },
     {
       "binary": {
-        "description": "last version without ranking score breakings",
+        "description": "apply the upgrade, no update task",
         "source": "release",
         "version": "1.47.0",
+        "edition": "community",
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+      }
+    },
+    {
+      "description": "wait for upgrade task to complete",
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "binary": {
+        "description": "version that breaks scores, register them again, no update task",
+        "source": "release",
+        "version": "1.48.0",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "description": "register results for the index using hannoy",
+      "route": "indexes/movies-hannoy/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "attributesToRetrieve": ["id"],
+          "hybrid": {
+            "embedder": "default",
+            "semanticRatio": 1.0
+          },
+          "limit": 5,
+          "q": "Police",
+          "showRankingScore": true
+        }
+      },
+      "register": {
+        "hitHannoy0": "/hits/0/id",
+        "hitHannoy1": "/hits/1/id",
+        "hitHannoy2": "/hits/2/id",
+        "hitHannoy3": "/hits/3/id",
+        "hitHannoy4": "/hits/4/id",
+        "hitHannoy0score": "/hits/0/_rankingScore",
+        "hitHannoy1score": "/hits/1/_rankingScore",
+        "hitHannoy2score": "/hits/2/_rankingScore",
+        "hitHannoy3score": "/hits/3/_rankingScore",
+        "hitHannoy4score": "/hits/4/_rankingScore"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "description": "upgrade to v1.48.0",
+        "source": "release",
+        "version": "1.48.0",
+        "edition": "community",
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+      }
+    },
+    {
+      "description": "wait for upgrade task to complete",
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "binary": {
+        "description": "current binary migrates arroy indexes to hannoy indexes, no upgrade task",
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "description": "results didn't change for arroy index because no upgrade",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "attributesToRetrieve": ["id"],
+          "hybrid": {
+            "embedder": "default",
+            "semanticRatio": 1.0
+          },
+          "limit": 5,
+          "q": "Police",
+          "showRankingScore": true
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 99,
+        "hits": [
+          {
+            "_rankingScore": "{{ hitHannoy0score }}",
+            "id": "{{ hitHannoy0 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy1score }}",
+            "id": "{{ hitHannoy1 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy2score }}",
+            "id": "{{ hitHannoy2 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy3score }}",
+            "id": "{{ hitHannoy3 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy4score }}",
+            "id": "{{ hitHannoy4 }}"
+          }
+        ],
+        "limit": 5,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "Police",
+        "requestUid": "[uuid]",
+        "semanticHitCount": 5
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "description": "apply upgrade task",
+        "source": "build",
         "edition": "community",
         "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
@@ -547,9 +661,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -599,9 +711,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -652,10 +762,44 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "from": 6,
+        "from": 8,
         "limit": 20,
         "next": null,
         "results": [
+          {
+            "batchUid": 8,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.48.0",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 8
+          },
+          {
+            "batchUid": 7,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.47.0",
+              "upgradeTo": "v1.48.0"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 7
+          },
           {
             "batchUid": 6,
             "canceledBy": null,
@@ -704,18 +848,10 @@
                   "source": "huggingFace"
                 }
               },
-              "filterableAttributes": [
-                "genres",
-                "release_date"
-              ],
+              "filterableAttributes": ["genres", "release_date"],
               "searchCutoffMs": 200000000,
-              "searchableAttributes": [
-                "title",
-                "overview"
-              ],
-              "sortableAttributes": [
-                "release_date"
-              ]
+              "searchableAttributes": ["title", "overview"],
+              "sortableAttributes": ["release_date"]
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -790,18 +926,10 @@
             "batchUid": 0,
             "canceledBy": null,
             "details": {
-              "filterableAttributes": [
-                "genres",
-                "release_date"
-              ],
+              "filterableAttributes": ["genres", "release_date"],
               "searchCutoffMs": 200000000,
-              "searchableAttributes": [
-                "title",
-                "overview"
-              ],
-              "sortableAttributes": [
-                "release_date"
-              ]
+              "searchableAttributes": ["title", "overview"],
+              "sortableAttributes": ["release_date"]
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -814,7 +942,7 @@
             "uid": 0
           }
         ],
-        "total": 7
+        "total": 9
       },
       "synchronous": "WaitForResponse"
     }
