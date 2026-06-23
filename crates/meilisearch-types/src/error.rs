@@ -197,6 +197,7 @@ macro_rules! make_error_codes {
 make_error_codes! {
 ApiKeyAlreadyExists                            , InvalidRequest       , CONFLICT ;
 ApiKeyNotFound                                 , InvalidRequest       , NOT_FOUND ;
+IndexScopedApiKeyWithGlobalAction              , InvalidRequest       , BAD_REQUEST ;
 BadParameter                                   , InvalidRequest       , BAD_REQUEST;
 BadRequest                                     , InvalidRequest       , BAD_REQUEST;
 DatabaseSizeLimitReached                       , Internal             , INTERNAL_SERVER_ERROR;

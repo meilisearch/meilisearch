@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::ALL_ACTIONS;
+use crate::auth::authorization::ALL_INDEX_SCOPED_ACTIONS;
 use crate::common::{Server, Value};
 use crate::json;
 
@@ -192,7 +193,7 @@ static SINGLE_REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
         }),
         json!({
             "indexes": ["sales"],
-            "actions": ALL_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
+            "actions": ALL_INDEX_SCOPED_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
             "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         // bad index
@@ -224,7 +225,7 @@ static BOTH_REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
         }),
         json!({
             "indexes": ["sales", "products"],
-            "actions": ALL_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
+            "actions": ALL_INDEX_SCOPED_ACTIONS.iter().cloned().filter(|a| *a != "search" && *a != "*").collect::<Vec<_>>(),
             "expiresAt": (OffsetDateTime::now_utc() + Duration::days(1)).format(&Rfc3339).unwrap()
         }),
         // bad index
