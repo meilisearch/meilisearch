@@ -159,6 +159,8 @@ pub struct SearchQueryGet {
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
     ///
     /// Supported value types are string, number, array, and object.
+    ///
+    /// Note: highlights matches within all listed attributes, even those not in `searchableAttributes`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_highlight: Option<CS<String>>,
@@ -180,7 +182,7 @@ pub struct SearchQueryGet {
     ///
     /// This is useful when you need custom highlighting.
     ///
-    /// Note that positions are given in bytes, not characters.
+    /// Note: reports match positions in all attributes, even non-searchable ones. Positions are measured in bytes, not characters.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     #[param(required = false, value_type = bool)]
     show_matches_position: Param<bool>,
@@ -486,6 +488,10 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with POST route](/docs/reference/api/search/search-with-post) in the Meilisearch API.
+///
+/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+///
+/// **Note:** The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
@@ -783,6 +789,8 @@ pub(crate) async fn search(
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with GET route](/docs/reference/api/search/search-with-get) in the Meilisearch API.
+///
+/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(

@@ -54,6 +54,13 @@ pub struct CreateApiKey {
     /// `*` character can be used as a wildcard when located at the last
     /// position. e.g. `documents.*` to authorize access on all documents
     /// endpoints.
+    ///
+    /// Valid actions include: `search`, `documents.add`,
+    /// `documents.get`, `documents.delete`, `indexes.create`, `indexes.get`,
+    /// `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.get`,
+    /// `tasks.cancel`, `tasks.delete`, `settings.get`, `settings.update`,
+    /// `stats.get`, `dumps.create`, `snapshots.create`, `version`, `keys.get`,
+    /// `keys.create`, `keys.update`, `keys.delete`. Use `*` to grant all actions.
     #[request(
         required,
         example = json!(["documents.add"]),
@@ -74,7 +81,8 @@ pub struct CreateApiKey {
     )]
     pub indexes: Vec<IndexUidPattern>,
     /// Represent the expiration date and time as RFC 3339 format. `null`
-    /// equals to no expiration time.
+    /// equals to no expiration time. Set to `null` to create a key that never
+    /// expires. Once a key is past its expiry date, using it returns an error.
     #[request(required,
         error = DeserrJsonError<InvalidApiKeyExpiresAt>,
         try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError,

@@ -39,6 +39,13 @@ pub struct ApiKeyApi;
 /// Create API key
 ///
 /// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
+///
+/// **Required fields:** `actions`, `indexes`, `expiresAt`.
+/// **Optional fields:** `name`, `description`, `uid`.
+///
+/// Set `expiresAt` to `null` to create a key that never expires.
+/// Use `"*"` in the `actions` array to grant all permissions (not recommended for production).
+/// Use `["*"]` in the `indexes` array to grant access to all indexes.
 #[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
@@ -117,6 +124,9 @@ impl ListApiKeys {
 /// List API keys
 ///
 /// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
+///
+/// **Note:** Expired keys are included in the response but deleted keys are not.
+/// Keys are returned in descending order of creation date.
 #[routes::path(
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),
@@ -255,6 +265,9 @@ pub async fn get_api_key(
 /// Update the name and description of an API key.
 ///
 /// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
+///
+/// **Note:** Only `name` and `description` can be updated. The fields `actions`, `indexes`,
+/// `expiresAt`, and `uid` cannot be modified after key creation.
 #[routes::path(
     security(("Bearer" = ["keys.update", "keys.*", "*"])),
     params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
