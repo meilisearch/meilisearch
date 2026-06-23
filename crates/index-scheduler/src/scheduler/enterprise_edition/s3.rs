@@ -467,7 +467,13 @@ async fn multipart_stream_to_s3(
 
             let mut buffer = match buffer.try_into_mut() {
                 Ok(buffer) => buffer,
-                Err(_) => unreachable!("All bytes references were consumed in the task"),
+                Err(_) => {
+                    // There could be a race condition where the body is dropped after the task is completed.
+                    // That is a known issue with the tokio runtime: When a task is completed, the tokio runtime
+                    // drops the task body after having informed that the task is done. In this case, we fallback
+                    // on creating a new buffer instead of using the one that was dropped.
+                    BytesMut::with_capacity(s3_multipart_part_size as usize)
+                }
             };
             buffer.clear();
             buffer
