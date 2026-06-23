@@ -1550,36 +1550,36 @@ async fn remote_sharding_federated_auto_search() {
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
-    {
-      "self": "ms0",
-      "remotes": {},
-      "shards": {},
-      "leader": null,
-      "version": "[version]"
-    }
-    "###);
+  {
+    "self": "ms0",
+    "remotes": {},
+    "shards": {},
+    "leader": null,
+    "version": "[version]"
+  }
+  "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
-    {
-      "self": "ms1",
-      "remotes": {},
-      "shards": {},
-      "leader": null,
-      "version": "[version]"
-    }
-    "###);
+  {
+    "self": "ms1",
+    "remotes": {},
+    "shards": {},
+    "leader": null,
+    "version": "[version]"
+  }
+  "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
-    {
-      "self": "ms2",
-      "remotes": {},
-      "shards": {},
-      "leader": null,
-      "version": "[version]"
-    }
-    "###);
+  {
+    "self": "ms2",
+    "remotes": {},
+    "shards": {},
+    "leader": null,
+    "version": "[version]"
+  }
+  "###);
 
     // add documents
     let documents = SCORE_DOCUMENTS.clone();
@@ -1645,195 +1645,195 @@ async fn remote_sharding_federated_auto_search() {
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
-    {
-      "hits": [
-        {
-          "title": "Badman",
-          "id": "E",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 0,
-            "weightedRankingScore": 1.0,
-            "remote": "ms2"
-          }
-        },
-        {
-          "title": "Batman Returns",
-          "id": "C",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.9242424242424242,
-            "remote": "ms1"
-          }
-        },
-        {
-          "title": "Batman the dark knight returns: Part 1",
-          "id": "A",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.8787878787878788,
-            "remote": "ms0"
-          }
-        },
-        {
-          "title": "Batman the dark knight returns: Part 2",
-          "id": "B",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.8787878787878788,
-            "remote": "ms0"
-          }
-        },
-        {
-          "title": "Batman",
-          "id": "D",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 0,
-            "weightedRankingScore": 0.4621212121212121,
-            "remote": "ms2"
-          }
+  {
+    "hits": [
+      {
+        "title": "Badman",
+        "id": "E",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 0,
+          "weightedRankingScore": 1.0,
+          "remote": "ms2"
         }
-      ],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 5,
-      "requestUid": "[uuid]",
-      "remoteErrors": {}
-    }
-    "###);
+      },
+      {
+        "title": "Batman Returns",
+        "id": "C",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.9242424242424242,
+          "remote": "ms1"
+        }
+      },
+      {
+        "title": "Batman the dark knight returns: Part 1",
+        "id": "A",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.8787878787878788,
+          "remote": "ms0"
+        }
+      },
+      {
+        "title": "Batman the dark knight returns: Part 2",
+        "id": "B",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.8787878787878788,
+          "remote": "ms0"
+        }
+      },
+      {
+        "title": "Batman",
+        "id": "D",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 0,
+          "weightedRankingScore": 0.4621212121212121,
+          "remote": "ms2"
+        }
+      }
+    ],
+    "processingTimeMs": "[time]",
+    "limit": 20,
+    "offset": 0,
+    "estimatedTotalHits": 5,
+    "requestUid": "[uuid]",
+    "remoteErrors": {}
+  }
+  "###);
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
-    {
-      "hits": [
-        {
-          "title": "Badman",
-          "id": "E",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 0,
-            "weightedRankingScore": 1.0,
-            "remote": "ms2"
-          }
-        },
-        {
-          "title": "Batman Returns",
-          "id": "C",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.9242424242424242,
-            "remote": "ms1"
-          }
-        },
-        {
-          "title": "Batman the dark knight returns: Part 1",
-          "id": "A",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.8787878787878788,
-            "remote": "ms0"
-          }
-        },
-        {
-          "title": "Batman the dark knight returns: Part 2",
-          "id": "B",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.8787878787878788,
-            "remote": "ms0"
-          }
-        },
-        {
-          "title": "Batman",
-          "id": "D",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 0,
-            "weightedRankingScore": 0.4621212121212121,
-            "remote": "ms2"
-          }
+  {
+    "hits": [
+      {
+        "title": "Badman",
+        "id": "E",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 0,
+          "weightedRankingScore": 1.0,
+          "remote": "ms2"
         }
-      ],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 5,
-      "requestUid": "[uuid]",
-      "remoteErrors": {}
-    }
-    "###);
+      },
+      {
+        "title": "Batman Returns",
+        "id": "C",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.9242424242424242,
+          "remote": "ms1"
+        }
+      },
+      {
+        "title": "Batman the dark knight returns: Part 1",
+        "id": "A",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.8787878787878788,
+          "remote": "ms0"
+        }
+      },
+      {
+        "title": "Batman the dark knight returns: Part 2",
+        "id": "B",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.8787878787878788,
+          "remote": "ms0"
+        }
+      },
+      {
+        "title": "Batman",
+        "id": "D",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 0,
+          "weightedRankingScore": 0.4621212121212121,
+          "remote": "ms2"
+        }
+      }
+    ],
+    "processingTimeMs": "[time]",
+    "limit": 20,
+    "offset": 0,
+    "estimatedTotalHits": 5,
+    "requestUid": "[uuid]",
+    "remoteErrors": {}
+  }
+  "###);
     let (response, _status_code) = ms2.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
-    {
-      "hits": [
-        {
-          "title": "Badman",
-          "id": "E",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 0,
-            "weightedRankingScore": 1.0,
-            "remote": "ms2"
-          }
-        },
-        {
-          "title": "Batman Returns",
-          "id": "C",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.9242424242424242,
-            "remote": "ms1"
-          }
-        },
-        {
-          "title": "Batman the dark knight returns: Part 1",
-          "id": "A",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.8787878787878788,
-            "remote": "ms0"
-          }
-        },
-        {
-          "title": "Batman the dark knight returns: Part 2",
-          "id": "B",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.8787878787878788,
-            "remote": "ms0"
-          }
-        },
-        {
-          "title": "Batman",
-          "id": "D",
-          "_federation": {
-            "indexUid": "test",
-            "queriesPosition": 0,
-            "weightedRankingScore": 0.4621212121212121,
-            "remote": "ms2"
-          }
+  {
+    "hits": [
+      {
+        "title": "Badman",
+        "id": "E",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 0,
+          "weightedRankingScore": 1.0,
+          "remote": "ms2"
         }
-      ],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 5,
-      "requestUid": "[uuid]",
-      "remoteErrors": {}
-    }
-    "###);
+      },
+      {
+        "title": "Batman Returns",
+        "id": "C",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.9242424242424242,
+          "remote": "ms1"
+        }
+      },
+      {
+        "title": "Batman the dark knight returns: Part 1",
+        "id": "A",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.8787878787878788,
+          "remote": "ms0"
+        }
+      },
+      {
+        "title": "Batman the dark knight returns: Part 2",
+        "id": "B",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 1,
+          "weightedRankingScore": 0.8787878787878788,
+          "remote": "ms0"
+        }
+      },
+      {
+        "title": "Batman",
+        "id": "D",
+        "_federation": {
+          "indexUid": "test",
+          "queriesPosition": 0,
+          "weightedRankingScore": 0.4621212121212121,
+          "remote": "ms2"
+        }
+      }
+    ],
+    "processingTimeMs": "[time]",
+    "limit": 20,
+    "offset": 0,
+    "estimatedTotalHits": 5,
+    "requestUid": "[uuid]",
+    "remoteErrors": {}
+  }
+  "###);
 }
 
 #[actix_rt::test]
@@ -6782,7 +6782,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
 
     let (response, code) = index0.search_post(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".hits.*._federation.remote" => "[remote]"  }), @r###"
     {
       "hits": [
         {
@@ -6827,7 +6827,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
     "###);
     let (response, code) = index1.search_post(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".hits.*._federation.remote" => "[remote]" }), @r###"
     {
       "hits": [
         {
@@ -6880,7 +6880,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
 
     let (response, code) = index0.search_post(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".hits.*._federation.remote" => "[remote]" }), @r###"
     {
       "hits": [
         {
@@ -6915,7 +6915,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
     "###);
     let (response, code) = index1.search_post(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".hits.*._federation.remote" => "[remote]" }), @r###"
     {
       "hits": [
         {
