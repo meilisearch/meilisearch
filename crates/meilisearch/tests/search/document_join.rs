@@ -981,7 +981,7 @@ async fn foreign_filter_on_non_filterable_attribute() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n_foreign(author, id = a1)",
+      "message": "Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n2:8 \"author\" IN [\"a1\"]",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -992,7 +992,7 @@ async fn foreign_filter_on_non_filterable_attribute() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Inside `.queries[0]`: Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n_foreign(author, id = a1)",
+      "message": "Inside `.queries[0]`: Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n2:8 \"author\" IN [\"a1\"]",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

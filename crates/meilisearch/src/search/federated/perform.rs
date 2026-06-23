@@ -23,7 +23,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, Deadline,
-    DocumentId, FederatingResultsStep, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET,
+    DocumentId, FederatingResultsStep, OrderBy, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -171,15 +171,18 @@ pub async fn perform_federated_search(
 
     let mut federation = federation;
     let mut partition = None;
-    for (query_index, (federated_query, filter)) in
+    for (query_index, (mut federated_query, filter)) in
         queries.into_iter().zip(precomputed_filters.into_iter()).enumerate()
     {
+        // Insert back the filter into the query as a string before sending it to the remote
+        federated_query.filter = filter.as_ref().map(|f| {
+            serde_json::Value::String(serialize_index_filter_to_filter_string(f).unwrap())
+        });
         partitioned_queries
             .partition(
                 &mut federation,
                 federated_query,
                 &mut partition,
-                filter,
                 query_index,
                 &network,
                 features,
@@ -501,7 +504,6 @@ pub async fn perform_federated_search(
 
 struct QueryByIndex {
     query: SearchQuery,
-    filter: Option<IndexFilter<'static>>,
     weight: Weight,
     query_index: usize,
 }
@@ -1034,7 +1036,6 @@ impl PartitionedQueries {
         federation: &mut Federation,
         mut federated_query: SearchQueryWithIndex,
         partition: &mut Option<Partition>,
-        precomputed_filter: Option<IndexFilter>,
         query_index: usize,
         network: &Network,
         features: RoFeatures,
@@ -1068,11 +1069,6 @@ impl PartitionedQueries {
         if federated_query.has_distinct() && federation.distinct.is_some() {
             return Err(MeilisearchHttpError::DistinctInFederatedQueryAndFederation.into());
         }
-
-        // Insert back the filter into the query as a string before sending it to the remote
-        federated_query.filter = precomputed_filter.as_ref().map(|f| {
-            serde_json::Value::String(serialize_index_filter_to_filter_string(f).unwrap())
-        });
 
         let (index_uid, query, federation_options);
         let queries = if federated_query.must_use_network(network, &features)? {
@@ -1145,7 +1141,6 @@ impl PartitionedQueries {
 
                 queries_by_index.push(QueryByIndex {
                     query,
-                    filter: precomputed_filter.as_ref().map(|f| f.clone().into_owned()),
                     weight: federation_options.weight,
                     // override query index here with the one in federation.
                     // this will fix-up error messages to refer to the global query index of the original request.
@@ -1406,7 +1401,7 @@ impl SearchByIndex {
                 Default::default()
             };
 
-        for QueryByIndex { query, weight, query_index, filter } in queries {
+        for QueryByIndex { query, weight, query_index } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
             let res: Result<(), ResponseError> = (|| {
                 let search_kind =
@@ -1478,7 +1473,7 @@ impl SearchByIndex {
                     &index,
                     &rtxn,
                     &query,
-                    filter,
+                    None,
                     &search_kind,
                     // clones of `Deadline` share the deadline rather than restart it
                     deadline.clone(),
