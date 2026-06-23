@@ -522,11 +522,12 @@ impl Action {
             Action::All => IndexScope::MultipleScope,
             Action::AllGet => IndexScope::MultipleScope,
 
-            // documents are all index-scoped
-            Action::DocumentsAll
-            | Action::DocumentsGet
-            | Action::DocumentsAdd
-            | Action::DocumentsDelete => IndexScope::ControllerChecksIndex,
+            Action::DocumentsAll => IndexScope::MultipleScope,
+            // used by render-template which is not index scoped
+            Action::DocumentsGet => IndexScope::RouteHandlerChecksIndex,
+
+            // remaining documents are index-scoped
+            Action::DocumentsAdd | Action::DocumentsDelete => IndexScope::ControllerChecksIndex,
             // search is checked by route handler in the case of multi-search
             Action::Search => IndexScope::RouteHandlerChecksIndex,
 
@@ -549,10 +550,11 @@ impl Action {
             Action::TasksGet => IndexScope::RouteHandlerChecksIndex,
             Action::TasksCompact => IndexScope::DenyIndexScope,
 
-            // settings are always scoped
-            Action::SettingsAll | Action::SettingsGet | Action::SettingsUpdate => {
-                IndexScope::ControllerChecksIndex
-            }
+            // settings.get is handler-checked, as required by render-template
+            Action::SettingsGet => IndexScope::RouteHandlerChecksIndex,
+            Action::SettingsAll => IndexScope::MultipleScope,
+            // remaining settings are index scoped
+            Action::SettingsUpdate => IndexScope::ControllerChecksIndex,
 
             // stats are always supported global
             Action::StatsAll => IndexScope::RouteHandlerChecksIndex,
