@@ -53,7 +53,7 @@ use crate::search::federated::types::{
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
-    parse_filter, NetworkableQuery as _, ShowFederationInfo, DEFAULT_SEARCH_LIMIT,
+    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, DEFAULT_SEARCH_LIMIT,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -170,6 +170,7 @@ pub async fn perform_federated_search(
     let mut partitioned_queries = PartitionedQueries::new();
 
     let mut federation = federation;
+    let mut partition = None;
     for (query_index, (federated_query, filter)) in
         queries.into_iter().zip(precomputed_filters.into_iter()).enumerate()
     {
@@ -177,6 +178,7 @@ pub async fn perform_federated_search(
             .partition(
                 &mut federation,
                 federated_query,
+                &mut partition,
                 filter,
                 query_index,
                 &network,
@@ -1031,6 +1033,7 @@ impl PartitionedQueries {
         &mut self,
         federation: &mut Federation,
         mut federated_query: SearchQueryWithIndex,
+        partition: &mut Option<Partition>,
         precomputed_filter: Option<IndexFilter>,
         query_index: usize,
         network: &Network,
@@ -1066,7 +1069,10 @@ impl PartitionedQueries {
             return Err(MeilisearchHttpError::DistinctInFederatedQueryAndFederation.into());
         }
 
-        let mut partition = None;
+        // Insert back the filter into the query as a string before sending it to the remote
+        federated_query.filter = precomputed_filter.as_ref().map(|f| {
+            serde_json::Value::String(serialize_index_filter_to_filter_string(f).unwrap())
+        });
 
         let (index_uid, query, federation_options);
         let queries = if federated_query.must_use_network(network, &features)? {
@@ -1085,7 +1091,7 @@ impl PartitionedQueries {
         };
 
         for federated_query in queries {
-            let (index_uid, mut query, federation_options) =
+            let (index_uid, query, federation_options) =
                 federated_query.into_index_query_federation();
 
             let federation_options = federation_options.unwrap_or_default();
@@ -1113,13 +1119,6 @@ impl PartitionedQueries {
                                         meilisearch_types::error::Code::InvalidMultiSearchRemote,
                                     ));
                                 };
-
-                                // Insert back the filter into the query as a string before sending it to the remote
-                                query.filter = precomputed_filter.as_ref().map(|f| {
-                                    serde_json::Value::String(
-                                        serialize_index_filter_to_filter_string(f).unwrap(),
-                                    )
-                                });
 
                                 let query = SearchQueryWithIndex::from_index_query_federation(
                                     index_uid,
