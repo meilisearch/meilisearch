@@ -299,7 +299,7 @@ async fn access_authorized_restricted_index() {
 
             let content = json!({
                 "indexes": ["products"],
-                "actions": actions,
+                "actions": action,
                 "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
             });
 
@@ -318,13 +318,13 @@ async fn access_authorized_restricted_index() {
                 if matches!(route_policy, IndexScopePolicy::Allow) {
                     assert_ne!(
                         response,
-                        INVALID_RESPONSE.clone(),
-                        "on route: {:?} - {:?} with action: {:?}",
+                        INVALID_ROUTE_POLICY_RESPONSE.clone(),
+                        "on route: {:?} - {:?} with actions: {:?}",
                         method,
                         route,
                         action
                     );
-                    assert_ne!(code, 403);
+                    assert_ne!(code, 403,);
 
                     // it is possible to call this action with the all_actions API key
                     server.use_api_key(&all_actions_key);
@@ -334,7 +334,7 @@ async fn access_authorized_restricted_index() {
                     assert_ne!(
                         response,
                         INVALID_RESPONSE.clone(),
-                        "on route: {:?} - {:?} with action: {:?}",
+                        "on route: {:?} - {:?} with actions: {:?}",
                         method,
                         route,
                         action
@@ -360,7 +360,7 @@ async fn access_authorized_restricted_index() {
                     assert_eq!(
                         response,
                         INVALID_ROUTE_POLICY_RESPONSE.clone(),
-                        "on route: {:?} - {:?} with action: {:?}",
+                        "on route: {:?} - {:?} with actions: {:?}",
                         method,
                         route,
                         action
