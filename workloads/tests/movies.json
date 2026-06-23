@@ -25,11 +25,17 @@
           ],
           "searchableAttributes": [
             "title",
-            "overview"
+            "overview",
+            "genres"
           ],
           "sortableAttributes": [
             "release_date"
-          ]
+          ],
+          "typoTolerance": {
+            "disableOnAttributes": [
+              "genres"
+            ]
+          }
         }
       },
       "expectedStatus": 202,
