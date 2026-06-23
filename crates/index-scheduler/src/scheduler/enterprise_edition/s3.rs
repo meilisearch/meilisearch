@@ -509,15 +509,18 @@ async fn multipart_stream_to_s3(
 
         let body = buffer.freeze();
         tracing::trace!("Sending part {part_number}");
-        let task = tokio::spawn({
-            let client = client.clone();
+        let request = client.put(url).prepare({
             let body = body.clone();
+            |inner| inner.body(body)
+        });
+
+        let task = tokio::spawn({
             backoff::future::retry(retry_backoff.clone(), move || {
-                let client = client.clone();
-                let url = url.clone();
-                let body = body.clone();
-                async move {
-                    match client.put(url).prepare(|inner| inner.body(body)).send().await {
+                // safety: it fails only with stream body
+                let request = request.try_clone().unwrap();
+                let request = request.send();
+                async {
+                    match request.await {
                         Ok(resp) if resp.status().is_client_error() => resp
                             .error_for_status()
                             .map_err(http_client::reqwest::Error::from)
@@ -528,6 +531,7 @@ async fn multipart_stream_to_s3(
                 }
             })
         });
+
         in_flight.push_back((task, body));
     }
 
