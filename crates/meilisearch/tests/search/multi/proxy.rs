@@ -6792,7 +6792,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms0"
+            "remote": "[remote]"
           }
         },
         {
@@ -6802,7 +6802,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms0"
+            "remote": "[remote]"
           }
         },
         {
@@ -6812,7 +6812,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms1"
+            "remote": "[remote]"
           }
         }
       ],
@@ -6837,7 +6837,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms1"
+            "remote": "[remote]"
           }
         },
         {
@@ -6847,7 +6847,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms0"
+            "remote": "[remote]"
           }
         },
         {
@@ -6857,7 +6857,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms0"
+            "remote": "[remote]"
           }
         }
       ],
@@ -6890,7 +6890,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms0"
+            "remote": "[remote]"
           }
         },
         {
@@ -6900,7 +6900,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms1"
+            "remote": "[remote]"
           }
         }
       ],
@@ -6925,7 +6925,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms1"
+            "remote": "[remote]"
           }
         },
         {
@@ -6935,7 +6935,7 @@ async fn remote_auto_sharding_auto_search_apostrophe_catastrophe() {
             "indexUid": "test",
             "queriesPosition": 0,
             "weightedRankingScore": 1.0,
-            "remote": "ms0"
+            "remote": "[remote]"
           }
         }
       ],
