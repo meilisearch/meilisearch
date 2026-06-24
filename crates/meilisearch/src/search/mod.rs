@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
-use index_scheduler::filter::{filter_into_index_filter, parse_filter, parse_local_index_filter};
+use index_scheduler::filter::{filter_into_index_filter, parse_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -1724,12 +1724,7 @@ pub fn prepare_search<'t>(
     search.offset(offset);
     search.limit(limit);
 
-    // HOTFIX @many: fallback to the filter from the query if the parsed filter is not provided
-    if let Some(filter) = filter {
-        search.filter(Some(filter));
-    } else if let Some(filter) = query.filter.as_ref() {
-        search.filter(parse_local_index_filter(filter, None, features, Code::InvalidSearchFilter)?);
-    }
+    search.filter(filter);
 
     if let Some(ref sort) = query.sort {
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {

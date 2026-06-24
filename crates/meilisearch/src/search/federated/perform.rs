@@ -1469,11 +1469,22 @@ impl SearchByIndex {
 
                 let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
+                let filter = if let Some(filter) = query.filter.as_ref() {
+                    parse_local_index_filter(
+                        filter,
+                        Some(index_uid.as_str()),
+                        params.features,
+                        Code::InvalidSearchFilter,
+                    )?
+                } else {
+                    None
+                };
+
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
                     &query,
-                    None,
+                    filter,
                     &search_kind,
                     // clones of `Deadline` share the deadline rather than restart it
                     deadline.clone(),
