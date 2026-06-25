@@ -50,7 +50,8 @@ use crate::extractors::authentication::GuardedData;
                     "system": "My super system prompt",
                     "searchDescription": "My super search tool description",
                     "searchQParam": "My awesome q search parameter description",
-                    "searchIndexUidParam": "My incredible index uid param description"
+                    "searchIndexUidParam": "My incredible index uid param description",
+                    "searchFilterParam": "My filter parameter description"
                 }
             }
         )),
