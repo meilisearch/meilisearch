@@ -2,12 +2,16 @@ use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Not as _;
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
-use index_scheduler::filter::{filter_into_index_filter, parse_filter};
+use index_scheduler::filter::{
+    filter_into_index_filter, filters_into_index_filters, parse_filter,
+    retrieve_foreign_keys_settings, SourceIndexUid,
+};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -23,8 +27,8 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    AttributeState, Deadline, FacetValueHit, IndexFilter, InternalError, OrderBy, PatternMatch,
-    SearchForFacetValues, SearchStep,
+    filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
+    OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -2503,6 +2507,7 @@ pub fn perform_similar(
     index_uid: IndexUid,
     query: SimilarQuery,
     progress: &Progress,
+    search_rules: Option<IndexSearchRules>,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let features = index_scheduler.features();
@@ -2534,6 +2539,30 @@ pub fn perform_similar(
         Route::Similar,
     )?;
 
+    let docid_filter = search_rules.and_then(|search_rules| search_rules.filter);
+    let docid_filter = docid_filter
+        .as_ref()
+        .map(|docid_filter| {
+            parse_filter(
+                docid_filter,
+                Code::InvalidSimilarFilter,
+                features,
+                Some(index_uid.as_str()),
+            )
+        })
+        .transpose()?
+        .flatten();
+
+    let candidates_filter = filter
+        .as_ref()
+        .and_then(|filter| {
+            parse_filter(filter, Code::InvalidSimilarFilter, features, None).transpose()
+        })
+        .transpose()?;
+
+    let (docid_filter, candidates_filter) =
+        extract_filters(index_scheduler, index_uid, progress, docid_filter, candidates_filter)?;
+
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
         ResponseError::from_msg(msg, Code::InvalidSimilarId)
@@ -2548,6 +2577,14 @@ pub fn perform_similar(
         ));
     };
 
+    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, progress)?;
+    if docid_universe.contains(internal_id).not() {
+        return Err(ResponseError::from_msg(
+            MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
+            Code::NotFoundSimilarId,
+        ));
+    }
+
     let mut similar = milli::Similar::new(
         internal_id,
         offset,
@@ -2560,18 +2597,8 @@ pub fn perform_similar(
         progress,
     );
 
-    if let Some(ref filter) = filter {
-        if let Some(filter) = parse_filter(filter, Code::InvalidSimilarFilter, features, None)? {
-            let filter = filter_into_index_filter(
-                filter,
-                &index,
-                &rtxn,
-                index_scheduler,
-                progress,
-                &index_uid,
-            )?;
-            similar.filter(filter);
-        }
+    if let Some(filter) = candidates_filter {
+        similar.filter(filter);
     }
 
     if let Some(ranking_score_threshold) = ranking_score_threshold {
@@ -2638,6 +2665,33 @@ pub fn perform_similar(
         performance_details,
     };
     Ok(result)
+}
+
+fn extract_filters<'a>(
+    index_scheduler: &IndexScheduler,
+    index_uid: IndexUid,
+    progress: &Progress,
+    docid_filter: Option<Filter<'a>>,
+    candidates_filter: Option<Filter<'a>>,
+) -> Result<(Option<IndexFilter<'a>>, Option<IndexFilter<'a>>), ResponseError> {
+    let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
+    let foreign_keys_settings =
+        retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;
+    let (docid_filter, candidates_filter) = match filters_into_index_filters(
+        vec![
+            (source_index_uid.clone(), docid_filter),
+            (source_index_uid.clone(), candidates_filter),
+        ],
+        &foreign_keys_settings,
+        index_scheduler,
+        progress,
+    )?
+    .as_mut_slice()
+    {
+        [docid_filter, candidates_filter] => (docid_filter.take(), candidates_filter.take()),
+        _ => unreachable!(),
+    };
+    Ok((docid_filter, candidates_filter))
 }
 
 pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {
