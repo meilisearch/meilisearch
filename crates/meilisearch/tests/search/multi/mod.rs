@@ -941,7 +941,7 @@ async fn federation_one_query_error() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `title` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\ntitle = toto",
+      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `title` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\n2:7 \"title\" = \"toto\"",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1010,7 +1010,7 @@ async fn federation_multiple_query_errors() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Index `SHARED_DOCUMENTS`: Attribute `color` is not filterable. Available filterable attribute patterns are: `id`, `title`.\ncolor = toto",
+      "message": "Inside `.queries[0]`: Index `SHARED_DOCUMENTS`: Attribute `color` is not filterable. Available filterable attribute patterns are: `id`, `title`.\n2:7 \"color\" = \"toto\"",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1057,7 +1057,7 @@ async fn federation_multiple_query_errors_interleaved() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `mother` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\nmother IN [intel, kefir]",
+      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `mother` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\n2:8 \"mother\" IN [\"intel\", \"kefir\"]",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

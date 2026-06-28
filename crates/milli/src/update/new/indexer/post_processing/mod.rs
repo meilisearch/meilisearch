@@ -39,7 +39,6 @@ pub(super) fn post_process(
     wtxn: &mut RwTxn<'_>,
     mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
     word_delta: &WordDelta,
-    exact_word_delta: &WordDelta,
     facet_field_ids_delta: FacetFieldIdsDelta,
 ) -> Result<()> {
     let index = indexing_context.index;
@@ -53,17 +52,9 @@ pub(super) fn post_process(
     )?;
     compute_facet_search_database(index, wtxn, global_fields_ids_map, indexing_context.progress)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
-    if let Some(prefix_data) =
-        compute_word_fst(index, wtxn, word_delta, exact_word_delta, indexing_context.progress)?
+    if let Some(prefix_data) = compute_word_fst(index, wtxn, word_delta, indexing_context.progress)?
     {
-        compute_prefix_database(
-            index,
-            wtxn,
-            word_delta,
-            exact_word_delta,
-            &prefix_data,
-            indexing_context.progress,
-        )?;
+        compute_prefix_database(index, wtxn, word_delta, &prefix_data, indexing_context.progress)?;
     }
 
     Ok(())
@@ -79,28 +70,15 @@ fn compute_prefix_database(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
-    exact_word_delta: &WordDelta,
     prefix_data: &PrefixData,
     progress: &Progress,
 ) -> Result<()> {
     progress.update_progress(PostProcessingWords::ComputePrefixes);
     let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
+    let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
+    let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
-    let tolerant_modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
-    let tolerant_deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
-
-    let exact_modified = compute_prefixes(&prefix_fst, exact_word_delta.added_or_modified_words())?;
-    let exact_deleted = compute_prefixes(&prefix_fst, exact_word_delta.deleted_words())?;
-
-    compute_prefix_database_from_sources(
-        index,
-        wtxn,
-        &tolerant_modified,
-        &tolerant_deleted,
-        &exact_modified,
-        &exact_deleted,
-        progress,
-    )
+    compute_prefix_database_from_sources(index, wtxn, &modified, &deleted, progress)
 }
 
 #[tracing::instrument(
@@ -112,173 +90,23 @@ fn compute_prefix_database(
 pub(crate) fn compute_prefix_database_from_sources(
     index: &Index,
     wtxn: &mut RwTxn,
-    tolerant_modified: &BTreeSet<MiniString>,
-    tolerant_deleted: &BTreeSet<MiniString>,
-    exact_modified: &BTreeSet<MiniString>,
-    exact_deleted: &BTreeSet<MiniString>,
+    modified: &BTreeSet<MiniString>,
+    deleted: &BTreeSet<MiniString>,
     progress: &Progress,
 ) -> Result<()> {
-    let mut modified_for_fid_prefixes = tolerant_modified.clone();
-    modified_for_fid_prefixes.extend(exact_modified.iter().cloned());
-    let mut deleted_for_fid_prefixes = tolerant_deleted.clone();
-    deleted_for_fid_prefixes.extend(exact_deleted.iter().cloned());
-
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    compute_word_prefix_docids(wtxn, index, tolerant_modified, tolerant_deleted)?;
+    compute_word_prefix_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
-    compute_exact_word_prefix_docids(wtxn, index, exact_modified, exact_deleted)?;
+    compute_exact_word_prefix_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixFieldIdDocids);
-    compute_word_prefix_fid_docids(
-        wtxn,
-        index,
-        &modified_for_fid_prefixes,
-        &deleted_for_fid_prefixes,
-    )?;
+    compute_word_prefix_fid_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixPositionDocids);
-    compute_word_prefix_position_docids(
-        wtxn,
-        index,
-        &modified_for_fid_prefixes,
-        &deleted_for_fid_prefixes,
-    )?;
+    compute_word_prefix_position_docids(wtxn, index, modified, deleted)?;
 
     Ok(())
-}
-
-/// Recompute the exact-word prefix databases from the exact-word docids database.
-///
-/// Rebuilds the prefix FST to include exact-word prefixes (using the same
-/// [`WordFstBuilder::register_exact_word_for_prefixes`] path as normal indexing), then
-/// repopulates [`Index::exact_word_prefix_docids`] from the updated FST.
-pub fn recompute_exact_word_prefix_docids_from_database(
-    index: &Index,
-    wtxn: &mut RwTxn,
-    progress: &Progress,
-) -> Result<()> {
-    let prefix_settings = index.prefix_settings(wtxn)?;
-    if prefix_settings.compute_prefixes != crate::index::PrefixSearch::IndexingTime {
-        return Ok(());
-    }
-
-    progress.update_progress(PostProcessingWords::ComputePrefixes);
-
-    // Collect exact words first so that we can release the borrow on `wtxn` before
-    // the FST builder needs exclusive access to write.
-    let mut exact_words: Vec<String> = Vec::new();
-    for result in index.exact_word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>() {
-        let (word, _) = result?;
-        exact_words.push(word.to_string());
-    }
-
-    // Build a new prefix FST that contains both tolerant-word prefixes (via drain of the
-    // existing words FST) and exact-word prefixes (registered explicitly).
-    // `FstMergerBuilder::build` drains all remaining entries from the existing FST through
-    // the prefix callback, so we do not need to re-register tolerant words manually.
-    let prefix_data = {
-        let words_fst = index.words_fst(wtxn)?;
-        let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-        word_fst_builder.with_prefix_settings(prefix_settings);
-        for word in &exact_words {
-            word_fst_builder.register_exact_word_for_prefixes(DelAdd::Addition, word.as_bytes())?;
-        }
-        word_fst_builder.build()?.1
-        // `words_fst` is dropped here, releasing the shared borrow on `wtxn`.
-    };
-
-    let Some(PrefixData { prefixes_fst_mmap }) = prefix_data else {
-        return Ok(());
-    };
-
-    // Persist the updated prefix FST (words FST is unchanged).
-    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_PREFIXES_FST_KEY, &prefixes_fst_mmap)?;
-
-    // Derive which exact prefixes changed and rebuild the docids database.
-    let prefix_fst = fst::Set::new(&prefixes_fst_mmap[..])?;
-    let exact_modified = compute_prefixes(&prefix_fst, exact_words.iter().map(|w| w.as_str()))?;
-    let exact_deleted = BTreeSet::new();
-
-    index.exact_word_prefix_docids.clear(wtxn)?;
-
-    compute_prefix_database_from_sources(
-        index,
-        wtxn,
-        &BTreeSet::new(),
-        &BTreeSet::new(),
-        &exact_modified,
-        &exact_deleted,
-        progress,
-    )
-}
-
-/// Rebuild the prefix FST and **all** prefix databases from the current word databases.
-///
-/// Used when prefix search transitions from `Disabled` to `IndexingTime` via a settings change.
-/// Unlike [`recompute_exact_word_prefix_docids_from_database`], this rebuilds the prefix FST
-/// from scratch (both tolerant and exact words) and repopulates every prefix database.
-pub(super) fn recompute_all_prefix_databases_from_database(
-    index: &Index,
-    wtxn: &mut RwTxn,
-    progress: &Progress,
-) -> Result<()> {
-    let prefix_settings = index.prefix_settings(wtxn)?;
-    if prefix_settings.compute_prefixes != crate::index::PrefixSearch::IndexingTime {
-        return Ok(());
-    }
-
-    progress.update_progress(PostProcessingWords::ComputePrefixes);
-
-    // Collect all words first to avoid holding borrows on `wtxn` while the FST builder runs.
-    let mut tolerant_words: Vec<String> = Vec::new();
-    for result in index.word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>() {
-        let (word, _) = result?;
-        tolerant_words.push(word.to_string());
-    }
-    let mut exact_words: Vec<String> = Vec::new();
-    for result in index.exact_word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>() {
-        let (word, _) = result?;
-        exact_words.push(word.to_string());
-    }
-
-    // Build a fresh prefix FST from both tolerant and exact words.
-    // We start from an empty FST because prefix search was previously disabled and the
-    // existing prefix FST (if any) is stale.
-    let prefix_data = {
-        let empty_fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
-        let mut word_fst_builder = WordFstBuilder::new(&empty_fst)?;
-        word_fst_builder.with_prefix_settings(prefix_settings);
-        for word in &tolerant_words {
-            word_fst_builder.register_word(DelAdd::Addition, word.as_bytes())?;
-        }
-        for word in &exact_words {
-            word_fst_builder.register_exact_word_for_prefixes(DelAdd::Addition, word.as_bytes())?;
-        }
-        word_fst_builder.build()?.1
-    };
-
-    let Some(PrefixData { prefixes_fst_mmap }) = prefix_data else {
-        return Ok(());
-    };
-
-    index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_PREFIXES_FST_KEY, &prefixes_fst_mmap)?;
-
-    let prefix_fst = fst::Set::new(&prefixes_fst_mmap[..])?;
-    let tolerant_modified =
-        compute_prefixes(&prefix_fst, tolerant_words.iter().map(|w| w.as_str()))?;
-    let exact_modified = compute_prefixes(&prefix_fst, exact_words.iter().map(|w| w.as_str()))?;
-    let deleted = BTreeSet::new();
-
-    compute_prefix_database_from_sources(
-        index,
-        wtxn,
-        &tolerant_modified,
-        &deleted,
-        &exact_modified,
-        &deleted,
-        progress,
-    )
 }
 
 /// The words must be sorted.
@@ -328,7 +156,6 @@ fn compute_word_fst(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
-    exact_word_delta: &WordDelta,
     progress: &Progress,
 ) -> Result<Option<PrefixData>> {
     progress.update_progress(PostProcessingWords::WordFst);
@@ -346,19 +173,6 @@ fn compute_word_fst(
             }
             Either::Right(deleted_word) => {
                 word_fst_builder.register_word(DelAdd::Deletion, deleted_word.as_ref())?;
-            }
-        }
-    }
-
-    for either in exact_word_delta.added_or_deleted_words() {
-        match either {
-            Either::Left(added_word) => {
-                word_fst_builder
-                    .register_exact_word_for_prefixes(DelAdd::Addition, added_word.as_ref())?;
-            }
-            Either::Right(deleted_word) => {
-                word_fst_builder
-                    .register_exact_word_for_prefixes(DelAdd::Deletion, deleted_word.as_ref())?;
             }
         }
     }

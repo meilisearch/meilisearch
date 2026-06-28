@@ -50,6 +50,19 @@ impl AuthController {
     }
 
     pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
+        let all_indexes_authorized =
+            create_key.indexes.is_empty() || create_key.indexes.contains(&IndexUidPattern::all());
+
+        if !all_indexes_authorized {
+            if let Some(global_action) =
+                create_key.actions.iter().find(|action| action.deny_index_scope())
+            {
+                return Err(AuthControllerError::IndexScopedApiKeyWithGlobalAction(
+                    // unwrap: global_action is serializable
+                    serde_json::to_string(global_action).unwrap(),
+                ));
+            }
+        }
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
             None => self.store.put_api_key(create_key.to_key()),
@@ -134,23 +147,39 @@ impl AuthController {
         action: Action,
         index: Option<&str>,
     ) -> Result<bool> {
-        match self
-            .store
-            // check if the key has access to all indexes.
-            .get_expiration_date(uid, action, None)?
-            .or(match index {
-                // else check if the key has access to the requested index.
-                Some(index) => self.store.get_expiration_date(uid, action, Some(index))?,
-                // or to any index if no index has been requested.
-                None => self.store.prefix_first_expiration_date(uid, action)?,
-            }) {
-            // check expiration date.
-            Some(Some(exp)) => Ok(OffsetDateTime::now_utc() < exp),
-            // no expiration date.
-            Some(None) => Ok(true),
-            // action or index forbidden.
-            None => Ok(false),
-        }
+        // fetch authorization for action and index
+        let maybe_expiration_date = {
+            // has the key access to all indexes?
+            if let Some(maybe_expiration_date) =
+                self.store.get_expiration_date(uid, action, None)?
+            {
+                Some(maybe_expiration_date)
+            } else {
+                // check access to the requested index
+                match index {
+                    Some(index) => self.store.get_expiration_date(uid, action, Some(index))?,
+                    None => {
+                        // no index requested, check if the route is checking indexes
+                        if !action.route_handler_is_checking_index_scope() {
+                            // not authorizated
+                            None
+                        } else {
+                            // index authorization checked by the route, find any allowed index
+                            self.store.prefix_first_expiration_date(uid, action)?
+                        }
+                    }
+                }
+            }
+        };
+
+        Ok(match maybe_expiration_date {
+            // action or index unauthorized
+            None => false,
+            // authorized if key is not expired
+            Some(Some(exp)) => OffsetDateTime::now_utc() < exp,
+            // always authorized (no expiration date)
+            Some(None) => true,
+        })
     }
 
     /// Delete all the keys in the DB.

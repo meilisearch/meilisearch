@@ -54,6 +54,13 @@ pub struct CreateApiKey {
     /// `*` character can be used as a wildcard when located at the last
     /// position. e.g. `documents.*` to authorize access on all documents
     /// endpoints.
+    ///
+    /// Valid actions include: `search`, `documents.add`,
+    /// `documents.get`, `documents.delete`, `indexes.create`, `indexes.get`,
+    /// `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.get`,
+    /// `tasks.cancel`, `tasks.delete`, `settings.get`, `settings.update`,
+    /// `stats.get`, `dumps.create`, `snapshots.create`, `version`, `keys.get`,
+    /// `keys.create`, `keys.update`, `keys.delete`. Use `*` to grant all actions.
     #[request(
         required,
         example = json!(["documents.add"]),
@@ -74,7 +81,8 @@ pub struct CreateApiKey {
     )]
     pub indexes: Vec<IndexUidPattern>,
     /// Represent the expiration date and time as RFC 3339 format. `null`
-    /// equals to no expiration time.
+    /// equals to no expiration time. Set to `null` to create a key that never
+    /// expires. Once a key is past its expiry date, using it returns an error.
     #[request(required,
         error = DeserrJsonError<InvalidApiKeyExpiresAt>,
         try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError,
@@ -508,9 +516,122 @@ impl Action {
         }
     }
 
+    pub fn index_scope(&self) -> IndexScope {
+        match self {
+            // let global wildcard expand to the relevant permissions
+            Action::All => IndexScope::MultipleScope,
+            Action::AllGet => IndexScope::MultipleScope,
+
+            Action::DocumentsAll => IndexScope::MultipleScope,
+            // used by render-template which is not index scoped
+            Action::DocumentsGet => IndexScope::RouteHandlerChecksIndex,
+
+            // remaining documents are index-scoped
+            Action::DocumentsAdd | Action::DocumentsDelete => IndexScope::ControllerChecksIndex,
+            // search is checked by route handler in the case of multi-search
+            Action::Search => IndexScope::RouteHandlerChecksIndex,
+
+            // indexes are supported global or index-scoped
+            Action::IndexesAll => IndexScope::MultipleScope,
+            Action::IndexesAdd => IndexScope::RouteHandlerChecksIndex,
+            Action::IndexesGet => IndexScope::RouteHandlerChecksIndex, // used in list index
+            Action::IndexesUpdate => IndexScope::ControllerChecksIndex,
+            Action::IndexesDelete => IndexScope::ControllerChecksIndex,
+            Action::IndexesSwap => IndexScope::RouteHandlerChecksIndex,
+
+            // index compaction, fields, are scoped
+            Action::IndexesCompact => IndexScope::ControllerChecksIndex,
+            Action::FieldsPost => IndexScope::ControllerChecksIndex,
+
+            // tasks are complicated due to compact
+            Action::TasksAll => IndexScope::MultipleScope,
+            Action::TasksCancel => IndexScope::RouteHandlerChecksIndex,
+            Action::TasksDelete => IndexScope::RouteHandlerChecksIndex,
+            Action::TasksGet => IndexScope::RouteHandlerChecksIndex,
+            Action::TasksCompact => IndexScope::DenyIndexScope,
+
+            // settings.get is handler-checked, as required by render-template
+            Action::SettingsGet => IndexScope::RouteHandlerChecksIndex,
+            Action::SettingsAll => IndexScope::MultipleScope,
+            // remaining settings are index scoped
+            Action::SettingsUpdate => IndexScope::ControllerChecksIndex,
+
+            // stats are always supported global
+            Action::StatsAll => IndexScope::RouteHandlerChecksIndex,
+            Action::StatsGet => IndexScope::RouteHandlerChecksIndex,
+
+            Action::ChatCompletions => IndexScope::RouteHandlerChecksIndex,
+
+            // metrics, dumps, snapshots, version, keys, experimental features, export, network, chats, webhooks and DSR are global
+            Action::MetricsAll
+            | Action::MetricsGet
+            | Action::DumpsAll
+            | Action::DumpsCreate
+            | Action::SnapshotsAll
+            | Action::SnapshotsCreate
+            | Action::Version
+            | Action::KeysAdd
+            | Action::KeysGet
+            | Action::KeysUpdate
+            | Action::KeysDelete
+            | Action::ExperimentalFeaturesGet
+            | Action::ExperimentalFeaturesUpdate
+            | Action::Export
+            | Action::NetworkGet
+            | Action::NetworkUpdate
+            | Action::ChatsAll
+            | Action::ChatsGet
+            | Action::ChatsDelete
+            | Action::ChatsSettingsAll
+            | Action::ChatsSettingsGet
+            | Action::ChatsSettingsUpdate
+            | Action::WebhooksGet
+            | Action::WebhooksUpdate
+            | Action::WebhooksDelete
+            | Action::WebhooksCreate
+            | Action::WebhooksAll
+            | Action::DynamicSearchRulesGet
+            | Action::DynamicSearchRulesCreate
+            | Action::DynamicSearchRulesUpdate
+            | Action::DynamicSearchRulesDelete
+            | Action::DynamicSearchRulesAll => IndexScope::DenyIndexScope,
+        }
+    }
+
+    pub fn deny_index_scope(&self) -> bool {
+        matches!(self.index_scope(), IndexScope::DenyIndexScope)
+    }
+
+    pub fn route_handler_is_checking_index_scope(&self) -> bool {
+        matches!(self.index_scope(), IndexScope::RouteHandlerChecksIndex)
+    }
+
     pub const fn repr(&self) -> u8 {
         *self as u8
     }
+}
+
+pub enum IndexScope {
+    /// The action is global and doesn't support index-scoped API keys
+    ///
+    /// - API key creation will be blocked for index-scoped keys
+    /// - Usage will be blocked by auth controller for indexless routes on index-scoped keys
+    DenyIndexScope,
+    /// The action is global but **does** support index-scoped API keys
+    ///
+    /// - API key creation will be allowed for index-scoped keys
+    /// - Usage will be allowed by auth controller for indexless routes on index-scoped keys (manually checked by the route)
+    RouteHandlerChecksIndex,
+    /// The action is always index-scoped
+    ///
+    /// - API key creation will be allowed for index-scoped keys
+    /// - Usage will be blocked by auth controller for indexless routes on index-scoped keys (should be called on index-scoped routes)
+    ControllerChecksIndex,
+    /// The action expands to multiple actions with different scopes
+    ///
+    /// - API key creation will be allowed for index-scoped keys
+    /// - Usage will be blocked by auth controller for indexless routes on index-scoped keys (should be called on single-scope actions)
+    MultipleScope,
 }
 
 pub mod actions {

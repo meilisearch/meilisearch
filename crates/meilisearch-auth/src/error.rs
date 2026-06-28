@@ -11,6 +11,8 @@ pub enum AuthControllerError {
     ApiKeyNotFound(String),
     #[error("`uid` field value `{0}` is already an existing API key.")]
     ApiKeyAlreadyExists(String),
+    #[error("cannot create index-scoped API key with global action `{0}`\n  - Hint: remove action `{0}` from the action list, or remove `indexes` to make the key global")]
+    IndexScopedApiKeyWithGlobalAction(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -27,6 +29,7 @@ impl ErrorCode for AuthControllerError {
         match self {
             Self::ApiKeyNotFound(_) => Code::ApiKeyNotFound,
             Self::ApiKeyAlreadyExists(_) => Code::ApiKeyAlreadyExists,
+            Self::IndexScopedApiKeyWithGlobalAction(_) => Code::IndexScopedApiKeyWithGlobalAction,
             Self::Internal(_) => Code::Internal,
         }
     }

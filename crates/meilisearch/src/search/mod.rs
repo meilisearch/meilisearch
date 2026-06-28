@@ -2,12 +2,16 @@ use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Not as _;
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
-use index_scheduler::filter::{filter_into_index_filter, parse_filter};
+use index_scheduler::filter::{
+    filter_into_index_filter, filters_into_index_filters, parse_filter,
+    retrieve_foreign_keys_settings, SourceIndexUid,
+};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -23,8 +27,8 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    AttributeState, Deadline, FacetValueHit, IndexFilter, InternalError, OrderBy, PatternMatch,
-    SearchForFacetValues, SearchStep,
+    filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
+    OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -178,6 +182,8 @@ pub struct SearchQuery {
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
     ///
     /// Supported value types are string, number, array, and object.
+    ///
+    /// Note: highlights matches within all listed attributes, even those not in `searchableAttributes`.
     #[request(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
     /// String to insert before each highlighted term.
@@ -196,7 +202,7 @@ pub struct SearchQuery {
     ///
     /// This is useful when you need custom highlighting.
     ///
-    /// Note that positions are given in bytes, not characters.
+    /// Note: reports match positions in all attributes, even non-searchable ones. Positions are measured in bytes, not characters.
     #[request(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
     /// A [filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results.
@@ -280,6 +286,8 @@ pub struct SearchQuery {
     /// The `semanticRatio` field controls the balance: 0.0 means keyword-only results, 1.0 means semantic-only.
     ///
     /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// The `semanticRatio` field defaults to `0.5`. A value of `0.0` uses keyword-only results; `1.0` uses semantic-only results.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
@@ -1546,13 +1554,31 @@ pub struct FacetStats {
     pub max: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+/// Schema representation of a facet value hit (for OpenAPI documentation only).
+#[derive(ToSchema)]
+#[schema(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct FacetValueHitSchema {
+    /// The facet value that matched the query.
+    pub value: String,
+    /// Number of documents with this facet value among the search results.
+    pub count: u64,
+}
+
+/// Result of a facet search operation.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct FacetSearchResult {
+    /// Array of matching facet values with their document counts, sorted lexicographically
+    /// in ascending order (or by count if `sortFacetValuesBy` is set to `"count"`).
+    #[schema(value_type = Vec<FacetValueHitSchema>)]
     pub facet_hits: Vec<FacetValueHit>,
+    /// The original `facetQuery` from the request. `null` if no query was provided.
     pub facet_query: Option<String>,
+    /// Time in milliseconds Meilisearch took to process the request.
     pub processing_time_ms: u128,
-    /// Errors from remote shards. Federated search only.
+    /// Errors from remote shards. Only present in federated search when some remotes failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 }
@@ -2481,6 +2507,7 @@ pub fn perform_similar(
     index_uid: IndexUid,
     query: SimilarQuery,
     progress: &Progress,
+    search_rules: Option<IndexSearchRules>,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let features = index_scheduler.features();
@@ -2512,6 +2539,30 @@ pub fn perform_similar(
         Route::Similar,
     )?;
 
+    let docid_filter = search_rules.and_then(|search_rules| search_rules.filter);
+    let docid_filter = docid_filter
+        .as_ref()
+        .map(|docid_filter| {
+            parse_filter(
+                docid_filter,
+                Code::InvalidSimilarFilter,
+                features,
+                Some(index_uid.as_str()),
+            )
+        })
+        .transpose()?
+        .flatten();
+
+    let candidates_filter = filter
+        .as_ref()
+        .and_then(|filter| {
+            parse_filter(filter, Code::InvalidSimilarFilter, features, None).transpose()
+        })
+        .transpose()?;
+
+    let (docid_filter, candidates_filter) =
+        extract_filters(index_scheduler, index_uid, progress, docid_filter, candidates_filter)?;
+
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
         ResponseError::from_msg(msg, Code::InvalidSimilarId)
@@ -2526,6 +2577,14 @@ pub fn perform_similar(
         ));
     };
 
+    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, progress)?;
+    if docid_universe.contains(internal_id).not() {
+        return Err(ResponseError::from_msg(
+            MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
+            Code::NotFoundSimilarId,
+        ));
+    }
+
     let mut similar = milli::Similar::new(
         internal_id,
         offset,
@@ -2538,18 +2597,8 @@ pub fn perform_similar(
         progress,
     );
 
-    if let Some(ref filter) = filter {
-        if let Some(filter) = parse_filter(filter, Code::InvalidSimilarFilter, features, None)? {
-            let filter = filter_into_index_filter(
-                filter,
-                &index,
-                &rtxn,
-                index_scheduler,
-                progress,
-                &index_uid,
-            )?;
-            similar.filter(filter);
-        }
+    if let Some(filter) = candidates_filter {
+        similar.filter(filter);
     }
 
     if let Some(ranking_score_threshold) = ranking_score_threshold {
@@ -2616,6 +2665,33 @@ pub fn perform_similar(
         performance_details,
     };
     Ok(result)
+}
+
+fn extract_filters<'a>(
+    index_scheduler: &IndexScheduler,
+    index_uid: IndexUid,
+    progress: &Progress,
+    docid_filter: Option<Filter<'a>>,
+    candidates_filter: Option<Filter<'a>>,
+) -> Result<(Option<IndexFilter<'a>>, Option<IndexFilter<'a>>), ResponseError> {
+    let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
+    let foreign_keys_settings =
+        retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;
+    let (docid_filter, candidates_filter) = match filters_into_index_filters(
+        vec![
+            (source_index_uid.clone(), docid_filter),
+            (source_index_uid.clone(), candidates_filter),
+        ],
+        &foreign_keys_settings,
+        index_scheduler,
+        progress,
+    )?
+    .as_mut_slice()
+    {
+        [docid_filter, candidates_filter] => (docid_filter.take(), candidates_filter.take()),
+        _ => unreachable!(),
+    };
+    Ok((docid_filter, candidates_filter))
 }
 
 pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {

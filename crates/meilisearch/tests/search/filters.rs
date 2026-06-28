@@ -760,7 +760,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\ndoggos.age > 2",
+              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:12 \"doggos.age\" > \"2\"",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -786,7 +786,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\ndoggos EXISTS",
+              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:8 \"doggos\" EXISTS",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -865,7 +865,7 @@ async fn vector_filter_nonexistent_embedder() {
         .await;
     snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n_vectors.other EXISTS",
+      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n11:16 _vectors.\"other\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -887,7 +887,7 @@ async fn vector_filter_all_embedders_user_provided() {
         .await;
     snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n_vectors.userProvided EXISTS",
+      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n11:23 _vectors.\"userProvided\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1028,7 +1028,7 @@ async fn vector_filter_non_existant_fragment() {
         .await;
     snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n_vectors.rest.fragments.withBred EXISTS",
+      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n28:36 _vectors.\"rest\".fragments.\"withBred\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

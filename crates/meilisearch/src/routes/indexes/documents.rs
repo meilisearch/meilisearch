@@ -300,6 +300,7 @@ impl Aggregate for DocumentsDeletionAggregator {
     params(
         ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         ("document_id" = String, Path, example = "853", description = "Document identifier.", nullable = false),
+        CustomMetadataQuery,
     ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -417,9 +418,9 @@ pub struct BrowseQueryGet {
     #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentIds>)]
     ids: Option<CS<String>>,
-    /// Filter expression to select which documents to return. Uses the same
-    /// syntax as search filters. Only documents matching the filter will be
-    /// included in the response. Example: `genres = action AND rating > 4`.
+    /// Filter expression to select which documents to return. Attributes must be added to the
+    /// `filterableAttributes` index setting before they can be used in filters. Only accepts
+    /// string expressions (not array syntax). Example: `genres = action AND rating > 4`.
     #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
@@ -467,10 +468,11 @@ pub struct BrowseQuery {
     /// fetching specific known documents.
     #[request(default, error = DeserrJsonError<InvalidDocumentIds>, schema_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
     ids: Option<Vec<serde_json::Value>>,
-    /// Filter expression to select which documents to return. Uses the same
-    /// syntax as search filters. Only documents matching the filter will be
-    /// included in the response. Example: `"genres = action AND rating > 4"`
-    /// or as an array `[["genres = action"], "rating > 4"]`.
+    /// Filter expression to select which documents to return. Attributes must be added to the
+    /// `filterableAttributes` index setting before they can be used in filters. Accepts a string
+    /// or an array of arrays of strings for AND/OR combinations.
+    /// Example string: `"genres = action AND rating > 4"`.
+    /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
     filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
@@ -483,7 +485,12 @@ pub struct BrowseQuery {
 
 /// List documents with POST
 ///
-/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
+/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
+/// body to specify filters, sort order, and which fields to return.
+///
+/// **Note:** Sending an empty payload (`{}`) returns all documents in the index.
+///
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
@@ -577,7 +584,11 @@ pub async fn documents_by_query_post(
 
 /// List documents with GET
 ///
-/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering. Suited for browsing or exporting index contents.
+/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering.
+///
+/// **Deprecated:** This endpoint will be deprecated in a future release. Use `POST /indexes/{index_uid}/documents/fetch` instead, which supports more parameters and array-based filter expressions.
+///
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
@@ -782,7 +793,9 @@ pub struct UpdateDocumentsQuery {
     #[param(required = false, example = "id")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
-    /// Customize the csv delimiter when importing CSV documents.
+    /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
+    /// character. Only valid when the content type is `text/csv`; using this parameter with
+    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
@@ -884,16 +897,17 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 ///
 /// Add a list of documents or replace them if they already exist.
 ///
-/// If you send an already existing document (same id) the whole existing
-/// document will be overwritten by the new document. Fields previously in the
-/// document not present in the new document are removed.
+/// If you send an already existing document (same id) the whole existing document will be
+/// overwritten by the new document. Fields previously in the document not present in the new
+/// document are removed.
 ///
 /// If the provided index does not exist, it will be created.
 ///
-/// For a partial update of the document see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
+/// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
-/// > Use the reserved `_geo` object to add geo coordinates to a document.
-/// > `_geo` is an object made of `lat` and `lng` field.
+/// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+///
+/// For a partial update see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
 
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
@@ -1000,12 +1014,17 @@ pub async fn replace_documents(
 /// Thus, any fields not present in the new document are kept and remained
 /// unchanged.
 ///
+/// **Important:** Partial updates apply only to top-level fields. Updating an object attribute
+/// replaces the entire object, removing any subfields not present in the update. Dot notation
+/// in an update request creates a new flat attribute rather than updating an existing nested field.
+///
 /// If the provided index does not exist, it will be created.
 ///
-/// To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
+/// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
-/// > Use the reserved `_geo` object to add geo coordinates to a document.
-/// > `_geo` is an object made of `lat` and `lng` field.
+/// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+///
+/// To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
 
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
@@ -1321,6 +1340,7 @@ async fn copy_body_to_file(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
     ),
     request_body(content = Vec<Value>),
     responses(
@@ -1423,7 +1443,9 @@ pub async fn delete_documents_batch(
 #[routes::request(proxied)]
 #[derive(Debug)]
 pub struct DocumentDeletionByFilter {
-    /// Filter expression to match documents for deletion
+    /// Filter expression to match documents for deletion. Attributes must be in
+    /// `filterableAttributes` before they can be used. Accepts a string or an array of arrays.
+    /// Sending an empty filter will return a `bad_request` error.
     #[request(required, error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
@@ -1433,7 +1455,10 @@ pub struct DocumentDeletionByFilter {
 /// Delete all documents in the index that match the given filter expression.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
+    ),
     request_body = DocumentDeletionByFilter,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -1540,17 +1565,22 @@ pub async fn delete_documents_by_filter(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-/// Request body for editing documents using a JavaScript function
+/// Request body for editing documents using a RHAI function
 #[routes::request(proxied)]
 #[derive(Debug)]
 pub struct DocumentEditionByFunction {
-    /// Filter expression to select which documents to edit
+    /// Filter expression to select which documents to edit. If omitted, all documents in the
+    /// index will be processed. Attributes must be in `filterableAttributes` to be used.
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
-    /// Data to make available for the editing function
+    /// Arbitrary data to pass into the function scope. By default the function only has access
+    /// to the current document being edited via the `doc` variable.
     #[request(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
-    /// RHAI function to apply to each document
+    /// A [RHAI](https://rhai.rs) function string to apply to each document. The function has
+    /// access to a `doc` variable representing the current document. Modify `doc` fields to
+    /// update the document. Return `null` or `()` to delete the document.
+    /// To enable this feature: `PATCH /experimental-features/ {"editDocumentsByFunction": true}`.
     #[request(required, error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     pub function: String,
 }
@@ -1592,6 +1622,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     security(("Bearer" = ["documents.*", "*"])),
     params(
         ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
     ),
     request_body = DocumentEditionByFunction,
     responses(
@@ -1725,7 +1756,10 @@ pub async fn edit_documents_by_function(
 /// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
+    ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

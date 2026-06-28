@@ -24,7 +24,7 @@ use index_scheduler::filter::{
     filter_into_index_filter, filters_into_index_filters_unchecked, parse_filter,
 };
 use index_scheduler::IndexScheduler;
-use meilisearch_auth::AuthController;
+use meilisearch_auth::{AuthController, IndexSearchRules};
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{
     ChatCompletionPrompts as DbChatCompletionPrompts,
@@ -35,7 +35,7 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TotalProcessingTimeStep,
+    all_obkv_to_json, obkv_to_json, Filter, OrderBy, PatternMatch, TotalProcessingTimeStep,
 };
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
@@ -239,18 +239,29 @@ fn setup_search_tool(
     let mut index_uids = Vec::new();
     let mut function_description = prompts.search_description.clone();
     let mut filter_description = prompts.search_filter_param.clone();
+    let progress = &Default::default();
     index_scheduler.try_for_each_index::<_, ()>(|name, index| {
         // Make sure to skip unauthorized indexes
         if !filters.is_index_authorized(name) {
             return Ok(());
         }
+        let search_rules = filters.get_index_search_rules(name);
 
         let rtxn = index.read_txn()?;
         let chat_config = index.chat_config(&rtxn)?;
         let index_description = chat_config.description;
         let _ = writeln!(&mut function_description, "\n\n - {name}: {index_description}\n");
         index_uids.push(name.to_string());
-        let facet_distributions = format_facet_distributions(index, &rtxn, 10).unwrap(); // TODO do not unwrap
+        let facet_distributions = format_facet_distributions(
+            index_scheduler,
+            index,
+            &rtxn,
+            10,
+            search_rules,
+            name,
+            progress,
+        )
+        .unwrap(); // TODO do not unwrap
         let _ = writeln!(&mut filter_description, "\n## Facet distributions of the {name} index");
         let _ = writeln!(&mut filter_description, "{facet_distributions}");
 
@@ -956,11 +967,27 @@ struct SearchInIndexParameters {
 }
 
 fn format_facet_distributions(
+    index_scheduler: &IndexScheduler,
     index: &Index,
     rtxn: &RoTxn,
     max_values_per_facet: usize,
-) -> meilisearch_types::milli::Result<String> {
-    let universe = index.documents_ids(rtxn)?;
+    search_rules: Option<IndexSearchRules>,
+    index_uid: &str,
+    progress: &Progress,
+) -> index_scheduler::Result<String> {
+    let from_milli = |err| index_scheduler::Error::from_milli(err, Some(index_uid.to_string()));
+    let universe = 'filter: {
+        let Some(search_rules) = search_rules else { break 'filter index.documents_ids(rtxn)? };
+        let Some(filter) = search_rules.filter else {
+            break 'filter index.documents_ids(rtxn)?;
+        };
+        let Some(filter) = Filter::from_json(&filter).map_err(from_milli)? else {
+            break 'filter index.documents_ids(rtxn)?;
+        };
+        let filter =
+            filter_into_index_filter(filter, index, rtxn, index_scheduler, progress, index_uid)?;
+        filter.evaluate(rtxn, index).map_err(from_milli)?
+    };
     let rules = index.filterable_attributes_rules(rtxn)?;
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let filterable_attributes = fields_ids_map
@@ -972,7 +999,8 @@ fn format_facet_distributions(
         .max_values_per_facet(max_values_per_facet)
         .candidates(universe)
         .facets(filterable_attributes)
-        .execute()?;
+        .execute()
+        .map_err(from_milli)?;
 
     let mut output = String::new();
     for (facet_name, entries) in facets_distribution {
