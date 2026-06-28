@@ -96,8 +96,9 @@ where
     }
 }
 
-/// Stream that serializes `{ ...header fields..., "results": [ ... streamed items ... ] }`
-/// by stripping the closing `}` from the header object and appending the `results` array.
+/// Stream that serializes `{"results":[...],"offset":...,"limit":...,"total":...}`
+/// with `results` first so JSON field order matches the non-streaming response
+/// (and insta snapshots). Pagination fields come from `header` after the array.
 pub struct StreamedJsonObject<S, T, H>
 where
     S: Stream<Item = Result<T, ResponseError>>,
@@ -112,8 +113,12 @@ where
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ObjectState {
-    Header,
+    /// Emit `{"results":`
+    Prefix,
+    /// Stream the JSON array body from [`StreamedJsonArray`]
     Hits,
+    /// Emit `,` + header object fields without outer braces, then `}`
+    Suffix,
     Done,
 }
 
@@ -127,7 +132,7 @@ where
         Self {
             header: Some(header),
             hits_stream: StreamedJsonArray::new(hits_stream),
-            state: ObjectState::Header,
+            state: ObjectState::Prefix,
             hits_field: "results",
         }
     }
@@ -144,40 +149,55 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         match this.state {
-            ObjectState::Header => {
-                let header = this.header.take().unwrap();
-                match serde_json::to_vec(&header) {
-                    Ok(mut json) => {
-                        if let Some(last) = json.last_mut() {
-                            if *last == b'}' {
-                                json.pop();
-                                let mut bytes = BytesMut::from(json.as_slice());
-                                bytes.extend_from_slice(b",\"");
-                                bytes.extend_from_slice(this.hits_field.as_bytes());
-                                bytes.extend_from_slice(b"\":");
-                                this.state = ObjectState::Hits;
-                                return Poll::Ready(Some(Ok(bytes.freeze())));
-                            }
-                        }
-                        Poll::Ready(Some(Err(ResponseError::from_msg(
-                            "Invalid header".to_string(),
-                            meilisearch_types::error::Code::Internal,
-                        ))))
-                    }
-                    Err(e) => {
-                        Poll::Ready(Some(Err(ResponseError::from(MeilisearchHttpError::from(e)))))
-                    }
-                }
+            ObjectState::Prefix => {
+                this.state = ObjectState::Hits;
+                let mut bytes = BytesMut::new();
+                bytes.extend_from_slice(b"{\"");
+                bytes.extend_from_slice(this.hits_field.as_bytes());
+                bytes.extend_from_slice(b"\":");
+                Poll::Ready(Some(Ok(bytes.freeze())))
             }
             ObjectState::Hits => match Pin::new(&mut this.hits_stream).poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => Poll::Ready(Some(Ok(bytes))),
                 Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(None) => {
-                    this.state = ObjectState::Done;
-                    Poll::Ready(Some(Ok(Bytes::from("}"))))
+                    this.state = ObjectState::Suffix;
+                    // Fall through to suffix in the same poll so we do not
+                    // stall waiting for another wake.
+                    match this.header.take() {
+                        Some(header) => match serde_json::to_vec(&header) {
+                            Ok(json) => {
+                                // json is `{...}`; emit `,...}` (comma + fields + closing brace)
+                                if json.first() == Some(&b'{') && json.last() == Some(&b'}') {
+                                    let mut bytes = BytesMut::with_capacity(json.len());
+                                    bytes.put_u8(b',');
+                                    bytes.extend_from_slice(&json[1..]);
+                                    this.state = ObjectState::Done;
+                                    Poll::Ready(Some(Ok(bytes.freeze())))
+                                } else {
+                                    Poll::Ready(Some(Err(ResponseError::from_msg(
+                                        "Invalid header".to_string(),
+                                        meilisearch_types::error::Code::Internal,
+                                    ))))
+                                }
+                            }
+                            Err(e) => Poll::Ready(Some(Err(ResponseError::from(
+                                MeilisearchHttpError::from(e),
+                            )))),
+                        },
+                        None => {
+                            this.state = ObjectState::Done;
+                            Poll::Ready(Some(Ok(Bytes::from("}"))))
+                        }
+                    }
                 }
                 Poll::Pending => Poll::Pending,
             },
+            ObjectState::Suffix => {
+                // Should have been handled in Hits::None; keep for completeness.
+                this.state = ObjectState::Done;
+                Poll::Ready(Some(Ok(Bytes::from("}"))))
+            }
             ObjectState::Done => Poll::Ready(None),
         }
     }
