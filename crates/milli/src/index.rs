@@ -68,7 +68,6 @@ pub mod main_key {
     pub const NON_SEPARATOR_TOKENS_KEY: &str = "non-separator-tokens";
     pub const SEPARATOR_TOKENS_KEY: &str = "separator-tokens";
     pub const DICTIONARY_KEY: &str = "dictionary";
-    pub const SYNONYMS_KEY: &str = "synonyms";
     pub const USER_DEFINED_SYNONYMS_KEY: &str = "user-defined-synonyms";
     pub const WORDS_FST_KEY: &str = "words-fst";
     pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
@@ -98,6 +97,7 @@ pub mod db_name {
     pub const MAIN: &str = "main";
     pub const WORD_DOCIDS: &str = "word-docids";
     pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
+    pub const SYNONYMS: &str = "synonyms";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
     pub const EXACT_WORD_PREFIX_DOCIDS: &str = "exact-word-prefix-docids";
     pub const EXTERNAL_DOCUMENTS_IDS: &str = "external-documents-ids";
@@ -123,7 +123,7 @@ pub mod db_name {
     pub const CELLULITE: &str = "cellulite"; // used as a prefix, counted as `Cellulite::nb_dbs`
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 26 + Cellulite::nb_dbs();
+const NUMBER_OF_DBS: u32 = 27 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -141,6 +141,9 @@ pub struct Index {
 
     /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
     pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
+
+    /// A list of words and the list of synonyms associated to it.
+    pub synonyms: heed::Database<SynonymsKeyCodec, SerdeJson<Synonyms>>,
 
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
@@ -230,6 +233,7 @@ impl Index {
             env.create_database(&mut wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?;
         let exact_word_docids = env.create_database(&mut wtxn, Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
+        let synonyms = env.create_database(&mut wtxn, Some(SYNONYMS))?;
         let exact_word_prefix_docids =
             env.create_database(&mut wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let word_pair_proximity_docids =
@@ -277,6 +281,7 @@ impl Index {
             external_documents_ids,
             word_docids,
             exact_word_docids,
+            synonyms,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
@@ -1340,29 +1345,6 @@ impl Index {
 
     /* synonyms */
 
-    pub(crate) fn put_synonyms(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>,
-        user_defined_synonyms: &BTreeMap<String, Vec<String>>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeBincode<_>>().put(
-            wtxn,
-            main_key::SYNONYMS_KEY,
-            synonyms,
-        )?;
-        self.main.remap_types::<Str, SerdeBincode<_>>().put(
-            wtxn,
-            main_key::USER_DEFINED_SYNONYMS_KEY,
-            user_defined_synonyms,
-        )
-    }
-
-    pub(crate) fn delete_synonyms(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SYNONYMS_KEY)?;
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
-    }
-
     pub fn user_defined_synonyms(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1374,24 +1356,20 @@ impl Index {
             .unwrap_or_default())
     }
 
-    pub fn synonyms(
+    pub fn put_user_defined_synonyms(
         &self,
-        rtxn: &RoTxn<'_>,
-    ) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeBincode<_>>()
-            .get(rtxn, main_key::SYNONYMS_KEY)?
-            .unwrap_or_default())
+        wtxn: &mut RwTxn<'_>,
+        user_defined_synonyms: &BTreeMap<String, Vec<String>>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
+            wtxn,
+            main_key::USER_DEFINED_SYNONYMS_KEY,
+            user_defined_synonyms,
+        )
     }
 
-    pub fn words_synonyms<S: AsRef<str>>(
-        &self,
-        rtxn: &RoTxn<'_>,
-        words: &[S],
-    ) -> heed::Result<Option<Vec<Vec<String>>>> {
-        let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
-        Ok(self.synonyms(rtxn)?.remove(&words))
+    pub fn delete_user_defined_synonyms(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
     }
 
     /* words prefixes fst */
@@ -1924,6 +1902,7 @@ impl Index {
             external_documents_ids,
             word_docids,
             exact_word_docids,
+            synonyms,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
@@ -1967,6 +1946,7 @@ impl Index {
             .insert("external_documents_ids", external_documents_ids.stat(rtxn).map(compute_size)?);
         sizes.insert("word_docids", word_docids.stat(rtxn).map(compute_size)?);
         sizes.insert("exact_word_docids", exact_word_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert("synonyms", synonyms.stat(rtxn).map(compute_size)?);
         sizes.insert("word_prefix_docids", word_prefix_docids.stat(rtxn).map(compute_size)?);
         sizes.insert(
             "exact_word_prefix_docids",
@@ -2031,6 +2011,32 @@ impl Index {
         sizes.insert("cellulite_metadata", cellulite.metadata_db_stats(rtxn).map(compute_size)?);
 
         Ok(sizes)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Synonyms {
+    synonyms: Vec<String>,
+}
+
+impl Synonyms {
+    pub fn new(synonyms: Vec<String>) -> Synonyms {
+        Synonyms { synonyms }
+    }
+
+    /// The original, unnormalized, unsplit, associated synonyms, e.g. "iphone".
+    pub fn original_synonyms(&self) -> impl Iterator<Item = &str> + '_ {
+        self.synonyms.iter().map(AsRef::as_ref)
+    }
+
+    /// The normalized and split associated synonyms, e.g.
+    pub fn synonyms(&self, tokenizer: &Tokenizer) -> Vec<Vec<String>> {
+        self.original_synonyms()
+            .filter_map(|s| {
+                let normalized = normalize(tokenizer, s);
+                Some(normalized).filter(|n| !n.is_empty())
+            })
+            .collect()
     }
 }
 
