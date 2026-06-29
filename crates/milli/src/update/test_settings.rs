@@ -556,8 +556,8 @@ fn set_and_reset_synonyms() {
 
     // Ensure synonyms are effectively stored
     let rtxn = index.read_txn().unwrap();
-    let synonyms = index.synonyms(&rtxn).unwrap();
-    assert!(!synonyms.is_empty()); // at this point the index should return something
+    let synonyms = index.synonyms.iter(&rtxn).unwrap();
+    assert_eq!(synonyms.count(), 3); // at this point the index should return something
 
     // Check that we can use synonyms
     let result = index.search(&rtxn).query("blini").execute().unwrap();
@@ -576,8 +576,8 @@ fn set_and_reset_synonyms() {
 
     // Ensure synonyms are reset
     let rtxn = index.read_txn().unwrap();
-    let synonyms = index.synonyms(&rtxn).unwrap();
-    assert!(synonyms.is_empty());
+    let mut synonyms = index.synonyms.iter(&rtxn).unwrap();
+    assert!(synonyms.next().is_none());
 
     // Check that synonyms are no longer work
     let result = index.search(&rtxn).query("blini").execute().unwrap();
@@ -618,8 +618,8 @@ fn thai_synonyms() {
 
     // Ensure synonyms are effectively stored
     let rtxn = index.read_txn().unwrap();
-    let synonyms = index.synonyms(&rtxn).unwrap();
-    assert!(!synonyms.is_empty()); // at this point the index should return something
+    let synonyms = index.synonyms.iter(&rtxn).unwrap();
+    assert_eq!(synonyms.count(), 1); // at this point the index should return something
 
     // Check that we can use synonyms
     let result = index.search(&rtxn).query("japanese").execute().unwrap();
