@@ -54,6 +54,7 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &ConvertArroyToHannoy {},
     &AddShards {},
     &FixVectorStoreConfig {},
+    &MigrateSynonymsToDedicatedDatabase {},
 ];
 
 /// Return true if the cached stats of the index must be regenerated
