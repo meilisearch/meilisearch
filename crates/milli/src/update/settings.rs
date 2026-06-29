@@ -700,19 +700,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_synonyms(&mut self) -> Result<bool> {
         match self.synonyms {
             Setting::Set(ref user_synonyms) => {
-                fn normalize(tokenizer: &Tokenizer<'_>, text: &str) -> Vec<String> {
-                    tokenizer
-                        .tokenize(text)
-                        .filter_map(|token| {
-                            if token.is_word() && !token.lemma().is_empty() {
-                                Some(token.lemma().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                }
-
                 let mut builder = TokenizerBuilder::new();
                 let stop_words = self.index.stop_words(self.wtxn)?;
                 if let Some(ref stop_words) = stop_words {
@@ -1627,6 +1614,20 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             Ok(None)
         }
     }
+}
+
+/// Normalize and tokenize a text
+pub fn normalize(tokenizer: &Tokenizer<'_>, text: &str) -> Vec<String> {
+    tokenizer
+        .tokenize(text)
+        .filter_map(|token| {
+            if token.is_word() && !token.lemma().is_empty() {
+                Some(token.lemma().to_string())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
 }
 
 pub struct InnerIndexSettingsDiff {
