@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use charabia::Tokenizer;
 use fst::automaton::Str;
 use fst::{IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;

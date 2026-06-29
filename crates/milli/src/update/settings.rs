@@ -25,7 +25,7 @@ use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes}
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    ChatConfig, PrefixSearch, SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    ChatConfig, PrefixSearch, SearchParameters, Synonyms, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;

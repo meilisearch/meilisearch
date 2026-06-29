@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::Path;
 
+use charabia::TokenizerBuilder;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};

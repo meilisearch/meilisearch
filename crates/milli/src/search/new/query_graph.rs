@@ -2,6 +2,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
+use charabia::Tokenizer;
 use fxhash::{FxHashMap, FxHasher};
 use roaring::RoaringBitmap;
 

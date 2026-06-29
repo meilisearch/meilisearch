@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use charabia::normalizer::NormalizedTokenIter;
-use charabia::{SeparatorKind, TokenKind};
+use charabia::{SeparatorKind, TokenKind, Tokenizer};
 
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};

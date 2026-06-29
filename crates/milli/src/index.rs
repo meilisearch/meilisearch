@@ -1,12 +1,13 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
 use cellulite::Cellulite;
-use heed::types::*;
+use charabia::Tokenizer;
+use heed::types::{SerdeJson, *};
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
@@ -24,13 +25,14 @@ use crate::heed_codec::facet::{
     FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::version::VersionCodec;
-use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
+use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec, SynonymsKeyCodec};
 use crate::order_by_map::OrderByMap;
 use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::sharding::{DbShardDocids, Shards};
 use crate::update::new::StdResult;
+use crate::update::settings::normalize;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
