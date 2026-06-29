@@ -216,12 +216,13 @@ pub fn partially_initialized_term_from_word(
     if is_prefix && use_prefix_db.is_none() {
         find_zero_typo_prefix_derivations(ctx, word_interned, &mut prefix_of)?;
     }
-    let synonyms = ctx.get_synonyms()?;
+
     let mut synonym_word_count = 0;
-    let synonyms = synonyms
-        .get(&vec![word.to_owned()])
-        .cloned()
-        .unwrap_or_default()
+    let synonyms = ctx
+        .index
+        .synonyms
+        .get(ctx.txn, &[word])?
+        .map_or(Vec::<Vec<_>>::new(), |synonyms| synonyms.synonyms(tokenizer))
         .into_iter()
         .take(limits::MAX_SYNONYM_PHRASE_COUNT)
         .filter_map(|words| {
@@ -229,10 +230,12 @@ pub fn partially_initialized_term_from_word(
                 return None;
             }
             synonym_word_count += words.len();
-            let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
+            let words =
+                words.into_iter().map(|w| Some(ctx.word_interner.insert(w.to_owned()))).collect();
             Some(ctx.phrase_interner.insert(Phrase { words }))
         })
         .collect();
+
     let zero_typo =
         ZeroTypoTerm { phrase: None, exact: zero_typo, prefix_of, synonyms, use_prefix_db };
 
