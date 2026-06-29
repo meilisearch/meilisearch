@@ -376,6 +376,28 @@ pub fn snap_settings(index: &Index) -> String {
     let mut snap = String::new();
     let rtxn = index.read_txn().unwrap();
 
+    let mut builder = TokenizerBuilder::new();
+    let stop_words = index.stop_words(&rtxn).unwrap();
+    if let Some(ref stop_words) = stop_words {
+        builder.stop_words(stop_words);
+    }
+
+    let separators = index.allowed_separators(&rtxn).unwrap();
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref separators) = separators {
+        builder.separators(separators);
+    }
+
+    let dictionary = index.dictionary(&rtxn).unwrap();
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref dictionary) = dictionary {
+        builder.words_dict(dictionary);
+    }
+
+    let tokenizer = builder.build();
+
     macro_rules! write_setting_to_snap {
         ($name:ident) => {
             let $name = index.$name(&rtxn).unwrap();
@@ -389,7 +411,13 @@ pub fn snap_settings(index: &Index) -> String {
     write_setting_to_snap!(distinct_field);
     write_setting_to_snap!(filterable_attributes_rules);
     write_setting_to_snap!(sortable_fields);
-    write_setting_to_snap!(synonyms);
+
+    // Synonyms are stored in a dedicated database
+    for result in index.synonyms.iter(&rtxn).unwrap() {
+        let (key, synonyms) = result.unwrap();
+        writeln!(&mut snap, "synonyms: {:?}", (key, synonyms.synonyms(&tokenizer))).unwrap();
+    }
+
     write_setting_to_snap!(authorize_typos);
     write_setting_to_snap!(min_word_len_one_typo);
     write_setting_to_snap!(min_word_len_two_typos);

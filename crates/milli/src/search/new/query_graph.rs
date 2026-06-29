@@ -95,6 +95,7 @@ impl QueryGraph {
     /// which contains ngrams.
     pub fn from_query(
         ctx: &mut SearchContext<'_>,
+        tokenizer: &Tokenizer<'_>,
         // The terms here must be consecutive
         terms: &[LocatedQueryTerm],
     ) -> Result<(QueryGraph, Vec<LocatedQueryTerm>)> {
@@ -125,9 +126,12 @@ impl QueryGraph {
             new_nodes.push(new_node_idx);
 
             if !prev1.is_empty() {
-                if let Some(ngram) =
-                    query_term::make_ngram(ctx, &terms[term_idx - 1..=term_idx], &nbr_typos)?
-                {
+                if let Some(ngram) = query_term::make_ngram(
+                    ctx,
+                    tokenizer,
+                    &terms[term_idx - 1..=term_idx],
+                    &nbr_typos,
+                )? {
                     new_located_query_terms.push(ngram.clone());
                     let ngram_idx = add_node(
                         &mut nodes_data,
@@ -141,9 +145,12 @@ impl QueryGraph {
                 }
             }
             if !prev2.is_empty() {
-                if let Some(ngram) =
-                    query_term::make_ngram(ctx, &terms[term_idx - 2..=term_idx], &nbr_typos)?
-                {
+                if let Some(ngram) = query_term::make_ngram(
+                    ctx,
+                    tokenizer,
+                    &terms[term_idx - 2..=term_idx],
+                    &nbr_typos,
+                )? {
                     new_located_query_terms.push(ngram.clone());
                     let ngram_idx = add_node(
                         &mut nodes_data,

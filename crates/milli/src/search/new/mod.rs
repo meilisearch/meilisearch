@@ -124,17 +124,6 @@ impl<'ctx> SearchContext<'ctx> {
         self.prefix_search != PrefixSearch::Disabled
     }
 
-    /// Get synonyms with caching to avoid repeated database access
-    pub fn get_synonyms(&mut self) -> Result<&HashMap<Vec<String>, Vec<Vec<String>>>> {
-        match self.synonym_cache.cache {
-            Some(ref synonyms) => Ok(synonyms),
-            None => {
-                let synonyms = self.index.synonyms(self.txn)?;
-                Ok(self.synonym_cache.cache.insert(synonyms))
-            }
-        }
-    }
-
     pub fn attributes_to_search_on(
         &mut self,
         attributes_to_search_on: &'ctx [String],
@@ -775,7 +764,7 @@ pub fn execute_search(
 
     let mut used_negative_operator = false;
     let mut located_query_terms = None;
-    let query_terms = if let Some(query) = query {
+    let bucket_sort_output = if let Some(query) = query {
         let _step = progress.update_progress_scoped(SearchStep::TokenizeQuery);
         let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
         let entered = span.enter();
@@ -850,7 +839,7 @@ pub fn execute_search(
         drop(entered);
 
         let ExtractedTokens { query_terms, negative_words, negative_phrases } =
-            located_query_terms_from_tokens(ctx, tokens, words_limit)?;
+            located_query_terms_from_tokens(ctx, &tokenizer, tokens, words_limit)?;
         used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
         let ignored_documents = resolve_negative_words(ctx, Some(&universe), &negative_words)?;
@@ -861,51 +850,64 @@ pub fn execute_search(
 
         if query_terms.is_empty() {
             // Do a placeholder search instead
-            None
+            let ranking_rules =
+                get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
+            let _step = progress.update_progress_scoped(SearchStep::PlaceholderRanking);
+            bucket_sort(
+                ctx,
+                ranking_rules,
+                &PlaceholderQuery,
+                distinct.as_deref(),
+                &universe,
+                from,
+                length,
+                scoring_strategy,
+                placeholder_search_logger,
+                deadline,
+                ranking_score_threshold,
+                exhaustive_number_hits,
+                max_total_hits,
+                pins,
+            )?
         } else {
-            Some(query_terms)
+            let (graph, new_located_query_terms) =
+                QueryGraph::from_query(ctx, &tokenizer, &query_terms)?;
+            located_query_terms = Some(new_located_query_terms);
+
+            let ranking_rules = get_ranking_rules_for_query_graph_search(
+                ctx,
+                sort_criteria,
+                geo_param,
+                terms_matching_strategy,
+            )?;
+
+            universe &= resolve_universe(
+                ctx,
+                &universe,
+                &graph,
+                terms_matching_strategy,
+                query_graph_logger,
+                progress,
+            )?;
+
+            let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
+            bucket_sort(
+                ctx,
+                ranking_rules,
+                &graph,
+                distinct.as_deref(),
+                &universe,
+                from,
+                length,
+                scoring_strategy,
+                query_graph_logger,
+                deadline,
+                ranking_score_threshold,
+                exhaustive_number_hits,
+                max_total_hits,
+                pins,
+            )?
         }
-    } else {
-        None
-    };
-
-    let bucket_sort_output = if let Some(query_terms) = query_terms {
-        let (graph, new_located_query_terms) = QueryGraph::from_query(ctx, &query_terms)?;
-        located_query_terms = Some(new_located_query_terms);
-
-        let ranking_rules = get_ranking_rules_for_query_graph_search(
-            ctx,
-            sort_criteria,
-            geo_param,
-            terms_matching_strategy,
-        )?;
-
-        universe &= resolve_universe(
-            ctx,
-            &universe,
-            &graph,
-            terms_matching_strategy,
-            query_graph_logger,
-            progress,
-        )?;
-
-        let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
-        bucket_sort(
-            ctx,
-            ranking_rules,
-            &graph,
-            distinct.as_deref(),
-            &universe,
-            from,
-            length,
-            scoring_strategy,
-            query_graph_logger,
-            deadline,
-            ranking_score_threshold,
-            exhaustive_number_hits,
-            max_total_hits,
-            pins,
-        )?
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;

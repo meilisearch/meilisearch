@@ -168,6 +168,7 @@ fn find_one_two_typo_derivations(
 
 pub fn partially_initialized_term_from_word(
     ctx: &mut SearchContext<'_>,
+    tokenizer: &Tokenizer<'_>,
     word: &str,
     max_typo: u8,
     is_prefix: bool,
