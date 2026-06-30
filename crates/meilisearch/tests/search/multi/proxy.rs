@@ -4552,7 +4552,7 @@ impl LocalMeili {
                         "PUT" => server.service.put_raw(&req.url, req.body, headers.clone()).await,
                         "PATCH" => server.service.patch_raw(&req.url, req.body, headers).await,
                         "GET" => server.service.get(&req.url).await,
-                        "DELETE" => server.service.delete(&req.url).await,
+                        "DELETE" => server.service.delete(&req.url, headers).await,
                         _ => unimplemented!(),
                     }
                 });

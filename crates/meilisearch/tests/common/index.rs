@@ -84,7 +84,7 @@ impl<'a> Index<'a, Owned> {
 
     pub async fn delete(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn add_documents(
@@ -165,7 +165,7 @@ impl<'a> Index<'a, Owned> {
 
     pub async fn delete_document(&self, id: u64) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/{}", urlencode(self.uid.as_ref()), id);
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn delete_document_by_filter(&self, body: Value) -> (Value, StatusCode) {
@@ -175,7 +175,7 @@ impl<'a> Index<'a, Owned> {
 
     pub async fn clear_all_documents(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn delete_batch(&self, ids: Vec<u64>) -> (Value, StatusCode) {
@@ -276,7 +276,7 @@ impl<'a> Index<'a, Owned> {
 
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn update_distinct_attribute(&self, value: Value) -> (Value, StatusCode) {
@@ -435,7 +435,7 @@ impl<State> Index<'_, State> {
 
     pub(super) async fn _delete(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn get_task(&self, update_id: u64) -> (Value, StatusCode) {

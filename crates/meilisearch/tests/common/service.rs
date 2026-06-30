@@ -139,8 +139,15 @@ impl Service {
         self.request(req).await
     }
 
-    pub async fn delete(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
-        let req = test::TestRequest::delete().uri(url.as_ref());
+    pub async fn delete(
+        &self,
+        url: impl AsRef<str>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::delete().uri(url.as_ref());
+        for header in headers {
+            req = req.insert_header(header);
+        }
         self.request(req).await
     }
 
