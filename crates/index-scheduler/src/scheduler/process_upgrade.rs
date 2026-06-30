@@ -1,6 +1,9 @@
+use meilisearch_types::index_uid::{DsrIndex, UserIndex};
 use meilisearch_types::milli;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 
+use crate::index_mapper::IndexUid as _;
+use crate::processing::UpgradeIndexesProgress;
 use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
@@ -27,7 +30,7 @@ impl IndexScheduler {
                 i as u32,
                 indexes.len() as u32,
             ));
-            let index = self.index(uid)?;
+            let index = self.user_index(uid)?;
             let mut index_wtxn = index.write_txn()?;
             let regen_stats = milli::update::upgrade::upgrade(
                 &mut index_wtxn,
@@ -64,7 +67,7 @@ impl IndexScheduler {
         let db_path = self.scheduler.version_file_path.parent().unwrap();
         wtxn.commit()?;
 
-        let indexes = self.index_names()?;
+        let indexes = self.user_index_names()?;
 
         tracing::info!("roll backing all indexes");
         for (i, uid) in indexes.iter().enumerate() {

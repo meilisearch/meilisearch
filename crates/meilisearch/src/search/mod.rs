@@ -57,9 +57,6 @@ pub use federated::{
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
-mod dynamic_rules;
-pub use dynamic_rules::{collect_active_rules, resolve_pins, DynamicSearchContext};
-
 mod hydration;
 mod value_paths_visitor;
 use hydration::hydrate_documents;
@@ -2511,7 +2508,7 @@ pub fn perform_similar(
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let features = index_scheduler.features();
-    let index = index_scheduler.index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid)?;
     let rtxn = index.read_txn()?;
 
     let SimilarQuery {

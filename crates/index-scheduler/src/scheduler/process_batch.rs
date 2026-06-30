@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 use byte_unit::Byte;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, ChannelCongestion};
@@ -26,7 +27,7 @@ use crate::processing::{
     TaskDeletionProgress, UpdateIndexProgress,
 };
 use crate::utils::{consecutive_ranges, swap_index_uid_in_task, ProcessingBatch};
-use crate::{Error, IndexScheduler, Result, TaskId, BEI128};
+use crate::{Error, IndexScheduler, IndexUid, Result, TaskId, BEI128};
 
 /// The name of the copy of the data.mdb file used during compaction.
 const DATA_MDB_COPY_NAME: &str = "data.mdb.cpy";

@@ -3,9 +3,6 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
-use super::Document;
-use crate::{Error, IndexMetadata, Result, Version};
-use meilisearch_types::dynamic_search_rules::RuleUid;
 pub use meilisearch_types::milli;
 use meilisearch_types::milli::vector::embedder::hf::OverridePooling;
 use roaring::RoaringBitmap;
@@ -13,6 +10,9 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;
 use uuid::Uuid;
+
+use super::Document;
+use crate::{Error, IndexMetadata, Result, Version};
 
 pub type Metadata = crate::Metadata;
 

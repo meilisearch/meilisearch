@@ -1,15 +1,15 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 
+use flate2::bufread::GzDecoder;
+use serde::Deserialize;
+use tempfile::TempDir;
+
 use self::compat::v4_to_v5::CompatV4ToV5;
 use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
 use self::v5::V5Reader;
 use self::v6::{V6IndexReader, V6Reader};
 use crate::{ArchiveExt, Result, Version};
-use flate2::bufread::GzDecoder;
-use meilisearch_types::index_uid::IndexUid;
-use serde::Deserialize;
-use tempfile::TempDir;
 
 mod compat;
 
@@ -238,18 +238,18 @@ impl From<CompatIndexV5ToV6> for DumpIndexReader {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::{fs::File, io::Seek};
+    use std::fs::File;
+    use std::io::Seek;
 
     use meili_snap::insta;
-    use meilisearch_types::{
-        batches::{Batch, BatchEnqueuedAt, BatchStats},
-        task_view::DetailsView,
-        tasks::{BatchStopReason, Kind, Status},
-    };
+    use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
+    use meilisearch_types::task_view::DetailsView;
+    use meilisearch_types::tasks::{BatchStopReason, Kind, Status};
     use time::macros::datetime;
 
     use super::*;
-    use crate::{reader::v6::RuntimeTogglableFeatures, test::create_test_dump_writer};
+    use crate::reader::v6::RuntimeTogglableFeatures;
+    use crate::test::create_test_dump_writer;
 
     #[test]
     fn import_dump_with_bad_batches() {

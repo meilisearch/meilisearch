@@ -382,7 +382,7 @@ mod tests {
         let tokens = tokenizer.tokenize(".");
         let index = temp_index_with_documents();
         let rtxn = index.read_txn()?;
-        let mut ctx = SearchContext::new(&index, &rtxn)?;
+        let mut ctx = SearchContext::new(&index, &rtxn, "test", time::OffsetDateTime::now_utc())?;
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
         let ExtractedTokens { query_terms, .. } =
             located_query_terms_from_tokens(&mut ctx, &tokenizer, tokens, None)?;
@@ -395,7 +395,7 @@ mod tests {
     fn test_unicode_typo_tolerance_fixed() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
-        let ctx = SearchContext::new(&temp_index, &rtxn)?;
+        let ctx = SearchContext::new(&temp_index, &rtxn, "test", time::OffsetDateTime::now_utc())?;
 
         let nbr_typos = number_of_typos_allowed(&ctx)?;
 
@@ -424,7 +424,7 @@ mod tests {
     fn test_various_unicode_scripts() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
-        let ctx = SearchContext::new(&temp_index, &rtxn)?;
+        let ctx = SearchContext::new(&temp_index, &rtxn, "test", time::OffsetDateTime::now_utc())?;
 
         let nbr_typos = number_of_typos_allowed(&ctx)?;
 

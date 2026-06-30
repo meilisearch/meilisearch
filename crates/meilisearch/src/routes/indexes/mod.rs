@@ -157,7 +157,7 @@ pub async fn list_indexes(
     debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
     let (total, indexes) =
-        index_scheduler.paginated_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
+        index_scheduler.paginated_user_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
     let indexes = indexes
         .into_iter()
         .map(|(name, stats)| IndexView {
@@ -342,7 +342,7 @@ pub async fn get_index(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let index = index_scheduler.index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid)?;
     let index_view = IndexView::new(index_uid.into_inner(), &index)?;
 
     debug!(returns = ?index_view, "Get index");
@@ -717,7 +717,7 @@ pub async fn get_index_stats(
     } = params.into_inner();
 
     let stats = IndexStats::from_db_index_stats(
-        index_scheduler.index_stats(&index_uid)?,
+        index_scheduler.user_index_stats(&index_uid)?,
         size_format.unwrap_or(SizeFormat::Raw), // default to `raw` for backcompat.
         show_internal_database_sizes,
     );

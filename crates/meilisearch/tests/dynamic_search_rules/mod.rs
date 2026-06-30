@@ -9,14 +9,14 @@ async fn routes_are_disabled_by_default() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(value), @r#"
+    snapshot!(json_string!(value), @r###"
     {
-      "message": "Using the `/dynamic-search-rules` routes requires enabling the `dynamic search rules` experimental feature. See https://github.com/orgs/meilisearch/discussions/884",
+      "message": "Calling the `POST /dynamic-search-rules` route requires enabling the `dynamic search rules` experimental feature. See https://github.com/orgs/meilisearch/discussions/884",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
-    "#);
+    "###);
 }
 
 async fn dynamic_search_rules_server() -> Server {

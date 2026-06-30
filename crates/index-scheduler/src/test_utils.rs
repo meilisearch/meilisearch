@@ -8,6 +8,7 @@ use file_store::File;
 use http_client::policy::IpPolicy;
 use meilisearch_auth::open_auth_store_env;
 use meilisearch_types::document_formats::DocumentFormatError;
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use meilisearch_types::milli::update::{IndexerConfig, MissingDocumentPolicy};
 use meilisearch_types::tasks::KindWithContent;

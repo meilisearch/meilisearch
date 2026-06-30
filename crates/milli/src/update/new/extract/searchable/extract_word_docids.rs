@@ -24,11 +24,9 @@ use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
 use crate::{
-    bucketed_position, DocumentId, FieldId, PatternMatch, Result, UserError,
+    bucketed_position, DocumentId, FieldId, PatternMatch, Result, UserError, MAX_COUNTED_WORDS,
     MAX_POSITION_PER_ATTRIBUTE,
 };
-
-const MAX_COUNTED_WORDS: usize = 30;
 
 pub struct WordDocidsBalancedCaches<'extractor> {
     word_fid_docids: BalancedCaches<'extractor>,

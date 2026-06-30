@@ -2,6 +2,7 @@ use std::fmt;
 use std::io::ErrorKind;
 
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyState, Origin};

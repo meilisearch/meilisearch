@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRule;
 use meilisearch_types::features::{ChatCompletionSettings, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::network::Network;

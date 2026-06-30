@@ -1,19 +1,25 @@
-use std::collections::BTreeMap;
 use std::convert::Infallible;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, ValuePointerRef};
+use milli::update::new::document::Document;
+use milli::update::Setting;
+use milli::FaultSource;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use utoipa::ToSchema;
 
 use crate::deserr::DeserrJsonError;
+use crate::error::deserr_codes::{
+    InvalidDynamicSearchRuleActions, InvalidDynamicSearchRuleActive,
+    InvalidDynamicSearchRuleConditions, InvalidDynamicSearchRuleDescription,
+    InvalidDynamicSearchRulePriority,
+};
 use crate::error::ParseOffsetDateTimeError;
 use crate::index_uid::IndexUid;
+use crate::locales::Locale;
 
 pub type RuleUid = IndexUid;
-
-pub type DynamicSearchRules = BTreeMap<RuleUid, DynamicSearchRule>;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]

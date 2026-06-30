@@ -30,7 +30,7 @@ use super::MustStopProcessing;
 use crate::filter::parse_local_index_filter;
 use crate::processing::AtomicDocumentStep;
 use crate::utils::UreqRequestWrapper;
-use crate::{Error, IndexScheduler, Result};
+use crate::{Error, IndexScheduler, Result, RoFeatures};
 
 type Response = http_client::ureq::http::Response<http_client::ureq::Body>;
 
@@ -47,7 +47,7 @@ impl IndexScheduler {
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessExport)?;
 
         let indexes: Vec<_> = self
-            .index_names()?
+            .user_index_names()?
             .into_iter()
             .flat_map(|uid| {
                 indexes

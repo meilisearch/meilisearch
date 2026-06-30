@@ -4,6 +4,7 @@
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
 use meilisearch_types::heed::Env;
+use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::tasks::{Status, Task};

@@ -62,7 +62,7 @@ use crate::metrics::{
 };
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
-use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
+use crate::search::{add_search_rules, elapsed, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
 /// Request a chat completion

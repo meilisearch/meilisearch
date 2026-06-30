@@ -36,15 +36,15 @@ use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
-use query_term::{
-    located_query_terms_from_tokens, ExtractedTokens, LocatedQueryTerm, Phrase, QueryTerm,
-};
+use query_term::{located_query_terms_from_tokens, Phrase, QueryTerm};
+pub use query_term::{ExtractedTokens, LocatedQueryTerm};
 use ranking_rules::{
     BoxRankingRule, PlaceholderQuery, RankingRule, RankingRuleOutput, RankingRuleQueryTrait,
 };
 use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
+use time::OffsetDateTime;
 
 pub(crate) use self::distinct::{facet_string_values, facet_values_prefix_key};
 use self::geo_sort::GeoSort;

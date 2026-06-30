@@ -51,7 +51,8 @@ macro_rules! test_filter {
                 Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
             let progress = Progress::default();
-            let mut search = Search::new(&rtxn, &index, &progress);
+            let mut search =
+                Search::new(&rtxn, &index, "test", time::OffsetDateTime::now_utc(), &progress);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 

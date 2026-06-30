@@ -5,6 +5,7 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::milli::sharding::Shards;

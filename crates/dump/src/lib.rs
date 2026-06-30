@@ -11,7 +11,7 @@ use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
 use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyChange};
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
+    Details, DsrUpdate, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
@@ -268,10 +268,6 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
-    use meilisearch_types::dynamic_search_rules::{
-        Condition, DynamicSearchRule, DynamicSearchRuleAction as RuleActionKind,
-        DynamicSearchRules, RuleAction, Selector,
-    };
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;

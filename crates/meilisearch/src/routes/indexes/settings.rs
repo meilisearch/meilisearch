@@ -242,7 +242,7 @@ macro_rules! make_setting_route {
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-                let index = index_scheduler.index(&index_uid)?;
+                let index = index_scheduler.user_index(&index_uid)?;
                 let rtxn = index.read_txn()?;
                 let settings = settings(&index, &rtxn, meilisearch_types::settings::SecretPolicy::HideSecrets)?;
 
@@ -736,7 +736,7 @@ pub async fn get_all(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let index = index_scheduler.index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let mut new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
 

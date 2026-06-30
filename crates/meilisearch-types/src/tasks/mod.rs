@@ -15,7 +15,9 @@ use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
+use crate::dynamic_search_rules::{DynamicSearchRuleUpdateRequest, RuleUid};
 use crate::error::ResponseError;
+use crate::index_uid::DsrIndex;
 use crate::index_uid_pattern::IndexUidPattern;
 use crate::keys::Key;
 use crate::settings::{Settings, Unchecked};

@@ -4,6 +4,7 @@ use std::io::BufWriter;
 use std::sync::atomic::Ordering;
 
 use dump::IndexMetadata;
+use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};

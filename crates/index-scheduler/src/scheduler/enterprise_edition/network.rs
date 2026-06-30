@@ -10,6 +10,7 @@ use bumpalo::Bump;
 use hashbrown::hash_map::EntryRef;
 use http_client::reqwest::header::AUTHORIZATION;
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::{AnyIndex, UserIndex};
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::RwTxn;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};

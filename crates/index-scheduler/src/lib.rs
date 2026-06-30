@@ -57,13 +57,14 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules, RuleUid};
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::index_uid::UserIndex;
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
@@ -90,6 +91,7 @@ pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
 
+use crate::dynamic_search_rules::DynamicSearchRules;
 use crate::index_mapper::IndexMapper;
 use crate::processing::ProcessingTasks;
 use crate::utils::clamp_to_page_size;
@@ -337,7 +339,7 @@ impl IndexScheduler {
                 .open(&options.tasks_path)
         }?;
 
-        // We **must** starts by upgrading the version because it'll also upgrade the required database before we can open them
+        // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
@@ -561,7 +563,7 @@ impl IndexScheduler {
             .saturating_sub(self.used_size()?))
     }
 
-    /// Return the index corresponding to the name.
+    /// Return the user index corresponding to the name.
     ///
     /// * If the index wasn't opened before, the index will be opened.
     /// * If the index doesn't exist on disk, the `IndexNotFoundError` is thrown.
@@ -1342,7 +1344,7 @@ pub struct IndexStats {
     pub inner_stats: InnerIndexStats,
 }
 
-pub use index_mapper::IndexStats as InnerIndexStats;
+pub use index_mapper::{IndexStats as InnerIndexStats, IndexUid};
 
 /// These structure are not meant to be exposed to the end user, if needed, use the meilisearch-types::webhooks structure instead.
 /// /!\ Everytime you deserialize this structure you should fill the cli_webhook later on with the `with_cli` method. /!\

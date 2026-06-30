@@ -5,6 +5,7 @@ use charabia::Language;
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
+use time::OffsetDateTime;
 
 pub use self::facet::{
     serialize_index_filter_to_filter_string, FacetDistribution, Filter, IndexFilter, OrderBy,
@@ -13,14 +14,18 @@ pub use self::facet::{
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
+use crate::dynamic_search_rules::{DsrFuel, DynamicSearchRules};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
 use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::search::new::{
+    extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens,
+};
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Position, Result, SearchContext, UserError,
+    Index, Position, Result, SearchContext, SearchStep, UserError,
 };
 
 // Building these factories is not free.

@@ -1,17 +1,24 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
+use meilisearch_types::index_uid::DsrIndex;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
-use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
-use meilisearch_types::milli::update::DocumentAdditionResult;
-use meilisearch_types::milli::{self, ChannelCongestion};
+use meilisearch_types::milli::update::new::indexer::{
+    self, IndexOperations, Payload, UpdateByFunction,
+};
+use meilisearch_types::milli::update::{DocumentAdditionResult, Setting};
+use meilisearch_types::milli::vector::RuntimeEmbedders;
+use meilisearch_types::milli::{
+    self, ChannelCongestion, FilterableAttributesRule, MustStopProcessing,
+};
 use meilisearch_types::network::Network;
-use meilisearch_types::settings::apply_settings_to_builder;
-use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
+use meilisearch_types::settings::{apply_settings_to_builder, Settings, TypoSettings};
+use meilisearch_types::tasks::{Details, DsrUpdate, KindWithContent, Status, Task};
 use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 

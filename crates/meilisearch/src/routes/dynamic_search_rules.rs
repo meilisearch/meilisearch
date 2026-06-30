@@ -1,26 +1,29 @@
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
-use deserr::actix_web::AwebJson;
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
-use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction, RuleUid};
+use itertools::Itertools;
+use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::dynamic_search_rules::{
+    DynamicSearchRule, DynamicSearchRuleUpdateRequest, RuleUid,
+};
 use meilisearch_types::error::deserr_codes::{
-    InvalidDynamicSearchRuleActions, InvalidDynamicSearchRuleActive,
-    InvalidDynamicSearchRuleConditions, InvalidDynamicSearchRuleDescription,
     InvalidDynamicSearchRuleFilter, InvalidDynamicSearchRuleFilterActive,
-    InvalidDynamicSearchRuleFilterAttributePatterns, InvalidDynamicSearchRuleLimit,
-    InvalidDynamicSearchRuleOffset, InvalidDynamicSearchRulePriority,
+    InvalidDynamicSearchRuleFilterQuery, InvalidDynamicSearchRuleLimit,
+    InvalidDynamicSearchRuleOffset,
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::{AttributePatterns, PatternMatch};
+use meilisearch_types::milli::SearchResult;
+use meilisearch_types::tasks::{DsrUpdate, KindWithContent};
 use serde::Serialize;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
+use crate::routes::indexes::documents::CustomMetadataQuery;
+use crate::routes::{Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 
 #[routes::routes(
     routes(

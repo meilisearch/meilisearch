@@ -3,8 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::iter::Zip;
 use std::rc::Rc;
 use std::str::FromStr as _;
-use std::sync::Arc;
-use std::time::Duration;
 use std::vec::{IntoIter, Vec};
 
 use actix_http::StatusCode;
@@ -15,7 +13,6 @@ use index_scheduler::filter::{
 };
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
@@ -34,9 +31,9 @@ use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
 use super::super::{
-    compute_facet_distribution_stats, prepare_search, resolve_pins, AttributesFormat,
-    ComputedFacets, HitMaker, HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata,
-    SearchQuery, SearchQueryWithIndex,
+    compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
+    HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata, SearchQuery,
+    SearchQueryWithIndex,
 };
 use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
 use super::types::{
@@ -1341,12 +1338,13 @@ impl SearchByIndex {
     fn execute(
         &mut self,
         index_uid: String,
+        before_search: time::OffsetDateTime,
         queries: Vec<QueryByIndex>,
         params: &SearchByIndexParams,
         progress: &Progress,
     ) -> Result<Deadline, (ResponseError, Option<usize>)> {
         let first_query_index = queries.first().map(|query| query.query_index);
-        let index = match params.index_scheduler.index(&index_uid) {
+        let index = match params.index_scheduler.user_index(&index_uid) {
             Ok(index) => index,
             Err(err) => {
                 let mut err = ResponseError::from(err);

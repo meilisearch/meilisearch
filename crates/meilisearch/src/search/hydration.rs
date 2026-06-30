@@ -215,7 +215,7 @@ impl FederatedHydrationFormatter {
         // Fetch the documents from the foreign indexes
         let mut hydration_documents = HashMap::new();
         for (index_uid, docids) in hydration_docids {
-            let index = index_scheduler.index(index_uid.as_ref())?;
+            let index = index_scheduler.user_index(index_uid.as_ref())?;
             let rtxn = index.read_txn()?;
             let document_maker = IndexDocumentMaker::new(&index, &rtxn)?;
             for docid in docids {

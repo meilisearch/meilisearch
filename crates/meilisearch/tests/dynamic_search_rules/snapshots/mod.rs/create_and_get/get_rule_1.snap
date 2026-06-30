@@ -4,7 +4,7 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
 {
   "uid": "rule-1",
   "active": true,
-  "conditions": [],
+  "conditions": {},
   "actions": [
     {
       "selector": {
