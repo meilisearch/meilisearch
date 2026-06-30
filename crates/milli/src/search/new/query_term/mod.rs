@@ -446,7 +446,7 @@ impl QueryTerm {
 
 impl Interned<QueryTerm> {
     /// Return the original word from the given query term
-    fn original_single_word(self, ctx: &SearchContext<'_>) -> Option<Interned<String>> {
+    pub fn original_single_word(self, ctx: &SearchContext<'_>) -> Option<Interned<String>> {
         let self_ = ctx.term_interner.get(self);
         if self_.ngram_words.is_some() {
             None

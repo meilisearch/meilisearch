@@ -306,7 +306,7 @@ fn resolve_universe(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
-fn resolve_negative_words(
+pub(in crate::search) fn resolve_negative_words(
     ctx: &mut SearchContext<'_>,
     universe: Option<&RoaringBitmap>,
     negative_words: &[Word],
@@ -321,7 +321,7 @@ fn resolve_negative_words(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
-fn resolve_negative_phrases(
+pub(in crate::search) fn resolve_negative_phrases(
     ctx: &mut SearchContext<'_>,
     negative_phrases: &[LocatedQueryTerm],
 ) -> Result<RoaringBitmap> {
