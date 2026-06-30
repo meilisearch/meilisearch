@@ -20,7 +20,7 @@ use crate::index::MatchingStrategy;
 use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::{
-    extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens,
+    extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens, QueryGraph,
 };
 use crate::vector::{Embedder, Embedding};
 use crate::{
@@ -299,16 +299,9 @@ impl<'a> Search<'a> {
         }
 
         let mut universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
-        let pins = self
-            .pins
-            .iter()
-            .filter(|pin| universe.contains(pin.doc_id))
-            .copied()
-            .collect::<Vec<_>>();
 
-        for pin in &pins {
-            universe.remove(pin.doc_id);
-        }
+        let (query_terms, pins, used_negative_operator) =
+            self.build_located_query_terms(&mut ctx, &mut universe)?;
 
         let mut query_vector = None;
         let PartialSearchResult {
@@ -317,7 +310,6 @@ impl<'a> Search<'a> {
             documents_ids,
             document_scores,
             degraded,
-            used_negative_operator,
         } = match self.semantic.as_ref() {
             Some(SemanticSearch {
                 vector: Some(vector),
@@ -352,7 +344,7 @@ impl<'a> Search<'a> {
             }
             _ => execute_search(
                 &mut ctx,
-                self.query.as_deref(),
+                query_terms,
                 self.terms_matching_strategy,
                 self.scoring_strategy,
                 self.exhaustive_number_hits,
@@ -363,12 +355,10 @@ impl<'a> Search<'a> {
                 self.geo_param,
                 self.offset,
                 self.limit,
-                Some(self.words_limit),
                 &mut DefaultSearchLogger,
                 &mut DefaultSearchLogger,
                 self.deadline.clone(),
                 self.ranking_score_threshold,
-                self.locales.as_ref(),
                 self.progress,
                 pins,
             )?,
@@ -395,6 +385,54 @@ impl<'a> Search<'a> {
             used_negative_operator,
             query_vector,
         })
+    }
+
+    pub fn build_located_query_terms(
+        &self,
+        ctx: &mut SearchContext<'_>,
+        universe: &mut RoaringBitmap,
+    ) -> Result<(Option<(QueryGraph, Vec<new::LocatedQueryTerm>)>, Vec<PinDoc>, bool), Error> {
+        let mut used_negative_operator = false;
+
+        let mut ignored = RoaringBitmap::new();
+
+        let query_graph_terms = if let Some(query) = self.query.as_deref() {
+            let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
+
+            let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
+                extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
+
+            used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+
+            ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
+            ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
+
+            if query_terms.is_empty() {
+                // Do a placeholder search instead
+                None
+            } else {
+                Some((graph, query_terms))
+            }
+        } else {
+            None
+        };
+
+        let pins = self
+            .dynamic_search_rules
+            .map(|(dsrs, fuel)| {
+                dsrs.resolve_pins(
+                    query_graph_terms.as_ref().map(|(_, terms)| terms.as_slice()).unwrap_or(&[]),
+                    universe,
+                    ctx,
+                    fuel,
+                )
+            })
+            .transpose()?
+            .unwrap_or_default();
+
+        *universe -= ignored;
+
+        Ok((query_graph_terms, pins, used_negative_operator))
     }
 }
 

@@ -5,6 +5,7 @@ use charabia::{SeparatorKind, TokenKind, Tokenizer};
 
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};
+use crate::search::new::query_graph::QueryGraph;
 use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
 use crate::search::new::Word;
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
@@ -14,6 +15,8 @@ use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 pub struct ExtractedTokens {
     /// The terms to search for in the database.
     pub query_terms: Vec<LocatedQueryTerm>,
+    /// The graph associated with these query terms
+    pub graph: QueryGraph,
     /// The words that must not appear in the results.
     pub negative_words: Vec<Word>,
     /// The phrases that must not appear in the results.
@@ -53,7 +56,9 @@ pub fn located_query_terms_from_tokens(
 
         // early return if word limit is exceeded
         if query_terms.len() >= parts_limit {
-            return Ok(ExtractedTokens { query_terms, negative_words, negative_phrases });
+            let (graph, query_terms) = QueryGraph::from_query(ctx, tokenizer, &query_terms)?;
+
+            return Ok(ExtractedTokens { query_terms, graph, negative_words, negative_phrases });
         }
 
         match token.kind {
@@ -191,7 +196,9 @@ pub fn located_query_terms_from_tokens(
         }
     }
 
-    Ok(ExtractedTokens { query_terms, negative_words, negative_phrases })
+    let (graph, query_terms) = QueryGraph::from_query(ctx, tokenizer, &query_terms)?;
+
+    Ok(ExtractedTokens { query_terms, graph, negative_words, negative_phrases })
 }
 
 pub fn number_of_typos_allowed<'ctx>(

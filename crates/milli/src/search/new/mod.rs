@@ -35,7 +35,7 @@ use heed::RoTxn;
 use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
-use query_graph::{QueryGraph, QueryNode};
+pub use query_graph::{QueryGraph, QueryNode};
 use query_term::{located_query_terms_from_tokens, Phrase, QueryTerm};
 pub use query_term::{ExtractedTokens, LocatedQueryTerm};
 use ranking_rules::{
@@ -741,7 +741,6 @@ pub fn execute_vector_search(
         documents_ids: docids,
         located_query_terms: None,
         degraded,
-        used_negative_operator: false,
     })
 }
 
@@ -749,7 +748,7 @@ pub fn execute_vector_search(
 #[tracing::instrument(level = "trace", skip_all, target = "search::main")]
 pub fn execute_search(
     ctx: &mut SearchContext<'_>,
-    query: Option<&str>,
+    query_graph_terms: Option<(QueryGraph, Vec<LocatedQueryTerm>)>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
@@ -760,163 +759,51 @@ pub fn execute_search(
     geo_param: GeoSortParameter,
     from: usize,
     length: usize,
-    words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
-    locales: Option<&Vec<Language>>,
     progress: &Progress,
     pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
-    let mut used_negative_operator = false;
-    let mut located_query_terms = None;
-    let bucket_sort_output = if let Some(query) = query {
-        let _step = progress.update_progress_scoped(SearchStep::TokenizeQuery);
-        let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
-        let entered = span.enter();
+    let (query_graph, located_query_terms) = query_graph_terms.unzip();
 
-        // We make sure that the analyzer is aware of the stop words
-        // this ensures that the query builder is able to properly remove them.
-        let mut tokbuilder = TokenizerBuilder::new();
-        let stop_words = ctx.index.stop_words(ctx.txn)?;
-        if let Some(ref stop_words) = stop_words {
-            tokbuilder.stop_words(stop_words);
-        }
+    let bucket_sort_output = if let Some(query_graph) = query_graph {
+        let ranking_rules = get_ranking_rules_for_query_graph_search(
+            ctx,
+            sort_criteria,
+            geo_param,
+            terms_matching_strategy,
+        )?;
 
-        let separators = ctx.index.allowed_separators(ctx.txn)?;
-        let separators: Option<Vec<_>> =
-            separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-        if let Some(ref separators) = separators {
-            tokbuilder.separators(separators);
-        }
+        universe &= resolve_universe(
+            ctx,
+            &universe,
+            &query_graph,
+            terms_matching_strategy,
+            query_graph_logger,
+            progress,
+        )?;
 
-        let dictionary = ctx.index.dictionary(ctx.txn)?;
-        let dictionary: Option<Vec<_>> =
-            dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
-        if let Some(ref dictionary) = dictionary {
-            tokbuilder.words_dict(dictionary);
-        }
-
-        let db_locales;
-        match locales {
-            Some(locales) => {
-                if !locales.is_empty() {
-                    tokbuilder.allow_list(locales);
-                }
-            }
-            None => {
-                // If no locales are specified, we use the locales specified in the localized attributes rules
-                let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
-                let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
-                let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn)?;
-
-                let localized_fields = match &ctx.restricted_fids {
-                    // if AttributeToSearchOn is set, use the restricted list of ids
-                    Some(restricted_fids) => {
-                        let iter = restricted_fids
-                            .exact
-                            .iter()
-                            .chain(restricted_fids.tolerant.iter())
-                            .map(|(fid, _)| *fid);
-
-                        LocalizedFieldIds::new(&localized_attributes_rules, &fields_ids_map, iter)
-                    }
-                    // Otherwise use the full list of ids coming from the index searchable fields
-                    None => LocalizedFieldIds::new(
-                        &localized_attributes_rules,
-                        &fields_ids_map,
-                        searchable_fields.into_iter(),
-                    ),
-                };
-
-                db_locales = localized_fields.all_locales();
-                if !db_locales.is_empty() {
-                    tokbuilder.allow_list(&db_locales);
-                }
-            }
-        };
-
-        let tokenizer = tokbuilder.build();
-        drop(entered);
-
-        let span = tracing::trace_span!(target: "search::tokens", "tokenize");
-        let entered = span.enter();
-        let tokens = tokenizer.tokenize(query);
-        drop(entered);
-
-        let ExtractedTokens { query_terms, negative_words, negative_phrases } =
-            located_query_terms_from_tokens(ctx, &tokenizer, tokens, words_limit)?;
-        used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
-
-        let ignored_documents = resolve_negative_words(ctx, Some(&universe), &negative_words)?;
-        let ignored_phrases = resolve_negative_phrases(ctx, &negative_phrases)?;
-
-        universe -= ignored_documents;
-        universe -= ignored_phrases;
-
-        if query_terms.is_empty() {
-            // Do a placeholder search instead
-            let ranking_rules =
-                get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
-            let _step = progress.update_progress_scoped(SearchStep::PlaceholderRanking);
-            bucket_sort(
-                ctx,
-                ranking_rules,
-                &PlaceholderQuery,
-                distinct.as_deref(),
-                &universe,
-                from,
-                length,
-                scoring_strategy,
-                placeholder_search_logger,
-                deadline,
-                ranking_score_threshold,
-                exhaustive_number_hits,
-                max_total_hits,
-                pins,
-            )?
-        } else {
-            let (graph, new_located_query_terms) =
-                QueryGraph::from_query(ctx, &tokenizer, &query_terms)?;
-            located_query_terms = Some(new_located_query_terms);
-
-            let ranking_rules = get_ranking_rules_for_query_graph_search(
-                ctx,
-                sort_criteria,
-                geo_param,
-                terms_matching_strategy,
-            )?;
-
-            universe &= resolve_universe(
-                ctx,
-                &universe,
-                &graph,
-                terms_matching_strategy,
-                query_graph_logger,
-                progress,
-            )?;
-
-            let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
-            bucket_sort(
-                ctx,
-                ranking_rules,
-                &graph,
-                distinct.as_deref(),
-                &universe,
-                from,
-                length,
-                scoring_strategy,
-                query_graph_logger,
-                deadline,
-                ranking_score_threshold,
-                exhaustive_number_hits,
-                max_total_hits,
-                pins,
-            )?
-        }
+        let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
+        bucket_sort(
+            ctx,
+            ranking_rules,
+            &query_graph,
+            distinct.as_deref(),
+            &universe,
+            from,
+            length,
+            scoring_strategy,
+            query_graph_logger,
+            deadline,
+            ranking_score_threshold,
+            exhaustive_number_hits,
+            max_total_hits,
+            pins,
+        )?
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
@@ -963,8 +850,88 @@ pub fn execute_search(
         documents_ids: docids,
         located_query_terms,
         degraded,
-        used_negative_operator,
     })
+}
+
+pub fn extract_tokens(
+    ctx: &mut SearchContext<'_>,
+    query: &str,
+    words_limit: Option<usize>,
+    locales: Option<&Vec<Language>>,
+) -> Result<ExtractedTokens> {
+    let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
+    let entered = span.enter();
+
+    // We make sure that the analyzer is aware of the stop words
+    // this ensures that the query builder is able to properly remove them.
+    let mut tokbuilder = TokenizerBuilder::new();
+    let stop_words = ctx.index.stop_words(ctx.txn)?;
+    if let Some(ref stop_words) = stop_words {
+        tokbuilder.stop_words(stop_words);
+    }
+
+    let separators = ctx.index.allowed_separators(ctx.txn)?;
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref separators) = separators {
+        tokbuilder.separators(separators);
+    }
+
+    let dictionary = ctx.index.dictionary(ctx.txn)?;
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref dictionary) = dictionary {
+        tokbuilder.words_dict(dictionary);
+    }
+
+    let db_locales;
+    match locales {
+        Some(locales) => {
+            if !locales.is_empty() {
+                tokbuilder.allow_list(locales);
+            }
+        }
+        None => {
+            // If no locales are specified, we use the locales specified in the localized attributes rules
+            let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
+            let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
+            let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn)?;
+
+            let localized_fields = match &ctx.restricted_fids {
+                // if AttributeToSearchOn is set, use the restricted list of ids
+                Some(restricted_fids) => {
+                    let iter = restricted_fids
+                        .exact
+                        .iter()
+                        .chain(restricted_fids.tolerant.iter())
+                        .map(|(fid, _)| *fid);
+
+                    LocalizedFieldIds::new(&localized_attributes_rules, &fields_ids_map, iter)
+                }
+                // Otherwise use the full list of ids coming from the index searchable fields
+                None => LocalizedFieldIds::new(
+                    &localized_attributes_rules,
+                    &fields_ids_map,
+                    searchable_fields.into_iter(),
+                ),
+            };
+
+            db_locales = localized_fields.all_locales();
+            if !db_locales.is_empty() {
+                tokbuilder.allow_list(&db_locales);
+            }
+        }
+    };
+
+    let tokenizer = tokbuilder.build();
+    drop(entered);
+
+    let span = tracing::trace_span!(target: "search::tokens", "tokenize");
+    let entered = span.enter();
+    let tokens = tokenizer.tokenize(query);
+    drop(entered);
+
+    located_query_terms_from_tokens(ctx, &tokenizer, tokens, words_limit)
 }
 
 pub(crate) fn check_sort_criteria(
@@ -1029,5 +996,4 @@ pub struct PartialSearchResult {
     pub document_scores: Vec<Vec<ScoreDetails>>,
 
     pub degraded: bool,
-    pub used_negative_operator: bool,
 }
