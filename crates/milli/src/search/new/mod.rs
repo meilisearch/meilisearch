@@ -77,6 +77,8 @@ pub struct SynonymCache {
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
     pub txn: &'ctx RoTxn<'ctx>,
+    pub index_uid: &'ctx str,
+    pub before_search: OffsetDateTime,
     pub db_cache: DatabaseCache<'ctx>,
     pub word_interner: DedupInterner<String>,
     pub phrase_interner: DedupInterner<Phrase>,
@@ -89,7 +91,12 @@ pub struct SearchContext<'ctx> {
 }
 
 impl<'ctx> SearchContext<'ctx> {
-    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Result<Self> {
+    pub fn new(
+        index: &'ctx Index,
+        txn: &'ctx RoTxn<'ctx>,
+        index_uid: &'ctx str,
+        before_search: OffsetDateTime,
+    ) -> Result<Self> {
         let searchable_fids = index.searchable_fields_and_weights(txn)?;
         let exact_attributes_ids = index.exact_attributes_ids(txn)?;
 
@@ -108,6 +115,8 @@ impl<'ctx> SearchContext<'ctx> {
         Ok(Self {
             index,
             txn,
+            index_uid,
+            before_search,
             db_cache: <_>::default(),
             word_interner: <_>::default(),
             phrase_interner: <_>::default(),

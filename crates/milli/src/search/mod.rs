@@ -254,7 +254,8 @@ impl<'a> Search<'a> {
         };
 
         if has_vector {
-            let ctx = SearchContext::new(self.index, self.rtxn)?;
+            let ctx =
+                SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
             filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)
         } else {
             Ok(self.execute()?.candidates)
@@ -262,7 +263,8 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx = SearchContext::new(self.index, self.rtxn)?;
+        let mut ctx =
+            SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.attributes_to_search_on(searchable_attributes)?;
