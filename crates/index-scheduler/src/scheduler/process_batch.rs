@@ -554,6 +554,133 @@ impl IndexScheduler {
                 self.process_network_index_batch(network_task, inner_batch, current_batch, progress)
             }
             Batch::NetworkReady { task } => self.process_network_ready(task, progress),
+            Batch::DsrUpdate { rules, tasks, must_create_index } => {
+                let index_uid = DsrIndex;
+                let index;
+
+                let settings_congestion = if must_create_index {
+                    // create the index if it doesn't already exist
+                    let wtxn = self.env.write_txn()?;
+
+                    index = self.index_mapper.create_index(wtxn, index_uid, None, None)?;
+                    let mut index_wtxn = index.write_txn()?;
+
+                    let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
+                    let settings_congestion = self.apply_dsr_settings(
+                        &mut index_wtxn,
+                        &index,
+                        &progress,
+                        &must_stop_processing,
+                        current_batch.embedder_stats.clone(),
+                    )?;
+
+                    // commit the settings change before applying the document change
+                    // this is because the document indexer relies on read transactions that will not see
+                    // the settings changes.
+                    index_wtxn.commit()?;
+
+                    settings_congestion
+                } else {
+                    let rtxn = self.env.read_txn()?;
+                    index = self.index_mapper.index(&rtxn, index_uid)?;
+                    None
+                };
+
+                let mut index_wtxn = index.write_txn()?;
+
+                let index_version = index.get_version(&index_wtxn)?.unwrap_or((1, 12, 0));
+                let package_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+                if index_version != package_version {
+                    return Err(Error::IndexVersionMismatch {
+                        index: index_uid.uid().to_string(),
+                        index_version,
+                        package_version,
+                    });
+                }
+
+                // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
+                self.index_mapper.set_currently_updating_index(Some((
+                    index_uid.uid().to_string(),
+                    index.clone(),
+                )));
+
+                let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
+                let (tasks, update_congestion) = self.apply_dsr_update(
+                    &mut index_wtxn,
+                    &index,
+                    rules.as_slice(),
+                    current_batch.embedder_stats.clone(),
+                    tasks,
+                    &progress,
+                )?;
+
+                {
+                    progress.update_progress(FinalizingIndexStep::Committing);
+                    let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
+                    let _entered = span.enter();
+
+                    index_wtxn.commit()?;
+                }
+
+                // if the update processed successfully, we're going to store the new
+                // stats of the index. Since the tasks have already been processed and
+                // this is a non-critical operation. If it fails, we should not fail
+                // the entire batch.
+                let mut post_commit_dabases_sizes = None;
+                let res = || -> Result<()> {
+                    progress.update_progress(FinalizingIndexStep::ComputingStats);
+                    let index_rtxn = index.read_txn()?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.uid().to_string())))?;
+                    let mut wtxn = self.env.write_txn()?;
+                    self.index_mapper.store_stats_of(&mut wtxn, index_uid, &stats)?;
+                    post_commit_dabases_sizes = Some(index.database_sizes(&index_rtxn)?);
+                    wtxn.commit()?;
+                    Ok(())
+                }();
+
+                match res {
+                    Ok(_) => (),
+                    Err(e) => tracing::error!(
+                        error = &e as &dyn std::error::Error,
+                        "Could not write the stats of the index"
+                    ),
+                }
+
+                let info = ProcessBatchInfo {
+                    congestion: ChannelCongestion::merge(settings_congestion, update_congestion),
+                    // In case we fail to the get post-commit sizes we decide
+                    // that nothing changed and use the pre-commit sizes.
+                    post_commit_dabases_sizes: post_commit_dabases_sizes
+                        .unwrap_or_else(|| pre_commit_dabases_sizes.clone()),
+                    pre_commit_dabases_sizes,
+                };
+
+                Ok((tasks, info))
+            }
+            Batch::DsrClear { mut tasks } => {
+                let index_uid = DsrIndex;
+
+                let number_of_documents = self.process_index_deletion(
+                    index_uid, &progress, true, // do not error if the DSR index does not exist
+                )?;
+
+                // We set all the tasks details to the default value.
+                for task in &mut tasks {
+                    task.status = Status::Succeeded;
+                    task.details = match &task.kind {
+                        KindWithContent::DsrClear => {
+                            Some(Details::ClearAll { deleted_documents: Some(number_of_documents) })
+                        }
+                        otherwise => otherwise.default_finished_details(),
+                    };
+                }
+
+                // Here we could also show that all the internal database sizes goes to 0
+                // but it would mean opening the index and that's costly.
+                Ok((tasks, ProcessBatchInfo::default()))
+            }
         }
     }
 
