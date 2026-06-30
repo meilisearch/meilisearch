@@ -60,6 +60,42 @@ impl IndexScheduler {
             }
         }
 
+        progress.update_progress(UpgradeIndexesProgress::UpgradingDsrIndex);
+
+        'dsr_update: {
+            let err = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_string()));
+            let rtxn = self.env.read_txn()?;
+            let index = match self.index_mapper.index(&rtxn, DsrIndex) {
+                Ok(dsr_index) => dsr_index,
+                Err(Error::IndexNotFound(_)) => break 'dsr_update,
+                Err(err) => return Err(err),
+            };
+            let mut index_wtxn = index.write_txn()?;
+            let regen_stats = milli::update::upgrade::upgrade(
+                &mut index_wtxn,
+                &index,
+                db_version,
+                milli::update::upgrade::UpgradeParams {
+                    must_stop_processing,
+                    progress: &progress,
+                    shards: shards.as_ref(),
+                },
+            )
+            .map_err(err)?;
+            if regen_stats {
+                let stats =
+                    crate::index_mapper::IndexStats::new(&index, &index_wtxn).map_err(err)?;
+                index_wtxn.commit()?;
+
+                // Release wtxn as soon as possible because it stops us from registering tasks
+                let mut index_schd_wtxn = self.env.write_txn()?;
+                self.index_mapper.store_stats_of(&mut index_schd_wtxn, DsrIndex, &stats)?;
+                index_schd_wtxn.commit()?;
+            } else {
+                index_wtxn.commit()?;
+            }
+        }
+
         Ok(())
     }
 
