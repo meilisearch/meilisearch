@@ -77,6 +77,7 @@ impl Task {
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid }
             | IndexCompaction { index_uid } => Some(index_uid),
+            DsrUpdate { .. } | DsrClear => Some(DsrIndex::dsr_uid()),
         }
     }
 
@@ -105,7 +106,9 @@ impl Task {
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
             | KindWithContent::NetworkTopologyChange { .. }
-            | KindWithContent::IndexCompaction { .. } => None,
+            | KindWithContent::IndexCompaction { .. }
+            | KindWithContent::DsrUpdate { .. }
+            | KindWithContent::DsrClear => None,
         }
     }
 }
@@ -187,6 +190,15 @@ pub enum KindWithContent {
         index_uid: String,
     },
     NetworkTopologyChange(network::NetworkTopologyChange),
+    DsrUpdate(DsrUpdate),
+    DsrClear,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DsrUpdate {
+    CreateOrUpdate { rule_id: RuleUid, update: DynamicSearchRuleUpdateRequest },
+    Deletion(RuleUid),
 }
 
 /// Index swap operation
@@ -232,6 +244,8 @@ impl KindWithContent {
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
             KindWithContent::IndexCompaction { .. } => Kind::IndexCompaction,
             KindWithContent::NetworkTopologyChange { .. } => Kind::NetworkTopologyChange,
+            KindWithContent::DsrUpdate { .. } => Kind::DsrUpdate,
+            KindWithContent::DsrClear => Kind::DsrClear,
         }
     }
 
@@ -262,6 +276,7 @@ impl KindWithContent {
                 }
                 indexes
             }
+            DsrUpdate { .. } | DsrClear => vec![DsrIndex::dsr_uid()],
             IndexSwap { swaps } => {
                 let mut indexes = HashSet::<&str>::default();
                 for swap in swaps {
@@ -304,9 +319,9 @@ impl KindWithContent {
                     deleted_documents: None,
                 })
             }
-            KindWithContent::DocumentClear { .. } | KindWithContent::IndexDeletion { .. } => {
-                Some(Details::ClearAll { deleted_documents: None })
-            }
+            KindWithContent::DocumentClear { .. }
+            | KindWithContent::IndexDeletion { .. }
+            | KindWithContent::DsrClear => Some(Details::ClearAll { deleted_documents: None }),
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
@@ -362,6 +377,7 @@ impl KindWithContent {
                 moved_documents: 0,
                 message: "processing tasks for previous network versions".into(),
             }),
+            KindWithContent::DsrUpdate(update) => Some(Details::DsrUpdate(update.clone())),
         }
     }
 
@@ -394,7 +410,7 @@ impl KindWithContent {
                     deleted_documents: Some(0),
                 })
             }
-            KindWithContent::DocumentClear { .. } => {
+            KindWithContent::DocumentClear { .. } | KindWithContent::DsrClear => {
                 Some(Details::ClearAll { deleted_documents: None })
             }
             KindWithContent::SettingsUpdate { new_settings, .. } => {
@@ -452,6 +468,7 @@ impl KindWithContent {
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 Some(network_topology_change.to_details())
             }
+            KindWithContent::DsrUpdate(update) => Some(Details::DsrUpdate(update.clone())),
         }
     }
 }
@@ -468,7 +485,7 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::DocumentEdition { .. } => None,
             KindWithContent::DocumentDeletion { .. } => None,
             KindWithContent::DocumentDeletionByFilter { .. } => None,
-            KindWithContent::DocumentClear { .. } => None,
+            KindWithContent::DocumentClear { .. } | KindWithContent::DsrClear => None,
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
@@ -522,6 +539,7 @@ impl From<&KindWithContent> for Option<Details> {
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 Some(network_topology_change.to_details())
             }
+            KindWithContent::DsrUpdate(update) => Some(Details::DsrUpdate(update.clone())),
         }
     }
 }
@@ -634,6 +652,8 @@ pub enum Kind {
     UpgradeDatabase,
     IndexCompaction,
     NetworkTopologyChange,
+    DsrUpdate,
+    DsrClear,
 }
 
 impl Kind {
@@ -646,7 +666,9 @@ impl Kind {
             | Kind::IndexCreation
             | Kind::IndexDeletion
             | Kind::IndexUpdate
-            | Kind::IndexCompaction => true,
+            | Kind::IndexCompaction
+            | Kind::DsrUpdate
+            | Kind::DsrClear => true,
             Kind::IndexSwap
             | Kind::TaskCancelation
             | Kind::TaskDeletion
@@ -677,6 +699,8 @@ impl Display for Kind {
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
             Kind::IndexCompaction => write!(f, "indexCompaction"),
             Kind::NetworkTopologyChange => write!(f, "networkTopologyChange"),
+            Kind::DsrUpdate => write!(f, "dsrUpdate"),
+            Kind::DsrClear => write!(f, "dsrClear"),
         }
     }
 }
@@ -716,6 +740,10 @@ impl FromStr for Kind {
             Ok(Kind::IndexCompaction)
         } else if kind.eq_ignore_ascii_case("networkTopologyChange") {
             Ok(Kind::NetworkTopologyChange)
+        } else if kind.eq_ignore_ascii_case("dsrUpdate") {
+            Ok(Kind::DsrUpdate)
+        } else if kind.eq_ignore_ascii_case("dsrClear") {
+            Ok(Kind::DsrClear)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -810,6 +838,7 @@ pub enum Details {
         moved_documents: u64,
         message: String,
     },
+    DsrUpdate(DsrUpdate),
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
@@ -851,7 +880,8 @@ impl Details {
             | Self::Dump { .. }
             | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
-            | Self::IndexSwap { .. } => (),
+            | Self::IndexSwap { .. }
+            | Self::DsrUpdate { .. } => (),
             Self::NetworkTopologyChange { moved_documents: _, message } => {
                 *message = format!("Failed. Previous status: {}", message);
             }
@@ -917,6 +947,12 @@ pub enum BatchStopReason {
     NetworkTaskImportTasks {
         id: TaskId,
         inner_reason: String,
+    },
+    DocumentOperationWithDsrUpdate {
+        id: TaskId,
+    },
+    SettingsWithDsrUpdate {
+        id: TaskId,
     },
 }
 
@@ -1017,6 +1053,12 @@ impl Display for BatchStopReason {
                     f,
                     "stopped after batching network task with id {id} and a batch of import tasks: {inner_reason}"
                 )
+            }
+            BatchStopReason::DocumentOperationWithDsrUpdate { id } => {
+                write!(f, "stopped before task with id {id} because it is a dynamic search rule update or clear, which cannot be batched with document operations")
+            }
+            BatchStopReason::SettingsWithDsrUpdate { id } => {
+                write!(f, "stopped before task with id {id} because it is a dynamic search rule update or clear, which cannot be batched with settings changes")
             }
         }
     }

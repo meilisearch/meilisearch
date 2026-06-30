@@ -332,7 +332,10 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ index_uid: {index_uid:?}, pre_compaction_size: {pre_compaction_size:?}, post_compaction_size: {post_compaction_size:?} }}")
         }
         Details::NetworkTopologyChange { moved_documents, message } => {
-            format!("{{ moved_documents: {moved_documents:?}, message: {message:?}")
+            format!("{{ moved_documents: {moved_documents:?}, message: {message:?} }}")
+        }
+        Details::DsrUpdate(update) => {
+            format!("{{ update: {update:?} }}")
         }
     }
 }

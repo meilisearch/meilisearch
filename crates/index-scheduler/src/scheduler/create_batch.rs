@@ -70,6 +70,14 @@ pub(crate) enum Batch {
     NetworkReady {
         task: Task,
     },
+    DsrUpdate {
+        rules: Vec<meilisearch_types::tasks::DsrUpdate>,
+        tasks: Vec<Task>,
+        must_create_index: bool,
+    },
+    DsrClear {
+        tasks: Vec<Task>,
+    },
 }
 
 #[derive(Debug)]
@@ -133,7 +141,9 @@ impl Batch {
             Batch::SnapshotCreation(tasks)
             | Batch::TaskDeletions(tasks)
             | Batch::UpgradeDatabase { tasks }
-            | Batch::IndexDeletion { tasks, .. } => {
+            | Batch::IndexDeletion { tasks, .. }
+            | Batch::DsrUpdate { tasks, .. }
+            | Batch::DsrClear { tasks } => {
                 RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
             }
             Batch::IndexOperation { op, .. } => match op {
@@ -181,6 +191,7 @@ impl Batch {
             | IndexDeletion { index_uid, .. }
             | IndexCompaction { index_uid, .. } => Some(index_uid),
             NetworkIndexBatch { network_task: _, inner_batch } => inner_batch.index_uid(),
+            DsrUpdate { .. } | DsrClear { .. } => Some(DsrIndex::dsr_uid()),
         }
     }
 }
@@ -205,6 +216,8 @@ impl fmt::Display for Batch {
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
             Batch::NetworkIndexBatch { .. } => f.write_str("NetworkTopologyChange")?,
             Batch::NetworkReady { .. } => f.write_str("NetworkTopologyChange")?,
+            Batch::DsrUpdate { .. } => f.write_str("DsrUpdate")?,
+            Batch::DsrClear { .. } => f.write_str("DsrClear")?,
         };
         match index_uid {
             Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
@@ -472,6 +485,29 @@ impl IndexScheduler {
                     self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
+            }
+            BatchKind::DsrUpdate { rules } => {
+                let tasks = self.queue.get_existing_tasks_for_processing_batch(
+                    rtxn,
+                    current_batch,
+                    rules,
+                )?;
+
+                let rules: Vec<_> = tasks
+                    .iter()
+                    .map(|task| match &task.kind {
+                        KindWithContent::DsrUpdate(update) => update.clone(),
+                        _ => unreachable!(),
+                    })
+                    .collect();
+
+                Ok(Some(Batch::DsrUpdate { rules, tasks, must_create_index }))
+            }
+            BatchKind::DsrClear { ids } => {
+                let tasks =
+                    self.queue.get_existing_tasks_for_processing_batch(rtxn, current_batch, ids)?;
+
+                Ok(Some(Batch::DsrClear { tasks }))
             }
         }
     }

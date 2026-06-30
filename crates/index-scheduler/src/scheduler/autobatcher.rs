@@ -25,6 +25,8 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
+    DsrUpdate,
+    DsrClear,
 }
 
 impl AutobatchKind {
@@ -68,6 +70,8 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
+            KindWithContent::DsrUpdate { .. } => AutobatchKind::DsrUpdate,
+            KindWithContent::DsrClear => AutobatchKind::DsrClear,
             KindWithContent::IndexCompaction { .. }
             | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
@@ -119,6 +123,12 @@ pub enum BatchKind {
     },
     IndexSwap {
         id: TaskId,
+    },
+    DsrUpdate {
+        rules: Vec<TaskId>,
+    },
+    DsrClear {
+        ids: Vec<TaskId>,
     },
 }
 
@@ -232,6 +242,8 @@ impl BatchKind {
                 Continue(BatchKind::Settings { allow_index_creation, settings_ids: vec![task_id] }),
                 allow_index_creation,
             ),
+            K::DsrUpdate => (Continue(BatchKind::DsrUpdate { rules: vec![task_id] }), true),
+            K::DsrClear => (Continue(BatchKind::DsrClear { ids: vec![task_id] }), false),
         }
     }
 

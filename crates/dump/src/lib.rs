@@ -166,6 +166,8 @@ pub enum KindDump {
         index_uid: String,
     },
     NetworkTopologyChange(NetworkTopologyChange),
+    DsrUpdate(DsrUpdate),
+    DsrClear,
 }
 
 impl From<Task> for TaskDump {
@@ -255,6 +257,8 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 KindDump::NetworkTopologyChange(network_topology_change)
             }
+            KindWithContent::DsrUpdate(update) => KindDump::DsrUpdate(update),
+            KindWithContent::DsrClear => KindDump::DsrClear,
         }
     }
 }
