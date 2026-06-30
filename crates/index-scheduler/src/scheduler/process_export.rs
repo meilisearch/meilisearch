@@ -83,7 +83,7 @@ impl IndexScheduler {
 
             let ExportIndexSettings { filter, override_settings } = export_settings;
 
-            let index = self.index(uid)?;
+            let index = self.user_index(uid)?;
             let index_rtxn = index.read_txn()?;
             let filter = filter
                 .as_ref()

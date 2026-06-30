@@ -277,25 +277,30 @@ fn stream_tarball_into_pipe(
 
     // 3. Snapshot every indexes
     progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexes);
-    let index_mapping = index_scheduler.index_mapper.index_mapping;
-    let nb_indexes = index_mapping.len(&rtxn)? as u32;
+    let nb_indexes = index_scheduler.index_mapper.index_count::<AnyIndex>(&rtxn)? as u32;
     let indexes_dir = Path::new("indexes");
-    let indexes_references: Vec<_> = index_scheduler
-        .index_mapper
-        .index_mapping
-        .iter(&rtxn)?
-        .map(|res| res.map_err(Error::from).map(|(name, uuid)| (name.to_string(), uuid)))
-        .collect::<Result<_, Error>>()?;
 
     // It's prettier to use a for loop instead of the IndexMapper::try_for_each_index
-    // method, especially when we need to access the UUID, local path and index number.
-    for (i, (name, uuid)) in indexes_references.into_iter().enumerate() {
+    // method, especially when we need to access the UUID, local path and index number
+    for (i, res) in index_scheduler.index_mapper.index_names::<AnyIndex>(&rtxn)?.enumerate() {
+        let name = res?;
         progress.update_progress(VariableNameStep::<SnapshotCreationProgress>::new(
-            &name, i as u32, nb_indexes,
+            name.uid(),
+            i as u32,
+            nb_indexes,
         ));
+
+        let uuid = index_scheduler.index_mapper.index_uuid(&rtxn, name)?.ok_or_else(|| {
+            Error::from_milli(
+                milli::InternalError::DatabaseMissingEntry { db_name: "index_mapping", key: None }
+                    .into(),
+                Some(name.uid().to_string()),
+            )
+        })?;
+
         let path = indexes_dir.join(uuid.to_string()).join("data.mdb");
-        let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
-        tracing::trace!("Appending index file for {name} in {}", path.display());
+        let index = index_scheduler.index_mapper.index(&rtxn, name)?;
+        tracing::trace!("Appending index file for {name} in {}", path.display(), name = name.uid(),);
         append_index_to_tarball(&mut tarball, path, &index)?;
     }
 

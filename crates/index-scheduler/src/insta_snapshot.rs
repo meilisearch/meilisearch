@@ -438,12 +438,15 @@ pub fn snapshot_batch(batch: &Batch) -> String {
 
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
     let mut s = String::new();
-    let names = mapper.index_names(rtxn).unwrap();
+    let names = mapper.index_names::<meilisearch_types::index_uid::UserIndex>(rtxn).unwrap();
 
     for name in names {
-        let stats = mapper.stats_of(rtxn, &name).unwrap();
+        let name = name.unwrap();
+        let uid = name.uid();
+
+        let stats = mapper.stats_of(rtxn, name).unwrap();
         s.push_str(&format!(
-            "{name}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
+            "{uid}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
             stats.documents_database_stats.number_of_entries(),
             stats.field_distribution
         ));

@@ -1702,7 +1702,7 @@ impl SearchByIndex {
         index_scheduler: &IndexScheduler,
     ) -> Result<(), ResponseError> {
         for (index_uid, facets) in std::mem::take(&mut self.federation.facets_by_index) {
-            let index = match index_scheduler.index(&index_uid) {
+            let index = match index_scheduler.user_index(&index_uid) {
                 Ok(index) => index,
                 Err(err) => {
                     let mut err = ResponseError::from(err);

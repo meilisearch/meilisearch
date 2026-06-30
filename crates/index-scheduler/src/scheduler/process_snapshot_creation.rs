@@ -174,20 +174,33 @@ impl IndexScheduler {
 
         // 3. Snapshot every indexes
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexes);
-        let index_mapping = self.index_mapper.index_mapping;
-        let nb_indexes = index_mapping.len(&rtxn)? as u32;
+        let nb_indexes = self.index_mapper.index_count::<AnyIndex>(&rtxn)? as u32;
 
-        for (i, result) in index_mapping.iter(&rtxn)?.enumerate() {
-            let (name, uuid) = result?;
+        for (i, result) in self.index_mapper.index_names::<AnyIndex>(&rtxn)?.enumerate() {
+            let name = result?;
             progress.update_progress(VariableNameStep::<SnapshotCreationProgress>::new(
-                name, i as u32, nb_indexes,
+                name.uid(),
+                i as u32,
+                nb_indexes,
             ));
             let index = self.index_mapper.index(&rtxn, name)?;
+
+            let uuid = self.index_mapper.index_uuid(&rtxn, name)?.ok_or_else(|| {
+                Error::from_milli(
+                    meilisearch_types::milli::InternalError::DatabaseMissingEntry {
+                        db_name: "index_mapping",
+                        key: None,
+                    }
+                    .into(),
+                    Some(name.uid().to_string()),
+                )
+            })?;
+
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
             fs::create_dir_all(&dst)?;
             index
                 .copy_to_path(dst.join("data.mdb"), compaction_option)
-                .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+                .map_err(|e| Error::from_milli(e, Some(name.uid().to_string())))?;
         }
 
         drop(rtxn);

@@ -674,10 +674,12 @@ impl IndexScheduler {
             };
         };
 
-        let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
+        let index_uid = AnyIndex::new(index_name);
+
+        let index_already_exists = self.index_mapper.exists(rtxn, index_uid)?;
         let mut primary_key = None;
         if index_already_exists {
-            let index = self.index_mapper.index(rtxn, index_name)?;
+            let index = self.index_mapper.index(rtxn, index_uid)?;
             let rtxn = index.read_txn()?;
             primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
         }

@@ -15,10 +15,12 @@ impl IndexScheduler {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessUpgrade)?;
 
-        let indexes = self.index_names()?;
+        let indexes = self.user_index_names()?;
         let must_stop_processing = &self.scheduler.must_stop_processing;
 
         let shards = self.network().shards();
+
+        progress.update_progress(UpgradeIndexesProgress::UpgradingUserIndexes);
 
         for (i, uid) in indexes.iter().enumerate() {
             if must_stop_processing.get() {
@@ -50,7 +52,8 @@ impl IndexScheduler {
 
                 // Release wtxn as soon as possible because it stops us from registering tasks
                 let mut index_schd_wtxn = self.env.write_txn()?;
-                self.index_mapper.store_stats_of(&mut index_schd_wtxn, uid, &stats)?;
+                let name = UserIndex::try_from_uid(uid)?;
+                self.index_mapper.store_stats_of(&mut index_schd_wtxn, name, &stats)?;
                 index_schd_wtxn.commit()?;
             } else {
                 index_wtxn.commit()?;
@@ -78,8 +81,10 @@ impl IndexScheduler {
             ));
             let index_schd_rtxn = self.env.read_txn()?;
 
+            let name = UserIndex::try_from_uid(uid)?;
+
             let rollback_outcome =
-                self.index_mapper.rollback_index(&index_schd_rtxn, uid, db_version)?;
+                self.index_mapper.rollback_index(&index_schd_rtxn, name, db_version)?;
             if !rollback_outcome.succeeded() {
                 return Err(crate::Error::RollbackFailed { index: uid.clone(), rollback_outcome });
             }

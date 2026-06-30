@@ -357,7 +357,8 @@ impl IndexScheduler {
                 // fixme: add index_uid to match to avoid the unwrap
                 let index_uid = index_uid.unwrap();
                 // fixme: handle error more gracefully? not sure when this could happen
-                self.index_mapper.resize_index(&wtxn, &index_uid)?;
+
+                self.index_mapper.resize_index(&wtxn, AnyIndex::new(&index_uid))?;
                 wtxn.abort();
 
                 tracing::info!("The max database size was reached. Resizing the index.");
