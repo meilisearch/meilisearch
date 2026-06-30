@@ -250,6 +250,24 @@ pub struct PaginationView<T> {
 }
 
 impl Pagination {
+    pub fn empty(self) -> PaginationView<()> {
+        self.format_with(0, Default::default())
+    }
+
+    pub fn try_auto_paginate_sized<T, E>(
+        self,
+        content: impl IntoIterator<Item = Result<T, E>> + ExactSizeIterator,
+    ) -> Result<PaginationView<T>, E>
+    where
+        T: Serialize,
+    {
+        let total = content.len();
+        let content: Result<Vec<_>, _> =
+            content.into_iter().skip(self.offset).take(self.limit).collect();
+        let content = content?;
+        Ok(self.format_with(total, content))
+    }
+
     /// Given the full data to paginate, returns the selected section.
     pub fn auto_paginate_sized<T>(
         self,
