@@ -2973,3 +2973,13 @@ fn format_value(
         value => value,
     }
 }
+
+pub fn elapsed(since: time::OffsetDateTime) -> std::time::Duration {
+    let now = time::OffsetDateTime::now_utc();
+    if now > since {
+        // unwrap: now > since
+        (now - since).try_into().unwrap()
+    } else {
+        std::time::Duration::ZERO
+    }
+}
