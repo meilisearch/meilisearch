@@ -574,15 +574,6 @@ fn import_dump(
     let wtxn = index_scheduler.env.write_txn()?;
     index_scheduler.put_network(wtxn, network)?;
 
-    let mut dynamic_search_rules = DynamicSearchRules::new();
-    for result in dump_reader.dynamic_search_rules()? {
-        let (uid, rule) = result?;
-        dynamic_search_rules.insert(uid, rule);
-    }
-    if !dynamic_search_rules.is_empty() {
-        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
-    }
-
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
     let base_config = index_scheduler.indexer_config();

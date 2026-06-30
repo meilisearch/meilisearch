@@ -189,8 +189,6 @@ pub struct IndexScheduler {
     pub(crate) index_mapper: IndexMapper,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
-    /// In charge of storing and retrieving search dynamic rules.
-    dynamic_search_rules: dynamic_search_rules::DynamicSearchRulesStore,
 
     /// Stores the custom chat prompts and other settings of the indexes.
     pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
@@ -268,7 +266,6 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
-            dynamic_search_rules: self.dynamic_search_rules.clone(),
             chat_settings: self.chat_settings,
             runtime: self.runtime.clone(),
             web_client: self.web_client.clone(),
@@ -280,9 +277,9 @@ impl IndexScheduler {
             + Queue::nb_db()
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
-            + dynamic_search_rules::DynamicSearchRulesStore::nb_db()
             + 1 // chat-prompts
             + 1 // persisted
+            + 1 // legacy dynamic search rules
     }
 
     /// Create an index scheduler and start its run loop.
@@ -345,8 +342,6 @@ impl IndexScheduler {
         let mut wtxn = env.write_txn()?;
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
-        let dynamic_search_rules =
-            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
@@ -388,7 +383,6 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
-            dynamic_search_rules,
             chat_settings,
             runtime,
             web_client
@@ -1166,29 +1160,16 @@ impl IndexScheduler {
         self.features.network()
     }
 
-    pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.dynamic_search_rules.put(wtxn, rules)?;
-        Ok(())
+    pub fn dynamic_search_rules(
+        &self,
+        features: RoFeatures,
+        disabled_action: &'static str,
+    ) -> Result<DynamicSearchRules<'_>> {
+        features.check_dynamic_search_rules(disabled_action)?;
+
+        Ok(DynamicSearchRules::new(self))
     }
 
-    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
-        self.dynamic_search_rules.get()
-    }
-
-    pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
-        let mut wtxn = self.env.write_txn()?;
-        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
-        wtxn.commit()?;
-        Ok(())
-    }
-
-    pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
-        let mut wtxn = self.env.write_txn()?;
-        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
-        wtxn.commit()?;
-        Ok(deleted)
-    }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {
         let webhooks = Webhooks::from_runtime(runtime);

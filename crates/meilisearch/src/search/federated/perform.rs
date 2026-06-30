@@ -90,7 +90,6 @@ pub async fn perform_federated_search(
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
-    let dynamic_search_rules = index_scheduler.dynamic_search_rules();
 
     // Preconstruct metadata keeping the original queries order for later metadata building
     let precomputed_query_metadata: Vec<_> = {
@@ -210,7 +209,6 @@ pub async fn perform_federated_search(
         has_remote: partitioned_queries.has_remote,
         is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
-        dynamic_search_rules,
     };
     let mut search_by_index = SearchByIndex::new(
         federation,
@@ -1296,7 +1294,6 @@ struct SearchByIndexParams {
     is_proxy: bool,
     has_remote: bool,
     network: Network,
-    dynamic_search_rules: Arc<DynamicSearchRules>,
 }
 
 struct SearchByIndex {
