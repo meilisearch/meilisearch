@@ -73,16 +73,25 @@ pub struct Search<'a> {
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    index_uid: &'a str,
+    before_search: OffsetDateTime,
     semantic: Option<SemanticSearch>,
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
     progress: &'a Progress,
-    pins: Vec<PinDoc>,
+    dynamic_search_rules: Option<(&'a DynamicSearchRules, DsrFuel)>,
+    candidates: Option<&'a RoaringBitmap>,
 }
 
 impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index, progress: &'a Progress) -> Search<'a> {
+    pub fn new(
+        rtxn: &'a heed::RoTxn<'a>,
+        index: &'a Index,
+        index_uid: &'a str,
+        before_search: OffsetDateTime,
+        progress: &'a Progress,
+    ) -> Search<'a> {
         Search {
             query: None,
             filter: None,
@@ -100,12 +109,15 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            index_uid,
+            before_search,
             semantic: None,
             locales: None,
             deadline: Deadline::never(),
             ranking_score_threshold: None,
             progress,
-            pins: vec![],
+            dynamic_search_rules: None,
+            candidates: None,
         }
     }
 
@@ -215,9 +227,25 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn pins(&mut self, pins: Vec<PinDoc>) -> &mut Search<'a> {
-        self.pins = pins;
+    pub fn dynamic_search_rules(
+        &mut self,
+        dynamic_search_rules: &'a DynamicSearchRules,
+        fuel: DsrFuel,
+    ) -> &mut Search<'a> {
+        self.dynamic_search_rules = Some((dynamic_search_rules, fuel));
         self
+    }
+
+    /// Limit the results to **at most** candidates.
+    ///
+    /// If there is a specified filter, it is applied on top of the candidates.
+    pub fn candidates(&mut self, candidates: &'a RoaringBitmap) -> &mut Search<'a> {
+        self.candidates = Some(candidates);
+        self
+    }
+
+    pub fn index_uid(&self) -> &'a str {
+        self.index_uid
     }
 
     pub fn execute_for_candidates(&self, is_hybrid_kind: bool) -> Result<RoaringBitmap> {
@@ -387,12 +415,15 @@ impl fmt::Debug for Search<'_> {
             max_total_hits,
             rtxn: _,
             index: _,
+            index_uid: _,
+            before_search: _,
             semantic,
             deadline,
             ranking_score_threshold,
             locales,
+            candidates,
             progress: _,
-            pins,
+            dynamic_search_rules: _,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -416,7 +447,7 @@ impl fmt::Debug for Search<'_> {
             .field("deadline", deadline)
             .field("ranking_score_threshold", ranking_score_threshold)
             .field("locales", locales)
-            .field("pins", pins)
+            .field("candidates", candidates)
             .finish()
     }
 }
