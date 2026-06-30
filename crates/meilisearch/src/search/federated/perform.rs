@@ -69,7 +69,7 @@ pub async fn perform_federated_search(
     if is_proxy {
         features.check_network("Performing a remote federated search").without_index()?;
     }
-    let before_search = std::time::Instant::now();
+    let before_search = time::OffsetDateTime::now_utc();
 
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -224,8 +224,13 @@ pub async fn perform_federated_search(
         move || -> Result<_, (ResponseError, Option<usize>)> {
             for (index_uid, queries) in partitioned_queries.local_queries_by_index {
                 // note: this is the only place we open `index_uid`
-                let index_deadline =
-                    search_by_index.execute(index_uid, queries, &params, &progress)?;
+                let index_deadline = search_by_index.execute(
+                    index_uid,
+                    before_search,
+                    queries,
+                    &params,
+                    &progress,
+                )?;
                 deadline = Deadline::earliest(deadline, index_deadline);
             }
 
@@ -251,12 +256,12 @@ pub async fn perform_federated_search(
     } = search_by_index;
 
     progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
-    let before_waiting_remote_results = std::time::Instant::now();
+    let before_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 2.3. Wait for proxy search requests to complete
     let (mut remote_results, remote_errors) = remote_search.finish().await;
 
-    let after_waiting_remote_results = std::time::Instant::now();
+    let after_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 3. merge hits and metadata across indexes and hosts
     progress.update_progress(FederatingResultsStep::MergeResults);
@@ -439,11 +444,11 @@ pub async fn perform_federated_search(
     let (facet_distribution, facet_stats, facets_by_index) =
         facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits);
 
-    let after_merge = std::time::Instant::now();
+    let after_merge = time::OffsetDateTime::now_utc();
 
     let local_duration = (before_waiting_remote_results - before_search)
         + (after_merge - after_waiting_remote_results);
-    let max_duration = Duration::max(local_duration, max_remote_duration);
+    let max_duration = time::Duration::max(local_duration, max_remote_duration);
 
     let hits_info = match (federation.page, federation.hits_per_page) {
         // no pagination
@@ -479,7 +484,7 @@ pub async fn perform_federated_search(
     Ok((
         FederatedSearchResult {
             hits: merged_hits,
-            processing_time_ms: max_duration.as_millis(),
+            processing_time_ms: max_duration.whole_milliseconds().max(0) as u128,
             hits_info,
             query_vectors,
             semantic_hit_count,
@@ -952,12 +957,12 @@ fn build_query_metadata(
 fn merge_metadata(
     results_by_index: &mut Vec<SearchResultByIndex>,
     remote_results: &Vec<FederatedSearchResult>,
-) -> (usize, bool, bool, FederatedFacets, Duration) {
+) -> (usize, bool, bool, FederatedFacets, time::Duration) {
     let mut estimated_total_hits = 0;
     let mut degraded = false;
     let mut used_negative_operator = false;
     let mut facets: FederatedFacets = FederatedFacets::default();
-    let mut max_remote_duration = Duration::ZERO;
+    let mut max_remote_duration = time::Duration::ZERO;
     for SearchResultByIndex {
         index,
         primary_key: _,
@@ -993,8 +998,8 @@ fn merge_metadata(
         performance_details: _,
     } in remote_results
     {
-        let this_remote_duration = Duration::from_millis(*processing_time_ms as u64);
-        max_remote_duration = Duration::max(this_remote_duration, max_remote_duration);
+        let this_remote_duration = time::Duration::nanoseconds(*processing_time_ms as i64);
+        max_remote_duration = time::Duration::max(this_remote_duration, max_remote_duration);
         estimated_total_hits += match hits_info {
             HitsInfo::Pagination { total_hits: estimated_total_hits, .. }
             | HitsInfo::OffsetLimit { estimated_total_hits, .. } => estimated_total_hits,
@@ -1478,6 +1483,8 @@ impl SearchByIndex {
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
+                    &index_uid,
+                    before_search,
                     &query,
                     filter,
                     &search_kind,
@@ -1510,7 +1517,7 @@ impl SearchByIndex {
                 }
 
                 let (result, _semantic_hit_count) =
-                    super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
+                    super::super::search_from_kind(search_kind, search)?;
                 let format = AttributesFormat {
                     attributes_to_retrieve: query.attributes_to_retrieve,
                     extra_attributes_to_retrieve: extra_attributes_to_retrieve.clone(),
