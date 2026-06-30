@@ -62,22 +62,22 @@ pub struct IndexMapper {
     index_map: Arc<RwLock<IndexMap>>,
 
     /// Map an index name with an index uuid currently available on disk.
-    pub(crate) index_mapping: Database<Str, UuidCodec>,
+    index_mapping: Database<Str, UuidCodec>,
     /// Map an index UUID with the cached stats associated to the index.
     ///
     /// Using an UUID forces to use the index_mapping table to recover the index behind a name, ensuring
     /// consistency wrt index swapping.
-    pub(crate) index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
+    index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
     /// The map size an index is opened with on the first time.
-    pub(crate) index_base_map_size: usize,
+    index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
     index_growth_amount: usize,
     /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
     enable_mdb_writemap: bool,
-    pub indexer_config: Arc<IndexerConfig>,
+    indexer_config: Arc<IndexerConfig>,
 
     /// A few types of long running batches of tasks that act on a single index set this field
     /// so that a handle to the index is available from other threads (search) in an optimized manner.
@@ -641,6 +641,10 @@ impl IndexMapper {
 
     pub fn indexer_config(&self) -> &IndexerConfig {
         &self.indexer_config
+    }
+
+    pub fn index_base_map_size(&self) -> usize {
+        self.index_base_map_size
     }
 
     pub fn set_currently_updating_index(&self, index: Option<(String, Index)>) {

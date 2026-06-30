@@ -533,7 +533,7 @@ impl IndexScheduler {
     }
 
     pub fn indexer_config(&self) -> &IndexerConfig {
-        &self.index_mapper.indexer_config
+        self.index_mapper.indexer_config()
     }
 
     /// Return the real database size (i.e.: The size **with** the free pages)

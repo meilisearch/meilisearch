@@ -146,7 +146,7 @@ impl IndexScheduler {
         // This is safe because we open the env file we just created in a temporary directory.
         // We are sure it's not being used by any other process nor thread.
         unsafe {
-            remove_tasks(&tasks, &dst, self.index_mapper.index_base_map_size)?;
+            remove_tasks(&tasks, &dst, self.index_mapper.index_base_map_size())?;
         }
 
         // 2.3 Create a read transaction on the index-scheduler
