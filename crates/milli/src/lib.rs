@@ -141,6 +141,9 @@ pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
 
+/// The maximum amount of words counted inside of a field.
+pub const MAX_COUNTED_WORDS: usize = 30;
+
 #[derive(Clone)]
 pub struct Deadline {
     deadline: Option<std::time::Instant>,
