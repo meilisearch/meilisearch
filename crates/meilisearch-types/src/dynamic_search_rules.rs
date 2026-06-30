@@ -46,6 +46,94 @@ pub struct DynamicSearchRule {
     pub actions: Vec<RuleAction>,
 }
 
+impl DynamicSearchRule {
+    pub fn new(uid: RuleUid) -> Self {
+        Self {
+            uid,
+            description: None,
+            precedence: None,
+            active: true,
+            conditions: Default::default(),
+            actions: vec![],
+        }
+    }
+
+    pub fn try_from_meili_doc<'a>(
+        doc: impl Document<'a>,
+        fault_source: FaultSource,
+    ) -> Result<Self, milli::Error> {
+        let to_milli_error = |err| {
+            if let FaultSource::User = fault_source {
+                milli::Error::UserError(milli::UserError::SerdeJson(err))
+            } else {
+                milli::Error::InternalError(milli::InternalError::SerdeJson(err))
+            }
+        };
+
+        let uid = serde_json::from_str(
+            doc.top_level_field("uid")?
+                .ok_or_else(|| {
+                    if let FaultSource::User = fault_source {
+                        milli::Error::UserError(milli::UserError::MissingDocumentId {
+                            primary_key: "uid".to_string(),
+                            document: Default::default(),
+                        })
+                    } else {
+                        milli::Error::InternalError(milli::InternalError::DatabaseMissingEntry {
+                            db_name: "dsr index",
+                            key: None,
+                        })
+                    }
+                })?
+                .get(),
+        )
+        .map_err(to_milli_error)?;
+        let description = match doc.top_level_field("description")? {
+            // we deserialize the description as an Option rather than hardcoding Some here,
+            // because the description could be an explicit `null`
+            Some(description) => serde_json::from_str(description.get()).map_err(to_milli_error)?,
+            None => None,
+        };
+
+        let precedence = match doc.top_level_field("precedence")? {
+            Some(precedence) => serde_json::from_str(precedence.get()).map_err(to_milli_error)?,
+            None => None,
+        };
+
+        let active = match doc.top_level_field("active")? {
+            Some(active) => serde_json::from_str(active.get()).map_err(to_milli_error)?,
+            // `active` defaults to true!
+            None => true,
+        };
+
+        let conditions = match doc.top_level_field("conditions")? {
+            Some(conditions) => serde_json::from_str(conditions.get()).map_err(to_milli_error)?,
+            None => Default::default(),
+        };
+
+        let actions = match doc.top_level_field("actions")? {
+            Some(actions) => serde_json::from_str(actions.get()).map_err(to_milli_error)?,
+            None => Default::default(),
+        };
+
+        Ok(Self { uid, description, precedence, active, conditions, actions })
+    }
+
+    pub fn into_uid_update(self) -> (RuleUid, DynamicSearchRuleUpdateRequest) {
+        let Self { uid, description, precedence, active, conditions, actions } = self;
+        (
+            uid,
+            DynamicSearchRuleUpdateRequest {
+                description: Setting::some_or_not_set(description),
+                precedence: Setting::some_or_not_set(precedence),
+                active: Setting::Set(active),
+                conditions: Setting::Set(conditions),
+                actions: Setting::Set(actions),
+            },
+        )
+    }
+}
+
 const fn default_dynamic_search_rule_active() -> bool {
     true
 }
