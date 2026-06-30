@@ -787,14 +787,16 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-filtered-remote",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "returns" }
-                ],
+                "conditions": {
+                    "query": {
+                        "words": "returns"
+                    }
+                },
                 "actions": [
                     {
                         "selector": { "id": "remote-filtered" },
@@ -804,7 +806,8 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -901,7 +904,7 @@ async fn remote_search_keeps_remote_pins() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote",
             json!({
@@ -915,7 +918,8 @@ async fn remote_search_keeps_remote_pins() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -989,14 +993,16 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote-query-miss",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "returns" }
-                ],
+                "conditions": {
+                  "query": {
+                    "words": "returns"
+                  }
+                },
                 "actions": [
                     {
                         "selector": { "id": "remote-pinned" },
@@ -1006,7 +1012,8 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -1107,9 +1114,11 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "pump-remote-pins",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "batman" }
-                ],
+                "conditions": {
+                  "query": {
+                    "words": "batman"
+                  }
+                },
                 "actions": [
                     {
                         "selector": { "id": "late-pin-1" },
@@ -1123,7 +1132,8 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -1303,7 +1313,7 @@ async fn remote_search_distinct_deduplicates_pinned_documents() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote-duplicate",
             json!({
@@ -1317,7 +1327,8 @@ async fn remote_search_distinct_deduplicates_pinned_documents() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -1435,14 +1446,16 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote-for-facets",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "returns" }
-                ],
+                "conditions": {
+                  "query": {
+                    "words": "returns"
+                  }
+                },
                 "actions": [
                     {
                         "selector": { "id": "remote-pinned" },
@@ -1452,7 +1465,8 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
