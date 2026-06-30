@@ -256,7 +256,7 @@ impl<'a> Search<'a> {
         if has_vector {
             let ctx =
                 SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)
+            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)
         } else {
             Ok(self.execute()?.candidates)
         }
@@ -298,7 +298,8 @@ impl<'a> Search<'a> {
             }
         }
 
-        let mut universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
+        let mut universe =
+            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)?;
 
         let (query_terms, pins, used_negative_operator) =
             self.build_located_query_terms(&mut ctx, &mut universe)?;

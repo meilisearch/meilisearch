@@ -2574,7 +2574,7 @@ pub fn perform_similar(
         ));
     };
 
-    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, progress)?;
+    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, None, progress)?;
     if docid_universe.contains(internal_id).not() {
         return Err(ResponseError::from_msg(
             MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),

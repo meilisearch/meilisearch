@@ -667,13 +667,22 @@ pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
     filters: &Option<IndexFilter<'_>>,
+    candidates: Option<&RoaringBitmap>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {
-    Ok(if let Some(filters) = filters {
-        let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
-        filters.evaluate(txn, index)?
-    } else {
-        index.documents_ids(txn)?
+    Ok(match (filters, candidates) {
+        (None, None) => index.documents_ids(txn)?,
+        (None, Some(candidates)) => candidates.clone(),
+        (Some(filters), None) => {
+            let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
+            filters.evaluate(txn, index)?
+        }
+        (Some(filters), Some(candidates)) => {
+            let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
+            let mut filtered = filters.evaluate(txn, index)?;
+            filtered &= candidates;
+            filtered
+        }
     })
 }
 

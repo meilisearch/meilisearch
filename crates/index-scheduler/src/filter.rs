@@ -179,10 +179,11 @@ pub fn filters_into_index_filters<'a>(
             let (_, foreign_index_uid, _, index_filter, _) = &foreign_filters[*filter_index];
 
             // filter the foreign index
-            let docids = filtered_universe(&foreign_index, &foreign_rtxn, index_filter, progress)
-                .map_err(|err| {
-                Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string()))
-            })?;
+            let docids =
+                filtered_universe(&foreign_index, &foreign_rtxn, index_filter, None, progress)
+                    .map_err(|err| {
+                        Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string()))
+                    })?;
 
             filters_internal_docids.push(docids);
         }
