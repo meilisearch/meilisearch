@@ -170,6 +170,8 @@ pub struct IndexSchedulerOptions {
     pub ip_policy: http_client::policy::IpPolicy,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
+    /// Fuel for Dynamic Search Rules
+    pub dsr_fuel: DsrFuel,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -240,6 +242,9 @@ pub struct IndexScheduler {
     runtime: Option<tokio::runtime::Handle>,
 
     web_client: http_client::reqwest::Client,
+
+    /// Fuel for dynamic search rules
+    dsr_fuel: DsrFuel,
 }
 
 impl IndexScheduler {
@@ -269,6 +274,7 @@ impl IndexScheduler {
             chat_settings: self.chat_settings,
             runtime: self.runtime.clone(),
             web_client: self.web_client.clone(),
+            dsr_fuel: self.dsr_fuel,
         }
     }
 
@@ -385,7 +391,8 @@ impl IndexScheduler {
             features,
             chat_settings,
             runtime,
-            web_client
+            web_client,
+            dsr_fuel: options.dsr_fuel,
         })
     }
 
@@ -1176,6 +1183,9 @@ impl IndexScheduler {
         Ok(DynamicSearchRules::new(self))
     }
 
+    pub fn dsr_fuel(&self) -> DsrFuel {
+        self.dsr_fuel
+    }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {
         let webhooks = Webhooks::from_runtime(runtime);

@@ -1798,15 +1798,15 @@ pub fn perform_search(
         progress,
     )?;
 
-    let pins = if features.runtime_features().dynamic_search_rules {
-        let rules = index_scheduler.dynamic_search_rules();
-        resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
-    } else {
-        Vec::new()
-    };
+    let dsrs = index_scheduler
+        .dynamic_search_rules(params.features, "")
+        // ignore error: having the feature disabled is actually allowed in search
+        .ok()
+        .and_then(|dsrs| dsrs.milli_dsrs().transpose())
+        .transpose()?;
 
-    if !pins.is_empty() {
-        search.pins(pins);
+    if let Some(dsrs) = &dsrs {
+        search.dynamic_search_rules(dsrs, index_scheduler.dsr_fuel());
     }
 
     let (

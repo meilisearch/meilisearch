@@ -131,6 +131,7 @@ impl Scheduler {
             embedding_cache_cap,
             ip_policy,
             experimental_no_snapshot_compaction,
+            dsr_fuel: _,
         } = options;
 
         Scheduler {

@@ -1492,13 +1492,17 @@ impl SearchByIndex {
                 search.offset(0);
                 search.limit(required_hit_count);
                 search.exhaustive_number_hits(params.is_exhaustive);
-                let pins = if params.features.runtime_features().dynamic_search_rules {
-                    resolve_pins(&params.dynamic_search_rules, &query, &index_uid, &index, &rtxn)?
-                } else {
-                    Vec::new()
-                };
-                if !pins.is_empty() {
-                    search.pins(pins);
+
+                let dsrs = params
+                    .index_scheduler
+                    .dynamic_search_rules(params.features, "")
+                    // ignore error: having the feature disabled is actually allowed in search
+                    .ok()
+                    .and_then(|dsrs| dsrs.milli_dsrs().transpose())
+                    .transpose()?;
+
+                if let Some(dsrs) = &dsrs {
+                    search.dynamic_search_rules(dsrs, params.index_scheduler.dsr_fuel());
                 }
 
                 if let Some(distinct) = self.federation.distinct.as_deref() {

@@ -243,6 +243,33 @@ pub fn setup_meilisearch(
         }
     };
 
+    let dsr_fuel = {
+        let max_counted_words = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_COUNTED_WORDS")
+        {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 10,
+            Err(err) => bail!(err),
+        };
+
+        let max_active_rules = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_ACTIVE_RULES") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 1000,
+            Err(err) => bail!(err),
+        };
+        let max_pin_actions = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_PIN_ACTIONS") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+        let word_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_WORD_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 4096,
+            Err(err) => bail!(err),
+        };
+
+        DsrFuel::new(max_counted_words, max_active_rules, max_pin_actions, word_fuel)
+    };
+
     let index_scheduler_opt = IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
@@ -284,6 +311,7 @@ pub fn setup_meilisearch(
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
         ip_policy,
+        dsr_fuel,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
