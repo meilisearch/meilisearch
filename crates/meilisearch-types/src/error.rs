@@ -485,7 +485,7 @@ InvalidDynamicSearchRulePriority               , InvalidRequest       , BAD_REQU
 InvalidDynamicSearchRuleActive                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleConditions             , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleActions                , InvalidRequest       , BAD_REQUEST ;
-InvalidDynamicSearchRuleFilterAttributePatterns, InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterQuery            , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleFilterActive           , InvalidRequest       , BAD_REQUEST ;
 DynamicSearchRuleNotFound                      , InvalidRequest       , NOT_FOUND
 }
