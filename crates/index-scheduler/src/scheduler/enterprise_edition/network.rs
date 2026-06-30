@@ -91,8 +91,8 @@ impl IndexScheduler {
         };
 
         let origin;
-        let origin = match task_network.origin() {
-            Some(origin) => origin,
+        let (origin, is_leader) = match task_network.origin() {
+            Some(origin) => (origin, false),
             None => {
                 let myself =
                     network_topology_change.name_for_import().expect("origin is not the leader");
@@ -101,7 +101,7 @@ impl IndexScheduler {
                     task_uid: task.uid,
                     network_version: task_network.network_version(),
                 };
-                &origin
+                (&origin, true)
             }
         };
 
@@ -117,6 +117,7 @@ impl IndexScheduler {
                 out_name,
                 new_shards,
                 origin,
+                is_leader,
                 &progress,
                 &self.scheduler.must_stop_processing,
             )?
@@ -156,6 +157,7 @@ impl IndexScheduler {
         Ok((vec![task], Default::default()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn balance_documents<
         'a,
         I: Iterator<Item = (&'a str, &'a Remote, J)> + Clone,
@@ -166,6 +168,7 @@ impl IndexScheduler {
         out_name: &str,
         new_shards: Shards,
         network_change_origin: &Origin,
+        is_leader: bool,
         progress: &Progress,
         must_stop_processing: &MustStopProcessing,
     ) -> crate::Result<()> {
@@ -181,7 +184,15 @@ impl IndexScheduler {
 
         let scheduler_rtxn = self.env.read_txn()?;
 
-        let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;
+        let features = self.features();
+
+        let index_count = if is_leader {
+            // leader sends both UserIndex and DsrIndex
+            self.index_mapper.index_count::<AnyIndex>(&scheduler_rtxn)?
+        } else {
+            // follower only sends UserIndex
+            self.index_mapper.index_count::<UserIndex>(&scheduler_rtxn)?
+        };
 
         // when the instance is empty, we still need to tell that to remotes, as they cannot know of that fact and will be waiting for
         // data
@@ -209,6 +220,55 @@ impl IndexScheduler {
         }
 
         let mut index_index = 0;
+
+        // DSR export
+        if is_leader {
+            'dsr: {
+                let Ok(dsrs) = self.dynamic_search_rules(features, "") else {
+                    break 'dsr;
+                };
+
+                let Some(dsrs) = dsrs.milli_dsrs()? else {
+                    break 'dsr;
+                };
+
+                progress.update_progress(
+                    VariableNameStep::<processing::network::ExportIndex>::new(
+                        "Exporting dynamic search rules".to_string(),
+                        index_index,
+                        index_count as u32,
+                    ),
+                );
+
+                index_index += 1;
+
+                for (remote_name, remote, _) in remotes.clone() {
+                    let target = TargetInstance {
+                        remote_name: Some(remote_name),
+                        base_url: &remote.url,
+                        api_key: remote.write_api_key.as_deref(),
+                    };
+
+                    let res = self.export_dsr_index(
+                        target,
+                        &dsrs,
+                        index_count,
+                        out_name,
+                        network_change_origin,
+                        progress,
+                        &agent,
+                        must_stop_processing,
+                    );
+
+                    match res {
+                        Ok(_) => {}
+                        Err(err) => {
+                            tracing::warn!("Could not export dynamic search rules to `{remote_name}` due to error: {err}");
+                        }
+                    }
+                }
+            }
+        }
 
         // shard rebalancing
         //
@@ -289,6 +349,7 @@ impl IndexScheduler {
                         progress,
                         agent: &agent,
                         must_stop_processing,
+                        features
                     };
 
                     let res = self.export_one_index(target, options, ctx);
