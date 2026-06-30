@@ -76,10 +76,6 @@ impl DumpWriter {
         Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
     }
 
-    pub fn create_dynamic_search_rules(&self) -> Result<DynamicSearchRulesWriter> {
-        DynamicSearchRulesWriter::new(self.dir.path().join("dynamic-search-rules"))
-    }
-
     pub fn create_webhooks(&self, webhooks: WebhooksDumpView) -> Result<()> {
         Ok(std::fs::write(
             self.dir.path().join("webhooks.json"),
@@ -135,28 +131,6 @@ impl ChatCompletionsSettingsWriter {
         let mut settings_file = File::create(self.path.join(name).with_extension("json"))?;
         serde_json::to_writer(&mut settings_file, &settings)?;
         settings_file.flush()?;
-        Ok(())
-    }
-}
-
-pub struct DynamicSearchRulesWriter {
-    path: PathBuf,
-    next_file_id: usize,
-}
-
-impl DynamicSearchRulesWriter {
-    pub(crate) fn new(path: PathBuf) -> Result<Self> {
-        std::fs::create_dir(&path)?;
-        Ok(DynamicSearchRulesWriter { path, next_file_id: 0 })
-    }
-
-    pub fn push_rule(&mut self, rule: &DynamicSearchRule) -> Result<()> {
-        // e.g. "dynamic-search-rules/000000101.json"
-        let file_name = format!("{:09}.json", self.next_file_id);
-        self.next_file_id += 1;
-        let mut file = File::create(self.path.join(file_name))?;
-        serde_json::to_writer(&mut file, &rule)?;
-        file.flush()?;
         Ok(())
     }
 }
@@ -376,8 +350,6 @@ pub(crate) mod test {
         .
         ├---- batches/
         │    └---- queue.jsonl
-        ├---- dynamic-search-rules/
-        │    └---- 000000000.json
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- documents.jsonl

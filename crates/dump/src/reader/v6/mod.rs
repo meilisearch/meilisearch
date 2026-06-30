@@ -295,35 +295,7 @@ impl V6Reader {
     pub fn webhooks(&self) -> Option<&Webhooks> {
         self.webhooks.as_ref()
     }
-
-    pub fn dynamic_search_rules(
-        &self,
-    ) -> Result<Box<dyn Iterator<Item = Result<(RuleUid, DynamicSearchRule)>> + '_>> {
-        let entries = match fs::read_dir(self.dump.path().join("dynamic-search-rules")) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Box::new(std::iter::empty())),
-            Err(e) => return Err(e.into()),
-        };
-        Ok(Box::new(
-            entries
-                .map(|entry| -> Result<Option<_>> {
-                    let entry = entry?;
-                    let file_name = entry.file_name();
-                    let path = Path::new(&file_name);
-                    if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
-                    {
-                        let file = File::open(entry.path())?;
-                        let rule: DynamicSearchRule = serde_json::from_reader(file)?;
-                        Ok(Some((rule.uid.clone(), rule)))
-                    } else {
-                        Ok(None)
-                    }
-                })
-                .filter_map(|entry| entry.transpose()),
-        ))
-    }
 }
-
 pub struct UpdateFile {
     reader: BufReader<File>,
 }
