@@ -647,3 +647,67 @@ impl IndexMapper {
         *self.currently_updating_index.write().unwrap() = index;
     }
 }
+
+pub trait IndexUid<'a>: Clone + Copy {
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64>;
+
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized;
+    fn uid(&self) -> &'a str;
+}
+
+impl<'a> IndexUid<'a> for AnyIndex<'a> {
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Ok(AnyIndex::new(uid))
+    }
+
+    fn uid(&self) -> &'a str {
+        AnyIndex::uid(self)
+    }
+
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
+        Ok(db.len(rtxn)?)
+    }
+}
+
+impl<'a> IndexUid<'a> for UserIndex<'a> {
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        UserIndex::new(uid).ok_or_else(|| Error::InvalidIndexUid { index_uid: uid.to_string() })
+    }
+
+    fn uid(&self) -> &'a str {
+        UserIndex::uid(self)
+    }
+
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
+        Ok(AnyIndex::count(db, rtxn)?.saturating_sub(DsrIndex::count(db, rtxn)?))
+    }
+}
+
+impl<'a> IndexUid<'a> for DsrIndex {
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if uid == Self::dsr_uid() {
+            Ok(Self)
+        } else {
+            Err(Error::ExpectedDsrUid { index_uid: uid.to_string() })
+        }
+    }
+
+    fn uid(&self) -> &'a str {
+        Self::dsr_uid()
+    }
+
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
+        Ok(if db.get(rtxn, Self::dsr_uid())?.is_some() { 1 } else { 0 })
+    }
+}
