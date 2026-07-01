@@ -137,7 +137,6 @@
         "edition": "community",
         "version": "1.35.0",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -290,7 +289,6 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }

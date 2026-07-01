@@ -140,7 +140,6 @@
         "version": "1.35.1",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -243,8 +242,7 @@
         "description": "perform upgrade task",
         "source": "release",
         "version": "1.35.1",
-        "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "edition": "community"
       }
     },
     {
@@ -438,7 +436,6 @@
         "version": "1.47.0",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -498,8 +495,7 @@
         "description": "apply the upgrade, no update task",
         "source": "release",
         "version": "1.47.0",
-        "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "edition": "community"
       }
     },
     {
@@ -520,7 +516,6 @@
         "version": "1.48.0",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -560,8 +555,7 @@
         "description": "upgrade to v1.48.0",
         "source": "release",
         "version": "1.48.0",
-        "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "edition": "community"
       }
     },
     {
@@ -581,7 +575,6 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -640,8 +633,7 @@
       "binary": {
         "description": "apply upgrade task",
         "source": "build",
-        "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "edition": "community"
       }
     },
     {
