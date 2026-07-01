@@ -1,6 +1,6 @@
 mod context;
 mod document;
-pub(crate) mod error;
+pub mod error;
 mod fields;
 
 use std::cell::RefCell;
@@ -111,7 +111,7 @@ impl Prompt {
         'doc, // lifetime of the allocator, will live for an entire chunk of documents
     >(
         &self,
-        external_docid: &str,
+        external_docid: Option<&str>,
         document: impl crate::update::new::document::Document<'a> + Debug,
         field_id_map: &RefCell<GlobalFieldsIdsMap>,
         doc_alloc: &'doc Bump,
@@ -124,10 +124,14 @@ impl Prompt {
             doc_alloc,
         );
         self.template.render_to(&mut rendered, &context).map_err(|liquid_error| {
-            RenderPromptError::missing_context_with_external_docid(
-                external_docid.to_owned(),
-                liquid_error,
-            )
+            if let Some(external_docid) = external_docid {
+                RenderPromptError::missing_context_with_external_docid(
+                    external_docid.to_owned(),
+                    liquid_error,
+                )
+            } else {
+                RenderPromptError::missing_context(liquid_error)
+            }
         })?;
         Ok(std::str::from_utf8(rendered.into_bump_slice())
             .expect("render can only write UTF-8 because all inputs and processing preserve utf-8"))

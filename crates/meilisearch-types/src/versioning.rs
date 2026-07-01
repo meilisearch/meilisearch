@@ -34,6 +34,7 @@ pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> 
     let version_path = db_path.join(VERSION_FILE_NAME);
 
     match fs::read_to_string(version_path) {
+        Ok(version) if version.trim().is_empty() => Err(VersionFileError::MissingVersionFile),
         Ok(version) => parse_version(&version),
         Err(error) => match error.kind() {
             ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile),
@@ -93,4 +94,48 @@ pub enum VersionFileError {
 
     #[error(transparent)]
     AnyhowError(#[from] anyhow::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn missing_version_file() {
+        let dir = tempdir().unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MissingVersionFile));
+    }
+
+    #[test]
+    fn empty_version_file_treated_as_missing() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "").unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MissingVersionFile));
+    }
+
+    #[test]
+    fn whitespace_only_version_file_treated_as_missing() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "  \n\t  ").unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MissingVersionFile));
+    }
+
+    #[test]
+    fn valid_version_file() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "1.12.0").unwrap();
+        assert_eq!(get_version(dir.path()).unwrap(), (1, 12, 0));
+    }
+
+    #[test]
+    fn malformed_version_file() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "not-a-version").unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MalformedVersionFile { .. }));
+    }
 }

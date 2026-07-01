@@ -113,6 +113,13 @@ pub struct IndexStats {
     /// are not returned to the disk after a deletion, this number is typically larger than
     /// `used_database_size` that only includes the size of the used pages.
     pub database_size: u64,
+
+    /// Size of all the internal databases for the index, ordered by decreasing size.
+    ///
+    /// Database names can change from version to version.
+    #[serde(default)] // backward compatibility
+    pub internal_database_sizes: Vec<(String, u64)>,
+
     /// Number of embeddings in the index.
     /// Option: retrocompatible with the stats of the pre-v1.13.0 versions of meilisearch
     pub number_of_embeddings: Option<u64>,
@@ -144,11 +151,23 @@ impl IndexStats {
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
         let vector_store_stats = index.vector_store_stats(rtxn)?;
+        let mut db_size = index.database_sizes(rtxn)?;
+        db_size.sort_by(|_, left, _, right| left.cmp(right).reverse());
+        let internal_database_sizes = db_size
+            .into_iter()
+            .take_while(|(_, size)| *size != 0)
+            .map(|(dbname, size)| {
+                use convert_case::{Case, Casing as _};
+
+                (dbname.to_case(Case::Camel), size as u64)
+            })
+            .collect();
         Ok(IndexStats {
             number_of_embeddings: Some(vector_store_stats.number_of_embeddings),
             number_of_embedded_documents: Some(vector_store_stats.documents.len()),
             documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),
             number_of_documents: None,
+            internal_database_sizes,
             database_size: index.on_disk_size()?,
             used_database_size: index.used_size()?,
             primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),

@@ -8,7 +8,7 @@ use liquid::model::{
 use liquid::{ObjectView, ValueView};
 
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, Metadata};
-use crate::GlobalFieldsIdsMap;
+use crate::{GlobalFieldsIdsMap, PatternMatch};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FieldValue<'a, D: ObjectView> {
@@ -68,8 +68,8 @@ impl<'a, D: ObjectView> FieldValue<'a, D> {
 
     pub fn is_searchable(&self) -> &bool {
         match self.metadata.is_searchable() {
-            true => &true,
-            false => &false,
+            PatternMatch::Match => &true,
+            _ => &false,
         }
     }
 

@@ -22,12 +22,17 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 
@@ -40,12 +45,17 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 
@@ -58,12 +68,17 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 
@@ -77,12 +92,17 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 
@@ -96,12 +116,17 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 }
@@ -122,12 +147,17 @@ async fn experimental_feature_metrics() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 
@@ -174,7 +204,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `disableDocumentsFetchQueue`, `legacySearch`, `renderRoute`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -315,7 +345,7 @@ async fn multi_search_with_personalization_without_enabling_the_feature() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #0 or remove `federation` from the request",
+      "message": "Inside `.queries[0]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request\n - Hint: pass `federation.personalize` for personalization in federated search",
       "code": "invalid_multi_search_query_personalization",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_personalization"

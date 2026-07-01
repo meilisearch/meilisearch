@@ -11,12 +11,12 @@ pub struct ThreadPoolNoAbort {
     thread_pool: ThreadPool,
     /// The number of active operations.
     active_operations: AtomicUsize,
-    /// Set to true if the thread pool catched a panic.
-    pool_catched_panic: Arc<AtomicBool>,
+    /// Set to true if the thread pool caught a panic.
+    pool_caught_panic: Arc<AtomicBool>,
 }
 
 impl ThreadPoolNoAbort {
-    pub fn install<OP, R>(&self, op: OP) -> Result<R, PanicCatched>
+    pub fn install<OP, R>(&self, op: OP) -> Result<R, CaughtPanic>
     where
         OP: FnOnce() -> R + Send,
         R: Send,
@@ -24,15 +24,15 @@ impl ThreadPoolNoAbort {
         self.active_operations.fetch_add(1, Ordering::Relaxed);
         let output = self.thread_pool.install(op);
         self.active_operations.fetch_sub(1, Ordering::Relaxed);
-        // While reseting the pool panic catcher we return an error if we catched one.
-        if self.pool_catched_panic.swap(false, Ordering::SeqCst) {
-            Err(PanicCatched)
+        // While reseting the pool panic catcher we return an error if we caught one.
+        if self.pool_caught_panic.swap(false, Ordering::SeqCst) {
+            Err(CaughtPanic)
         } else {
             Ok(output)
         }
     }
 
-    pub fn broadcast<OP, R>(&self, op: OP) -> Result<Vec<R>, PanicCatched>
+    pub fn broadcast<OP, R>(&self, op: OP) -> Result<Vec<R>, CaughtPanic>
     where
         OP: Fn(BroadcastContext<'_>) -> R + Sync,
         R: Send,
@@ -40,9 +40,9 @@ impl ThreadPoolNoAbort {
         self.active_operations.fetch_add(1, Ordering::Relaxed);
         let output = self.thread_pool.broadcast(op);
         self.active_operations.fetch_sub(1, Ordering::Relaxed);
-        // While reseting the pool panic catcher we return an error if we catched one.
-        if self.pool_catched_panic.swap(false, Ordering::SeqCst) {
-            Err(PanicCatched)
+        // While reseting the pool panic catcher we return an error if we caught one.
+        if self.pool_caught_panic.swap(false, Ordering::SeqCst) {
+            Err(CaughtPanic)
         } else {
             Ok(output)
         }
@@ -59,8 +59,8 @@ impl ThreadPoolNoAbort {
 }
 
 #[derive(Error, Debug)]
-#[error("A panic occured. Read the logs to find more information about it")]
-pub struct PanicCatched;
+#[error("A panic occurred. Read the logs to find more information about it")]
+pub struct CaughtPanic;
 
 #[derive(Default)]
 pub struct ThreadPoolNoAbortBuilder(ThreadPoolBuilder);
@@ -88,15 +88,15 @@ impl ThreadPoolNoAbortBuilder {
     }
 
     pub fn build(mut self) -> Result<ThreadPoolNoAbort, rayon::ThreadPoolBuildError> {
-        let pool_catched_panic = Arc::new(AtomicBool::new(false));
+        let pool_caught_panic = Arc::new(AtomicBool::new(false));
         self.0 = self.0.panic_handler({
-            let catched_panic = pool_catched_panic.clone();
-            move |_result| catched_panic.store(true, Ordering::SeqCst)
+            let caught_panic = pool_caught_panic.clone();
+            move |_result| caught_panic.store(true, Ordering::SeqCst)
         });
         Ok(ThreadPoolNoAbort {
             thread_pool: self.0.build()?,
             active_operations: AtomicUsize::new(0),
-            pool_catched_panic,
+            pool_caught_panic,
         })
     }
 }

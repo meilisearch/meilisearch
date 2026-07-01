@@ -1,9 +1,13 @@
+use std::future::Future;
+
+use actix_http::uri::PathAndQuery;
 pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
-use http_client::reqwest::{Client, Response, StatusCode};
-use meilisearch_types::network::Remote;
+use http_client::reqwest::{Method, RequestBuilder, Response, StatusCode};
+use meilisearch_types::network::{route, Remote};
 use rand::Rng as _;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::Value;
 
 use super::types::{FederatedSearch, FederatedSearchResult, Federation};
@@ -18,6 +22,10 @@ mod error {
 
     #[derive(Debug, thiserror::Error)]
     pub enum ProxySearchError {
+        #[error("Invalid remote url: {cause}")]
+        InvalidRemoteUrl { cause: String },
+        #[error("Unknown remote `{remote}")]
+        UnknownRemote { remote: String },
         #[error("{0}")]
         CouldNotSendRequest(ReqwestErrorWithoutUrl),
         #[error("could not authenticate against the remote host\n  - hint: check that the remote instance was registered with a valid API key having the `search` action")]
@@ -50,6 +58,8 @@ mod error {
             use meilisearch_types::error::Code;
             let message = self.to_string();
             let code = match self {
+                ProxySearchError::UnknownRemote { .. } => Code::UnknownRemote,
+                ProxySearchError::InvalidRemoteUrl { .. } => Code::InvalidNetworkUrl,
                 ProxySearchError::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
                 ProxySearchError::AuthenticationError => Code::RemoteInvalidApiKey,
                 ProxySearchError::BadRequest { .. } => Code::RemoteBadRequest,
@@ -87,9 +97,22 @@ mod error {
 
 #[derive(Clone)]
 pub struct ProxySearchParams {
-    pub deadline: Option<std::time::Instant>,
+    pub deadline: std::time::Instant,
     pub try_count: u32,
     pub client: http_client::reqwest::Client,
+}
+
+impl ProxySearchParams {
+    pub fn new_with_deadline_from_env(client: http_client::reqwest::Client) -> Self {
+        let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
+            .ok()
+            .map(|p| p.parse().unwrap())
+            .unwrap_or(25);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
+
+        Self { deadline, try_count: 3, client }
+    }
 }
 
 /// Performs a federated search on a remote host and returns the results
@@ -100,60 +123,38 @@ pub async fn proxy_search(
     params: &ProxySearchParams,
     include_metadata: bool,
 ) -> Result<FederatedSearchResult, ProxySearchError> {
-    let url = format!("{}/multi-search", node.url);
-
     let federated = FederatedSearch { queries, federation: Some(federation) };
 
-    let search_api_key = node.search_api_key.as_deref();
-
-    let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
-        .ok()
-        .map(|p| p.parse().unwrap())
-        .unwrap_or(25);
-
-    let max_deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
-
-    let deadline = if let Some(deadline) = params.deadline {
-        std::time::Instant::min(deadline, max_deadline)
-    } else {
-        max_deadline
-    };
-
-    for i in 0..params.try_count {
-        match try_proxy_search(
-            &url,
-            search_api_key,
-            &federated,
-            &params.client,
-            deadline,
-            include_metadata,
-        )
-        .await
-        {
-            Ok(response) => return Ok(response),
-            Err(retry) => {
-                let duration = retry.into_duration(i)?;
-                tokio::time::sleep(duration).await;
-            }
-        }
-    }
-    try_proxy_search(&url, search_api_key, &federated, &params.client, deadline, include_metadata)
-        .await
-        .map_err(Retry::into_error)
+    json_proxy(
+        route::multi_search_path(),
+        Method::POST,
+        node,
+        &federated,
+        params,
+        include_metadata,
+    )?
+    .await
 }
 
-async fn try_proxy_search(
-    url: &str,
-    search_api_key: Option<&str>,
-    federated: &FederatedSearch,
-    client: &Client,
-    deadline: std::time::Instant,
+pub fn json_proxy<Body: Serialize, Response: DeserializeOwned>(
+    path_and_query: PathAndQuery,
+    method: Method,
+    remote: &Remote,
+    body: Body,
+    params: &ProxySearchParams,
     include_metadata: bool,
-) -> Result<FederatedSearchResult, Retry> {
-    let timeout = deadline.saturating_duration_since(std::time::Instant::now());
+) -> Result<impl Future<Output = Result<Response, ProxySearchError>> + 'static, ProxySearchError> {
+    let url = route::url_from_base_and_route(&remote.url, path_and_query)
+        .map_err(|err| ProxySearchError::InvalidRemoteUrl { cause: err.to_string() })?;
 
-    let request = client.post(url).prepare(|request| {
-        let request = request.json(&federated).timeout(timeout);
+    let url = url.to_string();
+
+    let search_api_key = remote.search_api_key.as_deref();
+
+    let deadline = params.deadline;
+
+    let request = params.client.request(method, url).prepare(|request| {
+        let request = request.json(&body);
         let request = if let Some(search_api_key) = search_api_key {
             request.bearer_auth(search_api_key)
         } else {
@@ -166,6 +167,33 @@ async fn try_proxy_search(
             request
         }
     });
+
+    let try_count = params.try_count;
+
+    Ok(async move {
+        for i in 0..try_count {
+            // unwrap: we are passing `json` body, no streaming.
+            let request = request.try_clone().unwrap();
+
+            match try_json_proxy(request, deadline).await {
+                Ok(response) => return Ok(response),
+                Err(retry) => {
+                    let duration = retry.into_duration(i)?;
+                    tokio::time::sleep(duration).await;
+                }
+            }
+        }
+        try_json_proxy(request, deadline).await.map_err(Retry::into_error)
+    })
+}
+
+async fn try_json_proxy<Response: DeserializeOwned>(
+    request: RequestBuilder,
+    deadline: std::time::Instant,
+) -> Result<Response, Retry> {
+    let timeout = deadline.saturating_duration_since(std::time::Instant::now());
+
+    let request = request.prepare(|request| request.timeout(timeout));
 
     let response = request.send().await;
     let response = match response {

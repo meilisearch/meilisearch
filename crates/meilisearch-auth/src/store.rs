@@ -124,7 +124,12 @@ impl HeedAuthStore {
                     actions.insert(Action::SnapshotsCreate);
                 }
                 Action::TasksAll => {
-                    actions.extend([Action::TasksGet, Action::TasksDelete, Action::TasksCancel]);
+                    actions.extend([
+                        Action::TasksGet,
+                        Action::TasksDelete,
+                        Action::TasksCancel,
+                        Action::TasksCompact,
+                    ]);
                 }
                 Action::StatsAll => {
                     actions.insert(Action::StatsGet);
@@ -144,6 +149,14 @@ impl HeedAuthStore {
                         Action::WebhooksUpdate,
                         Action::WebhooksDelete,
                         Action::WebhooksCreate,
+                    ]);
+                }
+                Action::DynamicSearchRulesAll => {
+                    actions.extend([
+                        Action::DynamicSearchRulesGet,
+                        Action::DynamicSearchRulesCreate,
+                        Action::DynamicSearchRulesUpdate,
+                        Action::DynamicSearchRulesDelete,
                     ]);
                 }
                 other => {

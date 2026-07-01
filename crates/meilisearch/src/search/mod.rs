@@ -1,12 +1,17 @@
 use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::ops::Not as _;
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
-use either::Either;
+use index_scheduler::filter::{
+    filter_into_index_filter, filters_into_index_filters, parse_filter,
+    retrieve_foreign_keys_settings, SourceIndexUid,
+};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -22,17 +27,20 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    AttributeState, Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch,
-    SearchForFacetValues, SearchStep,
+    filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
+    OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
+use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
-    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    AscDesc, FieldId, FieldsIdsMap, FormatOptions, Index, LocalizedAttributesRule, MatchBounds,
+    MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
+use permissive_json_pointer::contained_in;
 use regex::Regex;
+use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 #[cfg(test)]
@@ -41,14 +49,19 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
+use crate::search::value_paths_visitor::ValuePathsVisitor;
 
 mod federated;
 pub use federated::{
-    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, Partition, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    perform_federated_search, proxy, FederatedSearch, FederatedSearchResult, Federation,
+    FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
+mod dynamic_rules;
+pub use dynamic_rules::{collect_active_rules, resolve_pins, DynamicSearchContext};
+
 mod hydration;
+mod value_paths_visitor;
 use hydration::hydrate_documents;
 mod ranking_rules;
 
@@ -66,20 +79,18 @@ pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 /// Configuration for [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries) results.
 ///
 /// When enabled, results are tailored to the user profile described in `userContext`.
-#[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
-#[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied, override_error = DeserrJsonError<InvalidSearchPersonalize>)]
+#[derive(Clone, Default, PartialEq, Debug)]
 pub struct Personalize {
     /// String describing the user (e.g. preferences, behavior).
     ///
     /// Used to return different results for different profiles.
-    #[deserr(error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
+    #[request(required, error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
     pub user_context: String,
 }
 
-#[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Clone, Default, PartialEq)]
 pub struct SearchQuery {
     /// Sets the search terms.
     ///
@@ -94,24 +105,21 @@ pub struct SearchQuery {
     /// Enclose terms in double quotes (`"`) for phrase search: only documents containing that exact sequence of words are returned (e.g. `"Winter Feast"`).
     ///
     /// Use a minus sign (`-`) before a word or phrase to exclude it from results.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Number of documents to skip at the start of the results.
     ///
     /// Use together with `limit` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination) (e.g. offset=20 and limit=20 returns results 21–40).
     ///
     /// This parameter is ignored when `page` or `hitsPerPage` is set; in that case the response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`.
-    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
-    #[schema(required = false, default = DEFAULT_SEARCH_OFFSET)]
+    #[request(default = DEFAULT_SEARCH_OFFSET(), schema_default = DEFAULT_SEARCH_OFFSET, error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     /// Maximum number of documents to return in the response.
     ///
     /// Use with `offset` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
     ///
     /// This parameter is ignored when `page` or `hitsPerPage` is set. The value cannot exceed the index [maxTotalHits](https://www.meilisearch.com/docs/reference/api/settings/update-pagination#body-max-total-hits-one-of-0) setting.
-    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
-    #[schema(required = false, default = DEFAULT_SEARCH_LIMIT)]
+    #[request(default = DEFAULT_SEARCH_LIMIT(), schema_default = DEFAULT_SEARCH_LIMIT, error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
     /// Request a specific results page (1-indexed).
     ///
@@ -120,8 +128,7 @@ pub struct SearchQuery {
     /// When this parameter is set, the response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`.
     ///
     /// `page` and `hitsPerPage` take precedence over `offset` and `limit`.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
     /// Maximum number of documents per page for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
     ///
@@ -130,16 +137,14 @@ pub struct SearchQuery {
     /// When set, the response includes `totalHits` and `totalPages`.
     ///
     /// Set to 0 to obtain the exhaustive `totalHits` count without returning any documents.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
     /// List of attributes to include in each returned document.
     ///
     /// Use `["*"]` to return all attributes; if not set, the index [displayed attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list is used.
     ///
     /// Attributes that are not in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) are omitted from the response.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     /// Attributes whose values should be cropped to a short excerpt.
     ///
@@ -150,24 +155,21 @@ pub struct SearchQuery {
     /// Use `["*"]` to crop all attributes in `attributesToRetrieve`.
     ///
     /// When possible, the crop is centered around the matching terms.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     /// Maximum number of words to include in cropped values.
     ///
     /// This parameter only applies when `attributesToCrop` is set.
     ///
     /// Both query terms and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0) count toward this length.
-    #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
-    #[schema(required = false, default = DEFAULT_CROP_LENGTH)]
+    #[request(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH(), schema_default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
     /// String used to mark crop boundaries in cropped text.
     ///
     /// If null or empty, no markers are inserted.
     ///
     /// Markers are only added where content was actually removed.
-    #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
-    #[schema(required = false, default = DEFAULT_CROP_MARKER)]
+    #[request(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER(), schema_default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
     /// Attributes in which matching query terms should be highlighted.
     ///
@@ -180,30 +182,28 @@ pub struct SearchQuery {
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
     ///
     /// Supported value types are string, number, array, and object.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
+    ///
+    /// Note: highlights matches within all listed attributes, even those not in `searchableAttributes`.
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
     /// String to insert before each highlighted term.
     ///
     /// Can be any string (e.g. `<strong>`, `*`).
     ///
     /// If null or empty, nothing is inserted at the start of a match.
-    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
-    #[schema(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
+    #[request(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG(), schema_default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
     /// String to insert after each highlighted term.
     ///
     /// Should be used together with `highlightPreTag` to avoid malformed output (e.g. unclosed HTML tags).
-    #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
-    #[schema(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
+    #[request(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG(), schema_default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
     /// When true, each hit includes a `_matchesPosition` object with the byte offset (`start` and `length`) of each matched term.
     ///
     /// This is useful when you need custom highlighting.
     ///
-    /// Note that positions are given in bytes, not characters.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
+    /// Note: reports match positions in all attributes, even non-searchable ones. Positions are measured in bytes, not characters.
+    #[request(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
     /// A [filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results.
     ///
@@ -212,8 +212,7 @@ pub struct SearchQuery {
     /// You can pass a string (e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`) or an array (e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`).
     ///
     /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch), use `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, or `_geoPolygon([lat,lng], ...)` (GeoJSON only for polygon).
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Sort results by one or more attributes and their order.
     ///
@@ -224,8 +223,7 @@ pub struct SearchQuery {
     /// The first attribute in the list has precedence.
     ///
     /// See [sorting search results](https://www.meilisearch.com/docs/learn/filtering_and_sorting/sort_search_results).
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
     /// Return only one document per distinct value of the given attribute (e.g. deduplicate by product_id).
     ///
@@ -234,8 +232,7 @@ pub struct SearchQuery {
     /// This overrides the index [distinctAttribute](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-distinct-attribute-one-of-0) setting for this request.
     ///
     /// See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
     /// Return the count of matches per facet value for the listed attributes.
     ///
@@ -246,8 +243,7 @@ pub struct SearchQuery {
     /// The number of values returned per facet is limited by the index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-faceting#body-max-values-per-facet-one-of-0) setting; attributes not in filterableAttributes are ignored.
     ///
     /// More info: [faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters).
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
     /// How to match query terms when there are not enough results to satisfy `limit`.
     ///
@@ -258,24 +254,21 @@ pub struct SearchQuery {
     /// **`frequency`**: Returns documents containing all query terms first. If there are not enough, removes one term at a time starting with the word that is most frequent in the dataset, giving more weight to rarer terms (e.g. in "white cotton shirt", prioritizes documents containing "white" if "shirt" is very common).
     ///
     /// Default: `last`.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict the search to the listed attributes only.
     ///
     /// Each attribute must be in the index [searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list.
     ///
     /// The order of attributes in this parameter does not affect relevancy.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
     /// Exclude from the results any document whose [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) is below this value (between 0.0 and 1.0).
     ///
     /// Excluded hits do not count toward `estimatedTotalHits`, `totalHits`, or facet distribution.
     ///
     /// When used together with `page` and `hitsPerPage`, this parameter may reduce performance because Meilisearch must score all matching documents.
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
-    #[schema(required = false, value_type = Option<f64>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, schema_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     /// Explicitly specify the language(s) of the query.
     ///
@@ -284,8 +277,7 @@ pub struct SearchQuery {
     /// This overrides auto-detection; use it when auto-detection is wrong for the query or the documents.
     ///
     /// See also the [localizedAttributes](https://www.meilisearch.com/docs/reference/api/settings/list-all-settings#response-localized-attributes-one-of-0) settings and [Language](https://www.meilisearch.com/docs/learn/resources/language).
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
     /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search): combines keyword and semantic search.
     ///
@@ -294,8 +286,9 @@ pub struct SearchQuery {
     /// The `semanticRatio` field controls the balance: 0.0 means keyword-only results, 1.0 means semantic-only.
     ///
     /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
-    #[schema(required = false, value_type = Option<HybridQuery>)]
+    ///
+    /// The `semanticRatio` field defaults to `0.5`. A value of `0.0` uses keyword-only results; `1.0` uses semantic-only results.
+    #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
     ///
@@ -306,14 +299,12 @@ pub struct SearchQuery {
     /// When used with `hybrid`, documents are ranked by vector similarity.
     ///
     /// You can also use it to override an embedder's automatic vector generation.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     /// When true, the response includes document and query embeddings in each hit's `_vectors` field.
     ///
     /// The `_vectors` field must be listed in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) for it to appear.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
     /// For [multimodal search](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings): provide data (e.g. image, text) that populates a single search fragment configured in index settings.
     ///
@@ -322,51 +313,113 @@ pub struct SearchQuery {
     /// An embedder is required; this parameter is incompatible with `vector`.
     ///
     /// POST only.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
     /// [Personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries): provide an object with a `userContext` field (a string describing the user, e.g. preferences or behavior).
     ///
     /// Results are then tailored to that profile.
     ///
     /// Personalization must be [enabled](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted instances).
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
-    #[schema(required = false, value_type = Option<Personalize>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>)]
     pub personalize: Option<Personalize>,
-    /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
-    /// When `false` or omitted, the query runs locally.
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
     ///
     /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
     ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
-    /// Values: `true` = use the whole network; `false` or omitted = local (default).
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
     /// When using the network, the index must exist with compatible settings on all remotes.
-    ///
-    /// Documents with the same id are assumed identical for deduplication.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
     ///
     /// See [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score).
     ///
     /// The `sort` ranking rule does not affect the value of `_rankingScore`.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
     /// When true, each document includes `_rankingScoreDetails`, which breaks down the score contribution of each [ranking rule](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules).
     ///
     /// Useful for debugging relevancy.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     /// When true, the response includes a `performanceDetails` object with a timing breakdown of the query processing.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
+}
+
+/// Helper trait for queries that can be networked.
+pub trait NetworkableQuery {
+    /// Required method: reference to the `useNetwork` optional boolean.
+    fn use_network_field(&mut self) -> &mut Option<bool>;
+
+    /// Required method: whether this query already explicitly specifies a remote.
+    fn has_remote(&self) -> bool;
+
+    /// Provided method: whether or not the method should be networked.
+    ///
+    /// Factor some logic so that callers don't have to reimplement for federated and single search.
+    fn must_use_network(
+        &mut self,
+        network: &Network,
+        features: &RoFeatures,
+    ) -> Result<bool, ResponseError> {
+        // as `useNetwork` is going to default to `true` if missing in some cases,
+        // taking its value is not sufficient to prevent recursion in all cases.
+        // so we will fix-up its value to explicitly false when needed.
+        let use_network = *self.use_network_field();
+        if use_network.is_some() {
+            features.check_network("passing `useNetwork` in a search query")?
+        }
+
+        // depending on the whether we're in a sharding context or not, we need a different
+        // fixup value for the use network field to prevent recursion,
+        // and we have a different default value.
+
+        let default = if network.sharding() {
+            *self.use_network_field() = Some(false);
+            true
+        } else {
+            *self.use_network_field() = None;
+            false
+        };
+
+        // **after we fixed-up the network field**, we can return immediately if there's an explicit remote.
+        if self.has_remote() {
+            return Ok(false);
+        }
+
+        Ok(use_network.unwrap_or(default))
+    }
+}
+
+impl NetworkableQuery for SearchQuery {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
+}
+
+impl NetworkableQuery for SearchQueryWithIndex {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        self.federation_options.as_ref().and_then(|opt| opt.remote.as_ref()).is_some()
+    }
 }
 
 impl From<SearchParameters> for SearchQuery {
@@ -606,20 +659,16 @@ impl fmt::Debug for SearchQuery {
 }
 
 /// Hybrid search configuration for combining keyword and semantic search
-#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied, override_error = DeserrJsonError<InvalidSearchHybridQuery>)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
     /// Balance between keyword search (0.0) and semantic search (1.0). Defaults to 0.5.
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
-    #[schema(default, value_type = f32)]
-    #[serde(default)]
+    #[request(default, schema_type = f32, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     pub semantic_ratio: SemanticRatio,
     /// Name of the embedder configured in index settings.
     ///
     /// Used for semantic part of the search.
-    #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
+    #[request(required, error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }
 
@@ -751,112 +800,122 @@ impl SearchQuery {
 // This struct contains the fields of `SearchQuery` inline.
 // This is because neither deserr nor serde support `flatten` when using `deny_unknown_fields.
 // The `From<SearchQueryWithIndex>` implementation ensures both structs remain up to date.
-#[derive(Debug, Clone, Serialize, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SearchQueryWithIndex {
     /// Index unique identifier
-    #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
+    #[request(required, error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
     /// Query string
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Number of documents to skip
-    #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: Option<usize>,
     /// Maximum number of documents returned
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLimit>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: Option<usize>,
     /// Request a specific page of results
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
     /// Maximum number of documents returned for a page
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
     /// Attributes to display in the returned documents
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     /// Attributes whose values have to be cropped
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     /// Maximum length of cropped value in words
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
+    #[request(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
     /// String marking crop boundaries
-    #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
+    #[request(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     pub crop_marker: String,
     /// Highlight matching terms contained in an attribute
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
     /// String inserted at the start of a highlighted term
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
+    #[request(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
     /// String inserted at the end of a highlighted term
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
+    #[request(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     pub highlight_post_tag: String,
     /// Return matching terms location
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
     /// Filter queries by an attribute's value
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Sort search results by an attribute's value
-    #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
     /// Restrict search to documents with unique values of specified
     /// attribute
-    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
     /// Display the count of matches per facet
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
     /// Strategy used to match query terms within documents
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to the specified attributes
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
     /// Exclude results below the specified ranking score
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
-    #[schema(value_type = Option<f64>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, schema_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     /// Languages to use for query tokenization
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
     /// Hybrid search configuration combining keyword and semantic search.
     /// Set `semanticRatio` to balance between keyword matching (0.0) and
     /// semantic similarity (1.0). Requires an embedder to be configured.
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
-    #[schema(value_type = Option<HybridQuery>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Search using a custom query vector
-    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     /// Return document and query vector data
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
     /// Perform AI-powered search queries with multimodal content
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
     /// Personalize search results
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
-    #[serde(skip)]
+    #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none", )]
     pub personalize: Option<Personalize>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>, default)]
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// Display the global ranking score of a document
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
     /// Adds a detailed global ranking score field
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     /// Adds a detailed performance details field
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: Option<bool>,
     /// Federation options for multi-index search
-    #[deserr(default)]
-    #[schema(value_type = Option<FederationOptions>)]
+    #[request(default)]
     pub federation_options: Option<FederationOptions>,
 }
 
@@ -884,12 +943,15 @@ impl SearchQueryWithIndex {
     }
 
     pub fn has_remote_and_use_network(&self) -> bool {
-        self.federation_options.as_ref().and_then(|opt| opt.remote.as_ref()).is_some()
-            && self.use_network == Some(true)
+        self.has_remote() && (self.use_network == Some(true))
     }
 
     pub fn has_show_performance_details(&self) -> bool {
         self.show_performance_details.is_some()
+    }
+
+    fn has_distinct(&self) -> bool {
+        self.distinct.is_some()
     }
 
     pub fn from_index_query_federation(
@@ -1043,52 +1105,41 @@ impl SearchQueryWithIndex {
 }
 
 /// Request body for similar document search
-#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SimilarQuery {
     /// Document ID to find similar documents for
-    #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
-    #[schema(required = true, value_type = String)]
+    #[request(required, schema_type = String, error = DeserrJsonError<InvalidSimilarId>)]
     pub id: serde_json::Value,
     /// Number of documents to skip
-    #[schema(required = false)]
-    #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
+    #[request(default = DEFAULT_SEARCH_OFFSET(), schema_default = DEFAULT_SEARCH_OFFSET, error = DeserrJsonError<InvalidSimilarOffset>)]
     pub offset: usize,
     /// Maximum number of documents returned
-    #[schema(required = false)]
-    #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSimilarLimit>)]
+    #[request(default = DEFAULT_SEARCH_LIMIT(), schema_default = DEFAULT_SEARCH_LIMIT, error = DeserrJsonError<InvalidSimilarLimit>)]
     pub limit: usize,
     /// Filter queries by an attribute's value
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
     /// Name of the embedder to use for semantic similarity
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidSimilarEmbedder>)]
+    #[request(required, error = DeserrJsonError<InvalidSimilarEmbedder>)]
     pub embedder: String,
     /// Attributes to display in the returned documents
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     /// Return document vector data
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
     pub retrieve_vectors: bool,
     /// Display the global ranking score of a document
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>)]
     pub show_ranking_score: bool,
     /// Adds a detailed global ranking score field
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     /// Adds a detailed performance details field
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarShowPerformanceDetails>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarShowPerformanceDetails>)]
     pub show_performance_details: bool,
     /// Excludes results with low ranking scores
-    #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
-    #[schema(required = false, value_type = f64)]
+    #[request(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, schema_type = f64)]
     pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 
@@ -1124,9 +1175,8 @@ impl TryFrom<Value> for ExternalDocumentId {
 }
 
 /// Strategy used to match query terms within documents
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize)]
-#[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
+#[routes::request(no_error, proxied)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     #[default]
@@ -1188,6 +1238,18 @@ pub struct SearchHit {
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
+
+    /// Extra document fields for internal use.
+    ///
+    /// They are never de/serialized and must be manually
+    /// mounted to/unmounted from `_federation` in a federated context.
+    ///
+    /// - Unmounting: See `SearchByIndex::execute`
+    /// - Mounting: See `MergedSearchHit::remote`
+    #[serde(default, skip)]
+    #[schema(ignore)]
+    pub extra_document: Document,
+
     /// Document with highlighted and cropped attributes.
     ///
     /// Present when `attributesToHighlight` or `attributesToCrop` was set.
@@ -1212,11 +1274,73 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+impl SearchHit {
+    fn facet_values<F>(&self, field_name: &str, mut visit: F)
+    where
+        F: FnMut(FacetValue),
+    {
+        permissive_json_pointer::visit_leaf_values(&self.document, field_name, &mut |value| {
+            for value in FacetValue::from_value(value) {
+                visit(value);
+            }
+        });
+        permissive_json_pointer::visit_leaf_values(
+            &self.extra_document,
+            field_name,
+            &mut |value| {
+                for value in FacetValue::from_value(value) {
+                    visit(value);
+                }
+            },
+        );
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FacetValue {
+    Normalized(String),
+    Number(serde_json::Number),
+}
+
+impl FacetValue {
+    pub fn from_value(field: &serde_json::Value) -> impl Iterator<Item = FacetValue> + '_ {
+        match field {
+            Value::Array(values) => {
+                either::Either::Left(values.iter().flat_map(Self::from_leaf_value))
+            }
+            value => either::Either::Right(Self::from_leaf_value(value).into_iter()),
+        }
+    }
+
+    fn from_leaf_value(field: &serde_json::Value) -> Option<FacetValue> {
+        match field {
+            Value::Bool(b) => Some(FacetValue::Normalized(b.to_string())),
+            Value::Number(number) => Some(FacetValue::Number(number.clone())),
+            Value::String(s) => {
+                let normalized = milli::normalize_facet(s);
+                Some(FacetValue::Normalized(normalized))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Metadata about a search query (included when requested via header).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchMetadata {
+    /// Query string set for the query, if not already present in the response.
+    ///
+    /// Only set if:
+    ///
+    /// 1. the metadata corresponds to a query in a federated search request, **and**
+    /// 2. that federated search request query is not a placeholder search (empty or missing `q`)
+    ///
+    /// Never set for regular search and non-federated multi-search because
+    /// the query(ies) are already present in the response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
     /// Unique identifier for the query.
     pub query_uid: Uuid,
     /// UID of the index that was searched.
@@ -1430,12 +1554,33 @@ pub struct FacetStats {
     pub max: f64,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+/// Schema representation of a facet value hit (for OpenAPI documentation only).
+#[derive(ToSchema)]
+#[schema(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct FacetValueHitSchema {
+    /// The facet value that matched the query.
+    pub value: String,
+    /// Number of documents with this facet value among the search results.
+    pub count: u64,
+}
+
+/// Result of a facet search operation.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct FacetSearchResult {
+    /// Array of matching facet values with their document counts, sorted lexicographically
+    /// in ascending order (or by count if `sortFacetValuesBy` is set to `"count"`).
+    #[schema(value_type = Vec<FacetValueHitSchema>)]
     pub facet_hits: Vec<FacetValueHit>,
+    /// The original `facetQuery` from the request. `null` if no query was provided.
     pub facet_query: Option<String>,
+    /// Time in milliseconds Meilisearch took to process the request.
     pub processing_time_ms: u128,
+    /// Errors from remote shards. Only present in federated search when some remotes failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 }
 
 /// Incorporate search rules in search query
@@ -1462,10 +1607,12 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
+    filter: Option<IndexFilter<'t>>,
     search_kind: &SearchKind,
     deadline: Deadline,
     features: RoFeatures,
@@ -1475,7 +1622,7 @@ pub fn prepare_search<'t>(
         features.check_multimodal("passing `media` in a search query")?;
     }
     let mut search = index.search(rtxn, progress);
-    search.deadline(deadline);
+    search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
     }
@@ -1494,11 +1641,9 @@ pub fn prepare_search<'t>(
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
                 None => {
-                    let _step = progress.update_progress_scoped(SearchStep::Embed);
+                    let _step = progress.update_progress_scoped(SearchStep::EmbedQuery);
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
-
-                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
 
                     let q = query.q.as_deref();
                     let media = query.media.as_ref();
@@ -1509,7 +1654,7 @@ pub fn prepare_search<'t>(
                     };
 
                     embedder
-                        .embed_search(search_query, Some(deadline))
+                        .embed_search(search_query, deadline.to_instant())
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
@@ -1583,11 +1728,7 @@ pub fn prepare_search<'t>(
     search.offset(offset);
     search.limit(limit);
 
-    if let Some(ref filter) = query.filter {
-        if let Some(facets) = parse_filter(filter, Code::InvalidSearchFilter, features)? {
-            search.filter(facets);
-        }
-    }
+    search.filter(filter);
 
     if let Some(ref sort) = query.sort {
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
@@ -1637,8 +1778,39 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
-    let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
+    let filter = match &query.filter {
+        Some(filter) => {
+            let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
+            filter
+                .map(|f| {
+                    filter_into_index_filter(f, index, &rtxn, index_scheduler, progress, &index_uid)
+                })
+                .transpose()?
+        }
+        None => None,
+    };
+
+    let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
+        index,
+        &rtxn,
+        &query,
+        filter,
+        &search_kind,
+        deadline.clone(),
+        features,
+        progress,
+    )?;
+
+    let pins = if features.runtime_features().dynamic_search_rules {
+        let rules = index_scheduler.dynamic_search_rules();
+        resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
+    } else {
+        Vec::new()
+    };
+
+    if !pins.is_empty() {
+        search.pins(pins);
+    }
 
     let (
         milli::SearchResult {
@@ -1657,6 +1829,7 @@ pub fn perform_search(
         let query_uid = Uuid::now_v7();
         let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
         Some(SearchMetadata {
+            query: None,
             query_uid,
             index_uid: index_uid_for_metadata,
             primary_key,
@@ -1701,6 +1874,7 @@ pub fn perform_search(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        extra_attributes_to_retrieve: Default::default(),
         retrieve_vectors,
         attributes_to_highlight,
         attributes_to_crop,
@@ -1751,14 +1925,12 @@ pub fn perform_search(
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
             let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
+            compute_facet_distribution_stats(&facets, index, &rtxn, candidates)
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
         .unzip();
 
-    let performance_details =
-        query.show_performance_details.then(|| progress.accumulated_durations());
     let result = SearchResult {
         hits: documents,
         hits_info,
@@ -1773,7 +1945,7 @@ pub fn perform_search(
         request_uid: Some(request_uid),
         metadata,
         remote_errors: None,
-        performance_details,
+        performance_details: None,
     };
     Ok((result, deadline))
 }
@@ -1788,6 +1960,58 @@ pub struct ComputedFacets {
     pub stats: BTreeMap<String, FacetStats>,
 }
 
+impl ComputedFacets {
+    pub fn remove_hits(&mut self, hits: &[SearchHit]) {
+        if hits.is_empty() {
+            return;
+        }
+        for (field_name, distribution) in &mut self.distribution {
+            let normalized_to_original: BTreeMap<_, _> = distribution
+                .keys()
+                .enumerate()
+                .filter_map(|(index, facet_value)| {
+                    let normalized = milli::normalize_facet(facet_value);
+                    if normalized == facet_value.as_str() {
+                        None
+                    } else {
+                        Some((normalized, index))
+                    }
+                })
+                .collect();
+
+            let mut must_remove = false;
+
+            for hit in hits {
+                hit.facet_values(field_name, |value| {
+                    let count = match value {
+                        FacetValue::Normalized(s) => {
+                            if let Some(original) = normalized_to_original.get(&s) {
+                                distribution.get_index_mut(*original).map(|(_, v)| v)
+                            } else {
+                                distribution.get_mut(&s)
+                            }
+                        }
+                        FacetValue::Number(number) => distribution.get_mut(&number.to_string()),
+                    };
+
+                    let Some(count) = count else {
+                        return;
+                    };
+
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        must_remove = true;
+                    }
+                });
+            }
+
+            if must_remove {
+                distribution.retain(|_, v| *v != 0);
+            }
+        }
+    }
+}
+
 pub enum Route {
     Search,
     MultiSearch,
@@ -1799,7 +2023,6 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     index: &Index,
     rtxn: &RoTxn,
     candidates: roaring::RoaringBitmap,
-    route: Route,
 ) -> Result<ComputedFacets, ResponseError> {
     let mut facet_distribution = index.facets_distribution(rtxn);
 
@@ -1823,16 +2046,7 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     let distribution = facet_distribution
         .candidates(candidates)
         .default_order_by(sort_facet_values_by.get("*"))
-        .execute()
-        .map_err(|error| match (error, route) {
-            (
-                error @ milli::Error::UserError(milli::UserError::InvalidFacetsDistribution {
-                    ..
-                }),
-                Route::MultiSearch,
-            ) => ResponseError::from_msg(error.to_string(), Code::InvalidMultiSearchFacets),
-            (error, _) => error.into(),
-        })?;
+        .execute()?;
     let stats = facet_distribution.compute_stats()?;
     let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
     Ok(ComputedFacets { distribution, stats })
@@ -1865,7 +2079,24 @@ pub fn search_from_kind(
 }
 
 struct AttributesFormat {
+    /// Subset of the index's `displayedAttributes`.
+    ///
+    /// - If `None`, all `displayedAttributes` will be returned.
+    /// - Fields in `attributes_to_retrieve` that are not in `displayedAttributes` will not be retrieved.
     attributes_to_retrieve: Option<BTreeSet<String>>,
+
+    /// Extra set of fields that will be stored in `extra_attributes` when making hits.
+    ///
+    /// This allows recovering fields that should not be shown to the end-user but that Meilisearch needs for e.g. distinct in
+    /// federated contexts.
+    ///
+    /// - If empty, `hit.extra_attributes` will not be populated.
+    /// - Fields in `extra_attributes_to_retrieve` will be retrieved in `hit.extra_attributes` **even** if missing in `displayedAttributes`.
+    /// - Fields in `attributes_to_retrieve` that are in `displayedAttributes` will **not** be collected in `extra_attributes`.
+    /// - `_vectors` cannot be retrieved in this way.
+    ///
+    /// Due to these properties, it is possible to populate `extra_attributes_to_retrieve` without checking the `displayedAttributes`.
+    extra_attributes_to_retrieve: BTreeSet<String>,
     retrieve_vectors: RetrieveVectors,
     attributes_to_highlight: Option<HashSet<String>>,
     attributes_to_crop: Option<Vec<String>>,
@@ -1911,6 +2142,7 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
+    extra_ids: Vec<String>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
@@ -2012,7 +2244,23 @@ impl<'a> HitMaker<'a> {
             .map(fids)
             .unwrap_or_else(|| displayed_ids.clone())
             .intersection(&displayed_ids)
-            .cloned()
+            .copied()
+            .collect();
+
+        let fids_no_wildcard = |attrs: &BTreeSet<String>| {
+            let mut ids = BTreeSet::new();
+            for attr in attrs {
+                if let Some(id) = fields_ids_map.id(attr) {
+                    ids.insert(id);
+                }
+            }
+            ids
+        };
+
+        let extra_ids: Vec<_> = fids_no_wildcard(&format.extra_attributes_to_retrieve)
+            .difference(&to_retrieve_ids)
+            .copied()
+            .filter_map(|fid| fields_ids_map.name(fid).map(|field| field.to_owned()))
             .collect();
 
         let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
@@ -2033,6 +2281,7 @@ impl<'a> HitMaker<'a> {
             rtxn,
             fields_ids_map,
             displayed_ids,
+            extra_ids,
             vectors_fid,
             retrieve_vectors,
             to_retrieve_ids,
@@ -2054,17 +2303,14 @@ impl<'a> HitMaker<'a> {
         progress: &Progress,
     ) -> milli::Result<SearchHit> {
         let _step = progress.update_progress_scoped(SearchStep::Format);
-        let (_, obkv) =
-            self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
-
-        // First generate a document with all the displayed fields
-        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, obkv)?;
+        let obkv = self.index.document(self.rtxn, id)?;
 
         let add_vectors_fid =
             self.vectors_fid.filter(|_fid| self.retrieve_vectors == RetrieveVectors::Retrieve);
 
-        // select the attributes to retrieve
-        let attributes_to_retrieve = self
+        // Select the attributes to retrieve
+        // Note that to_retrieve_ids is already an intersection with the displayed attributes
+        let attributes_to_retrieve: Vec<_> = self
             .to_retrieve_ids
             .iter()
             // skip the vectors_fid if RetrieveVectors::Hide
@@ -2076,10 +2322,20 @@ impl<'a> HitMaker<'a> {
             })
             // need to retrieve the existing `_vectors` field if the `RetrieveVectors::Retrieve`
             .chain(add_vectors_fid.iter())
-            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"));
+            // Convert the field into their names
+            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"))
+            .collect();
 
-        let mut document =
-            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+        // Generate a document with all the attributes to retrieve
+        let mut document = make_document(obkv, &self.fields_ids_map, &attributes_to_retrieve)?;
+
+        let extra_document = self
+            .extra_ids
+            .is_empty()
+            .not()
+            .then(|| make_document(obkv, &self.fields_ids_map, &self.extra_ids))
+            .transpose()?
+            .unwrap_or_default();
 
         if self.retrieve_vectors == RetrieveVectors::Retrieve {
             // Clippy is wrong
@@ -2104,16 +2360,33 @@ impl<'a> HitMaker<'a> {
         let localized_attributes =
             self.index.localized_attributes_rules(self.rtxn)?.unwrap_or_default();
 
-        let (matches_position, formatted) = format_fields(
-            &displayed_document,
-            &self.fields_ids_map,
-            &self.formatter_builder,
-            &self.formatted_options,
-            self.show_matches_position,
-            &self.displayed_ids,
-            self.locales.as_deref(),
-            &localized_attributes,
-        )?;
+        // If you need to format fields, pay the cost create the document from the displayed fields
+        // TODO make the format field use the obkv and only format necessary fields
+        let (matches_position, formatted) = if !self.show_matches_position
+            && self.formatted_options.is_empty()
+        {
+            (None, Document::new())
+        } else {
+            let extract_field = |&fid| self.fields_ids_map.name(fid).expect("Missing field name");
+            let selectors: Vec<_> = if self.show_matches_position {
+                self.displayed_ids.iter().map(extract_field).collect()
+            } else {
+                self.formatted_options.keys().map(extract_field).collect()
+            };
+
+            let document = make_document(obkv, &self.fields_ids_map, &selectors)?;
+
+            format_fields(
+                document,
+                &self.fields_ids_map,
+                &self.formatter_builder,
+                &self.formatted_options,
+                self.show_matches_position,
+                &self.displayed_ids,
+                self.locales.as_deref(),
+                &localized_attributes,
+            )?
+        };
 
         if let Some(sort) = self.sort.as_ref() {
             insert_geo_distance(sort, &mut document);
@@ -2127,6 +2400,7 @@ impl<'a> HitMaker<'a> {
 
         let hit = SearchHit {
             document,
+            extra_document,
             formatted,
             matches_position,
             ranking_score_details,
@@ -2166,21 +2440,18 @@ fn make_hits<'a>(
     Ok(documents)
 }
 
-pub fn perform_facet_search(
+pub fn perform_facet_search<'a>(
     index: &Index,
-    search_query: SearchQuery,
+    rtxn: &RoTxn,
+    search: milli::Search<'a>,
     facet_query: Option<String>,
     facet_name: String,
     search_kind: SearchKind,
-    features: RoFeatures,
     locales: Option<Vec<Language>>,
-) -> Result<FacetSearchResult, ResponseError> {
+) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
     let before_search = Instant::now();
-    let progress = Progress::default();
-    let rtxn = index.read_txn()?;
-    let deadline = index.search_deadline(&rtxn)?;
 
-    if !index.facet_search(&rtxn)? {
+    if !index.facet_search(rtxn)? {
         return Err(ResponseError::from_msg(
             "The facet search is disabled for this index".to_string(),
             Code::FacetSearchDisabled,
@@ -2191,7 +2462,7 @@ pub fn perform_facet_search(
     // and the locales of the facet string.
     // If the facet string is not localized, we **ignore** the locales provided by the user because the facet data has no locale.
     // If the user does not provide locales, we use the locales of the facet string.
-    let localized_attributes = index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
+    let localized_attributes = index.localized_attributes_rules(rtxn)?.unwrap_or_default();
     let localized_attributes_locales = localized_attributes
         .into_iter()
         .find(|attr| attr.match_str(&facet_name) == PatternMatch::Match);
@@ -2202,17 +2473,14 @@ pub fn perform_facet_search(
             .collect()
     });
 
-    let (search, _, _, _) =
-        prepare_search(index, &rtxn, &search_query, &search_kind, deadline, features, &progress)?;
-    let mut facet_search = SearchForFacetValues::new(
-        facet_name,
-        search,
-        matches!(search_kind, SearchKind::Hybrid { .. }),
-    );
+    let candidates =
+        search.execute_for_candidates(matches!(search_kind, SearchKind::Hybrid { .. }))?;
+
+    let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
-    if let Some(max_facets) = index.max_values_per_facet(&rtxn)? {
+    if let Some(max_facets) = index.max_values_per_facet(rtxn)? {
         facet_search.max_values(max_facets as usize);
     }
 
@@ -2220,40 +2488,80 @@ pub fn perform_facet_search(
         facet_search.locales(locales);
     }
 
-    Ok(FacetSearchResult {
-        facet_hits: facet_search.execute()?,
-        facet_query,
-        processing_time_ms: before_search.elapsed().as_millis(),
-    })
+    let (facet_hits, order) = facet_search.execute(&candidates)?;
+
+    Ok((
+        FacetSearchResult {
+            facet_hits,
+            facet_query,
+            remote_errors: None,
+            processing_time_ms: before_search.elapsed().as_millis(),
+        },
+        order,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn perform_similar(
-    index: &Index,
+    index_scheduler: &IndexScheduler,
+    index_uid: IndexUid,
     query: SimilarQuery,
-    embedder_name: String,
-    embedder: Arc<Embedder>,
-    quantized: bool,
-    retrieve_vectors: RetrieveVectors,
-    features: RoFeatures,
     progress: &Progress,
+    search_rules: Option<IndexSearchRules>,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
+    let features = index_scheduler.features();
+    let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
 
     let SimilarQuery {
         id,
         offset,
         limit,
-        filter: _,
-        embedder: _,
+        filter,
+        embedder,
         attributes_to_retrieve,
-        retrieve_vectors: _,
+        retrieve_vectors,
         show_ranking_score,
         show_ranking_score_details,
         show_performance_details,
         ranking_score_threshold,
     } = query;
+
+    let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
+
+    let (embedder_name, embedder, quantized) = SearchKind::embedder(
+        index_scheduler,
+        index_uid.to_string(),
+        &index,
+        &embedder,
+        None,
+        Route::Similar,
+    )?;
+
+    let docid_filter = search_rules.and_then(|search_rules| search_rules.filter);
+    let docid_filter = docid_filter
+        .as_ref()
+        .map(|docid_filter| {
+            parse_filter(
+                docid_filter,
+                Code::InvalidSimilarFilter,
+                features,
+                Some(index_uid.as_str()),
+            )
+        })
+        .transpose()?
+        .flatten();
+
+    let candidates_filter = filter
+        .as_ref()
+        .and_then(|filter| {
+            parse_filter(filter, Code::InvalidSimilarFilter, features, None).transpose()
+        })
+        .transpose()?;
+
+    let (docid_filter, candidates_filter) =
+        extract_filters(index_scheduler, index_uid, progress, docid_filter, candidates_filter)?;
 
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
@@ -2269,11 +2577,19 @@ pub fn perform_similar(
         ));
     };
 
+    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, progress)?;
+    if docid_universe.contains(internal_id).not() {
+        return Err(ResponseError::from_msg(
+            MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
+            Code::NotFoundSimilarId,
+        ));
+    }
+
     let mut similar = milli::Similar::new(
         internal_id,
         offset,
         limit,
-        index,
+        &index,
         &rtxn,
         embedder_name,
         embedder,
@@ -2281,10 +2597,8 @@ pub fn perform_similar(
         progress,
     );
 
-    if let Some(ref filter) = query.filter {
-        if let Some(facets) = parse_filter(filter, Code::InvalidSimilarFilter, features)? {
-            similar.filter(facets);
-        }
+    if let Some(filter) = candidates_filter {
+        similar.filter(filter);
     }
 
     if let Some(ranking_score_threshold) = ranking_score_threshold {
@@ -2308,6 +2622,7 @@ pub fn perform_similar(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        extra_attributes_to_retrieve: Default::default(),
         retrieve_vectors,
         attributes_to_highlight: None,
         attributes_to_crop: None,
@@ -2323,7 +2638,7 @@ pub fn perform_similar(
     };
 
     let hits = make_hits(
-        index,
+        &index,
         &rtxn,
         format,
         Default::default(),
@@ -2350,6 +2665,33 @@ pub fn perform_similar(
         performance_details,
     };
     Ok(result)
+}
+
+fn extract_filters<'a>(
+    index_scheduler: &IndexScheduler,
+    index_uid: IndexUid,
+    progress: &Progress,
+    docid_filter: Option<Filter<'a>>,
+    candidates_filter: Option<Filter<'a>>,
+) -> Result<(Option<IndexFilter<'a>>, Option<IndexFilter<'a>>), ResponseError> {
+    let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
+    let foreign_keys_settings =
+        retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;
+    let (docid_filter, candidates_filter) = match filters_into_index_filters(
+        vec![
+            (source_index_uid.clone(), docid_filter),
+            (source_index_uid.clone(), candidates_filter),
+        ],
+        &foreign_keys_settings,
+        index_scheduler,
+        progress,
+    )?
+    .as_mut_slice()
+    {
+        [docid_filter, candidates_filter] => (docid_filter.take(), candidates_filter.take()),
+        _ => unreachable!(),
+    };
+    Ok((docid_filter, candidates_filter))
 }
 
 pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {
@@ -2481,33 +2823,37 @@ fn add_non_formatted_ids_to_formatted_options(
     }
 }
 
-fn make_document(
-    displayed_attributes: &BTreeSet<FieldId>,
-    field_ids_map: &FieldsIdsMap,
+fn make_document<S, I>(
     obkv: &obkv::KvReaderU16,
-) -> milli::Result<Document> {
+    field_ids_map: &FieldsIdsMap,
+    selectors: impl IntoIterator<IntoIter = I>,
+) -> milli::Result<Document>
+where
+    S: AsRef<str>,
+    I: Clone + Iterator<Item = S>,
+{
+    let selectors = selectors.into_iter();
     let mut document = serde_json::Map::new();
 
-    // recreate the original json
-    for (key, value) in obkv.iter() {
-        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
-        let key = field_ids_map.name(key).expect("Missing field name").to_string();
+    for (key, value_bytes) in obkv {
+        let key = field_ids_map.name(key).expect("Missing field name");
+        if !selectors.clone().any(|selector| contained_in(selector.as_ref(), key)) {
+            // If the key is not part of the selection, skip this value
+            continue;
+        }
 
-        document.insert(key, value);
+        let visitor = ValuePathsVisitor::new_from_path(selectors.clone(), key);
+        let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
+        let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
+        document.insert(key.to_string(), value);
     }
 
-    // select the attributes to retrieve
-    let displayed_attributes = displayed_attributes
-        .iter()
-        .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
-
-    let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn format_fields(
-    document: &Document,
+    mut document: Document,
     field_ids_map: &FieldsIdsMap,
     builder: &MatcherBuilder<'_>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
@@ -2517,7 +2863,6 @@ fn format_fields(
     localized_attributes: &[LocalizedAttributesRule],
 ) -> milli::Result<(Option<MatchesPosition>, Document)> {
     let mut matches_position = compute_matches.then(BTreeMap::new);
-    let mut document = document.clone();
 
     // reduce the formatted option list to the attributes that should be formatted,
     // instead of all the attributes to display.
@@ -2576,12 +2921,9 @@ fn format_fields(
         },
     );
 
-    let selectors = formatted_options
-        .keys()
-        // This unwrap must be safe since we got the ids from the fields_ids_map just
-        // before.
-        .map(|&fid| field_ids_map.name(fid).unwrap());
-    let document = permissive_json_pointer::select_values(&document, selectors);
+    // We remove the fields that were not selected by the formatted_options.
+    let selectors = formatted_options.keys().map(|&fid| field_ids_map.name(fid).unwrap());
+    let document = permissive_json_pointer::select_values(document, selectors);
 
     Ok((matches_position, document))
 }
@@ -2633,88 +2975,4 @@ fn format_value(
         }
         value => value,
     }
-}
-
-pub(crate) fn parse_filter(
-    facets: &Value,
-    filter_parsing_error_code: Code,
-    features: RoFeatures,
-) -> Result<Option<Filter<'_>>, ResponseError> {
-    let filter = match facets {
-        Value::String(expr) => Filter::from_str(expr).map_err(|e| e.into()),
-        Value::Array(arr) => parse_filter_array(arr).map_err(|e| e.into()),
-        v => Err(MeilisearchHttpError::InvalidExpression(&["String", "Array"], v.clone()).into()),
-    };
-    let filter = filter.map_err(|err: ResponseError| {
-        ResponseError::from_msg(err.to_string(), filter_parsing_error_code)
-    })?;
-
-    if let Some(ref filter) = filter {
-        // If the contains operator is used while the contains filter feature is not enabled, errors out
-        if let Some((token, error)) =
-            filter.use_contains_operator().zip(features.check_contains_filter().err())
-        {
-            return Err(ResponseError::from_msg(
-                token.as_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-    }
-
-    if let Some(ref filter) = filter {
-        if let Some((token, error)) =
-            filter.use_shard_filter().zip(features.check_network("using a shard filter").err())
-        {
-            return Err(ResponseError::from_msg(
-                token.as_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-    }
-
-    if let Some(ref filter) = filter {
-        // If a vector filter is used while the multi modal feature is not enabled, errors out
-        if let Some((token, error)) =
-            filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())
-        {
-            return Err(ResponseError::from_msg(
-                token.as_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-    }
-
-    Ok(filter)
-}
-
-fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, MeilisearchHttpError> {
-    let mut ands = Vec::new();
-    for value in arr {
-        match value {
-            Value::String(s) => ands.push(Either::Right(s.as_str())),
-            Value::Array(arr) => {
-                let mut ors = Vec::new();
-                for value in arr {
-                    match value {
-                        Value::String(s) => ors.push(s.as_str()),
-                        v => {
-                            return Err(MeilisearchHttpError::InvalidExpression(
-                                &["String"],
-                                v.clone(),
-                            ));
-                        }
-                    }
-                }
-                ands.push(Either::Left(ors));
-            }
-            v => {
-                return Err(MeilisearchHttpError::InvalidExpression(
-                    &["String", "[String]"],
-                    v.clone(),
-                ));
-            }
-        }
-    }
-
-    Filter::from_array(ands).map_err(|e| MeilisearchHttpError::from_milli(e, None))
 }

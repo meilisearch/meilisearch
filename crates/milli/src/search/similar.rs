@@ -4,13 +4,14 @@ use roaring::RoaringBitmap;
 
 use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
+use crate::search::facet::IndexFilter;
 use crate::vector::{Embedder, VectorStore};
-use crate::{filtered_universe, DocumentId, Filter, Index, Result, SearchResult};
+use crate::{filtered_universe, DocumentId, Index, Result, SearchResult};
 
 pub struct Similar<'a> {
     id: DocumentId,
     // this should be linked to the String in the query
-    filter: Option<Filter<'a>>,
+    filter: Option<IndexFilter<'a>>,
     offset: usize,
     limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
@@ -50,7 +51,7 @@ impl<'a> Similar<'a> {
         }
     }
 
-    pub fn filter(&mut self, filter: Filter<'a>) -> &mut Self {
+    pub fn filter(&mut self, filter: IndexFilter<'a>) -> &mut Self {
         self.filter = Some(filter);
         self
     }

@@ -63,7 +63,7 @@ async fn create_api_key_bad_uid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid value at `.uid`: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `o` at 2",
+      "message": "Invalid value at `.uid`: invalid character: found `o` at 1",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"
@@ -93,7 +93,7 @@ async fn create_api_key_bad_actions() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r#"
     {
-      "message": "Unknown value `doggo` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `export`, `network.get`, `network.update`, `chatCompletions`, `chats.*`, `chats.get`, `chats.delete`, `chatsSettings.*`, `chatsSettings.get`, `chatsSettings.update`, `*.get`, `webhooks.get`, `webhooks.update`, `webhooks.delete`, `webhooks.create`, `webhooks.*`, `indexes.compact`, `fields.post`",
+      "message": "Unknown value `doggo` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `export`, `network.get`, `network.update`, `chatCompletions`, `chats.*`, `chats.get`, `chats.delete`, `chatsSettings.*`, `chatsSettings.get`, `chatsSettings.update`, `*.get`, `webhooks.get`, `webhooks.update`, `webhooks.delete`, `webhooks.create`, `webhooks.*`, `indexes.compact`, `fields.post`, `tasks.compact`, `dynamicSearchRules.get`, `dynamicSearchRules.create`, `dynamicSearchRules.update`, `dynamicSearchRules.delete`, `dynamicSearchRules.*`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"

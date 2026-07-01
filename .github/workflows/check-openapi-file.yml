@@ -20,16 +20,16 @@ jobs:
     name: Check OpenAPI specification
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@1.91.1
 
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -58,4 +58,4 @@ jobs:
       # Lints the OpenAPI file for best practices (descriptions, examples, naming conventions, etc.)
       # Ruleset is defined in crates/openapi-generator/.spectral.yaml
       - name: Lint OpenAPI specification
-        run: spectral lint /tmp/meilisearch-openapi.json --ruleset crates/openapi-generator/.spectral.yaml
+        run: spectral lint /tmp/meilisearch-openapi.json --verbose --ruleset crates/openapi-generator/.spectral.yaml

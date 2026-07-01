@@ -29,7 +29,7 @@ impl<'a> FstMergerBuilder<'a> {
         &mut self,
         deladd: DelAdd,
         right: &[u8],
-        insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
+        insertion_callback: &mut impl FnMut(&[u8], DelAdd) -> Result<()>,
     ) -> Result<()> {
         if let Some(left) = self.last.take() {
             let (left_inserted, right_inserted) =
@@ -66,7 +66,7 @@ impl<'a> FstMergerBuilder<'a> {
 
         // If we reach this point, it means that the stream is empty
         // and we need to insert the incoming word
-        self.insert(right, deladd, true, insertion_callback)?;
+        self.insert(right, deladd, insertion_callback)?;
 
         Ok(())
     }
@@ -76,25 +76,25 @@ impl<'a> FstMergerBuilder<'a> {
         deladd: DelAdd,
         left: &[u8],
         right: &[u8],
-        insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
+        insertion_callback: &mut impl FnMut(&[u8], DelAdd) -> Result<()>,
     ) -> Result<(bool, bool)> {
         let mut left_inserted = false;
         let mut right_inserted = false;
         match left.cmp(right) {
             std::cmp::Ordering::Less => {
                 // We need to insert the last word from the current fst
-                self.insert(left, DelAdd::Addition, false, insertion_callback)?;
+                self.insert(left, DelAdd::Addition, insertion_callback)?;
 
                 left_inserted = true;
             }
             std::cmp::Ordering::Equal => {
-                self.insert(right, deladd, true, insertion_callback)?;
+                self.insert(right, deladd, insertion_callback)?;
 
                 left_inserted = true;
                 right_inserted = true;
             }
             std::cmp::Ordering::Greater => {
-                self.insert(right, deladd, true, insertion_callback)?;
+                self.insert(right, deladd, insertion_callback)?;
 
                 right_inserted = true;
             }
@@ -107,8 +107,7 @@ impl<'a> FstMergerBuilder<'a> {
         &mut self,
         bytes: &[u8],
         deladd: DelAdd,
-        is_modified: bool,
-        insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
+        insertion_callback: &mut impl FnMut(&[u8], DelAdd) -> Result<()>,
     ) -> Result<()> {
         // Addition: We insert the word
         // Deletion: We delete the word by not inserting it
@@ -117,22 +116,22 @@ impl<'a> FstMergerBuilder<'a> {
             self.fst_builder.insert(bytes)?;
         }
 
-        insertion_callback(bytes, deladd, is_modified)?;
+        insertion_callback(bytes, deladd)?;
 
         Ok(())
     }
 
     fn drain_stream(
         &mut self,
-        insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
+        insertion_callback: &mut impl FnMut(&[u8], DelAdd) -> Result<()>,
     ) -> Result<()> {
         if let Some(last) = self.last.take() {
-            self.insert(last.as_slice(), DelAdd::Addition, false, insertion_callback)?;
+            self.insert(last.as_slice(), DelAdd::Addition, insertion_callback)?;
         }
 
         if let Some(mut stream) = self.stream.take() {
             while let Some(current) = stream.next() {
-                self.insert(current, DelAdd::Addition, false, insertion_callback)?;
+                self.insert(current, DelAdd::Addition, insertion_callback)?;
             }
         }
 
@@ -141,7 +140,7 @@ impl<'a> FstMergerBuilder<'a> {
 
     pub fn build(
         mut self,
-        insertion_callback: &mut impl FnMut(&[u8], DelAdd, bool) -> Result<()>,
+        insertion_callback: &mut impl FnMut(&[u8], DelAdd) -> Result<()>,
     ) -> Result<Mmap> {
         self.drain_stream(insertion_callback)?;
 

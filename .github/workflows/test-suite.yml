@@ -15,14 +15,14 @@ env:
 
 jobs:
   test-linux:
-    name: Tests on ${{ matrix.runner }} ${{ matrix.features }} 
+    name: Tests on ${{ matrix.runner }} ${{ matrix.features }}
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
         features: ["", "--features enterprise"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: check free space before
         run: df -h
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
@@ -36,19 +36,13 @@ jobs:
       - name: Setup test with Rust stable
         uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           key: ${{ matrix.features }}
       - name: Run cargo build without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --no-default-features --all
+        run: cargo build --locked --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
+        run: cargo test --locked --all ${{ matrix.features }}
 
   test-windows:
     name: Tests on ${{ matrix.os }}
@@ -60,20 +54,14 @@ jobs:
         features: ["", "--features enterprise"]
     if: github.event_name != 'merge_group'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --no-default-features --all
+        run: cargo build --locked --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
+        run: cargo test --locked --all ${{ matrix.features }}
 
   test-macos:
     name: Tests on ${{ matrix.os }}
@@ -85,27 +73,21 @@ jobs:
         features: ["", "--features enterprise"]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build without any default features
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --locked --no-default-features --all
+        run: cargo build --locked --no-default-features --all
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
+        run: cargo test --locked --all ${{ matrix.features }}
 
   test-all-features:
     name: Tests almost all features
     runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -126,7 +108,7 @@ jobs:
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -153,17 +135,38 @@ jobs:
           ollama pull all-minilm
 
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked -p meilisearch --features test-ollama ollama
+        run: cargo test --locked -p meilisearch --features test-ollama ollama
+
+  test-legacy-indexer:
+    name: Test legacy settings indexer
+    runs-on: ubuntu-22.04
+    env:
+      MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - name: check free space before
+        run: df -h
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
+      - name: check free space after
+        run: df -h
+      - name: Setup test with Rust stable
+        uses: dtolnay/rust-toolchain@1.91.1
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.9.1
+      - name: Run cargo test
+        run: cargo test --locked --all
 
   test-disabled-tokenization:
     name: Test disabled tokenization
     runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -185,7 +188,7 @@ jobs:
     name: Build in release
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -194,7 +197,7 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Build
         run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
@@ -205,7 +208,7 @@ jobs:
       matrix:
         features: ["", "--features enterprise"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -216,18 +219,15 @@ jobs:
         with:
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
+        run: cargo clippy --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
 
   fmt:
     name: Run Rustfmt
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -238,14 +238,9 @@ jobs:
         with:
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo fmt
-        # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
-        # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
-        # we are going to create an empty file where rustfmt expects it.
-        run: |
-          echo -ne "\n" > crates/benchmarks/benches/datasets_paths.rs
-          cargo fmt --all -- --check
+        run: cargo fmt --all -- --check
 
   declarative-tests:
     name: Run declarative tests
@@ -253,7 +248,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -262,7 +257,7 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run declarative tests
         run: |
           cargo xtask test workloads/tests/*.json

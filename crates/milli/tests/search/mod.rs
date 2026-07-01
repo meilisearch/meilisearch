@@ -14,7 +14,7 @@ use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{
     normalize_facet, AscDesc, Criterion, DocumentId, FilterableAttributesRule, Index, Member,
-    TermsMatchingStrategy,
+    MustStopProcessing, TermsMatchingStrategy,
 };
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
@@ -68,7 +68,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder.set_searchable_fields(vec![S("title"), S("description")]);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -104,7 +104,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -124,7 +124,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),

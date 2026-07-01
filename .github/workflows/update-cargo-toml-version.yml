@@ -17,7 +17,7 @@ jobs:
     name: Update version in Cargo.toml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -35,7 +35,7 @@ jobs:
       - name: Build Meilisearch to update Cargo.lock
         run: cargo build
       - name: Commit and push the changes to the ${{ env.NEW_BRANCH }} branch
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5 # v9
         with:
           message: "Update version for the next release (${{ env.NEW_VERSION }}) in Cargo.toml"
           new_branch: ${{ env.NEW_BRANCH }}

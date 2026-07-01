@@ -51,7 +51,6 @@ impl FacetsUpdateIncremental {
                 min_level_size,
                 max_group_size,
             },
-
             delta_data,
         }
     }

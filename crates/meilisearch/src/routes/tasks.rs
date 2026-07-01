@@ -1,3 +1,5 @@
+pub mod compact;
+
 use std::io::ErrorKind;
 
 use actix_web::web::Data;
@@ -32,6 +34,7 @@ use crate::{aggregate_methods, Opt};
     routes(
         "" => [get(get_tasks), delete(delete_tasks)],
         "/cancel" => post(cancel_tasks),
+        "/compact" => post(compact::compact_task_queue),
         "/{task_id}" => get(get_task),
         "/{task_id}/documents" => get(get_task_documents_file),
     ),
@@ -65,7 +68,7 @@ pub struct TasksFilterQuery {
     /// It's possible to specify several batch uids by separating them with
     /// the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidBatchUids>)]
-    #[param(required = false, value_type = Option<u32>, example = 12421)]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([1, 2, 3]))]
     pub batch_uids: OptionStarOrList<BatchId>,
 
     /// Permits to filter tasks by their uid. By default, when the uids query
@@ -181,8 +184,8 @@ impl TaskDeletionOrCancelationQuery {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct TaskDeletionOrCancelationQuery {
-    /// Permits to filter tasks by their uid. By default, when the `uids` query
-    /// parameter is not set, all task uids are returned. It's possible to
+    /// Permits to select tasks by their uid. When the `uids` query
+    /// parameter is set to `*`, all task uids included. It's possible to
     /// specify several uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
     #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598]))]
@@ -332,8 +335,16 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 /// Cancel tasks
 ///
 /// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
+///
+/// **Note:** Task cancellation is atomic — either all matched tasks are canceled or none are.
+///
+/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
+///
+/// **Tip:** You can cancel `taskCancelation` type tasks as long as they are `enqueued` or `processing`,
+/// because cancellation tasks are processed in reverse order of enqueueing.
 #[routes::path(
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
+    no_request_body,
     params(TaskDeletionOrCancelationQuery),
     responses(
         (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -416,6 +427,13 @@ async fn cancel_tasks(
 /// Delete tasks
 ///
 /// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
+///
+/// **Note:** Only finished tasks (`succeeded`, `failed`, or `canceled`) can be deleted.
+/// You cannot delete `enqueued` or `processing` tasks.
+///
+/// **Note:** Task deletion is atomic — either all matched tasks are deleted or none are.
+///
+/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
 #[routes::path(
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
@@ -515,7 +533,7 @@ pub struct AllTasks {
     pub limit: u32,
     /// The first task uid returned
     pub from: Option<u32>,
-    /// Value to send in from to fetch the next slice of results. Null when all data has been browsed
+    /// Value to pass as `from` parameter to get the next page. When `null`, there are no more tasks to retrieve.
     pub next: Option<u32>,
 }
 
@@ -650,9 +668,10 @@ async fn get_task(
     }
 }
 
-/// Get task's documents
+/// Get task's document payload
 ///
-/// Retrieve the list of documents that were processed or affected by a given [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). Only available for document-related tasks.
+/// Retrieve the document payload that was sent with this [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Only available for document-related tasks that are enqueued or processing.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("task_id" = u32, format = UInt32, example = 0, description = "The task identifier.", nullable = false)),

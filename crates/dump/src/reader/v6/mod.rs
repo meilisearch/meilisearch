@@ -3,6 +3,9 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
+use super::Document;
+use crate::{Error, IndexMetadata, Result, Version};
+use meilisearch_types::dynamic_search_rules::RuleUid;
 pub use meilisearch_types::milli;
 use meilisearch_types::milli::vector::embedder::hf::OverridePooling;
 use roaring::RoaringBitmap;
@@ -10,9 +13,6 @@ use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;
 use uuid::Uuid;
-
-use super::Document;
-use crate::{Error, IndexMetadata, Result, Version};
 
 pub type Metadata = crate::Metadata;
 
@@ -27,6 +27,7 @@ pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSet
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 pub type Network = meilisearch_types::network::Network;
 pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
+pub type DynamicSearchRule = meilisearch_types::dynamic_search_rules::DynamicSearchRule;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -293,6 +294,33 @@ impl V6Reader {
 
     pub fn webhooks(&self) -> Option<&Webhooks> {
         self.webhooks.as_ref()
+    }
+
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(RuleUid, DynamicSearchRule)>> + '_>> {
+        let entries = match fs::read_dir(self.dump.path().join("dynamic-search-rules")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Box::new(std::iter::empty())),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(Box::new(
+            entries
+                .map(|entry| -> Result<Option<_>> {
+                    let entry = entry?;
+                    let file_name = entry.file_name();
+                    let path = Path::new(&file_name);
+                    if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
+                    {
+                        let file = File::open(entry.path())?;
+                        let rule: DynamicSearchRule = serde_json::from_reader(file)?;
+                        Ok(Some((rule.uid.clone(), rule)))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .filter_map(|entry| entry.transpose()),
+        ))
     }
 }
 

@@ -282,7 +282,7 @@ impl IndexScheduler {
 
                     builder
                         .execute(
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             &progress,
                             self.ip_policy(),
                             current_batch.embedder_stats.clone(),
@@ -493,6 +493,10 @@ impl IndexScheduler {
                 let stats = match ret {
                     Ok(Ok(stats)) => stats,
                     Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
+                    // If the error code has been set by the process_export function, we return the error
+                    err @ Ok(Err(Error::WithCustomErrorCode(_, _))) => {
+                        return Err(err.unwrap().unwrap_err())
+                    }
                     Ok(Err(e)) => return Err(Error::Export(Box::new(e))),
                     Err(e) => {
                         let msg = match e.downcast_ref::<&'static str>() {
@@ -576,7 +580,7 @@ impl IndexScheduler {
         let src_path = index.path().join("data.mdb");
         let pre_size = std::fs::metadata(&src_path)?.len();
 
-        let dst_path = TempPath::from_path(index.path().join(DATA_MDB_COPY_NAME));
+        let dst_path = TempPath::try_from_path(index.path().join(DATA_MDB_COPY_NAME))?;
         let file = File::create(&dst_path)?;
         let mut file = tempfile::NamedTempFile::from_parts(file, dst_path);
 

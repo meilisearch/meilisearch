@@ -1,48 +1,25 @@
-use std::collections::HashSet;
-
 use serde_json::Value;
 
 use crate::attribute_patterns::PatternMatch;
+use crate::constants::{RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME};
 use crate::fields_ids_map::metadata::Metadata;
-use crate::filterable_attributes_rules::match_faceted_field;
 use crate::update::new::document::Document;
 use crate::update::new::extract::geo::extract_geo_coordinates;
 use crate::update::new::extract::perm_json_p;
-use crate::{
-    FieldId, FilterableAttributesRule, GlobalFieldsIdsMap, InternalError, Result, UserError,
-};
+use crate::{FieldId, GlobalFieldsIdsMap, InternalError, Result, UserError};
 
 #[allow(clippy::too_many_arguments)]
 pub fn extract_document_facets<'doc>(
     document: impl Document<'doc>,
-    field_id_map: &mut GlobalFieldsIdsMap,
-    filterable_attributes: &[FilterableAttributesRule],
-    sortable_fields: &HashSet<String>,
-    asc_desc_fields: &HashSet<String>,
-    distinct_field: &Option<String>,
+    // return the match result for the given field name.
+    match_field: impl Fn(&str) -> PatternMatch,
+    register_field: &mut impl FnMut(&str) -> Result<(FieldId, Metadata)>,
     facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
 ) -> Result<()> {
-    // return the match result for the given field name.
-    let match_field = |field_name: &str| -> PatternMatch {
-        match_faceted_field(
-            field_name,
-            filterable_attributes,
-            sortable_fields,
-            asc_desc_fields,
-            distinct_field,
-        )
-    };
-
     // extract the field if it is faceted (facet searchable, filterable, sortable)
     let mut extract_field = |name: &str, depth: perm_json_p::Depth, value: &Value| -> Result<()> {
-        match field_id_map.id_with_metadata_or_insert(name) {
-            Some((field_id, meta)) => {
-                facet_fn(field_id, meta, depth, value)?;
-
-                Ok(())
-            }
-            None => Err(UserError::AttributeLimitReached.into()),
-        }
+        let (field_id, meta) = register_field(name)?;
+        facet_fn(field_id, meta, depth, value)
     };
 
     for res in document.iter_top_level_fields() {
@@ -111,8 +88,8 @@ pub fn extract_geo_document<'doc>(
     if let Some(geo_value) = document.geo_field()? {
         if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
             let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
-                .id_with_metadata_or_insert("_geo.lat")
-                .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
+                .id_with_metadata_or_insert(RESERVED_GEO_LAT_FIELD_NAME)
+                .zip(field_id_map.id_with_metadata_or_insert(RESERVED_GEO_LNG_FIELD_NAME))
                 .ok_or(UserError::AttributeLimitReached)?;
 
             facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;

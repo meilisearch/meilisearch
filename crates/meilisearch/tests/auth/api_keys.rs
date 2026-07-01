@@ -26,7 +26,6 @@ async fn add_valid_api_key() {
             "settings.get",
             "settings.update",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -51,8 +50,7 @@ async fn add_valid_api_key() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -85,7 +83,6 @@ async fn add_valid_api_key_expired_at() {
             "settings.get",
             "settings.update",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13"
     });
@@ -110,8 +107,7 @@ async fn add_valid_api_key_expired_at() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -228,6 +224,29 @@ async fn error_add_api_key_bad_key() {
       "code": "invalid_api_key",
       "type": "auth",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn error_add_index_scoped_api_key_with_global_action() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+
+    let content = json!({
+        "description": json!(null),
+        "indexes": ["products"],
+        "actions": ["version"],
+        "expiresAt": "2050-11-13T00:00:00"
+    });
+    let (response, code) = server.add_api_key(content).await;
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
+    {
+      "message": "cannot create index-scoped API key with global action `\"version\"`\n  - Hint: remove action `\"version\"` from the action list, or remove `indexes` to make the key global",
+      "code": "index_scoped_api_key_with_global_action",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#index_scoped_api_key_with_global_action"
     }
     "###);
 }
@@ -421,7 +440,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r#"
     {
-      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `export`, `network.get`, `network.update`, `chatCompletions`, `chats.*`, `chats.get`, `chats.delete`, `chatsSettings.*`, `chatsSettings.get`, `chatsSettings.update`, `*.get`, `webhooks.get`, `webhooks.update`, `webhooks.delete`, `webhooks.create`, `webhooks.*`, `indexes.compact`, `fields.post`",
+      "message": "Unknown value `doc.add` at `.actions[0]`: expected one of `*`, `search`, `documents.*`, `documents.add`, `documents.get`, `documents.delete`, `indexes.*`, `indexes.create`, `indexes.get`, `indexes.update`, `indexes.delete`, `indexes.swap`, `tasks.*`, `tasks.cancel`, `tasks.delete`, `tasks.get`, `settings.*`, `settings.get`, `settings.update`, `stats.*`, `stats.get`, `metrics.*`, `metrics.get`, `dumps.*`, `dumps.create`, `snapshots.*`, `snapshots.create`, `version`, `keys.create`, `keys.get`, `keys.update`, `keys.delete`, `experimental.get`, `experimental.update`, `export`, `network.get`, `network.update`, `chatCompletions`, `chats.*`, `chats.get`, `chats.delete`, `chatsSettings.*`, `chatsSettings.get`, `chatsSettings.update`, `*.get`, `webhooks.get`, `webhooks.update`, `webhooks.delete`, `webhooks.create`, `webhooks.*`, `indexes.compact`, `fields.post`, `tasks.compact`, `dynamicSearchRules.get`, `dynamicSearchRules.create`, `dynamicSearchRules.update`, `dynamicSearchRules.delete`, `dynamicSearchRules.*`",
       "code": "invalid_api_key_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_actions"
@@ -493,7 +512,7 @@ async fn error_add_api_key_invalid_parameters_uid() {
 
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"
     {
-      "message": "Invalid value at `.uid`: invalid length: expected length 32 for simple format, found 13",
+      "message": "Invalid value at `.uid`: invalid length: found 13",
       "code": "invalid_api_key_uid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key_uid"
@@ -570,7 +589,6 @@ async fn get_api_key() {
             "settings.get",
             "settings.update",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -594,8 +612,7 @@ async fn get_api_key() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -629,8 +646,7 @@ async fn get_api_key() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -661,8 +677,7 @@ async fn get_api_key() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -752,7 +767,6 @@ async fn list_api_keys() {
             "settings.get",
             "settings.update",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -776,8 +790,7 @@ async fn list_api_keys() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -810,8 +823,7 @@ async fn list_api_keys() {
             "tasks.get",
             "settings.get",
             "settings.update",
-            "stats.get",
-            "dumps.create"
+            "stats.get"
           ],
           "indexes": [
             "products"
@@ -944,8 +956,7 @@ async fn delete_api_key() {
             "tasks.get",
             "settings.get",
             "settings.update",
-            "stats.get",
-            "dumps.create",
+            "stats.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -969,8 +980,7 @@ async fn delete_api_key() {
         "tasks.get",
         "settings.get",
         "settings.update",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1074,8 +1084,7 @@ async fn patch_api_key_description() {
             "indexes.get",
             "indexes.update",
             "indexes.delete",
-            "stats.get",
-            "dumps.create",
+            "stats.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1096,8 +1105,7 @@ async fn patch_api_key_description() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1131,8 +1139,7 @@ async fn patch_api_key_description() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1163,8 +1170,7 @@ async fn patch_api_key_description() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1195,8 +1201,7 @@ async fn patch_api_key_description() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1226,7 +1231,6 @@ async fn patch_api_key_name() {
             "indexes.update",
             "indexes.delete",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1247,8 +1251,7 @@ async fn patch_api_key_name() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1284,8 +1287,7 @@ async fn patch_api_key_name() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1319,8 +1321,7 @@ async fn patch_api_key_name() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1351,8 +1352,7 @@ async fn patch_api_key_name() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1382,8 +1382,7 @@ async fn error_patch_api_key_indexes() {
             "indexes.get",
             "indexes.update",
             "indexes.delete",
-            "stats.get",
-            "dumps.create",
+            "stats.get"
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1404,8 +1403,7 @@ async fn error_patch_api_key_indexes() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1452,7 +1450,6 @@ async fn error_patch_api_key_actions() {
             "indexes.update",
             "indexes.delete",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1473,8 +1470,7 @@ async fn error_patch_api_key_actions() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"
@@ -1529,7 +1525,6 @@ async fn error_patch_api_key_expiration_date() {
             "indexes.update",
             "indexes.delete",
             "stats.get",
-            "dumps.create",
         ],
         "expiresAt": "2050-11-13T00:00:00Z"
     });
@@ -1550,8 +1545,7 @@ async fn error_patch_api_key_expiration_date() {
         "indexes.get",
         "indexes.update",
         "indexes.delete",
-        "stats.get",
-        "dumps.create"
+        "stats.get"
       ],
       "indexes": [
         "products"

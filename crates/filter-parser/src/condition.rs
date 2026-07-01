@@ -49,6 +49,31 @@ impl Condition<'_> {
             Condition::StartsWith { .. } => "STARTS WITH",
         }
     }
+
+    pub fn into_owned(self) -> Condition<'static> {
+        match self {
+            Condition::GreaterThan(token) => Condition::GreaterThan(token.into_owned()),
+            Condition::GreaterThanOrEqual(token) => {
+                Condition::GreaterThanOrEqual(token.into_owned())
+            }
+            Condition::Equal(token) => Condition::Equal(token.into_owned()),
+            Condition::NotEqual(token) => Condition::NotEqual(token.into_owned()),
+            Condition::Null => Condition::Null,
+            Condition::Empty => Condition::Empty,
+            Condition::Exists => Condition::Exists,
+            Condition::LowerThan(token) => Condition::LowerThan(token.into_owned()),
+            Condition::LowerThanOrEqual(token) => Condition::LowerThanOrEqual(token.into_owned()),
+            Condition::Between { from, to } => {
+                Condition::Between { from: from.into_owned(), to: to.into_owned() }
+            }
+            Condition::Contains { keyword, word } => {
+                Condition::Contains { keyword: keyword.into_owned(), word: word.into_owned() }
+            }
+            Condition::StartsWith { keyword, word } => {
+                Condition::StartsWith { keyword: keyword.into_owned(), word: word.into_owned() }
+            }
+        }
+    }
 }
 
 /// condition      = value ("==" | ">" ...) value
@@ -129,7 +154,10 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
     // We could use nom's `cut` but it's better to be explicit about the errors
 
     if let Ok((_, space)) = tag::<_, _, ()>(" ")(input) {
-        return Err(crate::Error::failure_from_kind(space, ErrorKind::VectorFilterMissingEmbedder));
+        return Err(crate::Error::failure_from_kind(
+            space.into(),
+            ErrorKind::VectorFilterMissingEmbedder,
+        ));
     }
 
     let (input, embedder_name) =
@@ -151,9 +179,11 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
 
     if let Ok((input, point)) = tag::<_, _, ()>(".")(input) {
         let opt_value = parse_vector_value(input).ok().map(|(_, v)| v);
-        let value =
-            opt_value.as_ref().map(|v| v.value().to_owned()).unwrap_or_else(|| point.to_string());
-        let context = opt_value.map(|v| v.original_span()).unwrap_or(point);
+        let value = opt_value
+            .as_ref()
+            .map(|v| v.fragment().to_owned())
+            .unwrap_or_else(|| point.to_string());
+        let context = opt_value.unwrap_or(point.into());
         let previous_kind = match filter {
             VectorFilter::Fragment(_) => Some("fragments"),
             VectorFilter::DocumentTemplate => Some("documentTemplate"),
@@ -162,7 +192,7 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
             VectorFilter::None => None,
         };
         return Err(Error::failure_from_kind(
-            context,
+            context.span,
             ErrorKind::VectorFilterUnknownSuffix(previous_kind, value),
         ));
     }
@@ -189,7 +219,7 @@ pub fn parse_vectors_exists(input: Span) -> IResult<FilterCondition> {
         ));
     }
 
-    Err(crate::Error::failure_from_kind(input, ErrorKind::VectorFilterOperation))
+    Err(crate::Error::failure_from_kind(input.into(), ErrorKind::VectorFilterOperation))
 }
 
 /// contains        = value "CONTAINS" value
@@ -198,10 +228,7 @@ pub fn parse_contains(input: Span) -> IResult<FilterCondition> {
         tuple((parse_value, tag("CONTAINS"), cut(parse_value)))(input)?;
     Ok((
         input,
-        FilterCondition::Condition {
-            fid,
-            op: Contains { keyword: Token { span: contains, value: None }, word: value },
-        },
+        FilterCondition::Condition { fid, op: Contains { keyword: contains.into(), word: value } },
     ))
 }
 
@@ -215,7 +242,7 @@ pub fn parse_not_contains(input: Span) -> IResult<FilterCondition> {
         input,
         FilterCondition::Not(Box::new(FilterCondition::Condition {
             fid,
-            op: Contains { keyword: Token { span: contains, value: None }, word: value },
+            op: Contains { keyword: contains.into(), word: value },
         })),
     ))
 }
@@ -228,7 +255,7 @@ pub fn parse_starts_with(input: Span) -> IResult<FilterCondition> {
         input,
         FilterCondition::Condition {
             fid,
-            op: StartsWith { keyword: Token { span: starts_with, value: None }, word: value },
+            op: StartsWith { keyword: starts_with.into(), word: value },
         },
     ))
 }
@@ -243,7 +270,7 @@ pub fn parse_not_starts_with(input: Span) -> IResult<FilterCondition> {
         input,
         FilterCondition::Not(Box::new(FilterCondition::Condition {
             fid,
-            op: StartsWith { keyword: Token { span: starts_with, value: None }, word: value },
+            op: StartsWith { keyword: starts_with.into(), word: value },
         })),
     ))
 }

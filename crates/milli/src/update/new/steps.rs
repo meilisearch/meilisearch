@@ -15,9 +15,13 @@ make_enum_progress! {
         MergingWordProximity,
         WritingGeoPoints,
         WritingGeoJson,
+        WritingEmbeddingsToDatabase,
+        DeletingFromAllFilters,
+        DeletingFromFacetsOnly,
+        DeletingFromComparisonsOnly,
+        DeletingFromGeoDatabases,
         WaitingForDatabaseWrites,
         WaitingForExtractors,
-        WritingEmbeddingsToDatabase,
         PostProcessingFacets,
         PostProcessingWords,
         BuildingGeoJson,
@@ -49,6 +53,8 @@ make_enum_progress! {
 make_enum_progress! {
     pub enum PostProcessingWords {
         WordFst,
+        ComputePrefixFst,
+        ComputePrefixes,
         WordPrefixDocids,
         ExactWordPrefixDocids,
         WordPrefixFieldIdDocids,

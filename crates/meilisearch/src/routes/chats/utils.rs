@@ -219,7 +219,10 @@ pub fn format_documents<'doc>(
 ) -> Result<Vec<&'doc str>, ResponseError> {
     let ChatConfig { prompt: PromptData { template, max_bytes }, .. } = index.chat_config(rtxn)?;
 
-    let prompt = Prompt::new(template, max_bytes).unwrap();
+    let prompt = Prompt::new(template, max_bytes).map_err(|e| {
+        ResponseError::from_msg(e.to_string(), Code::InvalidChatSettingDocumentTemplate)
+    })?;
+
     let fid_map = index.fields_ids_map(rtxn)?;
     let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
     let fid_map_with_meta = FieldIdMapWithMetadata::new(fid_map.clone(), metadata_builder);
@@ -237,15 +240,16 @@ pub fn format_documents<'doc>(
             Some(doc) => doc,
             None => unreachable!("Document with internal ID {docid} not found"),
         };
-        let text = match prompt.render_document(&external_docid, document, &gfid_map, doc_alloc) {
-            Ok(text) => text,
-            Err(err) => {
-                return Err(ResponseError::from_msg(
-                    err.to_string(),
-                    Code::InvalidChatSettingDocumentTemplate,
-                ))
-            }
-        };
+        let text =
+            match prompt.render_document(Some(&external_docid), document, &gfid_map, doc_alloc) {
+                Ok(text) => text,
+                Err(err) => {
+                    return Err(ResponseError::from_msg(
+                        err.to_string(),
+                        Code::InvalidChatSettingDocumentTemplate,
+                    ))
+                }
+            };
         renders.push(text);
     }
 

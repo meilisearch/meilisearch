@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::AwebQueryParameter;
 use export::Export;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::batches::BatchStats;
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::{Code, ErrorType, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::CreateApiKey;
@@ -37,7 +41,9 @@ use crate::milli::progress::{ProgressStepView, ProgressView};
 use crate::routes::batches::AllBatches;
 use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::{DocumentDeletionByFilter, DocumentEditionByFunction};
-use crate::routes::indexes::{IndexView, ListFields, ListFieldsFilter};
+use crate::routes::indexes::{
+    GetIndexStatsParams, IndexView, ListFields, ListFieldsFilter, Size, SizeFormat,
+};
 use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote, Shard};
 use crate::routes::swap_indexes::SwapIndexesPayload;
@@ -59,6 +65,7 @@ mod api_key;
 pub mod batches;
 pub mod chats;
 mod dump;
+mod dynamic_search_rules;
 mod export;
 mod export_analytics;
 pub mod features;
@@ -69,6 +76,8 @@ mod multi_search;
 mod multi_search_analytics;
 pub mod network;
 mod open_api_utils;
+pub mod render;
+mod render_analytics;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
@@ -97,6 +106,8 @@ mod webhooks;
         "/export"=> sub(export::ExportApi),
         "/network"=> sub(network::NetworkApi),
         "/webhooks"=> sub(webhooks::WebhooksApi),
+        "/dynamic-search-rules"=> sub(dynamic_search_rules::DynamicSearchRulesApi),
+        "/render-template" => sub(render::RenderApi),
     ),
     tag = "Root",
     tags(
@@ -112,7 +123,7 @@ mod webhooks;
         url = "http://localhost:7700",
         description = "Local server.",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, ListFields, ListFieldsFilter, SizeFormat))
 )]
 pub struct MeilisearchApi;
 
@@ -250,6 +261,25 @@ impl Pagination {
         let total = content.len();
         let content: Vec<_> = content.into_iter().skip(self.offset).take(self.limit).collect();
         self.format_with(total, content)
+    }
+
+    pub fn auto_paginate_counting<T, I>(self, content: I) -> PaginationView<T>
+    where
+        I: IntoIterator<Item = T>,
+        T: Serialize,
+    {
+        let mut total = 0;
+        let mut results = Vec::with_capacity(self.limit);
+
+        for item in content {
+            if total >= self.offset && results.len() < self.limit {
+                results.push(item);
+            }
+
+            total += 1;
+        }
+
+        self.format_with(total, results)
     }
 
     /// Given an iterator and the total number of elements, returns the
@@ -393,9 +423,9 @@ pub async fn running() -> HttpResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     /// Total disk space used by the database in bytes
-    pub database_size: u64,
+    pub database_size: Size,
     /// Actual size of the data in the database in bytes
-    pub used_database_size: u64,
+    pub used_database_size: Size,
     /// Date of the last update in RFC 3339 format. Null if no update has been
     /// processed
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
@@ -411,6 +441,7 @@ pub struct Stats {
 #[routes::path(
     override_tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
+    params(GetIndexStatsParams),
     responses(
         (status = 200, description = "The stats of the instance.", body = Stats, content_type = "application/json", example = json!(
             {
@@ -445,10 +476,13 @@ pub struct Stats {
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<AuthController>>,
+    params: AwebQueryParameter<GetIndexStatsParams, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let filters = index_scheduler.filters();
+    let params = params.into_inner();
 
-    let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
+    let stats =
+        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters, params)?;
 
     debug!(returns = ?stats, "Get stats");
     Ok(HttpResponse::Ok().json(stats))
@@ -458,11 +492,15 @@ pub fn create_all_stats(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     filters: &meilisearch_auth::AuthFilter,
+    params: GetIndexStatsParams,
 ) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
     let mut used_database_size = 0;
+
+    let size_format = params.size_format.unwrap_or(SizeFormat::Raw); // default to `raw` for backcompat.
+    let Param(show_internal_database_sizes) = params.show_internal_database_sizes;
 
     for index_uid in index_scheduler.index_names()? {
         // Accumulate the size of all indexes, even unauthorized ones, so
@@ -479,13 +517,19 @@ pub fn create_all_stats(
         last_task = last_task.map_or(Some(stats.inner_stats.updated_at), |last| {
             Some(last.max(stats.inner_stats.updated_at))
         });
-        indexes.insert(index_uid.to_string(), stats.into());
+        indexes.insert(
+            index_uid.to_string(),
+            IndexStats::from_db_index_stats(stats, size_format, show_internal_database_sizes),
+        );
     }
 
     database_size += index_scheduler.size()?;
     used_database_size += index_scheduler.used_size()?;
     database_size += auth_controller.size()?;
     used_database_size += auth_controller.used_size()?;
+
+    let database_size = Size::new(database_size, size_format);
+    let used_database_size = Size::new(used_database_size, size_format);
 
     let stats = Stats { database_size, used_database_size, last_update: last_task, indexes };
     Ok(stats)
@@ -557,11 +601,16 @@ struct HealthResponse {
 enum HealthStatus {
     #[default]
     Available,
+    MustRestart,
 }
 
 /// Get health
 ///
 /// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
+///
+/// The engine will return `available` status with a `200` status code when the instance is healthy.
+/// It will return `mustRestart` status with a `500` status code if the instance requires a restart.
+/// This restart is required after a compaction of the task queue for example.
 #[routes::path(
     responses(
         (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
@@ -578,6 +627,11 @@ pub async fn get_health(
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
 ) -> Result<HttpResponse, ResponseError> {
+    if tasks::compact::COMPACTION_SUCCESSFUL.load(Ordering::Relaxed) {
+        return Ok(HttpResponse::InternalServerError()
+            .json(HealthResponse { status: HealthStatus::MustRestart }));
+    }
+
     search_queue.health().unwrap();
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();

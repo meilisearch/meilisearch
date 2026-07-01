@@ -82,7 +82,7 @@ pub(crate) fn try_routes(attr: TokenStream, item: TokenStream) -> Result<TokenSt
         if let Some(get) = get {
             tokens = quote! { #tokens.route(web::get().to(crate::extractors::sequential_extractor::SeqHandler(#get)))};
         }
-                if let Some(post) = post {
+        if let Some(post) = post {
             tokens = quote! { #tokens.route(web::post().to(crate::extractors::sequential_extractor::SeqHandler(#post)))};
         }
                 if let Some(put) = put {
@@ -168,6 +168,18 @@ fn define_local_handler(
         last_ident.ident = quote::format_ident!("__path_{}", last_ident.ident);
     }
 
+    let path_with_body = if method_has_body(&method) {
+        quote! {
+            impl routes::PathWithBody for #local_handler {
+                fn implemented() {
+                    <#struct_handler as routes::PathWithBody>::implemented();
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     quote! {
         struct #local_handler;
         impl<'t> utoipa::__dev::Tags<'t> for #local_handler {
@@ -202,7 +214,13 @@ fn define_local_handler(
                 #struct_handler::schemas(schemas)
             }
         }
+
+        #path_with_body
     }
+}
+
+fn method_has_body(method: &Ident) -> bool {
+    method == "Post" || method == "Patch" || method == "Put"
 }
 
 fn localized_handler(handler: &Path) -> Ident {

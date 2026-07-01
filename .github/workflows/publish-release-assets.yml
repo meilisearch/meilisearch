@@ -16,15 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     # No need to check the version for dry run (cron or workflow_dispatch)
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.
       - name: Check tag format
         if: github.event_name == 'release'
         id: check-tag-format
+        env:
+          GH_REF_NAME: ${{ github.ref_name }}
         run: |
-          escaped_tag=$(printf "%q" ${{ github.ref_name }})
+          escaped_tag=$(printf "%q" "$GH_REF_NAME")
 
           if [[ $escaped_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "stable=true" >> $GITHUB_OUTPUT
@@ -43,7 +45,7 @@ jobs:
       matrix:
         edition: [community, enterprise]
         release:
-          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64]
+          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64, linux-riscv64]
         include:
           - edition: "community"
             feature-flag: ""
@@ -76,16 +78,28 @@ jobs:
             binary_path: aarch64-unknown-linux-gnu/release/meilisearch
             asset_name: linux-aarch64
             extra-args: "--target aarch64-unknown-linux-gnu"
+          - release: linux-riscv64
+            os: ubuntu-22.04
+            binary_path: riscv64gc-unknown-linux-gnu/release/meilisearch
+            asset_name: linux-riscv64
+            extra-args: "--target riscv64gc-unknown-linux-gnu"
+            use_cross: true
     needs: check-version
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked
       - name: Build
-        run: cargo build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
+        shell: bash
+        env:
+          BUILD_TOOL: ${{ matrix.use_cross && 'cross' || 'cargo' }}
+        run: $BUILD_TOOL build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
         if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: target/${{ matrix.binary_path }}
@@ -98,12 +112,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: Generate OpenAPI file
         run: |
           cd crates/openapi-generator
@@ -111,7 +122,7 @@ jobs:
       - name: Upload OpenAPI file to Release
         # No need to upload for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: ./meilisearch-openapi.json

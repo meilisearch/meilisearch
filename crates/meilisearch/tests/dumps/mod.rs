@@ -2185,12 +2185,17 @@ async fn import_dump_v6_containing_experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": null,
+      "renderRoute": false
     }
     "###);
 
@@ -2313,12 +2318,17 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": null,
+      "renderRoute": false
     }
     "###);
 
@@ -2421,12 +2431,17 @@ async fn generate_and_import_dump_containing_vectors() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "foreignKeys": false
+      "foreignKeys": false,
+      "disableDocumentsFetchQueue": false,
+      "legacySearch": false,
+      "renderRoute": false
     }
     "###);
 

@@ -58,6 +58,7 @@ const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FI
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
+const MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT: &str = "MEILI_EXPERIMENTAL_LEGACY_SEARCH";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
 const MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE: &str = "MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE";
@@ -396,6 +397,13 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
+    /// Experimental legacy search feature.
+    ///
+    /// Enables the legacy search pipeline by default.
+    #[clap(long, env = MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT)]
+    #[serde(default)]
+    pub experimental_legacy_search_default: bool,
+
     /// Experimental search queue size. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/729>
     ///
@@ -619,6 +627,7 @@ impl Opt {
             no_analytics,
             experimental_contains_filter,
             experimental_enable_metrics,
+            experimental_legacy_search_default: experimental_legacy_search,
             experimental_search_queue_size,
             experimental_drop_search_after,
             experimental_nb_searches_per_core,
@@ -692,6 +701,10 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_METRICS,
             experimental_enable_metrics.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT,
+            experimental_legacy_search.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE,
@@ -820,6 +833,7 @@ impl Opt {
     pub(crate) fn to_instance_features(&self) -> InstanceTogglableFeatures {
         InstanceTogglableFeatures {
             metrics: self.experimental_enable_metrics,
+            legacy_search_as_default: self.experimental_legacy_search_default,
             logs_route: self.experimental_enable_logs_route,
             contains_filter: self.experimental_contains_filter,
         }
@@ -1024,7 +1038,7 @@ pub struct S3SnapshotOpts {
     #[serde(default = "default_experimental_s3_snapshot_signature_duration_seconds")]
     pub experimental_s3_signature_duration_seconds: u64,
 
-    /// The size of the the multipart parts.
+    /// The size of the multipart parts.
     ///
     /// Must not be less than 10MiB and larger than 8GiB. Yes,
     /// twice the boundaries of the AWS S3 multipart upload
@@ -1290,7 +1304,7 @@ where
     T: AsRef<OsStr>,
 {
     if let Err(VarError::NotPresent) = std::env::var(key) {
-        std::env::set_var(key, value);
+        unsafe { std::env::set_var(key, value) };
     }
 }
 

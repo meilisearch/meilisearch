@@ -10,7 +10,8 @@ use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::{IndexScheduler, RoFeatures, TaskId};
+use index_scheduler::filter::{filter_into_index_filter, parse_filter, parse_local_index_filter};
+use index_scheduler::{IndexScheduler, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -20,9 +21,10 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
+use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId};
+use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter};
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -48,8 +50,9 @@ use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+    PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
+use crate::search::{ExternalDocumentId, RetrieveVectors};
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -294,6 +297,7 @@ impl Aggregate for DocumentsDeletionAggregator {
     params(
         ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         ("document_id" = String, Path, example = "853", description = "Document identifier.", nullable = false),
+        CustomMetadataQuery,
     ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -411,9 +415,9 @@ pub struct BrowseQueryGet {
     #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentIds>)]
     ids: Option<CS<String>>,
-    /// Filter expression to select which documents to return. Uses the same
-    /// syntax as search filters. Only documents matching the filter will be
-    /// included in the response. Example: `genres = action AND rating > 4`.
+    /// Filter expression to select which documents to return. Attributes must be added to the
+    /// `filterableAttributes` index setting before they can be used in filters. Only accepts
+    /// string expressions (not array syntax). Example: `genres = action AND rating > 4`.
     #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
@@ -429,63 +433,61 @@ pub struct BrowseQueryGet {
 /// this to fetch documents with optional filtering, sorting, and pagination.
 /// This is useful for displaying document lists, exporting data, or
 /// inspecting index contents.
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request]
+#[derive(Debug)]
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
     /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
-    #[schema(required = false, default, example = 150)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
+    #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
     offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time and memory usage. Defaults to
     /// `20`.
-    #[schema(required = false, default = 20, example = 1)]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentLimit>)]
+    #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     limit: usize,
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
     /// fields you need. Example: `["title", "description", "price"]`.
-    #[schema(required = false, example = json!(["title, description"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentFields>, example = json!(["title, description"]))]
     fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
     /// size. Defaults to `false`.
-    #[schema(required = false, default, example = true)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
     retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
     /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
     /// documents matching other criteria are returned. This is useful for
     /// fetching specific known documents.
-    #[schema(required = false, value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentIds>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentIds>, schema_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
     ids: Option<Vec<serde_json::Value>>,
-    /// Filter expression to select which documents to return. Uses the same
-    /// syntax as search filters. Only documents matching the filter will be
-    /// included in the response. Example: `"genres = action AND rating > 4"`
-    /// or as an array `[["genres = action"], "rating > 4"]`.
-    #[schema(required = false, default, value_type = Option<Value>, example = "popularity > 1000")]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    /// Filter expression to select which documents to return. Attributes must be added to the
+    /// `filterableAttributes` index setting before they can be used in filters. Accepts a string
+    /// or an array of arrays of strings for AND/OR combinations.
+    /// Example string: `"genres = action AND rating > 4"`.
+    /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
+    #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
     filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
     /// (ascending) or `desc` (descending). Example: `["price:asc",
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
-    #[schema(required = false, default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentSort>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     sort: Option<Vec<String>>,
 }
 
 /// List documents with POST
 ///
-/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
+/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
+/// body to specify filters, sort order, and which fields to return.
+///
+/// **Note:** Sending an empty payload (`{}`) returns all documents in the index.
+///
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
@@ -542,9 +544,13 @@ pub async fn documents_by_query_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<BrowseQuery, DeserrJsonError>,
+    search_queue: web::Data<crate::search_queue::SearchQueue>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let use_queue = index_scheduler.features().queue_documents_fetch();
+    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
+
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
@@ -566,12 +572,20 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    documents_by_query(&index_scheduler, index_uid, body)
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, body).await;
+    if let Some(permit) = permit {
+        permit.drop().await;
+    }
+    ret
 }
 
 /// List documents with GET
 ///
-/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering. Suited for browsing or exporting index contents.
+/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering.
+///
+/// **Deprecated:** This endpoint will be deprecated in a future release. Use `POST /indexes/{index_uid}/documents/fetch` instead, which supports more parameters and array-based filter expressions.
+///
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
@@ -624,10 +638,14 @@ pub async fn get_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
+    search_queue: web::Data<crate::search_queue::SearchQueue>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
+
+    let use_queue = index_scheduler.features().queue_documents_fetch();
+    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
         params.into_inner();
@@ -668,11 +686,17 @@ pub async fn get_documents(
         &req,
     );
 
-    documents_by_query(&index_scheduler, index_uid, query)
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, query).await;
+
+    if let Some(permit) = permit {
+        permit.drop().await;
+    }
+
+    ret
 }
 
-fn documents_by_query(
-    index_scheduler: &IndexScheduler,
+async fn documents_by_query(
+    index_scheduler: Data<IndexScheduler>,
     index_uid: web::Path<String>,
     query: BrowseQuery,
 ) -> Result<HttpResponse, ResponseError> {
@@ -681,46 +705,75 @@ fn documents_by_query(
 
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
 
-    let ids = if let Some(ids) = ids {
-        let mut parsed_ids = Vec::with_capacity(ids.len());
-        for (index, id) in ids.into_iter().enumerate() {
-            let id = id.try_into().map_err(|error| {
-                let msg = format!("In `.ids[{index}]`: {error}");
-                ResponseError::from_msg(msg, Code::InvalidDocumentIds)
-            })?;
-            parsed_ids.push(id)
-        }
-        Some(parsed_ids)
-    } else {
-        None
-    };
-
-    let sort_criteria = if let Some(sort) = &sort {
-        let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
-            Ok(sorts) => sorts,
-            Err(asc_desc_error) => {
-                return Err(milli::SortError::from(asc_desc_error).into_document_error().into())
+    let ret = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+        let ids = if let Some(ids) = ids {
+            let mut parsed_ids = Vec::with_capacity(ids.len());
+            for (index, id) in ids.into_iter().enumerate() {
+                let id = id.try_into().map_err(|error| {
+                    let msg = format!("In `.ids[{index}]`: {error}");
+                    ResponseError::from_msg(msg, Code::InvalidDocumentIds)
+                })?;
+                parsed_ids.push(id)
             }
+            Some(parsed_ids)
+        } else {
+            None
         };
-        Some(sorts)
-    } else {
-        None
-    };
 
-    let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = retrieve_documents(
-        &index,
-        offset,
-        limit,
-        ids,
-        filter,
-        fields,
-        retrieve_vectors,
-        index_scheduler.features(),
-        sort_criteria,
-    )?;
+        let sort_criteria = if let Some(sort) = &sort {
+            let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
+                Ok(sorts) => sorts,
+                Err(asc_desc_error) => {
+                    return Err(milli::SortError::from(asc_desc_error).into_document_error().into())
+                }
+            };
+            Some(sorts)
+        } else {
+            None
+        };
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+        let index = index_scheduler.index(&index_uid)?;
+        let rtxn = index.read_txn()?;
+        let progress = Progress::default();
+
+        let filter = &filter;
+        let filter = if let Some(filter) = filter {
+            let filter = parse_filter(
+                filter,
+                Code::InvalidDocumentFilter,
+                index_scheduler.features(),
+                None,
+            )?;
+            filter
+                .map(|f| {
+                    filter_into_index_filter(
+                        f,
+                        &index,
+                        &rtxn,
+                        &index_scheduler,
+                        &progress,
+                        &index_uid,
+                    )
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        let (total, documents) = retrieve_documents(
+            &index,
+            &rtxn,
+            offset,
+            limit,
+            ids,
+            filter,
+            fields,
+            retrieve_vectors,
+            sort_criteria,
+        )?;
+        Ok(PaginationView::new(offset, limit, total as usize, documents))
+    })
+    .await
+    .unwrap()?;
 
     Ok(HttpResponse::Ok().json(ret))
 }
@@ -735,7 +788,9 @@ pub struct UpdateDocumentsQuery {
     #[param(required = false, example = "id")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
-    /// Customize the csv delimiter when importing CSV documents.
+    /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
+    /// character. Only valid when the content type is `text/csv`; using this parameter with
+    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
@@ -837,16 +892,17 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 ///
 /// Add a list of documents or replace them if they already exist.
 ///
-/// If you send an already existing document (same id) the whole existing
-/// document will be overwritten by the new document. Fields previously in the
-/// document not present in the new document are removed.
+/// If you send an already existing document (same id) the whole existing document will be
+/// overwritten by the new document. Fields previously in the document not present in the new
+/// document are removed.
 ///
 /// If the provided index does not exist, it will be created.
 ///
-/// For a partial update of the document see [add or update documents route](/reference/api/documents/add-or-update-documents).
+/// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
-/// > Use the reserved `_geo` object to add geo coordinates to a document.
-/// > `_geo` is an object made of `lat` and `lng` field.
+/// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+///
+/// For a partial update see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
 
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
@@ -953,12 +1009,17 @@ pub async fn replace_documents(
 /// Thus, any fields not present in the new document are kept and remained
 /// unchanged.
 ///
+/// **Important:** Partial updates apply only to top-level fields. Updating an object attribute
+/// replaces the entire object, removing any subfields not present in the update. Dot notation
+/// in an update request creates a new flat attribute rather than updating an existing nested field.
+///
 /// If the provided index does not exist, it will be created.
 ///
-/// To completely overwrite a document, see [add or replace documents route](/reference/api/documents/add-or-replace-documents).
+/// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
-/// > Use the reserved `_geo` object to add geo coordinates to a document.
-/// > `_geo` is an object made of `lat` and `lng` field.
+/// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+///
+/// To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
 
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
@@ -1274,6 +1335,7 @@ async fn copy_body_to_file(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
     ),
     request_body(content = Vec<Value>),
     responses(
@@ -1373,13 +1435,13 @@ pub async fn delete_documents_batch(
 }
 
 /// Request body for deleting documents by filter
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct DocumentDeletionByFilter {
-    /// Filter expression to match documents for deletion
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
+    /// Filter expression to match documents for deletion. Attributes must be in
+    /// `filterableAttributes` before they can be used. Accepts a string or an array of arrays.
+    /// Sending an empty filter will return a `bad_request` error.
+    #[request(required, error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
 
@@ -1388,7 +1450,10 @@ pub struct DocumentDeletionByFilter {
 /// Delete all documents in the index that match the given filter expression.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
+    ),
     request_body = DocumentDeletionByFilter,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -1447,10 +1512,11 @@ pub async fn delete_documents_by_filter(
     );
 
     // we ensure the filter is well formed before enqueuing it
-    crate::search::parse_filter(
+    parse_local_index_filter(
         &filter.filter,
-        Code::InvalidDocumentFilter,
+        None,
         index_scheduler.features(),
+        Code::InvalidDocumentFilter,
     )?
     .ok_or(MeilisearchHttpError::EmptyFilter)?;
 
@@ -1494,21 +1560,23 @@ pub async fn delete_documents_by_filter(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-/// Request body for editing documents using a JavaScript function
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+/// Request body for editing documents using a RHAI function
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct DocumentEditionByFunction {
-    /// Filter expression to select which documents to edit
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    /// Filter expression to select which documents to edit. If omitted, all documents in the
+    /// index will be processed. Attributes must be in `filterableAttributes` to be used.
+    #[request(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
-    /// Data to make available for the editing function
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
+    /// Arbitrary data to pass into the function scope. By default the function only has access
+    /// to the current document being edited via the `doc` variable.
+    #[request(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
-    /// RHAI function to apply to each document
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
+    /// A [RHAI](https://rhai.rs) function string to apply to each document. The function has
+    /// access to a `doc` variable representing the current document. Modify `doc` fields to
+    /// update the document. Return `null` or `()` to delete the document.
+    /// To enable this feature: `PATCH /experimental-features/ {"editDocumentsByFunction": true}`.
+    #[request(required, error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     pub function: String,
 }
 
@@ -1549,6 +1617,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     security(("Bearer" = ["documents.*", "*"])),
     params(
         ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
     ),
     request_body = DocumentEditionByFunction,
     responses(
@@ -1618,10 +1687,11 @@ pub async fn edit_documents_by_function(
 
     if let Some(ref filter) = body.filter {
         // we ensure the filter is well formed before enqueuing it
-        crate::search::parse_filter(
+        parse_local_index_filter(
             filter,
-            Code::InvalidDocumentFilter,
+            Some(index_uid.as_str()),
             index_scheduler.features(),
+            Code::InvalidDocumentFilter,
         )?
         .ok_or(MeilisearchHttpError::EmptyFilter)?;
     }
@@ -1681,7 +1751,10 @@ pub async fn edit_documents_by_function(
 /// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
+    ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -1808,39 +1881,31 @@ fn some_documents<'a, 't: 'a>(
 #[allow(clippy::too_many_arguments)]
 fn retrieve_documents<S: AsRef<str>>(
     index: &Index,
+    rtxn: &RoTxn,
     offset: usize,
     limit: usize,
     ids: Option<Vec<ExternalDocumentId>>,
-    filter: Option<Value>,
+    filter: Option<IndexFilter>,
     attributes_to_retrieve: Option<Vec<S>>,
     retrieve_vectors: RetrieveVectors,
-    features: RoFeatures,
     sort_criteria: Option<Vec<AscDesc>>,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
-    let rtxn = index.read_txn()?;
-    let filter = &filter;
-    let filter = if let Some(filter) = filter {
-        parse_filter(filter, Code::InvalidDocumentFilter, features)?
-    } else {
-        None
-    };
-
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
         let mut candidates = RoaringBitmap::new();
         for id in ids.iter() {
-            let Some(docid) = external_document_ids.get(&rtxn, id)? else {
+            let Some(docid) = external_document_ids.get(rtxn, id)? else {
                 continue;
             };
             candidates.insert(docid);
         }
         candidates
     } else {
-        index.documents_ids(&rtxn)?
+        index.documents_ids(rtxn)?
     };
 
     if let Some(filter) = filter {
-        candidates &= filter.evaluate(&rtxn, index).map_err(|err| match err {
+        candidates &= filter.evaluate(rtxn, index).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
             }
@@ -1850,7 +1915,7 @@ fn retrieve_documents<S: AsRef<str>>(
 
     let (it, number_of_documents) = if let Some(sort) = sort_criteria {
         let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
@@ -1859,7 +1924,7 @@ fn retrieve_documents<S: AsRef<str>>(
         (
             itertools::Either::Left(some_documents(
                 index,
-                &rtxn,
+                rtxn,
                 documents.into_iter(),
                 retrieve_vectors,
             )?),
@@ -1870,7 +1935,7 @@ fn retrieve_documents<S: AsRef<str>>(
         (
             itertools::Either::Right(some_documents(
                 index,
-                &rtxn,
+                rtxn,
                 candidates.into_iter().skip(offset).take(limit),
                 retrieve_vectors,
             )?),
@@ -1882,7 +1947,7 @@ fn retrieve_documents<S: AsRef<str>>(
         .map(|document| {
             Ok(match &attributes_to_retrieve {
                 Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    &document?,
+                    document?,
                     attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
                         (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
                     ),
@@ -1914,7 +1979,7 @@ fn retrieve_document<S: AsRef<str>>(
 
     let document = match &attributes_to_retrieve {
         Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-            &document,
+            document,
             attributes_to_retrieve
                 .iter()
                 .map(|s| s.as_ref())

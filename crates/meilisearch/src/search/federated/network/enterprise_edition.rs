@@ -7,44 +7,65 @@ use std::collections::BTreeMap;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::SHARD_FIELD;
-use meilisearch_types::network::Network;
+use meilisearch_types::network::{Network, RemoteAvailability};
 use rand::seq::IteratorRandom as _;
 
-use crate::search::{fuse_filters, SearchQueryWithIndex};
+use crate::search::federated::network::ProxyQuery;
+use crate::search::fuse_filters;
 
 /// Partition over all shards such that each shard appears exactly once.
 ///
 /// The remote responsible for each shard is picked at random among the remotes that own the shard.
-pub fn partition_shards(
-    query: SearchQueryWithIndex,
+pub fn partition_shards<Q: ProxyQuery>(
+    query: Q,
     remote_for_shard: impl Iterator<Item = (impl AsRef<str>, String)>,
-) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
+) -> Result<impl Iterator<Item = Q::ProxiedQuery>, ResponseError> {
     Ok(remote_for_shard.map(move |(shard, remote)| {
-        let mut query = query.clone();
-        query.federation_options.get_or_insert_default().remote = Some(remote);
+        let mut query = query.proxy_with_remote(remote);
 
         let shard_filter =
             Some(serde_json::Value::String(format!("{SHARD_FIELD} = \"{}\"", shard.as_ref())));
 
-        query.filter = fuse_filters(query.filter.take(), shard_filter);
+        let filter = Q::filter_field(&mut query);
+
+        *filter = fuse_filters(filter.take(), shard_filter);
         query
     }))
 }
 
-pub(super) fn remote_for_shard(network: Network) -> BTreeMap<String, String> {
+pub(super) fn remote_for_shard(
+    network: Network,
+    remote_availability: &RemoteAvailability,
+) -> BTreeMap<String, String> {
     let mut rng = rand::thread_rng();
+    let local = network.local;
 
     let remote_for_shard = {
         network
             .shards
             .into_iter()
             .filter_map(move |(shard_name, shard)| {
-                let Some(remote_for_shard) = shard.remotes.into_iter().choose(&mut rng) else {
-                    tracing::warn!("No remote for shard {shard_name}");
-                    return None;
+                let shard_name = shard_name.escape_default().collect();
+
+                let remote_for_shard = match &local {
+                    // pick the local instance if it owns the shard
+                    Some(local) if shard.remotes.contains(local) => local.clone(),
+                    // otherwise pick a random other remote
+                    _ => {
+                        let Some(remote_for_shard) = shard
+                            .remotes
+                            .into_iter()
+                            .filter(|remote| remote_availability.is_available(remote))
+                            .choose(&mut rng)
+                        else {
+                            tracing::warn!("No remote for shard {shard_name}");
+                            return None;
+                        };
+                        remote_for_shard
+                    }
                 };
 
-                Some((shard_name.escape_default().collect(), remote_for_shard))
+                Some((shard_name, remote_for_shard))
             })
             .collect()
     };

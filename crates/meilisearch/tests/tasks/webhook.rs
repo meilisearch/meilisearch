@@ -362,7 +362,7 @@ async fn post_get_delete() {
 
     let (value, code) = server
         .create_webhook(json!({
-            "url": "https://example.com/hook",
+            "url": "http://localhost:6666/hook",
             "headers": { "authorization": "TOKEN" }
         }))
         .await;
@@ -371,7 +371,7 @@ async fn post_get_delete() {
     {
       "uuid": "[uuid]",
       "isEditable": true,
-      "url": "https://example.com/hook",
+      "url": "http://localhost:6666/hook",
       "headers": {
         "authorization": "XXX..."
       }
@@ -385,7 +385,7 @@ async fn post_get_delete() {
     {
       "uuid": "[uuid]",
       "isEditable": true,
-      "url": "https://example.com/hook",
+      "url": "http://localhost:6666/hook",
       "headers": {
         "authorization": "XXX..."
       }
@@ -415,13 +415,13 @@ async fn create_and_patch() {
     }
     "#);
 
-    let (value, code) = server.create_webhook(json!({ "url": "https://example.com/hook" })).await;
+    let (value, code) = server.create_webhook(json!({ "url": "http://localhost:6666/hook" })).await;
     snapshot!(code, @"201 Created");
     snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
     {
       "uuid": "[uuid]",
       "isEditable": true,
-      "url": "https://example.com/hook",
+      "url": "http://localhost:6666/hook",
       "headers": {}
     }
     "#);
@@ -434,7 +434,7 @@ async fn create_and_patch() {
     {
       "uuid": "[uuid]",
       "isEditable": true,
-      "url": "https://example.com/hook",
+      "url": "http://localhost:6666/hook",
       "headers": {
         "authorization": "XXX..."
       }
@@ -448,7 +448,7 @@ async fn create_and_patch() {
     {
       "uuid": "[uuid]",
       "isEditable": true,
-      "url": "https://example.com/hook",
+      "url": "http://localhost:6666/hook",
       "headers": {
         "authorization": "XXX...",
         "authorization2": "TOKEN"
@@ -463,7 +463,7 @@ async fn create_and_patch() {
     {
       "uuid": "[uuid]",
       "isEditable": true,
-      "url": "https://example.com/hook",
+      "url": "http://localhost:6666/hook",
       "headers": {
         "authorization2": "TOKEN"
       }
@@ -501,7 +501,7 @@ async fn invalid_url_and_headers() {
     // Test invalid header name (containing spaces)
     let (value, code) = server
         .create_webhook(json!({
-            "url": "https://example.com/hook",
+            "url": "http://localhost:6666/hook",
             "headers": { "invalid header name": "value" }
         }))
         .await;
@@ -518,7 +518,7 @@ async fn invalid_url_and_headers() {
     // Test invalid header value (containing control characters)
     let (value, code) = server
         .create_webhook(json!({
-            "url": "https://example.com/hook",
+            "url": "http://localhost:6666/hook",
             "headers": { "authorization": "token\nwith\nnewlines" }
         }))
         .await;
@@ -542,7 +542,7 @@ async fn invalid_uuid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "message": "Invalid UUID: invalid character: found `i` at 0",
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
@@ -551,11 +551,11 @@ async fn invalid_uuid() {
 
     // Test update webhook with invalid UUID
     let (value, code) =
-        server.patch_webhook("invalid-uuid", json!({ "url": "https://example.com/hook" })).await;
+        server.patch_webhook("invalid-uuid", json!({ "url": "http://localhost:6666/hook" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "message": "Invalid UUID: invalid character: found `i` at 0",
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
@@ -567,7 +567,7 @@ async fn invalid_uuid() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "message": "Invalid UUID: invalid character: found `i` at 0",
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
@@ -583,7 +583,7 @@ async fn forbidden_fields() {
     let custom_uuid = Uuid::new_v4();
     let (value, code) = server
         .create_webhook(json!({
-            "url": "https://example.com/hook",
+            "url": "http://localhost:6666/hook",
             "uuid": custom_uuid.to_string(),
             "headers": { "authorization": "TOKEN" }
         }))
@@ -601,7 +601,7 @@ async fn forbidden_fields() {
     // Test creating webhook with isEditable field
     let (value, code) = server
         .create_webhook(json!({
-            "url": "https://example.com/hook2",
+            "url": "http://localhost:6666/hook2",
             "isEditable": false,
             "headers": { "authorization": "TOKEN" }
         }))

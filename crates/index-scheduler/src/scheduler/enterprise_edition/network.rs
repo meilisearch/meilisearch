@@ -498,12 +498,31 @@ impl IndexScheduler {
             None, // document deletion never changes primary key
             &document_changes,
             embedders,
-            &|| must_stop_processing.get(),
+            must_stop_processing,
             progress,
             self.ip_policy(),
             &EmbedderStats::default(),
         )?;
 
+        Ok(())
+    }
+
+    pub fn is_remote_available(&self, remote_name: &str) -> Result<bool> {
+        Ok(self.remote_availability().is_available(remote_name))
+    }
+
+    pub fn mark_remote_unavailable(&self, remote_name: String) -> Result<()> {
+        self.remote_availability().mark_unavailable(remote_name);
+        Ok(())
+    }
+
+    pub fn mark_remote_unavailable_indefinitely(&self, remote_name: String) -> Result<()> {
+        self.remote_availability().mark_unavailable_indefinitely(remote_name);
+        Ok(())
+    }
+
+    pub fn mark_remote_available(&self, remote_name: &str) -> Result<()> {
+        self.remote_availability().mark_available(remote_name);
         Ok(())
     }
 }

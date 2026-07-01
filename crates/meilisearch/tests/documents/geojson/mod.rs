@@ -163,14 +163,14 @@ async fn basic_add_geojson_documents_and_settings() {
 
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     snapshot!(response,
-    @r#"
+    @r###"
     {
-      "message": "Index `[uuid]`: Attribute `_geojson` is not filterable. This index does not have configured filterable attributes.\n14:15 _geoPolygon([0,0],[0,2],[2,2],[2,0])",
+      "message": "Index `[uuid]`: Attribute `_geojson` is not filterable. This index does not have configured filterable attributes.\n14:15 _geoPolygon([0, 0], [0, 2], [2, 2], [2, 0])",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 
     let (task, _status_code) =
         index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;

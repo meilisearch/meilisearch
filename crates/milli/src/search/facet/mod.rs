@@ -5,7 +5,9 @@ use heed::{BytesDecode, RoTxn};
 use roaring::RoaringBitmap;
 
 pub use self::facet_distribution::{FacetDistribution, OrderBy, DEFAULT_VALUES_PER_FACET};
-pub use self::filter::{BadGeoError, Filter, SHARD_FIELD};
+pub use self::filter::{
+    serialize_index_filter_to_filter_string, BadGeoError, Filter, IndexFilter, SHARD_FIELD,
+};
 pub use self::search::{FacetValueHit, SearchForFacetValues};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::BytesRefCodec;
@@ -14,10 +16,11 @@ use crate::{Index, Result};
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
+#[cfg(test)]
+mod facet_range_search_test;
 mod facet_sort_ascending;
 mod facet_sort_descending;
 mod filter;
-mod filter_vector;
 mod search;
 
 fn facet_extreme_value<'t>(

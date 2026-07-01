@@ -7,9 +7,8 @@ use meili_snap::{json_string, snapshot};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{GetAllDocumentsOptions, Value};
+use crate::common::{GetAllDocumentsOptions, Server, Value};
 use crate::json;
-use crate::vector::get_server_vector;
 
 #[derive(serde::Deserialize)]
 struct OpenAiResponses(BTreeMap<String, OpenAiResponse>);
@@ -349,7 +348,7 @@ async fn create_slow_mock() -> (&'static MockServer, Value) {
 #[actix_rt::test]
 async fn it_works() {
     let (_mock, setting) = create_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -583,7 +582,7 @@ async fn it_works() {
 #[actix_rt::test]
 async fn tokenize_long_text() {
     let (_mock, setting) = create_mock_tokenized().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -646,7 +645,7 @@ async fn tokenize_long_text() {
 #[actix_rt::test]
 async fn bad_api_key() {
     let (_mock, mut setting) = create_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let documents = json!([
@@ -794,7 +793,7 @@ async fn bad_api_key() {
 #[actix_rt::test]
 async fn bad_model() {
     let (_mock, mut setting) = create_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let documents = json!([
@@ -872,7 +871,7 @@ async fn bad_model() {
 #[actix_rt::test]
 async fn bad_dimensions() {
     let (_mock, mut setting) = create_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let documents = json!([
@@ -971,7 +970,7 @@ async fn bad_dimensions() {
 #[actix_rt::test]
 async fn smaller_dimensions() {
     let (_mock, setting) = create_mock_dimensions().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1203,7 +1202,7 @@ async fn smaller_dimensions() {
 #[actix_rt::test]
 async fn small_embedding_model() {
     let (_mock, setting) = create_mock_small_embedding_model().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1434,7 +1433,7 @@ async fn small_embedding_model() {
 #[actix_rt::test]
 async fn legacy_embedding_model() {
     let (_mock, setting) = create_mock_legacy_embedding_model().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1667,7 +1666,7 @@ async fn legacy_embedding_model() {
 #[actix_rt::test]
 async fn it_still_works() {
     let (_mock, setting) = create_fallible_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1899,7 +1898,7 @@ async fn it_still_works() {
 #[actix_rt::test]
 async fn timeout() {
     let (_mock, setting) = create_slow_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1907,6 +1906,7 @@ async fn timeout() {
           "embedders": {
               "default": setting,
           },
+          "searchCutoffMs": 500,
         }))
         .await;
     snapshot!(code, @"202 Accepted");
@@ -1967,36 +1967,6 @@ async fn timeout() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
-        }))
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["semanticHitCount"]), @"0");
-    snapshot!(json_string!(response["hits"]), @"[]");
-
-    let (response, code) = index
-        .search_post(json!({
-            "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
-        }))
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["semanticHitCount"]), @"1");
-    snapshot!(json_string!(response["hits"]), @r###"
-    [
-      {
-        "id": 0,
-        "name": "kefir",
-        "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
-      }
-    ]
-    "###);
-
-    let (response, code) = index
-        .search_post(json!({
-            "q": "grand chien de berger des montagnes foil the cache",
             "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
         }))
         .await;

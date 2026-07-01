@@ -2,13 +2,13 @@ use crate::make_enum_progress;
 
 make_enum_progress! {
     pub enum SearchStep {
-        Tokenize,
-        Embed,
-        Filter,
-        ResolveUniverse,
-        KeywordSearch,
-        PlaceholderSearch,
-        SemanticSearch,
+        TokenizeQuery,
+        EmbedQuery,
+        EvaluateFilter,
+        EvaluateQuery,
+        KeywordRanking,
+        PlaceholderRanking,
+        SemanticRanking,
         Format,
         FacetDistribution,
         Personalization,
@@ -29,7 +29,7 @@ make_enum_progress! {
 
 make_enum_progress! {
     pub enum TotalProcessingTimeStep {
-        WaitForPermit,
+        WaitInQueue,
         Search,
         Similar,
     }

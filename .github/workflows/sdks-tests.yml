@@ -22,7 +22,7 @@ jobs:
     outputs:
       docker-image: ${{ steps.define-image.outputs.docker-image }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Define the Docker image we need to use
         id: define-image
         env:
@@ -50,7 +50,7 @@ jobs:
       MEILISEARCH_VERSION: ${{ needs.define-docker-image.outputs.docker-image }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-dotnet
       - name: Setup .NET Core
@@ -80,7 +80,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-dart
       - uses: dart-lang/setup-dart@v1
@@ -109,7 +109,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: stable
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-go
       - name: Get dependencies
@@ -136,7 +136,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-java
       - name: Set up Java
@@ -164,7 +164,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-js
       - name: Install pnpm
@@ -179,14 +179,6 @@ jobs:
         run: pnpm test
       - name: Build project
         run: pnpm build
-      - name: Run ESM env
-        run: pnpm test:env:esm
-      - name: Run Node.js env
-        run: pnpm test:env:nodejs
-      - name: Run node typescript env
-        run: pnpm test:env:node-ts
-      - name: Run Browser env
-        run: pnpm test:env:browser
 
   meilisearch-php-tests:
     needs: define-docker-image
@@ -202,7 +194,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-php
       - name: Install PHP
@@ -232,17 +224,17 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
         uses: actions/setup-python@v6
-      - name: Install pipenv
-        uses: dschep/install-pipenv-action@v1
-      - name: Install dependencies
-        run: pipenv install --dev --python=${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.16"
       - name: Test with pytest
-        run: pipenv run pytest
+        run: uv run pytest
 
   meilisearch-ruby-tests:
     needs: define-docker-image
@@ -258,7 +250,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-ruby
       - name: Set up Ruby 3
@@ -284,7 +276,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-rust
       - name: Build
@@ -306,7 +298,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-swift
       - name: Run tests
@@ -330,13 +322,13 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-js-plugins
       - name: Install pnpm
         uses: pnpm/action-setup@v4
       - name: Setup node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           cache: pnpm
       - name: Install dependencies
@@ -366,7 +358,7 @@ jobs:
     env:
       RAILS_VERSION: "7.0"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-rails
       - name: Install SQLite dependencies
@@ -377,7 +369,7 @@ jobs:
           ruby-version: 3
           bundler-cache: true
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.12.0
+        uses: supercharge/mongodb-github-action@1.12.1
         with:
           mongodb-version: 8.0
       - name: Run tests
@@ -397,7 +389,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-symfony
       - name: Install PHP

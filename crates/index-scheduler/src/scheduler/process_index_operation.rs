@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
-use meilisearch_types::milli::{self, ChannelCongestion, Filter};
+use meilisearch_types::milli::{self, ChannelCongestion};
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
@@ -15,6 +16,7 @@ use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 
 use super::create_batch::{DocumentOperation, IndexOperation};
+use crate::filter::parse_local_index_filter;
 use crate::processing::{
     DocumentDeletionProgress, DocumentEditionProgress, DocumentOperationProgress, SettingsProgress,
 };
@@ -117,7 +119,23 @@ impl IndexScheduler {
                                 .iter()
                                 .map(|s| &*indexer_alloc.alloc_str(s))
                                 .collect_in(&indexer_alloc);
-                            indexer.delete_documents(document_ids.into_bump_slice());
+                            indexer
+                                .delete_documents_by_external_ids(document_ids.into_bump_slice());
+                        }
+                        DocumentOperation::DeleteByFilter { filter } => {
+                            let filter = parse_local_index_filter(
+                                &filter,
+                                Some(index_uid.as_str()),
+                                self.features(),
+                                Code::InvalidDocumentFilter,
+                            )?;
+                            if let Some(filter) = filter {
+                                let candidates =
+                                    filter.evaluate(index_wtxn, index).map_err(|err| {
+                                        Error::from_milli(err, Some(index_uid.clone()))
+                                    })?;
+                                indexer.delete_documents_by_internal_ids(candidates);
+                            }
                         }
                     }
                 }
@@ -133,7 +151,7 @@ impl IndexScheduler {
                         &rtxn,
                         primary_key.as_deref(),
                         &mut new_fields_ids_map,
-                        &|| must_stop_processing.get(),
+                        &must_stop_processing,
                         progress.clone(),
                         shards.as_ref(),
                     )
@@ -164,6 +182,12 @@ impl IndexScheduler {
                                 deleted_documents: Some(stats.document_count),
                             })
                         }
+                        Some(Details::DocumentDeletionByFilter { ref original_filter, .. }) => {
+                            Some(Details::DocumentDeletionByFilter {
+                                original_filter: original_filter.clone(),
+                                deleted_documents: Some(stats.document_count),
+                            })
+                        }
                         _ => {
                             // In the case of a `documentAdditionOrUpdate` or `DocumentDeletion`
                             // the details MUST be set to either addition or deletion
@@ -186,7 +210,7 @@ impl IndexScheduler {
                             primary_key,
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -221,12 +245,23 @@ impl IndexScheduler {
                     unreachable!()
                 };
 
-                let candidates = match filter.as_ref().map(Filter::from_json) {
-                    Some(Ok(Some(filter))) => filter
+                let candidates = match filter
+                    .as_ref()
+                    .and_then(|f| {
+                        parse_local_index_filter(
+                            f,
+                            Some(index_uid.as_str()),
+                            self.features(),
+                            Code::InvalidDocumentFilter,
+                        )
+                        .transpose()
+                    })
+                    .transpose()?
+                {
+                    Some(filter) => filter
                         .evaluate(index_wtxn, index)
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
-                    None | Some(Ok(None)) => index.documents_ids(index_wtxn)?,
-                    Some(Err(e)) => return Err(Error::from_milli(e, Some(index_uid.clone()))),
+                    None => index.documents_ids(index_wtxn)?,
                 };
 
                 let (original_filter, context, function) = if let Some(Details::DocumentEdition {
@@ -300,7 +335,7 @@ impl IndexScheduler {
                             None, // cannot change primary key in DocumentEdition
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -369,14 +404,17 @@ impl IndexScheduler {
                         }
                         KindWithContent::DocumentDeletionByFilter { index_uid, filter_expr } => {
                             let before = to_delete.len();
-                            let filter = match Filter::from_json(filter_expr) {
+                            let filter = match parse_local_index_filter(
+                                filter_expr,
+                                Some(index_uid.as_str()),
+                                self.features(),
+                                Code::InvalidDocumentFilter,
+                            ) {
                                 Ok(filter) => filter,
                                 Err(err) => {
-                                    // theorically, this should be catched by deserr before reaching the index-scheduler and cannot happens
+                                    // theorically, this should be caught by deserr before reaching the index-scheduler and cannot happens
                                     task.status = Status::Failed;
-                                    task.error = Some(
-                                        Error::from_milli(err, Some(index_uid.clone())).into(),
-                                    );
+                                    task.error = Some(err.into());
                                     None
                                 }
                             };
@@ -451,7 +489,7 @@ impl IndexScheduler {
                             None, // document deletion never changes primary key
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -488,12 +526,7 @@ impl IndexScheduler {
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
                 let congestion = builder
-                    .execute(
-                        &|| must_stop_processing.get(),
-                        progress,
-                        self.ip_policy(),
-                        embedder_stats,
-                    )
+                    .execute(&must_stop_processing, progress, self.ip_policy(), embedder_stats)
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
                 Ok((tasks, congestion))

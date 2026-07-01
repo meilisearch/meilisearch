@@ -39,8 +39,8 @@ pub async fn patch_network(
     }
 
     let merged_network = merge_networks(old_network.clone(), new_network)?;
-
-    index_scheduler.put_network(merged_network.clone())?;
+    let wtxn = index_scheduler.env.write_txn()?;
+    index_scheduler.put_network(wtxn, merged_network.clone())?;
 
     analytics.publish(
         PatchNetworkAnalytics {

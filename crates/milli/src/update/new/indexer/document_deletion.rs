@@ -110,7 +110,7 @@ mod test {
     use crate::update::new::steps::IndexingStep;
     use crate::update::new::thread_local::{MostlySend, ThreadLocal};
     use crate::update::new::DocumentChange;
-    use crate::DocumentId;
+    use crate::{DocumentId, MustStopProcessing};
 
     #[test]
     fn test_deletions() {
@@ -174,7 +174,7 @@ mod test {
             new_fields_ids_map: &fields_ids_map,
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
-            must_stop_processing: &(|| false),
+            must_stop_processing: &MustStopProcessing::default(),
             progress: &Progress::default(),
             grenad_parameters: &Default::default(),
         };

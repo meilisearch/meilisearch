@@ -8,6 +8,7 @@ use crate::common::{
     shared_index_with_nested_documents, Server, DOCUMENTS, NESTED_DOCUMENTS,
 };
 use crate::json;
+use crate::vector::rest::create_mock;
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {
@@ -600,6 +601,70 @@ async fn search_with_pattern_filter_settings_scenario_1() {
 }
 
 #[actix_rt::test]
+async fn remove_comparison_feature_keeps_equality() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // Step 1: Add a filterable attribute with BOTH comparison and equality features
+    let (task, code) = index
+        .update_settings(json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos"],
+            "features": {
+                "facetSearch": false,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]}))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 2: Add documents
+    let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 3: Remove the comparison feature but keep equality
+    let (task, code) = index
+        .update_settings(json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos"],
+            "features": {
+                "facetSearch": false,
+                "filter": { "equality": true, "comparison": false }
+            }
+        }]}))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 4: Test that equality filter still works
+    index
+        .search(json!({ "filter": "cattos = simba" }), |response, code| {
+            snapshot!(code, @"200 OK");
+            // Assert we find the matching document
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 654,
+                "father": "pierre",
+                "mother": "sabine",
+                "doggos": [
+                  {
+                    "name": "gros bill",
+                    "age": 8
+                  }
+                ],
+                "cattos": [
+                  "simba",
+                  "pestiféré"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+}
+
+#[actix_rt::test]
 async fn test_filterable_attributes_priority() {
     // Test that the filterable attributes priority is respected
 
@@ -695,7 +760,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:11 doggos.age > 2",
+              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:12 \"doggos.age\" > \"2\"",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -721,7 +786,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:7 doggos EXISTS",
+              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:8 \"doggos\" EXISTS",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -798,14 +863,14 @@ async fn vector_filter_nonexistent_embedder() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n10:15 _vectors.other EXISTS",
+      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n11:16 _vectors.\"other\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -820,14 +885,14 @@ async fn vector_filter_all_embedders_user_provided() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n10:22 _vectors.userProvided EXISTS",
+      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n11:23 _vectors.\"userProvided\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -961,14 +1026,14 @@ async fn vector_filter_non_existant_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n25:33 _vectors.rest.fragments.withBred EXISTS",
+      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n28:36 _vectors.\"rest\".fragments.\"withBred\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -996,7 +1061,7 @@ async fn vector_filter_document_template_but_fragments_used() {
 
 #[actix_rt::test]
 async fn vector_filter_document_template() {
-    let (_mock, setting) = crate::vector::create_mock().await;
+    let (_mock, setting) = create_mock().await;
     let server = crate::vector::get_server_vector().await;
     let index = server.index("doggo");
 
@@ -1169,4 +1234,54 @@ async fn vector_filter_regenerate() {
       "requestUid": "[uuid]"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn issue_6335() {
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos"],
+        "features": {
+                  "facetSearch": false,
+                  "filter": {"equality": true, "comparison": true}
+        }}]}),
+        &json!({
+            "filter": "cattos < pestiféré"
+        }),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r#"
+            [
+              {
+                "id": 750,
+                "father": "romain",
+                "mother": "michelle",
+                "cattos": [
+                  "enigma"
+                ]
+              },
+              {
+                "id": 951,
+                "father": "jean-baptiste",
+                "mother": "sophie",
+                "doggos": [
+                  {
+                    "name": "turbo",
+                    "age": 5
+                  },
+                  {
+                    "name": "fast",
+                    "age": 6
+                  }
+                ],
+                "cattos": [
+                  "moumoute",
+                  "gomez"
+                ]
+              }
+            ]
+            "#);
+        },
+    )
+    .await;
 }

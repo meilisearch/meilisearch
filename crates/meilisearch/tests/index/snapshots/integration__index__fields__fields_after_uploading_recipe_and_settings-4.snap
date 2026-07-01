@@ -123,7 +123,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "cuisine.is_authentic",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": false
@@ -151,7 +151,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "cuisine.region",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": true
@@ -179,7 +179,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "cuisine.type",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": true
@@ -599,7 +599,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "nutrition.calories",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": false
@@ -627,7 +627,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "nutrition.carbs",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": false
@@ -655,7 +655,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "nutrition.fat",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": false
@@ -683,7 +683,7 @@ expression: "(code.as_u16(), resp)"
       {
         "name": "nutrition.protein",
         "displayed": {
-          "enabled": false
+          "enabled": true
         },
         "searchable": {
           "enabled": false

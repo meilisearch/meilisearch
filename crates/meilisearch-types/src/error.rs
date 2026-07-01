@@ -21,7 +21,7 @@ pub struct ResponseError {
     /// The error code.
     #[schema(value_type = Code)]
     #[serde(rename = "code")]
-    error_code: String,
+    pub error_code: String,
     /// The error type.
     #[schema(value_type = ErrorType)]
     #[serde(rename = "type")]
@@ -197,6 +197,7 @@ macro_rules! make_error_codes {
 make_error_codes! {
 ApiKeyAlreadyExists                            , InvalidRequest       , CONFLICT ;
 ApiKeyNotFound                                 , InvalidRequest       , NOT_FOUND ;
+IndexScopedApiKeyWithGlobalAction              , InvalidRequest       , BAD_REQUEST ;
 BadParameter                                   , InvalidRequest       , BAD_REQUEST;
 BadRequest                                     , InvalidRequest       , BAD_REQUEST;
 DatabaseSizeLimitReached                       , Internal             , INTERNAL_SERVER_ERROR;
@@ -271,6 +272,7 @@ InvalidMultiSearchFederationOptions            , InvalidRequest       , BAD_REQU
 InvalidMultiSearchMaxValuesPerFacet            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchMergeFacets                  , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryFacets                  , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchDistinct                     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination              , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPosition                , InvalidRequest       , BAD_REQUEST ;
@@ -352,6 +354,8 @@ InvalidSettingsSynonyms                        , InvalidRequest       , BAD_REQU
 InvalidSettingsTypoTolerance                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsLocalizedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidState                                   , Internal             , INTERNAL_SERVER_ERROR ;
+InvalidStatsShowInternalDatabaseSizes          , InvalidRequest       , BAD_REQUEST ;
+InvalidStatsSizeFormat                         , InvalidRequest       , BAD_REQUEST ;
 InvalidStoreFile                               , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidSwapDuplicateIndexFound                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
@@ -394,6 +398,7 @@ NotLeader                                      , InvalidRequest       , BAD_REQU
 PayloadTooLarge                                , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 RemoteBadResponse                              , System               , BAD_GATEWAY ;
 RemoteBadRequest                               , InvalidRequest       , BAD_REQUEST ;
+UnknownRemote                                  , InvalidRequest       , BAD_REQUEST ;
 RemoteCouldNotSendRequest                      , System               , BAD_GATEWAY ;
 RemoteInvalidApiKey                            , Auth                 , FORBIDDEN ;
 RemoteRemoteError                              , System               , BAD_GATEWAY ;
@@ -457,6 +462,12 @@ InvalidIndexFieldsFilterDistinct               , InvalidRequest       , BAD_REQU
 InvalidIndexFieldsFilterRankingRule            , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexFieldsFilterFilterable             , InvalidRequest       , BAD_REQUEST ;
 RequiresEnterpriseEdition                      , InvalidRequest       , UNAVAILABLE_FOR_LEGAL_REASONS ;
+// Render
+InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
+RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
+TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
+TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST ;
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhookUrl                              , InvalidRequest       , BAD_REQUEST ;
@@ -465,7 +476,18 @@ ImmutableWebhook                               , InvalidRequest       , BAD_REQU
 InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
 WebhookNotFound                                , InvalidRequest       , NOT_FOUND ;
 ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQUEST ;
-ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST
+ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleOffset                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleLimit                  , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilter                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleDescription            , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRulePriority               , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleActive                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleConditions             , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleActions                , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterAttributePatterns, InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterActive           , InvalidRequest       , BAD_REQUEST ;
+DynamicSearchRuleNotFound                      , InvalidRequest       , NOT_FOUND
 }
 
 impl ErrorCode for JoinError {
@@ -517,6 +539,9 @@ impl ErrorCode for milli::Error {
                 | UserError::TooManyEmbedders(_)
                 | UserError::TooManyFragments(_)
                 | UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
+                UserError::InvalidChatSettingsDocumentTemplate(_) => {
+                    Code::InvalidChatSettingDocumentTemplate
+                }
                 UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                 UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
                     Code::IndexPrimaryKeyMultipleCandidatesFound

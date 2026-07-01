@@ -185,7 +185,7 @@ fn fail_in_process_batch_for_document_deletion() {
             false,
         )
         .unwrap();
-    // This one should not be catched by Meilisearch but it's still nice to handle it because if one day we break the filters it could happens
+    // This one should not be caught by Meilisearch but it's still nice to handle it because if one day we break the filters it could happens
     index_scheduler
         .register(
             KindWithContent::DocumentDeletionByFilter {

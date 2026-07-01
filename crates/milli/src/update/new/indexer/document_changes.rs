@@ -14,7 +14,7 @@ use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::GrenadParameters;
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing, Result};
 
 /// An internal iterator (i.e. using `foreach`) of `DocumentChange`s
 pub trait Extractor<'extractor>: Sync {
@@ -62,41 +62,32 @@ pub struct IndexingContext<
     'fid,     // invariant lifetime of fields ids map
     'indexer, // covariant lifetime of objects that are borrowed  during the entire indexing operation
     'index,   // covariant lifetime of the index
-    MSP,
-> where
-    MSP: Fn() -> bool + Sync,
-{
+> {
     pub index: &'index Index,
     pub db_fields_ids_map: &'indexer FieldsIdsMap,
     pub new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
-    pub must_stop_processing: &'indexer MSP,
+    pub must_stop_processing: &'indexer MustStopProcessing,
     pub progress: &'indexer Progress,
     pub grenad_parameters: &'indexer GrenadParameters,
 }
 
-impl<MSP> Copy
+impl Copy
     for IndexingContext<
         '_, // invariant lifetime of fields ids map
         '_, // covariant lifetime of objects that are borrowed  during the entire indexing operation
         '_, // covariant lifetime of the index
-        MSP,
     >
-where
-    MSP: Fn() -> bool + Sync,
 {
 }
 
-impl<MSP> Clone
+impl Clone
     for IndexingContext<
         '_, // invariant lifetime of fields ids map
         '_, // covariant lifetime of objects that are borrowed  during the entire indexing operation
         '_, // covariant lifetime of the index
-        MSP,
     >
-where
-    MSP: Fn() -> bool + Sync,
 {
     fn clone(&self) -> Self {
         *self
@@ -114,7 +105,6 @@ pub fn extract<
     'index,     // covariant lifetime of the index
     EX,
     DC: DocumentChanges<'pl>,
-    MSP,
 >(
     document_changes: &DC,
     extractor: &EX,
@@ -127,14 +117,13 @@ pub fn extract<
         must_stop_processing,
         progress,
         grenad_parameters: _,
-    }: IndexingContext<'fid, 'indexer, 'index, MSP>,
+    }: IndexingContext<'fid, 'indexer, 'index>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,
     step: IndexingStep,
 ) -> Result<()>
 where
     EX: Extractor<'extractor>,
-    MSP: Fn() -> bool + Sync,
 {
     tracing::trace!("We are resetting the extractor allocators");
     progress.update_progress(step);
@@ -163,7 +152,7 @@ where
             )
         },
         |context, items| {
-            if (must_stop_processing)() {
+            if must_stop_processing.get() {
                 return Err(Arc::new(InternalError::AbortedIndexation.into()));
             }
 

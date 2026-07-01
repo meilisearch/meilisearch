@@ -9,8 +9,8 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-ureq = { version = "3.1.4", features = ["json"] }
-reqwest = { version = "0.12.24", features = [
+ureq = { version = "3.3.0", default-features = false, features = ["json", "gzip", "rustls"] }
+reqwest = { version = "0.12.28", features = [
     "stream",
     "multipart",
     "rustls-tls-native-roots",
@@ -24,6 +24,7 @@ hyper-util = { version = "0.1.19", features = [
 ] }
 tower-service = "0.3.3"
 cidr = "0.3.2"
+url = "2.5.7"
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["full"] }

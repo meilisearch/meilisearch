@@ -1183,7 +1183,7 @@ impl GeoSender<'_, '_> {
 pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoJsonSender<'_, '_> {
-    pub fn send_geojson(&self, docid: DocumentId, value: Vec<u8>) -> crate::Result<()> {
+    pub fn insert_geojson(&self, docid: DocumentId, mut value: &[u8]) -> crate::Result<()> {
         let max_grant = self.0.max_grant;
         let refcell = self.0.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
@@ -1193,9 +1193,7 @@ impl GeoJsonSender<'_, '_> {
         let total_length = EntryHeader::total_cellulite_item_size(value_length);
         if total_length > max_grant {
             let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
-
-            let mut embedding_bytes = bytemuck::cast_slice(&value);
-            io::copy(&mut embedding_bytes, &mut value_file)?;
+            io::copy(&mut value, &mut value_file)?;
 
             let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
             let geojson = unsafe { Mmap::map(&value_file)? }; // Safe because the file is never modified
@@ -1217,7 +1215,7 @@ impl GeoJsonSender<'_, '_> {
                 let header_size = payload_header.header_size();
                 let (header_bytes, remaining) = grant.split_at_mut(header_size);
                 payload_header.serialize_into(header_bytes);
-                remaining.copy_from_slice(&value);
+                remaining.copy_from_slice(value);
                 Ok(())
             },
         )?;

@@ -79,80 +79,82 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 /// Minimum word length required before typos are allowed.
 ///
 /// This helps prevent matching very short words with typos, which can lead to irrelevant results.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
+#[routes::request(setting, no_error, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MinWordSizeTyposSetting {
     /// Minimum word length to accept one typo. Shorter words must match exactly. For example, if set to 5, "apple" can have one typo but "app" cannot.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<u8>, default = 5, example = json!(5))]
+    #[request(schema_type = Option<u8>, schema_default = 5, example = json!(5), skip_serializing_if = "Setting::is_not_set")]
     pub one_typo: Setting<u8>,
     /// Minimum word length to accept two typos. Must be greater than or equal to `oneTypo`. For example, if set to 9, "computing" can have two typos.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<u8>, default = 9, example = json!(9))]
+    #[request(schema_type = Option<u8>, schema_default = 9, example = json!(9), skip_serializing_if = "Setting::is_not_set")]
     pub two_typos: Setting<u8>,
 }
 
 /// Typo tolerance: how spelling mistakes in queries are handled.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(deny_unknown_fields, rename_all = camelCase, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
+#[routes::request(setting, no_error, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsTypoTolerance>>)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TypoSettings {
     /// When true, typo tolerance is enabled. When false, only exact matches are returned.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<bool>, default = true, example = json!(true))]
+    #[request(
+        schema_type = Option<bool>,
+        schema_default = true,
+        example = json!(true),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub enabled: Setting<bool>,
     /// Minimum word length before typos are allowed. Contains `oneTypo` (min length for 1 typo) and `twoTypos` (min length for 2 typos). Example: `{ "oneTypo": 5, "twoTypos": 9 }`.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
-    #[schema(value_type = Option<MinWordSizeTyposSetting>, default = json!({ "oneTypo": 5, "twoTypos": 9 }), example = json!({ "oneTypo": 5, "twoTypos": 9 }))]
+    #[request(
+        schema_type = Option<MinWordSizeTyposSetting>,
+        error = DeserrJsonError<InvalidSettingsTypoTolerance>,
+        schema_default = json!({ "oneTypo": 5, "twoTypos": 9 }),
+        example = json!({ "oneTypo": 5, "twoTypos": 9 }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub min_word_size_for_typos: Setting<MinWordSizeTyposSetting>,
     /// Words for which typo tolerance is disabled. Use for brand names or terms that must match exactly.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<BTreeSet<String>>, default = json!([]), example = json!(["iPhone", "phone"]))]
+    #[request(
+        schema_type = Option<BTreeSet<String>>,
+        schema_default = json!([]),
+        example = json!(["iPhone", "phone"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub disable_on_words: Setting<BTreeSet<String>>,
     /// Attributes for which typo tolerance is disabled. Those attributes only return exact matches. Useful for fields like product codes or IDs.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<BTreeSet<String>>, default = json!([]), example = json!(["uuid", "url"]))]
+    #[request(
+        schema_type = Option<BTreeSet<String>>,
+        schema_default = json!([]),
+        example = json!(["uuid", "url"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
     /// When true, typo tolerance is disabled on numeric tokens. For example, 123 will not match 132.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<bool>, default = false, example = json!(false))]
+    #[request(
+        schema_type = Option<bool>,
+        schema_default = false,
+        example = json!(false),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub disable_on_numbers: Setting<bool>,
 }
 
 /// Faceting: maximum number of facet values and how they are sorted.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(setting, no_error)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FacetingSettings {
     /// Maximum number of facet values returned per facet. Values are sorted in ascending lexicographical order.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<usize>, default = 100, example = json!(100))]
+    #[request(schema_default = 100, example = json!(100), schema_type = Option<usize>, skip_serializing_if = "Setting::is_not_set")]
     pub max_values_per_facet: Setting<usize>,
     /// Sort order per facet: by descending count (`count`) or ascending alphanumeric (`alpha`). Key `*` applies to all facets.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, FacetValuesSort>>, default = json!({ "*": "alpha" }), example = json!({ "*": FacetValuesSort::Alpha }))]
+    #[request(schema_type = Option<BTreeMap<String, FacetValuesSort>>, schema_default = json!({ "*": "alpha" }), example = json!({ "*": FacetValuesSort::Alpha }), skip_serializing_if = "Setting::is_not_set")]
     pub sort_facet_values_by: Setting<BTreeMap<String, FacetValuesSort>>,
 }
 
 /// Pagination: cap on how many results a search can return.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(setting, no_error)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PaginationSettings {
     /// Maximum number of search results Meilisearch can return. Limit and offset cannot go beyond this value.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default)]
-    #[schema(value_type = Option<usize>, default = 1000, example = json!(1000))]
+    #[request(schema_default = 1000, schema_type = Option<usize>, example = json!(1000), skip_serializing_if = "Setting::is_not_set")]
     pub max_total_hits: Setting<NonZeroUsize>,
 }
 
@@ -181,6 +183,9 @@ pub struct SettingEmbeddingSettings {
     pub inner: Setting<crate::milli::vector::settings::EmbeddingSettings>,
 }
 
+// no deserr impl
+impl routes::RequestBody for SettingEmbeddingSettings {}
+
 impl fmt::Debug for SettingEmbeddingSettings {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
@@ -204,155 +209,229 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 /// Used as the request body for PATCH settings. Only the fields you send are updated; pass `null` to reset a setting to its default.
 ///
 /// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
-#[serde(
-    // We don't deny unknown fields for backward compatibility with
-    // settings that were previously written in the task queue.
-    // Note that we use serde to store the settings in the task
-    // queue and changing this parameter doesn't impact the HTTP
-    // route as we are using deser there.
-    //
-    // deny_unknown_fields,
-    rename_all = "camelCase",
-    bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
-)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(setting)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Settings<T> {
     /// Fields returned in search results. Affects only search endpoints, not get-document endpoints. See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsDisplayedAttributes>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!(["*"]), example = json!(["id", "title", "description", "url"]))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsDisplayedAttributes>,
+        schema_type = Option<Vec<String>>,
+        schema_default = json!(["*"]),
+        example = json!(["id", "title", "description", "url"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub displayed_attributes: WildcardSetting,
 
     /// Fields searched for query words, in order of importance. Defines [attribute ranking order](https://www.meilisearch.com/docs/learn/relevancy/attribute_ranking_order). See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchableAttributes>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!(["*"]), example = json!(["title", "description"]))]
+    #[request(
+        schema_type = Option<Vec<String>>,
+        error = DeserrJsonError<InvalidSettingsSearchableAttributes>,
+        schema_default = json!(["*"]),
+        example = json!(["title", "description"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub searchable_attributes: WildcardSetting,
 
     /// Attributes that can be used as [filters](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) and [facets](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters). Strings or objects with `attributePatterns` and `features`.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
-    #[schema(value_type = Option<Vec<FilterableAttributesRule>>, default = json!([]), example = json!(["release_date", "genre"]))]
+    #[request(
+        schema_type = Option<Vec<FilterableAttributesRule>>,
+        error = DeserrJsonError<InvalidSettingsFilterableAttributes>,
+        schema_default = json!([]),
+        example = json!(["release_date", "genre"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub filterable_attributes: Setting<Vec<FilterableAttributesRule>>,
 
     /// Attributes that can be used to [sort search results](https://www.meilisearch.com/docs/learn/filtering_and_sorting/sort_search_results).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsSortableAttributes>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["release_date"]))]
+    #[request(
+        schema_type = Option<Vec<String>>,
+        error = DeserrJsonError<InvalidSettingsSortableAttributes>,
+        schema_default = json!([]),
+        example = json!(["release_date"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub sortable_attributes: Setting<BTreeSet<String>>,
 
     /// Foreign keys to use for cross-index filtering search.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsForeignKeys>)]
-    #[schema(value_type = Option<Vec<ForeignKey>>, example = json!([{"foreignIndexUid": "products", "fieldName": "productId"}]))]
+    #[request(
+        default,
+        schema_type = Option<Vec<ForeignKey>>,
+        error = DeserrJsonError<InvalidSettingsForeignKeys>,
+        example = json!([{"foreignIndexUid": "products", "fieldName": "productId"}]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub foreign_keys: Setting<Vec<ForeignKey>>,
 
     /// [Ranking rules](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules) in order of importance. Built-in rules and custom sort rules (`attribute:asc` or `attribute:desc`).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsRankingRules>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]), example = json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]))]
+    #[request(
+        schema_type = Option<Vec<String>>,
+        error = DeserrJsonError<InvalidSettingsRankingRules>,
+        schema_default = json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]),
+        example = json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub ranking_rules: Setting<Vec<RankingRuleView>>,
 
     /// Words ignored when present in search queries.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsStopWords>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["the", "a"]))]
+    #[request(
+        schema_type = Option<Vec<String>>,
+        error = DeserrJsonError<InvalidSettingsStopWords>,
+        schema_default = json!([]),
+        example = json!(["the", "a"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub stop_words: Setting<BTreeSet<String>>,
 
     /// Characters that are not treated as word separators. Removed from the default separator set.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsNonSeparatorTokens>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["@", "#"]))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsNonSeparatorTokens>,
+        schema_type = Option<Vec<String>>,
+        schema_default = json!([]),
+        example = json!(["@", "#"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub non_separator_tokens: Setting<BTreeSet<String>>,
 
     /// Characters that delimit words. Added on top of the default separators.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsSeparatorTokens>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["|"]))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsSeparatorTokens>,
+        schema_type = Option<Vec<String>>,
+        schema_default = json!([]),
+        example = json!(["|"]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub separator_tokens: Setting<BTreeSet<String>>,
 
     /// Strings Meilisearch parses as a single term. Useful for names or domain terms.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsDictionary>)]
-    #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["J. R. R."]))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsDictionary>,
+        schema_type = Option<Vec<String>>,
+        schema_default = json!([]),
+        example = json!(["J. R. R."]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub dictionary: Setting<BTreeSet<String>>,
 
     /// Pairs of words or phrases treated as equivalent for search. Key maps to an array of [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsSynonyms>)]
-    #[schema(value_type = Option<BTreeMap<String, Vec<String>>>, default = json!({}), example = json!({ "phone": ["iPhone"] }))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsSynonyms>,
+        schema_type = Option<BTreeMap<String, Vec<String>>>,
+        schema_default = json!({}),
+        example = json!({ "phone": ["iPhone"] }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
 
     /// Field whose value must be unique in the returned documents. One document per distinct value. See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
-    #[schema(value_type = Option<String>, example = json!("sku"))]
+    #[request(
+        default,
+        error = DeserrJsonError<InvalidSettingsDistinctAttribute>,
+        schema_type = Option<String>,
+        example = json!("sku"),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub distinct_attribute: Setting<String>,
 
     /// Precision for the proximity ranking rule and phrase search: `byWord` (exact distance) or `byAttribute` (same attribute).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsProximityPrecision>)]
-    #[schema(value_type = Option<String>, default = json!("byWord"), example = json!(ProximityPrecisionView::ByWord))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsProximityPrecision>,
+        schema_type = Option<String>,
+        schema_default = json!("byWord"),
+        example = json!(ProximityPrecisionView::ByWord),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub proximity_precision: Setting<ProximityPrecisionView>,
 
     /// [Typo tolerance](https://www.meilisearch.com/docs/learn/relevancy/typo_tolerance_settings): enable/disable, minimum word length for typos, and where to disable it.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
-    #[schema(value_type = Option<TypoSettings>, default = json!({ "enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [], "disableOnNumbers": false }), example = json!({ "enabled": true, "disableOnAttributes": ["title"] }))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsTypoTolerance>,
+        schema_type = Option<TypoSettings>,
+        schema_default = json!({ "enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [], "disableOnNumbers": false }),
+        example = json!({ "enabled": true, "disableOnAttributes": ["title"] }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub typo_tolerance: Setting<TypoSettings>,
 
     /// Related to [faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): max facet values per facet and how facet values are sorted.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsFaceting>)]
-    #[schema(value_type = Option<FacetingSettings>, default = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }), example = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } }))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsFaceting>,
+        schema_type = Option<FacetingSettings>,
+        schema_default = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }),
+        example = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub faceting: Setting<FacetingSettings>,
 
     /// Related to [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination): maximum number of results a search can return.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsPagination>)]
-    #[schema(value_type = Option<PaginationSettings>, default = json!({ "maxTotalHits": 1000 }), example = json!({ "maxTotalHits": 1000 }))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsPagination>,
+        schema_type = Option<PaginationSettings>,
+        schema_default = json!({ "maxTotalHits": 1000 }),
+        example = json!({ "maxTotalHits": 1000 }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub pagination: Setting<PaginationSettings>,
 
     /// [Embedders](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search) used for semantic and [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Map of embedder name to config (`source`, `model`, `documentTemplate`, etc.).
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
-    #[schema(value_type = Option<BTreeMap<String, crate::milli::vector::settings::EmbeddingSettings>>, default = json!({}), example = json!({ "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } }), nullable = true)]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsEmbedders>,
+        schema_type = Option<BTreeMap<String, crate::milli::vector::settings::EmbeddingSettings>>,
+        schema_default = json!({}),
+        example = json!({ "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } }), nullable = true,
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub embedders: Setting<BTreeMap<String, SettingEmbeddingSettings>>,
 
     /// Maximum duration of a search in milliseconds. If reached, the search stops and returns results computed so far. When null, 1500 ms is used.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchCutoffMs>)]
-    #[schema(value_type = Option<u64>, example = json!(1500))]
+    #[request(
+        default, error = DeserrJsonError<InvalidSettingsSearchCutoffMs>,
+        schema_type = Option<u64>,
+        example = json!(1500),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub search_cutoff_ms: Setting<u64>,
 
     /// Locales and attribute patterns for [language-specific tokenization](https://www.meilisearch.com/docs/learn/resources/language). Affects searchable, filterable, and sortable attributes.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
-    #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, default = json!([]), example = json!([{"locales": ["jpn"], "attributePatterns": ["*_ja"]}]))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsLocalizedAttributes>,
+        schema_type = Option<Vec<LocalizedAttributesRuleView>>,
+        schema_default = json!([]),
+        example = json!([{"locales": ["jpn"], "attributePatterns": ["*_ja"]}]),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
 
     /// When true, [facet search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters) is enabled. When false, the facet-search endpoint is disabled.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetSearch>)]
-    #[schema(value_type = Option<bool>, default = true, example = json!(true))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsFacetSearch>,
+        schema_type = Option<bool>,
+        schema_default = true,
+        example = json!(true),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub facet_search: Setting<bool>,
 
     /// When to compute prefix matches: `indexingTime` or `disabled`. `disabled` speeds up indexing but reduces relevancy.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
-    #[schema(value_type = Option<PrefixSearchSettings>, default = json!("indexingTime"), example = json!(PrefixSearchSettings::IndexingTime))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsPrefixSearch>,
+        schema_type = Option<PrefixSearchSettings>,
+        schema_default = json!("indexingTime"),
+        example = json!(PrefixSearchSettings::IndexingTime),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub prefix_search: Setting<PrefixSearchSettings>,
 
     /// [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: index description, document template, and search parameters used when the LLM queries this index.
-    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default, error = DeserrJsonError<InvalidSettingsIndexChat>)]
-    #[schema(value_type = Option<ChatSettings>, default = json!({}), example = json!({ "description": "A comprehensive movie database", "documentTemplateMaxBytes": 400, "searchParameters": { "limit": 20 } }))]
+    #[request(
+        error = DeserrJsonError<InvalidSettingsIndexChat>,
+        schema_type = Option<ChatSettings>,
+        schema_default = json!({}),
+        example = json!({ "description": "A comprehensive movie database", "documentTemplateMaxBytes": 400, "searchParameters": { "limit": 20 } }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
     pub chat: Setting<ChatSettings>,
 
-    #[serde(skip)]
-    #[deserr(skip)]
+    #[request(skip)]
     pub _kind: PhantomData<T>,
 }
 
@@ -381,16 +460,20 @@ pub fn hide_secret(secret: &mut String, secret_offset: usize) {
     match secret.len().checked_sub(secret_offset) {
         None => (),
         Some(x) if x < 10 => {
-            secret.replace_range(secret_offset.., "XXX...");
+            let offset = secret.ceil_char_boundary(secret_offset);
+            secret.replace_range(offset.., "XXX...");
         }
         Some(x) if x < 20 => {
-            secret.replace_range((secret_offset + 2).., "XXXX...");
+            let offset = secret.ceil_char_boundary(secret_offset + 2);
+            secret.replace_range(offset.., "XXXX...");
         }
         Some(x) if x < 30 => {
-            secret.replace_range((secret_offset + 3).., "XXXXX...");
+            let offset = secret.ceil_char_boundary(secret_offset + 3);
+            secret.replace_range(offset.., "XXXXX...");
         }
         Some(_x) => {
-            secret.replace_range((secret_offset + 5).., "XXXXXX...");
+            let offset = secret.ceil_char_boundary(secret_offset + 5);
+            secret.replace_range(offset.., "XXXXXX...");
         }
     }
 }
@@ -1046,8 +1129,10 @@ pub fn settings(
     Ok(settings)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr, ToSchema)]
-#[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
+#[routes::request(
+    // no `setting` because we manually implement De/Serialize for some reason
+    no_error, try_from(&String) = FromStr::from_str -> CriterionError)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
     Words,
@@ -1157,9 +1242,8 @@ impl From<RankingRuleView> for Criterion {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(error = DeserrJsonError<InvalidSettingsProximityPrecision>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(setting, override_error = DeserrJsonError<InvalidSettingsProximityPrecision>)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProximityPrecisionView {
     #[default]
     ByWord,
@@ -1224,10 +1308,8 @@ impl std::ops::Deref for WildcardSetting {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-#[deserr(error = DeserrJsonError<InvalidSettingsPrefixSearch>, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(setting, override_error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrefixSearchSettings {
     #[default]
     IndexingTime,
@@ -1321,5 +1403,20 @@ pub(crate) mod test {
         let checked = settings.check();
         assert_eq!(checked.displayed_attributes, Setting::Reset.into());
         assert_eq!(checked.searchable_attributes, Setting::Reset.into());
+    }
+
+    #[test]
+    fn test_hide_secret() {
+        let mut secret = String::from("123456789");
+        hide_secret(&mut secret, 0);
+        assert_eq!(secret, "XXX...");
+        let mut secret = String::from("123456789012345678901234567890");
+        hide_secret(&mut secret, 0);
+        assert_eq!(secret, "12345XXXXXX...");
+
+        // related to https://linear.app/meilisearch/issue/SP-1771
+        let mut secret = String::from("ひらがな6789012345678901234567890");
+        hide_secret(&mut secret, 0);
+        assert_eq!(secret, "ひらXXXXXX...");
     }
 }

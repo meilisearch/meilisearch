@@ -26,6 +26,7 @@ crate::empty_analytics!(DumpAnalytics, "Dump Created");
 ///
 /// Trigger a dump creation process. When complete, a dump file is written to the [dump directory](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#dump-directory). The directory is created if it does not exist.
 #[routes::path(
+    no_request_body,
     security(("Bearer" = ["dumps.create", "dumps.*", "*"])),
     responses(
         (status = 202, description = "Dump is being created.", body = SummarizedTaskView, content_type = "application/json", example = json!(

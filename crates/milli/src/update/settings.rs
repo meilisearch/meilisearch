@@ -14,8 +14,11 @@ use super::chat::ChatSearchParams;
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
-use crate::attribute_patterns::PatternMatch;
-use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
+use crate::attribute_patterns::{match_field_legacy, PatternMatch};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME,
+};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
@@ -26,8 +29,8 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::{EmbedderStats, Progress, VariableNameStep};
-use crate::prompt::{default_max_bytes, default_template_text, PromptData};
+use crate::progress::{EmbedderStats, Progress};
+use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
@@ -42,11 +45,10 @@ use crate::vector::settings::{
 };
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
-    VectorStoreBackend,
 };
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
-    LocalizedAttributesRule, Result,
+    LocalizedAttributesRule, MustStopProcessing, Result,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
@@ -198,7 +200,6 @@ pub struct Settings<'a, 't, 'i> {
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
     chat: Setting<ChatSettings>,
-    vector_store: Setting<VectorStoreBackend>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -239,7 +240,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
             chat: Setting::NotSet,
-            vector_store: Setting::NotSet,
             indexer_config,
         }
     }
@@ -486,30 +486,21 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.chat = Setting::Reset;
     }
 
-    pub fn set_vector_store(&mut self, value: VectorStoreBackend) {
-        self.vector_store = Setting::Set(value);
-    }
-
-    pub fn reset_vector_store(&mut self) {
-        self.vector_store = Setting::Reset;
-    }
-
     #[tracing::instrument(
         level = "trace"
         skip(self, progress_callback, should_abort, settings_diff, embedder_stats),
         target = "indexing::documents"
     )]
-    fn reindex<FP, FA>(
+    fn reindex<FP>(
         &mut self,
         progress_callback: &FP,
-        should_abort: &FA,
+        should_abort: &MustStopProcessing,
         settings_diff: InnerIndexSettingsDiff,
         embedder_ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: &Arc<EmbedderStats>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
@@ -537,7 +528,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.indexer_config,
             IndexDocumentsConfig::default(),
             &progress_callback,
-            &should_abort,
+            should_abort,
             embedder_stats,
             embedder_ip_policy,
         )?;
@@ -562,7 +553,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(true)
     }
 
-    fn update_distinct_field(&mut self) -> Result<bool> {
+    fn update_distinct_attribute(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
                 self.index.put_distinct_field(self.wtxn, attr)?;
@@ -801,7 +792,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    fn update_filterable(&mut self) -> Result<()> {
+    fn update_filterable_attributes(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
                 self.index.put_filterable_attributes_rules(self.wtxn, fields)?;
@@ -814,7 +805,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn update_sortable(&mut self) -> Result<()> {
+    fn update_sortable_attributes(&mut self) -> Result<()> {
         match self.sortable_fields {
             Setting::Set(ref fields) => {
                 let mut new_fields = HashSet::new();
@@ -1266,9 +1257,15 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         &name,
                         EmbeddingValidationContext::FullSettings,
                     )?;
+                    let is_being_quantized = setting
+                        .as_ref()
+                        .set()
+                        .and_then(|settings| settings.binary_quantized.set())
+                        .unwrap_or_default();
                     embedder_actions.insert(
                         name.clone(),
-                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
+                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false)
+                            .with_is_being_quantized(is_being_quantized),
                     );
                     let mut fragments = FragmentConfigs::new();
                     fragments.add_new_fragments(
@@ -1378,6 +1375,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     },
                 };
 
+                // Validate the document template syntax
+                Prompt::new(prompt.template.clone(), prompt.max_bytes)
+                    .map_err(UserError::InvalidChatSettingsDocumentTemplate)?;
+
                 let search_parameters = match new_search_parameters {
                     Setting::Set(sp) => {
                         let ChatSearchParams {
@@ -1451,16 +1452,15 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    fn legacy_execute<FP, FA>(
+    fn legacy_execute<FP>(
         mut self,
         progress_callback: FP,
-        should_abort: FA,
+        should_abort: &MustStopProcessing,
         ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
@@ -1469,7 +1469,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         // never trigger re-indexing
         self.update_displayed()?;
-        self.update_distinct_field()?;
+        self.update_distinct_attribute()?;
         self.update_criteria()?;
         self.update_primary_key()?;
         self.update_authorize_typos()?;
@@ -1482,8 +1482,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_foreign_keys()?;
 
         // could trigger re-indexing
-        self.update_filterable()?;
-        self.update_sortable()?;
+        self.update_filterable_attributes()?;
+        self.update_sortable_attributes()?;
         self.update_stop_words()?;
         self.update_non_separator_tokens()?;
         self.update_separator_tokens()?;
@@ -1520,7 +1520,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         if inner_settings_diff.any_reindexing_needed() {
             self.reindex(
                 &progress_callback,
-                &should_abort,
+                should_abort,
                 inner_settings_diff,
                 ip_policy,
                 &embedder_stats,
@@ -1530,83 +1530,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn execute_vector_backend<'indexer, MSP>(
-        &mut self,
-        must_stop_processing: &'indexer MSP,
-        progress: &'indexer Progress,
-    ) -> Result<()>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
-        let old_backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
-
-        let new_backend = match self.vector_store {
-            Setting::Set(new_backend) => {
-                self.index.put_vector_store(self.wtxn, new_backend)?;
-                new_backend
-            }
-            Setting::Reset => {
-                self.index.delete_vector_store(self.wtxn)?;
-                VectorStoreBackend::default()
-            }
-            Setting::NotSet => return Ok(()),
-        };
-
-        if old_backend == new_backend {
-            return Ok(());
-        }
-
-        let embedders = self.index.embedding_configs();
-        let embedding_configs = embedders.embedding_configs(self.wtxn)?;
-        enum VectorStoreBackendChangeIndex {}
-        let embedder_count = embedding_configs.len();
-
-        let rtxn = self.index.read_txn()?;
-
-        for (i, config) in embedding_configs.into_iter().enumerate() {
-            if must_stop_processing() {
-                return Err(crate::InternalError::AbortedIndexation.into());
-            }
-            let embedder_name = &config.name;
-            progress.update_progress(VariableNameStep::<VectorStoreBackendChangeIndex>::new(
-                format!("Changing vector store backend for embedder `{embedder_name}`"),
-                i as u32,
-                embedder_count as u32,
-            ));
-            let quantized = config.config.quantized();
-            let embedder_id = embedders.embedder_id(self.wtxn, &config.name)?.unwrap();
-            let vector_store = crate::vector::VectorStore::new(
-                old_backend,
-                self.index.vector_store,
-                embedder_id,
-                quantized,
-            );
-
-            vector_store.change_backend(
-                &rtxn,
-                self.wtxn,
-                progress.clone(),
-                must_stop_processing,
-                self.indexer_config.max_memory,
-            )?;
-        }
-
-        Ok(())
-    }
-
-    pub fn execute<'indexer, MSP>(
+    pub fn execute<'indexer>(
         mut self,
-        must_stop_processing: &'indexer MSP,
+        must_stop_processing: &'indexer MustStopProcessing,
         progress: &'indexer Progress,
         ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
-    ) -> Result<Option<ChannelCongestion>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<Option<ChannelCongestion>> {
         progress.update_progress(SettingsIndexerStep::ChangingVectorStore);
-        // execute any pending vector store backend change
-        self.execute_vector_backend(must_stop_processing, progress)?;
 
         // force the old indexer if the environment says so
         if self.indexer_config.experimental_no_edition_2024_for_settings {
@@ -1621,100 +1552,79 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 .map(|_| None);
         }
 
-        // only use the new indexer when only the embedder possibly changed
-        if let Self {
-            searchable_fields: _,
-            displayed_fields: Setting::NotSet,
-            filterable_fields: Setting::NotSet,
-            sortable_fields: Setting::NotSet,
-            foreign_keys: Setting::NotSet,
-            criteria: Setting::NotSet,
-            stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
-            non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
-            separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
-            dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
-            distinct_field: Setting::NotSet,
-            synonyms: Setting::NotSet,
-            primary_key: Setting::NotSet,
-            authorize_typos: Setting::NotSet,
-            min_word_len_two_typos: Setting::NotSet,
-            min_word_len_one_typo: Setting::NotSet,
-            exact_words: Setting::NotSet, // TODO (require force reindexing of searchables)
-            exact_attributes: _,
-            max_values_per_facet: Setting::NotSet,
-            sort_facet_values_by: Setting::NotSet,
-            pagination_max_total_hits: Setting::NotSet,
-            proximity_precision: _,
-            embedder_settings: _,
-            search_cutoff: Setting::NotSet,
-            localized_attributes_rules: Setting::NotSet, // TODO to start with
-            prefix_search: Setting::NotSet,              // TODO continue with this
-            facet_search: Setting::NotSet,
-            disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
-            chat: Setting::NotSet,
-            vector_store: Setting::NotSet,
-            wtxn: _,
-            index: _,
-            indexer_config: _,
-        } = &self
-        {
-            progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
+        progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
 
-            self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
+        self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-            let old_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
-            // Update index settings
-            let embedding_config_updates = self.update_embedding_configs()?;
-            self.update_user_defined_searchable_attributes()?;
-            self.update_exact_attributes()?;
-            self.update_proximity_precision()?;
+        // Update index settings
+        let embedding_config_updates = self.update_embedding_configs()?;
+        self.update_user_defined_searchable_attributes()?;
+        self.update_exact_attributes()?;
+        self.update_proximity_precision()?;
+        self.update_filterable_attributes()?;
+        self.update_sortable_attributes()?;
+        self.update_distinct_attribute()?;
+        self.update_foreign_keys()?;
+        self.update_criteria()?;
+        self.update_displayed()?;
+        self.update_primary_key()?;
+        self.update_authorize_typos()?;
+        self.update_min_typo_word_len()?;
+        self.update_exact_words()?;
+        self.update_max_values_per_facet()?;
+        self.update_sort_facet_values_by()?;
+        self.update_pagination_max_total_hits()?;
+        self.update_search_cutoff()?;
+        self.update_chat_config()?;
+        self.update_facet_search()?;
+        self.update_prefix_search()?;
+        self.update_exact_words()?;
+        self.update_disabled_typos_terms()?;
+        self.update_stop_words()?;
+        self.update_non_separator_tokens()?;
+        self.update_separator_tokens()?;
+        self.update_dictionary()?;
+        self.update_localized_attributes_rules()?;
+        // Make sure to update the synonyms *after* updating the dictionary
+        // as the dictionary is used by the synonyms to correctly parse them.
+        self.update_synonyms()?;
 
-            // Note that we don't need to update the searchables here,
-            // as it will be done after the settings update.
-            let new_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+        // Note that we don't need to update the searchables here,
+        // as it will be done after the settings update.
+        let new_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
-            let primary_key_id = self
-                .index
-                .primary_key(self.wtxn)?
-                .and_then(|name| new_inner_settings.fields_ids_map.id(name));
-            let settings_update_only = true;
-            let inner_settings_diff = InnerIndexSettingsDiff::new(
-                old_inner_settings,
-                new_inner_settings,
-                primary_key_id,
-                embedding_config_updates,
-                settings_update_only,
-            );
+        let primary_key_id = self
+            .index
+            .primary_key(self.wtxn)?
+            .and_then(|name| new_inner_settings.fields_ids_map.id(name));
+        let settings_update_only = true;
+        let inner_settings_diff = InnerIndexSettingsDiff::new(
+            old_inner_settings,
+            new_inner_settings,
+            primary_key_id,
+            embedding_config_updates,
+            settings_update_only,
+        );
 
-            if self.index.number_of_documents(self.wtxn)? > 0 {
-                reindex(
-                    self.wtxn,
-                    self.index,
-                    &self.indexer_config.thread_pool,
-                    self.indexer_config.grenad_parameters(),
-                    &inner_settings_diff,
-                    must_stop_processing,
-                    progress,
-                    ip_policy,
-                    embedder_stats,
-                )
-                .map(Some)
-            } else {
-                Ok(None)
-            }
-        } else {
-            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
-
-            self.legacy_execute(
-                |indexing_step| tracing::debug!(update = ?indexing_step),
+        if self.index.number_of_documents(self.wtxn)? > 0 {
+            reindex(
+                self.wtxn,
+                self.index,
+                &self.indexer_config.thread_pool,
+                self.indexer_config.grenad_parameters(),
+                &inner_settings_diff,
                 must_stop_processing,
+                progress,
                 ip_policy,
                 embedder_stats,
             )
-            .map(|_| None)
+            .map(Some)
+        } else {
+            Ok(None)
         }
     }
 }
@@ -1931,10 +1841,13 @@ impl InnerIndexSettingsDiff {
             Some(DelAddOperation::DeletionAndAddition)
         } else if let Some(only_additional_fields) = &self.only_additional_fields {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
-            if only_additional_fields.contains(additional_field) {
-                Some(DelAddOperation::Addition)
-            } else {
+            if only_additional_fields
+                .iter()
+                .all(|f| match_field_legacy(f, additional_field) == PatternMatch::NoMatch)
+            {
                 None
+            } else {
+                Some(DelAddOperation::Addition)
             }
         } else if self.cache_user_defined_searchables {
             Some(DelAddOperation::DeletionAndAddition)
@@ -1955,7 +1868,9 @@ impl InnerIndexSettingsDiff {
         settings
             .fields_ids_map
             .iter_id_metadata()
-            .filter(|(_, metadata)| metadata.is_faceted(&settings.filterable_attributes_rules))
+            .filter(|(_, metadata)| {
+                metadata.is_faceted(&settings.filterable_attributes_rules) == PatternMatch::Match
+            })
             .map(|(id, _)| id)
             .collect()
     }
@@ -1963,10 +1878,10 @@ impl InnerIndexSettingsDiff {
     pub fn facet_fids_changed(&self) -> bool {
         for eob in merge_join_by(
             self.old.fields_ids_map.iter().filter(|(_, _, metadata)| {
-                metadata.is_faceted(&self.old.filterable_attributes_rules)
+                metadata.is_faceted(&self.old.filterable_attributes_rules) == PatternMatch::Match
             }),
             self.new.fields_ids_map.iter().filter(|(_, _, metadata)| {
-                metadata.is_faceted(&self.new.filterable_attributes_rules)
+                metadata.is_faceted(&self.new.filterable_attributes_rules) == PatternMatch::Match
             }),
             |(old_fid, _, _), (new_fid, _, _)| old_fid.cmp(new_fid),
         ) {
@@ -2090,14 +2005,14 @@ impl InnerIndexSettings {
             Some(_) if index.is_geo_enabled(rtxn)? => {
                 // if `_geo` is faceted then we get the `lat` and `lng`
                 let field_ids = fields_ids_map
-                    .insert("_geo.lat")
-                    .zip(fields_ids_map.insert("_geo.lng"))
+                    .insert(RESERVED_GEO_LAT_FIELD_NAME)
+                    .zip(fields_ids_map.insert(RESERVED_GEO_LNG_FIELD_NAME))
                     .ok_or(UserError::AttributeLimitReached)?;
                 Some(field_ids)
             }
             _ => None,
         };
-        let geo_json_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
+        let geojson_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
         let localized_attributes_rules =
             index.localized_attributes_rules(rtxn)?.unwrap_or_default();
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
@@ -2129,7 +2044,7 @@ impl InnerIndexSettings {
             runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
-            geojson_fid: geo_json_fid,
+            geojson_fid,
             prefix_search,
             facet_search,
             disabled_typos_terms,
@@ -2195,7 +2110,7 @@ fn embedders(
                     .into_iter()
                     .map(|fragment| {
                         let template = JsonTemplate::new(
-                            embedder_options.fragment(&fragment.name).unwrap().clone(),
+                            embedder_options.indexing_fragment(&fragment.name).unwrap().clone(),
                         )
                         .unwrap();
 
@@ -2629,14 +2544,35 @@ pub trait SettingsDelta {
     fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
     fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
 
-    fn old_searchable_attributes(&self) -> &Option<Vec<String>>;
-    fn new_searchable_attributes(&self) -> &Option<Vec<String>>;
-
     fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms;
     fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms;
 
     fn old_proximity_precision(&self) -> &ProximityPrecision;
     fn new_proximity_precision(&self) -> &ProximityPrecision;
+
+    fn old_prefix_search(&self) -> &PrefixSearch;
+    fn new_prefix_search(&self) -> &PrefixSearch;
+
+    fn old_stop_words(&self) -> &Option<fst::Set<Vec<u8>>>;
+    fn new_stop_words(&self) -> &Option<fst::Set<Vec<u8>>>;
+
+    fn old_dictionary(&self) -> &Option<BTreeSet<String>>;
+    fn new_dictionary(&self) -> &Option<BTreeSet<String>>;
+
+    fn old_allowed_separators(&self) -> &Option<BTreeSet<String>>;
+    fn new_allowed_separators(&self) -> &Option<BTreeSet<String>>;
+
+    fn old_localized_attributes_rules(&self) -> &[LocalizedAttributesRule];
+    fn new_localized_attributes_rules(&self) -> &[LocalizedAttributesRule];
+
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+
+    fn old_geojson_field_id(&self) -> Option<FieldId>;
+    fn new_geojson_field_id(&self) -> Option<FieldId>;
 
     fn old_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedders(&self) -> &RuntimeEmbedders;
@@ -2664,13 +2600,6 @@ impl SettingsDelta for InnerIndexSettingsDiff {
         &self.new.fields_ids_map
     }
 
-    fn old_searchable_attributes(&self) -> &Option<Vec<String>> {
-        &self.old.user_defined_searchable_attributes
-    }
-    fn new_searchable_attributes(&self) -> &Option<Vec<String>> {
-        &self.new.user_defined_searchable_attributes
-    }
-
     fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms {
         &self.old.disabled_typos_terms
     }
@@ -2683,6 +2612,62 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_proximity_precision(&self) -> &ProximityPrecision {
         &self.new.proximity_precision
+    }
+
+    fn old_prefix_search(&self) -> &PrefixSearch {
+        &self.old.prefix_search
+    }
+    fn new_prefix_search(&self) -> &PrefixSearch {
+        &self.new.prefix_search
+    }
+
+    fn old_stop_words(&self) -> &Option<fst::Set<Vec<u8>>> {
+        &self.old.stop_words
+    }
+    fn new_stop_words(&self) -> &Option<fst::Set<Vec<u8>>> {
+        &self.new.stop_words
+    }
+
+    fn old_dictionary(&self) -> &Option<BTreeSet<String>> {
+        &self.old.dictionary
+    }
+    fn new_dictionary(&self) -> &Option<BTreeSet<String>> {
+        &self.new.dictionary
+    }
+
+    fn old_allowed_separators(&self) -> &Option<BTreeSet<String>> {
+        &self.old.allowed_separators
+    }
+    fn new_allowed_separators(&self) -> &Option<BTreeSet<String>> {
+        &self.new.allowed_separators
+    }
+
+    fn old_localized_attributes_rules(&self) -> &[LocalizedAttributesRule] {
+        &self.old.localized_attributes_rules
+    }
+    fn new_localized_attributes_rules(&self) -> &[LocalizedAttributesRule] {
+        &self.new.localized_attributes_rules
+    }
+
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.old.filterable_attributes_rules
+    }
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.new.filterable_attributes_rules
+    }
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.old.geo_fields_ids
+    }
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.new.geo_fields_ids
+    }
+
+    fn old_geojson_field_id(&self) -> Option<FieldId> {
+        self.old.geojson_fid
+    }
+    fn new_geojson_field_id(&self) -> Option<FieldId> {
+        self.new.geojson_fid
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {

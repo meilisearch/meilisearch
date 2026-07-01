@@ -8,8 +8,9 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
-    InvalidMultiSearchWeight, InvalidSearchHitsPerPage, InvalidSearchLimit, InvalidSearchOffset,
-    InvalidSearchPage, InvalidSearchShowPerformanceDetails,
+    InvalidMultiSearchWeight, InvalidSearchDistinct, InvalidSearchHitsPerPage, InvalidSearchLimit,
+    InvalidSearchOffset, InvalidSearchPage, InvalidSearchPersonalize,
+    InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -21,7 +22,7 @@ use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
-use crate::search::{SearchMetadata, SearchResult};
+use crate::search::{Personalize, SearchMetadata, SearchResult};
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -31,24 +32,28 @@ pub const INDEX_UID: &str = "indexUid";
 pub const QUERIES_POSITION: &str = "queriesPosition";
 pub const WEIGHTED_RANKING_SCORE: &str = "weightedRankingScore";
 pub const WEIGHTED_SCORE_VALUES: &str = "weightedScoreValues";
+pub const PINNED_POSITION: &str = "pinnedPosition";
 pub const FEDERATION_REMOTE: &str = "remote";
+pub const FEDERATION_EXTRA_DOCUMENT: &str = "extra_document";
 
 /// Options for federated multi-search queries
-#[derive(Debug, Default, Clone, PartialEq, Serialize, deserr::Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct FederationOptions {
-    /// Weight to apply to results from this query (default: 1.0)
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchWeight>)]
-    #[schema(value_type = f64)]
+    /// A multiplicative factor applied to the ranking score for hits from this query.
+    ///
+    /// Values less than 1.0 make hits from this query less likely to appear in final results; values greater than 1.0 make them more likely.
+    ///
+    /// Must be a positive number. Default: `1.0`.
+    #[request(default, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
     pub weight: Weight,
 
     /// Remote server to send this query to
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchRemote>)]
+    #[request(default, error = DeserrJsonError<InvalidMultiSearchRemote>)]
     pub remote: Option<String>,
 
     /// Position of this query in the list of queries
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchQueryPosition>)]
+    #[request(default, error = DeserrJsonError<InvalidMultiSearchQueryPosition>)]
     pub query_position: Option<usize>,
 }
 
@@ -83,31 +88,41 @@ impl std::ops::Deref for Weight {
 }
 
 /// Configuration for federated multi-search
-#[derive(Debug, Clone, deserr::Deserr, Serialize, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug, Clone)]
 pub struct Federation {
     /// Maximum number of results to return across all queries
-    #[deserr(default = super::super::DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    #[request(default = super::super::DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
     /// Number of results to skip
-    #[deserr(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    #[request(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchPage>, skip_serializing_if = "Option::is_none")]
     pub page: Option<usize>,
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchHitsPerPage>, skip_serializing_if = "Option::is_none")]
     pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
+    #[request(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
     /// Options for merging facets from multiple indexes
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
-    #[schema(value_type = Option<MergeFacets>)]
+    #[request(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>, skip_serializing_if = "Option::is_none")]
     pub merge_facets: Option<MergeFacets>,
+
+    /// Restrict search to documents with unique values of the specified attribute across all queries.
+    ///
+    /// 1. This applies across all queries in the request, regardless of index or remote of origin.
+    /// 2. This overrides the index-level distinct attribute.
+    /// 3. This requires that the passed field can be set as distinct in all the participating indexes.
+    #[request(default, error = DeserrJsonError<InvalidSearchDistinct>, skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<String>,
+
     /// Whether to include performance details in the response
-    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
+
+    /// Personalize search results
+    #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none")]
+    pub personalize: Option<Personalize>,
 }
 
 impl Default for Federation {
@@ -119,7 +134,9 @@ impl Default for Federation {
             hits_per_page: Default::default(),
             facets_by_index: Default::default(),
             merge_facets: Default::default(),
+            distinct: Default::default(),
             show_performance_details: Default::default(),
+            personalize: Default::default(),
         }
     }
 }
@@ -133,16 +150,14 @@ impl Federation {
 /// Options for merging facets from multiple indexes in federated search.
 /// When multiple indexes are queried, this controls how their facet values
 /// are combined into a single facet distribution.
-#[derive(Copy, Clone, Debug, deserr::Deserr, Serialize, Default, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidMultiSearchMergeFacets>, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(proxied, override_error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct MergeFacets {
     /// The maximum number of facet values to return for each facet after
     /// merging. Values from all indexes are combined and sorted before
     /// truncation. If not specified, uses the default limit from the index
     /// settings.
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMaxValuesPerFacet>)]
+    #[request(default, error = DeserrJsonError<InvalidMultiSearchMaxValuesPerFacet>)]
     pub max_values_per_facet: Option<usize>,
 }
 
@@ -150,23 +165,22 @@ pub struct MergeFacets {
 /// allows you to execute multiple search queries in a single request and
 /// optionally combine their results into a unified response. Use this for
 /// cross-index search scenarios or to reduce network round-trips.
-#[derive(Debug, deserr::Deserr, Serialize, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct FederatedSearch {
     /// An array of search queries to execute. Each query can target a
     /// different index and have its own parameters. When `federation` is
     /// `null`, results are returned separately for each query. When
     /// `federation` is set, results are merged.
-    #[schema(required = true)]
+    ///
+    /// Each query object must include `indexUid` to specify which index to search.
+    #[request(required)]
     pub queries: Vec<SearchQueryWithIndex>,
     /// Configuration for combining results from multiple queries into a
     /// single response. When set, results are merged and ranked together.
     /// When `null`, each query's results are returned separately in an
     /// array.
-    #[deserr(default)]
-    #[schema(required = false, value_type = Option<Federation>)]
+    #[request(default)]
     pub federation: Option<Federation>,
 }
 
@@ -461,4 +475,10 @@ impl FederatedFacets {
             }
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShowFederationInfo {
+    OnNetworkOnly,
+    Always,
 }

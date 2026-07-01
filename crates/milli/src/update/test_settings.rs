@@ -6,6 +6,7 @@ use meili_snap::snapshot;
 use super::*;
 use crate::error::Error;
 use crate::index::tests::TempIndex;
+use crate::search::facet::IndexFilter;
 use crate::update::ClearDocuments;
 use crate::{db_snap, Criterion, Filter, SearchResult};
 
@@ -106,9 +107,11 @@ fn mixup_searchable_with_displayed_fields() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
 
-    // In the same transaction we change the displayed fields to be only the "age".
+    // We change the displayed fields to be only the "age".
     // We also change the searchable fields to be the "name" field only.
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_displayed_fields(vec!["age".into()]);
@@ -170,6 +173,9 @@ fn set_and_reset_displayed_field() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_displayed_fields(vec!["age".into()]);
@@ -455,6 +461,9 @@ fn set_and_reset_stop_words() {
         )
         .unwrap();
 
+    wtxn.commit().unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
     // In the same transaction we provide some stop_words
     let set = btreeset! { "i".to_string(), "the".to_string(), "are".to_string() };
     index
@@ -530,8 +539,10 @@ fn set_and_reset_synonyms() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
 
     // In the same transaction provide some synonyms
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_synonyms(btreemap! {
@@ -592,8 +603,10 @@ fn thai_synonyms() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
 
     // In the same transaction provide some synonyms
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_synonyms(btreemap! {
@@ -665,7 +678,7 @@ fn setting_not_filterable_cant_filter() {
 
     let rtxn = index.read_txn().unwrap();
     let filter = Filter::from_str("toto = 32").unwrap().unwrap();
-    let _ = filter.evaluate(&rtxn, &index).unwrap_err();
+    let _ = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
 }
 
 #[test]
@@ -892,7 +905,6 @@ fn test_correct_settings_init() {
                 facet_search,
                 disable_on_numbers,
                 chat,
-                vector_store,
             } = settings;
             assert!(matches!(searchable_fields, Setting::NotSet));
             assert!(matches!(displayed_fields, Setting::NotSet));
@@ -923,7 +935,6 @@ fn test_correct_settings_init() {
             assert!(matches!(facet_search, Setting::NotSet));
             assert!(matches!(disable_on_numbers, Setting::NotSet));
             assert!(matches!(chat, Setting::NotSet));
-            assert!(matches!(vector_store, Setting::NotSet));
         })
         .unwrap();
 }

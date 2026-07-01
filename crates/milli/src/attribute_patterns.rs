@@ -19,6 +19,9 @@ pub struct AttributePatterns {
     pub patterns: Vec<String>,
 }
 
+// manual impl: transparent + manual deserr impl
+impl routes::RequestBody for AttributePatterns {}
+
 impl<E: deserr::DeserializeError> Deserr<E> for AttributePatterns {
     fn deserialize_from_value<V: deserr::IntoValue>(
         value: deserr::Value<V>,
@@ -112,6 +115,31 @@ pub fn match_field_legacy(pattern: &str, field: &str) -> PatternMatch {
         // If the field does not match the pattern and is not a parent of a nested field that matches the pattern, return NoMatch
         PatternMatch::NoMatch
     }
+}
+
+/// Match a field against a set of patterns using the legacy behavior.
+///
+/// A field matches a set of patterns if it is a parent of one of the patterns or if it matches one of the patterns.
+///
+/// # Arguments
+///
+/// * `patterns` - The set of patterns to match against.
+/// * `field` - The field to match against the patterns.
+pub fn field_match_any_patterns_legacy<I, P>(patterns: I, field: &str) -> PatternMatch
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<str>,
+{
+    let mut selection = PatternMatch::NoMatch;
+    for pattern in patterns {
+        match match_field_legacy(pattern.as_ref(), field) {
+            PatternMatch::Match => return PatternMatch::Match,
+            PatternMatch::Parent => selection = PatternMatch::Parent,
+            PatternMatch::NoMatch => (),
+        }
+    }
+
+    selection
 }
 
 /// Match a field against a distinct field.

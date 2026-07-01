@@ -6,13 +6,12 @@ use std::ops::DerefMut as _;
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
 
-use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
+use super::{match_searchable_field, OneOrTwoTokenizers};
 use crate::fields_ids_map::metadata::Metadata;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
-use crate::update::new::extract::searchable::has_searchable_children;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
@@ -276,15 +275,12 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'_> {
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
-    ) -> Result<WordDocidsCaches<'extractor>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<WordDocidsCaches<'extractor>> {
         // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
         let rtxn = indexing_context.index.read_txn()?;
         let stop_words = indexing_context.index.stop_words(&rtxn)?;
@@ -363,7 +359,7 @@ impl WordDocidsExtractors {
                 return Err(UserError::AttributeLimitReached.into());
             };
 
-            let pattern_match = if meta.is_searchable() {
+            let pattern_match = if meta.is_searchable() == PatternMatch::Match {
                 PatternMatch::Match
             } else {
                 // TODO: should be a match on the field_name using `match_field_legacy` function,
@@ -463,85 +459,88 @@ impl WordDocidsExtractors {
         let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
         cached_sorter.flush_fid_word_count(&mut buffer)
     }
-}
 
-pub struct WordDocidsSettingsExtractorsData<'a, SD> {
-    tokenizer: DocumentTokenizer<'a>,
-    max_memory_by_thread: Option<usize>,
-    buckets: usize,
-    settings_delta: &'a SD,
-}
-
-impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for WordDocidsSettingsExtractorsData<'_, SD>
-{
-    type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
-
-    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
-        Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
-            self.buckets,
-            self.max_memory_by_thread,
-            extractor_alloc,
-        ))))
-    }
-
-    fn process<'doc>(
-        &'doc self,
-        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
-        context: &'doc DocumentContext<Self::Data>,
-    ) -> crate::Result<()> {
-        for document in documents {
-            let document = document?;
-            SettingsChangeWordDocidsExtractors::extract_document_from_settings_change(
-                document,
-                context,
-                &self.tokenizer,
-                self.settings_delta,
-            )?;
-        }
-        Ok(())
-    }
-}
-
-pub struct SettingsChangeWordDocidsExtractors;
-
-impl SettingsChangeWordDocidsExtractors {
-    pub fn run_extraction<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
     ) -> Result<WordDocidsCaches<'extractor>>
     where
         SD: SettingsDelta + Sync,
-        MSP: Fn() -> bool + Sync,
     {
-        // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
-        // TODO we need to read the new AND old settings to support changing global parameters
-        let rtxn = indexing_context.index.read_txn()?;
-        let stop_words = indexing_context.index.stop_words(&rtxn)?;
-        let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
-        let allowed_separators: Option<Vec<_>> =
-            allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
-        let dictionary = indexing_context.index.dictionary(&rtxn)?;
-        let dictionary: Option<Vec<_>> =
-            dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-        let mut builder = tokenizer_builder(
-            stop_words.as_ref(),
-            allowed_separators.as_deref(),
-            dictionary.as_deref(),
-        );
-        let tokenizer = builder.build();
-        let localized_attributes_rules =
-            indexing_context.index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
-        let document_tokenizer = DocumentTokenizer {
-            tokenizer: &tokenizer,
-            localized_attributes_rules: &localized_attributes_rules,
+        // Warning: this is highly inspired code from extract_word_pair_proximity_docids.rs so if you
+        //          change something here consider modifying the original place if necessary.
+        let old_stop_words = settings_delta.old_stop_words();
+        let old_dictionary = settings_delta.old_dictionary();
+        let old_allowed_separators = settings_delta.old_allowed_separators();
+        let old_localized_attributes_rules = settings_delta.old_localized_attributes_rules();
+
+        let new_stop_words = settings_delta.new_stop_words();
+        let new_dictionary = settings_delta.new_dictionary();
+        let new_allowed_separators = settings_delta.new_allowed_separators();
+        let new_localized_attributes_rules = settings_delta.new_localized_attributes_rules();
+
+        // old tokenizer
+        let mut tokenizer_builder = charabia::TokenizerBuilder::new();
+        if let Some(stop_words) = old_stop_words {
+            tokenizer_builder.stop_words(stop_words);
+        }
+        let dictionary_vec: Vec<_>;
+        if let Some(dictionary) = old_dictionary {
+            dictionary_vec = dictionary.iter().map(String::as_ref).collect();
+            tokenizer_builder.words_dict(&dictionary_vec);
+        }
+        let separators_vec: Vec<_>;
+        if let Some(separators) = old_allowed_separators {
+            separators_vec = separators.iter().map(String::as_ref).collect();
+            tokenizer_builder.separators(&separators_vec);
+        }
+        let old_document_tokenizer = DocumentTokenizer {
+            tokenizer: &tokenizer_builder.build(),
+            localized_attributes_rules: old_localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
+
+        let mut new_tokenizer_builder = charabia::TokenizerBuilder::new();
+        let new_dictionary_vec: Vec<_>;
+        let new_separators_vec: Vec<_>;
+        let new_tokenizer;
+        let tokenizers = if old_stop_words.as_ref().map(|f| f.as_fst().as_bytes())
+            == new_stop_words.as_ref().map(|f| f.as_fst().as_bytes())
+            && old_dictionary == new_dictionary
+            && old_allowed_separators == new_allowed_separators
+            && old_localized_attributes_rules == new_localized_attributes_rules
+        {
+            OneOrTwoTokenizers::OneTokenizer(old_document_tokenizer)
+        } else {
+            // new tokenizer
+            if let Some(stop_words) = new_stop_words {
+                new_tokenizer_builder.stop_words(stop_words);
+            }
+            if let Some(dictionary) = new_dictionary {
+                new_dictionary_vec = dictionary.iter().map(String::as_ref).collect();
+                new_tokenizer_builder.words_dict(&new_dictionary_vec);
+            }
+            if let Some(separators) = new_allowed_separators {
+                new_separators_vec = separators.iter().map(String::as_ref).collect();
+                new_tokenizer_builder.separators(&new_separators_vec);
+            }
+            new_tokenizer = new_tokenizer_builder.build();
+            let new_document_tokenizer = DocumentTokenizer {
+                tokenizer: &new_tokenizer,
+                localized_attributes_rules: new_localized_attributes_rules,
+                max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+            };
+            OneOrTwoTokenizers::TwoTokenizer {
+                old: old_document_tokenizer,
+                new: new_document_tokenizer,
+            }
+        };
+
         let extractor_data = WordDocidsSettingsExtractorsData {
-            tokenizer: document_tokenizer,
+            tokenizers,
             max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
             buckets: rayon::current_num_threads(),
             settings_delta,
@@ -573,7 +572,7 @@ impl SettingsChangeWordDocidsExtractors {
     fn extract_document_from_settings_change<SD: SettingsDelta>(
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<RefCell<Option<WordDocidsBalancedCaches>>>,
-        document_tokenizer: &DocumentTokenizer,
+        document_tokenizers: OneOrTwoTokenizers<'_>,
         settings_delta: &SD,
     ) -> Result<()> {
         let mut cached_sorter_ref = context.data.borrow_mut_or_yield();
@@ -582,8 +581,6 @@ impl SettingsChangeWordDocidsExtractors {
 
         let new_fields_ids_map = settings_delta.new_fields_ids_map();
         let old_fields_ids_map = context.index.fields_ids_map_with_metadata(&context.rtxn)?;
-        let old_searchable = settings_delta.old_searchable_attributes().as_ref();
-        let new_searchable = settings_delta.new_searchable_attributes().as_ref();
 
         let current_document = document.current(
             &context.rtxn,
@@ -600,48 +597,68 @@ impl SettingsChangeWordDocidsExtractors {
         }
 
         let mut action = ActionToOperate::SkipDocument;
-        // Here we do a preliminary check to determine the action to take.
-        // This check doesn't trigger the tokenizer as we never return
-        // PatternMatch::Match.
-        document_tokenizer.tokenize_document(
-            current_document,
-            &mut |field_name| {
-                let fid = match new_fields_ids_map.id(field_name) {
-                    Some(field_id) => field_id,
-                    None => panic!("Expected field `{field_name}` in the fields IDs map"),
-                };
 
-                // If the document must be reindexed, early return NoMatch to stop the scanning process.
-                if action == ActionToOperate::ReindexAllFields {
-                    return Ok((fid, PatternMatch::NoMatch));
-                }
+        match document_tokenizers {
+            OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
+                // Here we do a preliminary check to determine the action to take.
+                // This check doesn't trigger the tokenizer as we never return
+                // PatternMatch::Match.
+                document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut |field_name| {
+                        let fid = match new_fields_ids_map.id(field_name) {
+                            Some(field_id) => field_id,
+                            None => panic!("Expected field `{field_name}` in the fields IDs map"),
+                        };
 
-                let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
-                let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+                        // If the document must be reindexed, early return NoMatch to stop the scanning process.
+                        if action == ActionToOperate::ReindexAllFields {
+                            return Ok((fid, PatternMatch::NoMatch));
+                        }
 
-                action = match (old_field_metadata, new_field_metadata) {
-                    // At least one field is added or removed from the exact fields => ReindexAllFields
-                    (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. })
-                        if old_exact != new_exact =>
-                    {
-                        ActionToOperate::ReindexAllFields
-                    }
-                    // At least one field is removed from the searchable fields => ReindexAllFields
-                    (Metadata { searchable: Some(_), .. }, Metadata { searchable: None, .. }) => {
-                        ActionToOperate::ReindexAllFields
-                    }
-                    // At least one field is added in the searchable fields => IndexAddedFields
-                    (Metadata { searchable: None, .. }, Metadata { searchable: Some(_), .. }) => {
-                        // We can safely overwrite the action, because we early return when action is ReindexAllFields.
-                        ActionToOperate::IndexAddedFields
-                    }
-                    _ => action,
-                };
+                        let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
+                        let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
 
-                Ok((fid, PatternMatch::Parent))
-            },
-            &mut |_, _, _, _| Ok(()),
-        )?;
+                        action = match (old_field_metadata, new_field_metadata) {
+                            // At least one field is added or removed from the exact fields => ReindexAllFields
+                            (
+                                Metadata { exact: old_exact, .. },
+                                Metadata { exact: new_exact, .. },
+                            ) if old_exact != new_exact => ActionToOperate::ReindexAllFields,
+                            // At least one field is removed from the searchable fields => ReindexAllFields
+                            (
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                                Metadata { searchable: (PatternMatch::NoMatch, _), .. },
+                            )
+                            | (
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                                Metadata { searchable: (PatternMatch::Parent, _), .. },
+                            ) => ActionToOperate::ReindexAllFields,
+                            // At least one field is added in the searchable fields => IndexAddedFields
+                            (
+                                Metadata { searchable: (PatternMatch::NoMatch, _), .. },
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                            )
+                            | (
+                                Metadata { searchable: (PatternMatch::Parent, _), .. },
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                            ) => {
+                                // We can safely overwrite the action, because we early return when action is ReindexAllFields.
+                                ActionToOperate::IndexAddedFields
+                            }
+                            _ => action,
+                        };
+
+                        Ok((fid, PatternMatch::Parent))
+                    },
+                    &mut |_, _, _, _| Ok(()),
+                )?;
+            }
+            OneOrTwoTokenizers::TwoTokenizer { old: _, new: _ } => {
+                // If the tokenizer changed, we need to reindex the whole document.
+                action = ActionToOperate::ReindexAllFields;
+            }
+        }
 
         // Early return when we don't need to index the document
         if action == ActionToOperate::SkipDocument {
@@ -656,30 +673,29 @@ impl SettingsChangeWordDocidsExtractors {
             let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
             let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
 
+            let was_matching_searchable = old_field_metadata.is_searchable();
+            let is_matching_searchable = new_field_metadata.is_searchable();
+
             let pattern_match = match action {
                 ActionToOperate::ReindexAllFields => {
-                    if old_field_metadata.is_searchable() || new_field_metadata.is_searchable() {
-                        PatternMatch::Match
-                    // If any old or new field is searchable then we need to iterate over all fields
-                    // else if any field matches we need to iterate over all fields
-                    } else if has_searchable_children(
-                        field_name,
-                        old_searchable.zip(new_searchable).map(|(old, new)| old.iter().chain(new)),
-                    ) {
-                        PatternMatch::Parent
-                    } else {
-                        PatternMatch::NoMatch
+                    match (was_matching_searchable, is_matching_searchable) {
+                        // If any old or new field is searchable then we need to iterate over all fields
+                        (PatternMatch::Match, _) | (_, PatternMatch::Match) => PatternMatch::Match,
+                        // else if any child matches we need to iterate over all fields
+                        (PatternMatch::Parent, _) | (_, PatternMatch::Parent) => {
+                            PatternMatch::Parent
+                        }
+                        _ => PatternMatch::NoMatch,
                     }
                 }
                 ActionToOperate::IndexAddedFields => {
-                    // Was not searchable but now is
-                    if !old_field_metadata.is_searchable() && new_field_metadata.is_searchable() {
-                        PatternMatch::Match
-                    // If the field is now a parent of a searchable field
-                    } else if has_searchable_children(field_name, new_searchable) {
-                        PatternMatch::Parent
-                    } else {
-                        PatternMatch::NoMatch
+                    match (was_matching_searchable, is_matching_searchable) {
+                        // Was not searchable but now is
+                        (PatternMatch::NoMatch, PatternMatch::Match)
+                        | (PatternMatch::Parent, PatternMatch::Match) => PatternMatch::Match,
+                        // If the field is now a parent of a searchable field
+                        (_, PatternMatch::Parent) => PatternMatch::Parent,
+                        _ => PatternMatch::NoMatch,
                     }
                 }
                 ActionToOperate::SkipDocument => unreachable!(),
@@ -690,72 +706,179 @@ impl SettingsChangeWordDocidsExtractors {
 
         let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
         let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
-        let mut token_fn = |_field_name: &str, field_id, pos, word: &str| {
-            let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
-            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
 
-            match (old_field_metadata, new_field_metadata) {
-                (
-                    Metadata { searchable: Some(_), exact: old_exact, .. },
-                    Metadata { searchable: None, .. },
-                ) => cached_sorter.insert_del_u32(
-                    field_id,
-                    pos,
-                    word,
-                    old_exact || old_disabled_typos_terms.is_exact(word),
-                    // We deleted the field globally
-                    FieldDbExtraction::Skip,
-                    document.docid(),
-                    doc_alloc,
-                ),
-                (
-                    Metadata { searchable: None, .. },
-                    Metadata { searchable: Some(_), exact: new_exact, .. },
-                ) => cached_sorter.insert_add_u32(
-                    field_id,
-                    pos,
-                    word,
-                    new_exact || new_disabled_typos_terms.is_exact(word),
-                    FieldDbExtraction::Extract,
-                    document.docid(),
-                    doc_alloc,
-                ),
-                (Metadata { searchable: None, .. }, Metadata { searchable: None, .. }) => {
-                    unreachable!()
-                }
-                (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. }) => {
-                    cached_sorter.insert_del_u32(
-                        field_id,
-                        pos,
-                        word,
-                        old_exact || old_disabled_typos_terms.is_exact(word),
-                        // The field has already been extracted
-                        FieldDbExtraction::Skip,
-                        document.docid(),
-                        doc_alloc,
-                    )?;
-                    cached_sorter.insert_add_u32(
-                        field_id,
-                        pos,
-                        word,
-                        new_exact || new_disabled_typos_terms.is_exact(word),
-                        // The field has already been extracted
-                        FieldDbExtraction::Skip,
-                        document.docid(),
-                        doc_alloc,
-                    )
-                }
+        // we must tokenize twice when we change global parameters like stop words,
+        // the language settings, dictionary, separators, non-separators...
+        match document_tokenizers {
+            OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
+                let mut token_fn = |_field_name: &str, field_id, pos, word: &str| {
+                    use PatternMatch::{Match, NoMatch, Parent};
+
+                    let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+                    let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+
+                    match (old_field_metadata, new_field_metadata) {
+                        (
+                            Metadata { searchable: (Match, _), exact: old_exact, .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        )
+                        | (
+                            Metadata { searchable: (Match, _), exact: old_exact, .. },
+                            Metadata { searchable: (Parent, _), .. },
+                        ) => cached_sorter.insert_del_u32(
+                            field_id,
+                            pos,
+                            word,
+                            old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                            FieldDbExtraction::Extract,
+                            document.docid(),
+                            doc_alloc,
+                        ),
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (Match, _), exact: new_exact, .. },
+                        )
+                        | (
+                            Metadata { searchable: (Parent, _), .. },
+                            Metadata { searchable: (Match, _), exact: new_exact, .. },
+                        ) => cached_sorter.insert_add_u32(
+                            field_id,
+                            pos,
+                            word,
+                            new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                            FieldDbExtraction::Extract,
+                            document.docid(),
+                            doc_alloc,
+                        ),
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        ) => {
+                            unreachable!()
+                        }
+                        (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. }) => {
+                            cached_sorter.insert_del_u32(
+                                field_id,
+                                pos,
+                                word,
+                                old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                                // Should we really have this specific case?
+                                FieldDbExtraction::Skip,
+                                document.docid(),
+                                doc_alloc,
+                            )?;
+                            cached_sorter.insert_add_u32(
+                                field_id,
+                                pos,
+                                word,
+                                new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                                // Should we really have this specific case?
+                                FieldDbExtraction::Skip,
+                                document.docid(),
+                                doc_alloc,
+                            )
+                        }
+                    }
+                };
+
+                document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut should_tokenize,
+                    &mut token_fn,
+                )?;
             }
-        };
+            OneOrTwoTokenizers::TwoTokenizer {
+                old: old_document_tokenizer,
+                new: new_document_tokenizer,
+            } => {
+                let mut old_token_fn = |_field_name: &str, field_id, pos, word: &str| {
+                    use PatternMatch::Match;
 
-        // TODO we must tokenize twice when we change global parameters like stop words,
-        //      the language settings, dictionary, separators, non-separators...
-        document_tokenizer.tokenize_document(
-            current_document,
-            &mut should_tokenize,
-            &mut token_fn,
-        )?;
+                    match old_fields_ids_map.metadata(field_id).unwrap() {
+                        Metadata { searchable: (Match, _), exact: old_exact, .. } => cached_sorter
+                            .insert_del_u32(
+                                field_id,
+                                pos,
+                                word,
+                                old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                                FieldDbExtraction::Extract,
+                                document.docid(),
+                                doc_alloc,
+                            ),
+                        _ => Ok(()),
+                    }
+                };
 
+                old_document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut should_tokenize,
+                    &mut old_token_fn,
+                )?;
+
+                let mut new_token_fn = |_field_name: &str, field_id, pos, word: &str| {
+                    use PatternMatch::Match;
+
+                    match new_fields_ids_map.metadata(field_id).unwrap() {
+                        Metadata { searchable: (Match, _), exact: new_exact, .. } => cached_sorter
+                            .insert_add_u32(
+                                field_id,
+                                pos,
+                                word,
+                                new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                                FieldDbExtraction::Extract,
+                                document.docid(),
+                                doc_alloc,
+                            ),
+                        _ => Ok(()),
+                    }
+                };
+
+                new_document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut should_tokenize,
+                    &mut new_token_fn,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct WordDocidsSettingsExtractorsData<'a, SD> {
+    tokenizers: OneOrTwoTokenizers<'a>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+    settings_delta: &'a SD,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for WordDocidsSettingsExtractorsData<'_, SD>
+{
+    type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        ))))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            WordDocidsExtractors::extract_document_from_settings_change(
+                document,
+                context,
+                self.tokenizers,
+                self.settings_delta,
+            )?;
+        }
         Ok(())
     }
 }

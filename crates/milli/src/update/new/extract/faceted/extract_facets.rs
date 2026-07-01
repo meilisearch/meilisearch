@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::DerefMut as _;
+use std::sync::RwLock;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
@@ -20,12 +21,20 @@ use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
+use crate::update::new::indexer::settings_change_extract;
+use crate::update::new::indexer::settings_changes::{
+    DocumentsIndentifiers, SettingsChangeExtractor,
+};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
-use crate::update::new::DocumentChange;
+use crate::update::new::{DocumentChange, DocumentIdentifiers};
+use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
-use crate::{DocumentId, FieldId, FilterableAttributesRule, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{
+    DocumentId, FieldId, FieldIdMapMissingEntry, FilterableAttributesRule, GlobalFieldsIdsMap,
+    InternalError, PatternMatch, Result, UserError, MAX_FACET_VALUE_LENGTH,
+};
 
 pub struct FacetedExtractorData<'a, 'b> {
     sender: &'a FieldIdDocidFacetSender<'a, 'b>,
@@ -137,11 +146,20 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
-                    new_fields_ids_map.deref_mut(),
-                    filterable_attributes,
-                    sortable_fields,
-                    asc_desc_fields,
-                    distinct_field,
+                    |field_name| {
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
+                    },
+                    &mut |name| {
+                        new_fields_ids_map
+                            .id_with_metadata_or_insert(name)
+                            .ok_or(UserError::AttributeLimitReached.into())
+                    },
                     &mut del,
                 )?;
 
@@ -174,21 +192,39 @@ impl FacetedDocidsExtractor {
                 if has_changed_for_facets {
                     extract_document_facets(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
-                        new_fields_ids_map.deref_mut(),
-                        filterable_attributes,
-                        sortable_fields,
-                        asc_desc_fields,
-                        distinct_field,
+                        |field_name| {
+                            match_faceted_field(
+                                field_name,
+                                filterable_attributes,
+                                sortable_fields,
+                                asc_desc_fields,
+                                distinct_field,
+                            )
+                        },
+                        &mut |name| {
+                            new_fields_ids_map
+                                .id_with_metadata_or_insert(name)
+                                .ok_or(UserError::AttributeLimitReached.into())
+                        },
                         &mut facet_fn!(del),
                     )?;
 
                     extract_document_facets(
                         inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                        new_fields_ids_map.deref_mut(),
-                        filterable_attributes,
-                        sortable_fields,
-                        asc_desc_fields,
-                        distinct_field,
+                        |field_name| {
+                            match_faceted_field(
+                                field_name,
+                                filterable_attributes,
+                                sortable_fields,
+                                asc_desc_fields,
+                                distinct_field,
+                            )
+                        },
+                        &mut |name| {
+                            new_fields_ids_map
+                                .id_with_metadata_or_insert(name)
+                                .ok_or(UserError::AttributeLimitReached.into())
+                        },
                         &mut facet_fn!(add),
                     )?;
                 }
@@ -216,11 +252,20 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     inner.inserted(),
-                    new_fields_ids_map.deref_mut(),
-                    filterable_attributes,
-                    sortable_fields,
-                    asc_desc_fields,
-                    distinct_field,
+                    |field_name| {
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
+                    },
+                    &mut |name| {
+                        new_fields_ids_map
+                            .id_with_metadata_or_insert(name)
+                            .ok_or(UserError::AttributeLimitReached.into())
+                    },
                     &mut add,
                 )?;
 
@@ -254,7 +299,7 @@ impl FacetedDocidsExtractor {
         value: &Value,
     ) -> Result<()> {
         // if the field is not faceted, do nothing
-        if !meta.is_faceted(filterable_attributes) {
+        if meta.is_faceted(filterable_attributes) != PatternMatch::Match {
             return Ok(());
         }
 
@@ -472,16 +517,13 @@ fn truncate_str(s: &str) -> &str {
 
 impl FacetedDocidsExtractor {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract::faceted")]
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         sender: &FieldIdDocidFacetSender,
         step: IndexingStep,
-    ) -> Result<Vec<BalancedCaches<'extractor>>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<Vec<BalancedCaches<'extractor>>> {
         let index = indexing_context.index;
         let rtxn = index.read_txn()?;
         let filterable_attributes = index.filterable_attributes_rules(&rtxn)?;
@@ -517,5 +559,172 @@ impl FacetedDocidsExtractor {
         }
 
         Ok(datastore.into_iter().map(RefCell::into_inner).collect())
+    }
+
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, 'b, SD>(
+        settings_delta: &SD,
+        documents: &'indexer DocumentsIndentifiers<'indexer>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+        step: IndexingStep,
+    ) -> Result<Vec<BalancedCaches<'extractor>>>
+    where
+        SD: SettingsDelta + Sync,
+    {
+        let span =
+            tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
+        let _entered = span.enter();
+
+        let datastore = ThreadLocal::new();
+        let extractor = FacetsSettingsExtractorsData {
+            fid_docid_facet_sender,
+            max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
+            buckets: rayon::current_num_threads(),
+            settings_delta,
+        };
+        settings_change_extract(
+            documents,
+            &extractor,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            step,
+        )?;
+
+        Ok(datastore.into_iter().map(RefCell::into_inner).collect())
+    }
+
+    fn extract_document_from_settings_change<SD>(
+        document: DocumentIdentifiers<'_>,
+        context: &DocumentContext<RefCell<BalancedCaches>>,
+        settings_delta: &SD,
+        fid_docid_facet_sender: &FieldIdDocidFacetSender,
+    ) -> Result<()>
+    where
+        SD: SettingsDelta,
+    {
+        let mut cached_sorter = context.data.borrow_mut_or_yield();
+        let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
+        let new_filterable_attributes_rules = settings_delta.new_filterable_rules();
+        let docid = document.docid();
+
+        let mut add = |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
+            Self::facet_fn_with_options(
+                &context.doc_alloc,
+                cached_sorter.deref_mut(),
+                BalancedCaches::insert_add_u32,
+                &mut del_add_facet_value,
+                DelAddFacetValue::insert_add,
+                docid,
+                fid,
+                meta,
+                new_filterable_attributes_rules,
+                depth,
+                value,
+            )
+        };
+
+        let old_fields_ids_map = settings_delta.old_fields_ids_map();
+        let current_document = document.current(
+            &context.rtxn,
+            context.index,
+            old_fields_ids_map.as_fields_ids_map(),
+        )?;
+
+        let old_filterable_rules = settings_delta.old_filterable_rules();
+        let new_fields_ids_map = settings_delta.new_fields_ids_map();
+        let new_filterable_rules = settings_delta.new_filterable_rules();
+
+        extract_document_facets(
+            current_document,
+            // TODO extract into another function
+            |field_name| {
+                let old_faceted = match old_fields_ids_map.id_with_metadata(field_name) {
+                    Some((_, metadata)) => metadata.is_faceted(old_filterable_rules),
+                    None => PatternMatch::NoMatch,
+                };
+
+                let new_faceted = match new_fields_ids_map.id_with_metadata(field_name) {
+                    Some((_, metadata)) => metadata.is_faceted(new_filterable_rules),
+                    None => PatternMatch::NoMatch,
+                };
+
+                match (old_faceted, new_faceted) {
+                    // If the field became faceted, return Match
+                    (PatternMatch::NoMatch, PatternMatch::Match)
+                    | (PatternMatch::Parent, PatternMatch::Match) => PatternMatch::Match,
+                    // If the field is no longer faceted, return NoMatch
+                    (PatternMatch::NoMatch, PatternMatch::NoMatch)
+                    | (PatternMatch::Match, PatternMatch::NoMatch)
+                    | (PatternMatch::Parent, PatternMatch::NoMatch) => PatternMatch::NoMatch,
+                    // If the field became a parent field, return Parent
+                    (PatternMatch::NoMatch, PatternMatch::Parent)
+                    | (PatternMatch::Match, PatternMatch::Parent) => PatternMatch::Parent,
+                    // If the field is still faceted or parent, return Parent because it can be a parent field of a new faceted field
+                    (PatternMatch::Match, PatternMatch::Match)
+                    | (PatternMatch::Parent, PatternMatch::Parent) => PatternMatch::Parent,
+                }
+            },
+            &mut |name| {
+                new_fields_ids_map.id_with_metadata(name).ok_or_else(|| {
+                    InternalError::FieldIdMapMissingEntry(FieldIdMapMissingEntry::FieldName {
+                        field_name: name.to_string(),
+                        process: "extract_document_facets",
+                    })
+                    .into()
+                })
+            },
+            &mut add,
+        )?;
+
+        let global = RwLock::new(new_fields_ids_map.clone());
+        let mut global_fields_ids_map = GlobalFieldsIdsMap::new(&global);
+        let external_id = document.external_document_id();
+        extract_geo_document(current_document, external_id, &mut global_fields_ids_map, &mut add)?;
+        // Note that we check that no new _geo.lat/lng fields were added to
+        //      the global fields ids map as they should already exists.
+        debug_assert_eq!(global.into_inner().unwrap(), *new_fields_ids_map);
+
+        del_add_facet_value.send_data(docid, fid_docid_facet_sender, &context.doc_alloc).unwrap();
+        Ok(())
+    }
+}
+
+struct FacetsSettingsExtractorsData<'a, 'b, SD> {
+    fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+    settings_delta: &'a SD,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for FacetsSettingsExtractorsData<'_, '_, SD>
+{
+    type Data = RefCell<BalancedCaches<'extractor>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(BalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        )))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            FacetedDocidsExtractor::extract_document_from_settings_change(
+                document,
+                context,
+                self.settings_delta,
+                self.fid_docid_facet_sender,
+            )?;
+        }
+        Ok(())
     }
 }

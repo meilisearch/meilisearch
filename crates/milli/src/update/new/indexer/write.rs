@@ -17,7 +17,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
 use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
-use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
+use crate::{DocumentId, Error, Index, InternalError, MustStopProcessing, Result, UserError};
 
 pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,
@@ -26,7 +26,7 @@ pub fn write_to_db(
     wtxn: &mut RwTxn<'_>,
     vector_stores: &HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
 ) -> Result<ChannelCongestion> {
-    // Used by by the HannoySetVector to copy the embedding into an
+    // Used by the HannoySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
     let mut aligned_embedding = Vec::new();
     let span = tracing::trace_span!(target: "indexing::write_db", "all");
@@ -83,7 +83,7 @@ pub fn write_to_db(
             }
         }
 
-        // Every time the is a message in the channel we search
+        // Every time there is a message in the channel we search
         // for new entries in the BBQueue buffers.
         write_from_bbqueue(
             &mut writer_receiver,
@@ -119,7 +119,7 @@ impl ChannelCongestion {
 
 #[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]
 #[allow(clippy::too_many_arguments)]
-pub fn build_vectors<MSP>(
+pub fn build_vectors(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     progress: &Progress,
@@ -127,11 +127,8 @@ pub fn build_vectors<MSP>(
     vector_memory: Option<usize>,
     vector_stores: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
     embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
-    must_stop_processing: &MSP,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync + Send,
-{
+    must_stop_processing: &MustStopProcessing,
+) -> Result<()> {
     if index_embeddings.is_empty() {
         return Ok(());
     }

@@ -13,6 +13,7 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, InternalError};
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::progress::Progress;
+use crate::search::facet::IndexFilter;
 use crate::update::new::indexer;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{
@@ -22,8 +23,8 @@ use crate::update::{
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
 use crate::{
-    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index, Search,
-    SearchResult,
+    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index,
+    MustStopProcessing, Search, SearchResult,
 };
 
 pub(crate) struct TempIndex {
@@ -100,7 +101,7 @@ impl TempIndex {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )?;
@@ -120,7 +121,7 @@ impl TempIndex {
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -157,7 +158,7 @@ impl TempIndex {
         let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
         update(&mut builder);
         builder.execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -190,7 +191,7 @@ impl TempIndex {
         let mut indexer = indexer::IndexOperations::new();
         let external_document_ids: Vec<_> =
             external_document_ids.iter().map(AsRef::as_ref).collect();
-        indexer.delete_documents(external_document_ids.as_slice());
+        indexer.delete_documents_by_external_ids(external_document_ids.as_slice());
 
         let indexer_alloc = Bump::new();
         let (document_changes, operation_stats, primary_key) = indexer.into_changes(
@@ -199,7 +200,7 @@ impl TempIndex {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )?;
@@ -219,7 +220,7 @@ impl TempIndex {
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -250,12 +251,9 @@ impl TempIndex {
 
 #[test]
 fn aborting_indexation() {
-    use std::sync::atomic::AtomicBool;
-    use std::sync::atomic::Ordering::Relaxed;
-
     let index = TempIndex::new();
     let mut wtxn = index.inner.write_txn().unwrap();
-    let should_abort = AtomicBool::new(false);
+    let should_abort = MustStopProcessing::default();
 
     let indexer_config = &index.indexer_config;
     let pool = &indexer_config.thread_pool;
@@ -281,13 +279,13 @@ fn aborting_indexation() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
         .unwrap();
 
-    should_abort.store(true, Relaxed);
+    should_abort.must_stop();
 
     let err = pool
         .install(|| {
@@ -301,7 +299,7 @@ fn aborting_indexation() {
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| should_abort.load(Relaxed),
+                &should_abort,
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -497,56 +495,72 @@ fn test_basic_geo_bounding_box() {
 
     // exact match a document
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
     // match a document in the middle of the rectangle
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
     // select everything
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
 
     // go on the edge of the longitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
 
     // go on the other edge of the longitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
 
     // wrap around the longitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
 
     // go on the edge of the latitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[3]>");
 
     // go on the edge of the latitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
@@ -555,7 +569,9 @@ fn test_basic_geo_bounding_box() {
 
     // try to wrap around the latitude
     let error = search
-        .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap_err();
     insta::assert_snapshot!(
@@ -568,7 +584,9 @@ fn test_basic_geo_bounding_box() {
 
     // send a top latitude lower than the bottow latitude
     let error = search
-        .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap_err();
     insta::assert_snapshot!(
@@ -604,17 +622,21 @@ fn test_contains() {
     let rtxn = index.read_txn().unwrap();
     let mut search = index.search(&rtxn);
     let search_result = search
-        .filter(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap())))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1]>");
     let mut search = index.search(&rtxn);
-    let search_result =
-        search.filter(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap()).execute().unwrap();
+    let search_result = search
+        .filter(Some(IndexFilter::from(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap())))
+        .execute()
+        .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2]>");
     let mut search = index.search(&rtxn);
     let search_result = search
-        .filter(Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2, 4, 5]>");
@@ -1383,9 +1405,12 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     assert!(results.candidates.is_empty());
 
     let mut search = index.search(&rtxn);
-    let results =
-        dbg!(search.filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()).execute())
-            .unwrap();
+    let results = dbg!(search
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()
+        )))
+        .execute())
+    .unwrap();
     assert!(results.candidates.is_empty());
 
     index
@@ -1415,7 +1440,9 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
 
     let mut search = index.search(&rtxn);
     let results = search
-        .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
+        .filter(Some(IndexFilter::from(
+            Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap(),
+        )))
         .execute()
         .unwrap();
     assert!(results.candidates.is_empty());

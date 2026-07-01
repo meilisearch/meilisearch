@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, LinkedList};
 use std::iter;
 use std::ops::Bound;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
 
@@ -9,34 +9,40 @@ use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
-use fst::Streamer as _;
+use fst::{IntoStreamer, Streamer as _};
 use hashbrown::HashMap;
-use heed::types::{Bytes, DecodeIgnore, Unit};
+use heed::types::{Bytes, DecodeIgnore, Str, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
+pub use mini_string::MiniString;
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
+pub use word_delta::WordDelta;
 pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};
 
 use super::channel::*;
 use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
+use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::heed_codec::StrBEU16Codec;
-use crate::progress::{EmbedderStats, Progress};
+use crate::index::PrefixSearch;
+use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
-use crate::update::new::steps::SettingsIndexerStep;
-use crate::update::new::FacetFieldIdsDelta;
+use crate::update::new::steps::{PostProcessingWords, SettingsIndexerStep};
 use crate::update::settings::SettingsDelta;
-use crate::update::GrenadParameters;
+use crate::update::{GrenadParameters, WordsPrefixesFst};
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{
-    Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
+    CboRoaringBitmapCodec, Error, FieldsIdsMap, FilterFeatures, FilterableAttributesFeatures,
+    GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing, PatternMatch, Result,
+    ThreadPoolNoAbort,
 };
 
 pub(crate) mod de;
@@ -45,10 +51,12 @@ mod document_deletion;
 mod document_operation;
 mod extract;
 mod guess_primary_key;
+mod mini_string;
 mod partial_dump;
 mod post_processing;
 pub mod settings_changes;
 mod update_by_function;
+mod word_delta;
 mod write;
 
 static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
@@ -57,7 +65,7 @@ static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
 ///
 /// Give it the output of the [`Indexer::document_changes`] method and it will execute it in the [`rayon::ThreadPool`].
 #[allow(clippy::too_many_arguments)] // clippy: 😝
-pub fn index<'pl, 'indexer, 'index, DC, MSP>(
+pub fn index<'pl, 'indexer, 'index, DC>(
     wtxn: &mut RwTxn,
     index: &'index Index,
     pool: &ThreadPoolNoAbort,
@@ -67,14 +75,13 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     new_primary_key: Option<PrimaryKey<'pl>>,
     document_changes: &DC,
     embedders: RuntimeEmbedders,
-    must_stop_processing: &'indexer MSP,
+    must_stop_processing: &'indexer MustStopProcessing,
     progress: &'indexer Progress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: &'indexer EmbedderStats,
 ) -> Result<ChannelCongestion>
 where
     DC: DocumentChanges<'pl>,
-    MSP: Fn() -> bool + Sync,
 {
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
@@ -174,7 +181,8 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
+        let (facet_field_ids_delta, word_delta, index_embeddings) =
+            extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -187,7 +195,7 @@ where
                 vector_memory,
                 &mut vector_stores,
                 None,
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )
         })
         .unwrap()?;
@@ -197,6 +205,7 @@ where
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
+                &word_delta,
                 facet_field_ids_delta,
             )
         })
@@ -205,7 +214,7 @@ where
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
-            &indexing_context.must_stop_processing,
+            &|| indexing_context.must_stop_processing.get(),
             indexing_context.progress,
         )?;
 
@@ -237,23 +246,34 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn reindex<'indexer, 'index, MSP, SD>(
+pub fn reindex<'indexer, 'index, SD>(
     wtxn: &mut RwTxn<'index>,
     index: &'index Index,
     pool: &ThreadPoolNoAbort,
     grenad_parameters: GrenadParameters,
     settings_delta: &'indexer SD,
-    must_stop_processing: &'indexer MSP,
+    must_stop_processing: &'indexer MustStopProcessing,
     progress: &'indexer Progress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: Arc<EmbedderStats>,
 ) -> Result<ChannelCongestion>
 where
-    MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
 {
     delete_old_embedders_and_fragments(wtxn, index, settings_delta)?;
     delete_old_fid_based_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
+    delete_old_fid_from_facet_databases(
+        wtxn,
+        index,
+        settings_delta,
+        must_stop_processing,
+        progress,
+    )?;
+    delete_old_geo_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
+
+    // Fetch the numbers from the words FST
+    let (numbers_to_delete_from_words_fst, numbers_to_add_to_words_fst) =
+        migrate_numbers(wtxn, index, settings_delta)?;
 
     // Clear word_pair_proximity if byWord to byAttribute
     let old_proximity_precision = settings_delta.old_proximity_precision();
@@ -264,9 +284,13 @@ where
         index.word_pair_proximity_docids.clear(wtxn)?;
     }
 
-    // TODO delete useless searchable databases
-    //      - Clear fid_prefix_* in the post processing
-    //      - clear the prefix + fid_prefix if setting `PrefixSearch` is enabled
+    if *settings_delta.new_prefix_search() == PrefixSearch::Disabled {
+        index.delete_words_prefixes_fst(wtxn)?;
+        index.word_prefix_docids.clear(wtxn)?;
+        index.word_prefix_fid_docids.clear(wtxn)?;
+        index.word_prefix_position_docids.clear(wtxn)?;
+        index.exact_word_prefix_docids.clear(wtxn)?;
+    }
 
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
@@ -343,7 +367,13 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let index_embeddings = extractor_handle.join().unwrap()?;
+        let (index_embeddings, mut word_delta, facet_field_ids_delta) =
+            extractor_handle.join().unwrap()?;
+
+        // Insert the recently added numbers into the added words
+        word_delta.added.extend(numbers_to_add_to_words_fst);
+        // Insert the recently removed numbers into deleted words
+        word_delta.deleted.extend(numbers_to_delete_from_words_fst);
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -356,27 +386,55 @@ where
                 vector_memory,
                 &mut vector_stores,
                 Some(embedder_actions),
-                &indexing_context.must_stop_processing,
+                indexing_context.must_stop_processing,
             )
         })
         .unwrap()?;
 
         pool.install(|| {
-            // WARN When implementing the facets don't forget this
-            let facet_field_ids_delta = FacetFieldIdsDelta::new(0, 0);
+            // This method writes an empty prefix FST when the prefix search is
+            // disabled because it is based on the modified words during the process
+            // and we have not necessarily modified any word during a settings change.
             post_processing::post_process(
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
+                &word_delta,
                 facet_field_ids_delta,
-            )
+            )?;
+
+            // When the prefix search was disabled and is enabled we need to call the
+            // WordsPrefixesFst::execute to generate and write the words FST from scratch
+            // and call the compute_prefix_database_from_sources a second time to correctly
+            // generate the prefixes databases.
+            if *settings_delta.old_prefix_search() == PrefixSearch::Disabled
+                && *settings_delta.new_prefix_search() == PrefixSearch::IndexingTime
+            {
+                indexing_context.progress.update_progress(PostProcessingWords::ComputePrefixFst);
+                WordsPrefixesFst::new(wtxn, index).execute()?;
+                let prefixes_fst = index.words_prefixes_fst(wtxn)?;
+
+                let mut modified = BTreeSet::new();
+                let deleted = BTreeSet::new();
+                let mut prefix_stream = prefixes_fst.into_stream();
+                while let Some(prefix) = prefix_stream.next() {
+                    let Ok(prefix) = std::str::from_utf8(prefix) else { continue };
+                    let Some(prefix) = MiniString::new(prefix) else { continue };
+                    modified.insert(prefix);
+                }
+                post_processing::compute_prefix_database_from_sources(
+                    index, wtxn, &modified, &deleted, progress,
+                )?;
+            }
+
+            Ok(()) as Result<_>
         })
         .unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
-            &indexing_context.must_stop_processing,
+            &|| indexing_context.must_stop_processing.get(),
             indexing_context.progress,
         )?;
 
@@ -503,18 +561,366 @@ where
     Ok(())
 }
 
-/// Deletes entries refering the provided
-/// fids from the fid-based databases.
-pub fn delete_old_fid_based_databases<SD, MSP>(
+fn delete_old_geo_databases<SD>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     settings_delta: &SD,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     progress: &Progress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
-    MSP: Fn() -> bool + Sync,
+{
+    let _step = progress.update_progress_scoped(IndexingStep::DeletingFromGeoDatabases);
+
+    let new_enabled_geojson = settings_delta
+        .new_fields_ids_map()
+        .id_with_metadata(RESERVED_GEOJSON_FIELD_NAME)
+        .is_some_and(|(_id, meta)| meta.is_geojson_enabled());
+
+    // Clear the cellulite database when the geojson support is removed
+    if !new_enabled_geojson {
+        index.cellulite.clear(wtxn)?;
+    }
+
+    if must_stop_processing.get() {
+        return Err(Error::InternalError(InternalError::AbortedIndexation));
+    }
+
+    let new_enabled_geo = settings_delta
+        .new_fields_ids_map()
+        .id_with_metadata(RESERVED_GEO_FIELD_NAME)
+        .is_some_and(|(_id, meta)| meta.is_geo_enabled());
+
+    // Clear the geo rtree entry when the geo support is removed
+    if !new_enabled_geo {
+        index.delete_geo_rtree(wtxn)?;
+    }
+
+    Ok(())
+}
+
+pub fn migrate_numbers<SD>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+) -> Result<(BTreeSet<String>, BTreeSet<String>)>
+where
+    SD: SettingsDelta + Sync,
+{
+    let mut numbers_to_delete_from_words_fst = BTreeSet::new();
+    let mut numbers_to_add_to_words_fst = BTreeSet::new();
+
+    let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
+    let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
+    match (old_disabled_typos_terms, new_disabled_typos_terms) {
+        (
+            DisabledTyposTerms { disable_on_numbers: false },
+            DisabledTyposTerms { disable_on_numbers: true },
+        ) => {
+            // We enable disableOnNumbers so we need to remove those from the words FST
+            numbers_to_delete_from_words_fst =
+                extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?;
+            let rtxn = index.read_txn()?;
+            migrate_word_docids(
+                &rtxn,
+                index.word_docids,
+                wtxn,
+                index.exact_word_docids,
+                &numbers_to_delete_from_words_fst,
+            )?;
+            migrate_word_docids(
+                &rtxn,
+                index.word_prefix_docids,
+                wtxn,
+                index.exact_word_prefix_docids,
+                &numbers_to_delete_from_words_fst,
+            )?;
+        }
+        (
+            DisabledTyposTerms { disable_on_numbers: true },
+            DisabledTyposTerms { disable_on_numbers: false },
+        ) => {
+            // We disable disableOnNumbers so we need to add those words to the words FST
+            numbers_to_add_to_words_fst = extract_numbers_from_non_exact_searchable_attributes(
+                wtxn,
+                index,
+                settings_delta.old_fields_ids_map(),
+                old_disabled_typos_terms,
+            )?;
+            let rtxn = index.read_txn()?;
+            migrate_word_docids(
+                &rtxn,
+                index.exact_word_docids,
+                wtxn,
+                index.word_docids,
+                &numbers_to_add_to_words_fst,
+            )?;
+            migrate_word_docids(
+                &rtxn,
+                index.exact_word_prefix_docids,
+                wtxn,
+                index.word_prefix_docids,
+                &numbers_to_add_to_words_fst,
+            )?;
+        }
+        _ => (),
+    }
+
+    Ok((numbers_to_delete_from_words_fst, numbers_to_add_to_words_fst))
+}
+
+pub fn extract_numbers_from_words_fst(
+    rtxn: &RoTxn<'_>,
+    index: &Index,
+    disabled_typos_terms: &DisabledTyposTerms,
+) -> Result<BTreeSet<String>> {
+    let mut removed_numbers = BTreeSet::new();
+    let fst = index.words_fst(rtxn)?;
+    let mut stream = fst.stream();
+    // TODO use an automaton to only iterate over strings that are numbers
+    //      (and thus starts with a digit)
+    while let Some(bytes) = stream.next() {
+        let word = std::str::from_utf8(bytes)?;
+        if disabled_typos_terms.is_exact(word) {
+            removed_numbers.insert(word.to_string());
+        }
+    }
+
+    Ok(removed_numbers)
+}
+
+pub fn extract_numbers_from_non_exact_searchable_attributes(
+    rtxn: &RoTxn<'_>,
+    index: &Index,
+    exact_attributes: &FieldIdMapWithMetadata,
+    disabled_typos_terms: &DisabledTyposTerms,
+) -> Result<BTreeSet<String>> {
+    let mut numbers = BTreeSet::new();
+    for result in index.word_fid_docids.remap_data_type::<DecodeIgnore>().iter(rtxn)? {
+        let ((word, fid), _) = result?;
+        let Some(metadata) = exact_attributes.metadata(fid) else { continue };
+        if metadata.exact != PatternMatch::Match && disabled_typos_terms.is_exact(word) {
+            numbers.insert(word.to_string());
+        }
+    }
+    Ok(numbers)
+}
+
+pub fn migrate_word_docids(
+    rtxn: &RoTxn<'_>,
+    src: Database<Str, CboRoaringBitmapCodec>,
+    wtxn: &mut RwTxn<'_>,
+    dst: Database<Str, CboRoaringBitmapCodec>,
+    words: &BTreeSet<String>,
+) -> Result<()> {
+    let src = src.remap_data_type::<Bytes>();
+    let dst = dst.remap_data_type::<Bytes>();
+
+    for word in words {
+        let Some(docids_bytes) = src.get(rtxn, word)? else { continue };
+        dst.put(wtxn, word, docids_bytes)?;
+        src.delete(wtxn, word)?;
+    }
+
+    Ok(())
+}
+
+pub fn delete_old_fid_from_facet_databases<SD>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+    must_stop_processing: &MustStopProcessing,
+    progress: &Progress,
+) -> Result<()>
+where
+    SD: SettingsDelta + Sync,
+{
+    let mut remove_from_everywhere = BTreeSet::new();
+    let mut remove_from_facet_search = BTreeSet::new();
+    let mut remove_comparison_levels_only = BTreeSet::new();
+
+    let old_fields_ids_map = settings_delta.old_fields_ids_map();
+    let old_filterable_rules = settings_delta.old_filterable_rules();
+
+    let new_fields_ids_map = settings_delta.new_fields_ids_map();
+    let new_filterable_rules = settings_delta.new_filterable_rules();
+
+    for (id, old_metadata) in old_fields_ids_map.iter_id_metadata() {
+        if old_metadata.is_faceted(old_filterable_rules) != PatternMatch::Match {
+            // This was not faceted, no need to delete it from the facet databases
+            continue;
+        }
+
+        let Some(new_metadata) = new_fields_ids_map.metadata(id) else {
+            // This field is no longer in the new fields ids map, delete it from everywhere
+            remove_from_everywhere.insert(id);
+            continue;
+        };
+
+        if new_metadata.is_faceted(new_filterable_rules) != PatternMatch::Match {
+            // This field is no longer faceted, delete it from everywhere
+            remove_from_everywhere.insert(id);
+            continue;
+        }
+
+        // Check if the field still needs facet search databases
+        let FilterableAttributesFeatures { facet_search: old_facet_search, filter: old_filter } =
+            old_metadata.filterable_attributes_features(old_filterable_rules);
+        let FilterableAttributesFeatures { facet_search: new_facet_search, filter: new_filter } =
+            new_metadata.filterable_attributes_features(new_filterable_rules);
+
+        if old_facet_search && !new_facet_search {
+            // The field is no longer facet searchable, delete it from the facet search databases
+            remove_from_facet_search.insert(id);
+        }
+
+        // Check if the field still needs facet level databases
+        let FilterFeatures { equality: _, comparison: old_comparison } = old_filter;
+        let old_asc_desc = old_metadata.is_asc_desc() == PatternMatch::Match;
+        let old_sortable = old_metadata.is_sortable() == PatternMatch::Match;
+        let is_old_comparison = old_sortable || old_asc_desc || old_comparison;
+
+        let FilterFeatures { equality: _, comparison: new_comparison } = new_filter;
+        let new_asc_desc = new_metadata.is_asc_desc() == PatternMatch::Match;
+        let new_sortable = new_metadata.is_sortable() == PatternMatch::Match;
+        let is_new_comparison = new_sortable || new_asc_desc || new_comparison;
+
+        if is_old_comparison && !is_new_comparison {
+            // Remove the comparison levels from the facets.
+            remove_comparison_levels_only.insert(id);
+        }
+    }
+
+    let Index {
+        // filterable, sortable, distinct, :asc/:desc
+        facet_id_exists_docids,
+        facet_id_is_null_docids,
+        facet_id_is_empty_docids,
+        field_id_docid_facet_f64s,
+        field_id_docid_facet_strings,
+
+        // facet search
+        facet_id_normalized_string_strings,
+        facet_id_string_fst,
+
+        // comparison, sortable, or :asc/:desc
+        facet_id_f64_docids,
+        facet_id_string_docids,
+        ..
+    } = index;
+
+    // Deletes these fields IDs from all the filterable, facet and other datastructures.
+    if !remove_from_everywhere.is_empty() {
+        let databases: [Database<Bytes, DecodeIgnore>; _] = [
+            facet_id_exists_docids.remap_types(),
+            facet_id_is_null_docids.remap_types(),
+            facet_id_is_empty_docids.remap_types(),
+            field_id_docid_facet_f64s.remap_types(),
+            field_id_docid_facet_strings.remap_types(),
+            facet_id_normalized_string_strings.remap_types(),
+            facet_id_string_fst.remap_types(),
+            facet_id_f64_docids.remap_types(),
+            facet_id_string_docids.remap_types(),
+        ];
+
+        progress.update_progress(IndexingStep::DeletingFromAllFilters);
+        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+        progress.update_progress(db_progress_obj);
+
+        for database in databases {
+            if must_stop_processing.get() {
+                return Err(Error::InternalError(InternalError::AbortedIndexation));
+            }
+
+            for id in remove_from_everywhere.iter().copied() {
+                let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
+                while iter.next().transpose()?.is_some() {
+                    // safety: We don't keep any reference to the database.
+                    unsafe { iter.del_current()? };
+                }
+            }
+
+            db_progress.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    // Delete the entries for these field IDs from the facet search datastructures.
+    if !remove_from_facet_search.is_empty() {
+        let databases: [Database<Bytes, DecodeIgnore>; _] =
+            [facet_id_normalized_string_strings.remap_types(), facet_id_string_fst.remap_types()];
+
+        progress.update_progress(IndexingStep::DeletingFromFacetsOnly);
+        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+        progress.update_progress(db_progress_obj);
+
+        // TODO merge with the above code
+        for database in databases {
+            if must_stop_processing.get() {
+                return Err(Error::InternalError(InternalError::AbortedIndexation));
+            }
+
+            for id in remove_from_facet_search.iter().copied() {
+                let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
+                while iter.next().transpose()?.is_some() {
+                    // safety: We don't keep any reference to the database.
+                    unsafe { iter.del_current()? };
+                }
+            }
+
+            db_progress.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    // Deletes the levels > 0 for the entries corresponding to these
+    // field IDs in the layered filter + comparison datastructures.
+    if !remove_comparison_levels_only.is_empty() {
+        let databases: [Database<Bytes, DecodeIgnore>; _] =
+            [facet_id_f64_docids.remap_types(), facet_id_string_docids.remap_types()];
+
+        progress.update_progress(IndexingStep::DeletingFromComparisonsOnly);
+        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+        progress.update_progress(db_progress_obj);
+
+        // TODO merge with the above code (or not?)
+        for database in databases {
+            if must_stop_processing.get() {
+                return Err(Error::InternalError(InternalError::AbortedIndexation));
+            }
+
+            for id in remove_comparison_levels_only.iter().copied() {
+                let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
+                while let Some((key, _ignored)) = iter.next().transpose()? {
+                    // We want to delete everything that is not from
+                    // the level 0 as it provides equality comparisons.
+                    //
+                    // The first two bytes corresponds to the field ID
+                    // while the third byte corresponds to the level.
+                    if key.get(2).copied() != Some(0) {
+                        // safety: We don't keep any reference to the database.
+                        unsafe { iter.del_current()? };
+                    }
+                }
+            }
+
+            db_progress.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    Ok(())
+}
+
+/// Deletes entries refering the provided
+/// fids from the fid-based databases.
+pub fn delete_old_fid_based_databases<SD>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+    must_stop_processing: &MustStopProcessing,
+    progress: &Progress,
+) -> Result<()>
+where
+    SD: SettingsDelta + Sync,
 {
     // Get the fids to delete from the settings delta.
     // Compare the old and new fields ids map to find the fids that are no longer searchable.
@@ -524,10 +930,10 @@ where
         old_fields_ids_map
             .iter_id_metadata()
             .filter_map(|(id, metadata)| {
-                if metadata.is_searchable()
+                if metadata.is_searchable() == PatternMatch::Match
                     && new_fields_ids_map
                         .metadata(id)
-                        .is_none_or(|metadata| !metadata.is_searchable())
+                        .is_none_or(|metadata| metadata.is_searchable() != PatternMatch::Match)
                 {
                     Some(id)
                 } else {
@@ -552,16 +958,13 @@ where
 
 /// Deletes entries related to field IDs that must no longer exist in the database.
 /// Uses parallel fetching to speed up the deletion process.
-pub fn delete_old_fid_based_databases_from_fids<MSP>(
+pub fn delete_old_fid_based_databases_from_fids(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
     progress: &Progress,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<()> {
     let bounds = compute_fst_bounds(wtxn, index)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
@@ -687,24 +1090,21 @@ fn fetch_keys_to_delete_in_parallel(
 
 /// Parallel version of delete_old_word_fid_docids that fetches keys in parallel
 /// and then deletes them sequentially.
-fn delete_old_word_fid_docids_parallel<MSP>(
+fn delete_old_word_fid_docids_parallel(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     database: Database<StrBEU16Codec, Unit>,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
     bounds: &[Option<Box<[u8]>>],
-) -> crate::Result<usize>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> crate::Result<usize> {
     let results = fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete, bounds)?;
 
     let database = database.remap_key_type::<Bytes>();
     let mut count = 0;
     for result in results.into_iter().flatten() {
         let keys = result?;
-        if must_stop_processing() {
+        if must_stop_processing.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
         keys.into_iter().try_for_each(|key| {
@@ -717,18 +1117,15 @@ where
     Ok(count)
 }
 
-fn delete_old_fid_word_count_docids<MSP>(
+fn delete_old_fid_word_count_docids(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
-) -> Result<(), Error>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<(), Error> {
     let db = index.field_id_word_count_docids.remap_data_type::<DecodeIgnore>();
     for &fid_to_delete in fids_to_delete {
-        if must_stop_processing() {
+        if must_stop_processing.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
 

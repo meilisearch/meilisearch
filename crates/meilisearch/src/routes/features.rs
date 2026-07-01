@@ -1,14 +1,12 @@
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -39,12 +37,17 @@ pub struct ExperimentalFeaturesApi;
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            dynamic_search_rules: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
+            task_queue_compaction_route: Some(false),
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
             foreign_keys: Some(false),
+            disable_documents_fetch_queue: Some(false),
+            legacy_search: Some(false),
+            render_route: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -71,41 +74,54 @@ async fn get_features(
 }
 
 /// Experimental features that can be toggled at runtime
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
+#[routes::request(response)]
+#[derive(Debug)]
 pub struct RuntimeTogglableFeatures {
     /// Enable the /metrics endpoint for Prometheus metrics
-    #[deserr(default)]
+    #[request(default)]
     pub metrics: Option<bool>,
     /// Enable the /logs route for log configuration
-    #[deserr(default)]
+    #[request(default)]
     pub logs_route: Option<bool>,
     /// Enable document editing via JavaScript functions
-    #[deserr(default)]
+    #[request(default)]
     pub edit_documents_by_function: Option<bool>,
     /// Enable the CONTAINS filter operator
-    #[deserr(default)]
+    #[request(default)]
     pub contains_filter: Option<bool>,
+    /// Enable dynamic search rules and the `/dynamic-search-rules` routes
+    #[request(default)]
+    pub dynamic_search_rules: Option<bool>,
     /// Enable network features for distributed search
-    #[deserr(default)]
+    #[request(default)]
     pub network: Option<bool>,
     /// Enable the route to get documents from tasks
-    #[deserr(default)]
+    #[request(default)]
     pub get_task_documents_route: Option<bool>,
+    /// Enable the route to compact the task queue database
+    #[request(default)]
+    pub task_queue_compaction_route: Option<bool>,
     /// Enable composite embedders for multi-source embeddings
-    #[deserr(default)]
+    #[request(default)]
     pub composite_embedders: Option<bool>,
     /// Enable chat completion capabilities
-    #[deserr(default)]
+    #[request(default)]
     pub chat_completions: Option<bool>,
     /// Enable multimodal search with images and other media
-    #[deserr(default)]
+    #[request(default)]
     pub multimodal: Option<bool>,
     /// Enable foreign key support for document hydration
-    #[deserr(default)]
+    #[request(default)]
     pub foreign_keys: Option<bool>,
+    /// Disable documents fetch queue
+    #[request(default)]
+    pub disable_documents_fetch_queue: Option<bool>,
+    /// Enable legacy search pipeline
+    #[request(default)]
+    pub legacy_search: Option<bool>,
+    /// Enable the `POST /render-template` route
+    #[request(default)]
+    pub render_route: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -115,12 +131,17 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            dynamic_search_rules,
             network,
             get_task_documents_route,
+            task_queue_compaction_route,
             composite_embedders,
             chat_completions,
             multimodal,
             foreign_keys,
+            disable_documents_fetch_queue,
+            legacy_search,
+            render_route,
         } = value;
 
         Self {
@@ -128,12 +149,17 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route: Some(logs_route),
             edit_documents_by_function: Some(edit_documents_by_function),
             contains_filter: Some(contains_filter),
+            dynamic_search_rules: Some(dynamic_search_rules),
             network: Some(network),
             get_task_documents_route: Some(get_task_documents_route),
+            task_queue_compaction_route: Some(task_queue_compaction_route),
             composite_embedders: Some(composite_embedders),
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
             foreign_keys: Some(foreign_keys),
+            disable_documents_fetch_queue: Some(disable_documents_fetch_queue),
+            legacy_search,
+            render_route: Some(render_route),
         }
     }
 }
@@ -144,12 +170,17 @@ pub struct PatchExperimentalFeatureAnalytics {
     logs_route: bool,
     edit_documents_by_function: bool,
     contains_filter: bool,
+    dynamic_search_rules: bool,
     network: bool,
     get_task_documents_route: bool,
+    task_queue_compaction_route: bool,
     composite_embedders: bool,
     chat_completions: bool,
     multimodal: bool,
     foreign_keys: bool,
+    disable_documents_fetch_queue: bool,
+    legacy_search: bool,
+    render_route: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -163,12 +194,17 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: new.logs_route,
             edit_documents_by_function: new.edit_documents_by_function,
             contains_filter: new.contains_filter,
+            dynamic_search_rules: new.dynamic_search_rules,
             network: new.network,
             get_task_documents_route: new.get_task_documents_route,
+            task_queue_compaction_route: new.task_queue_compaction_route,
             composite_embedders: new.composite_embedders,
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
             foreign_keys: new.foreign_keys,
+            disable_documents_fetch_queue: new.disable_documents_fetch_queue,
+            legacy_search: new.legacy_search,
+            render_route: new.render_route,
         })
     }
 
@@ -182,18 +218,24 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Enable or disable experimental features at runtime.
 #[routes::path(
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
+    request_body = RuntimeTogglableFeatures,
     responses(
         (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            dynamic_search_rules: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
+            task_queue_compaction_route: Some(false),
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
             foreign_keys: Some(false),
+            disable_documents_fetch_queue: Some(false),
+            legacy_search: Some(false),
+            render_route: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -226,11 +268,19 @@ async fn patch_features(
             .edit_documents_by_function
             .unwrap_or(old_features.edit_documents_by_function),
         contains_filter: new_features.0.contains_filter.unwrap_or(old_features.contains_filter),
+        dynamic_search_rules: new_features
+            .0
+            .dynamic_search_rules
+            .unwrap_or(old_features.dynamic_search_rules),
         network: new_features.0.network.unwrap_or(old_features.network),
         get_task_documents_route: new_features
             .0
             .get_task_documents_route
             .unwrap_or(old_features.get_task_documents_route),
+        task_queue_compaction_route: new_features
+            .0
+            .task_queue_compaction_route
+            .unwrap_or(old_features.task_queue_compaction_route),
         composite_embedders: new_features
             .0
             .composite_embedders
@@ -238,6 +288,12 @@ async fn patch_features(
         chat_completions: new_features.0.chat_completions.unwrap_or(old_features.chat_completions),
         multimodal: new_features.0.multimodal.unwrap_or(old_features.multimodal),
         foreign_keys: new_features.0.foreign_keys.unwrap_or(old_features.foreign_keys),
+        disable_documents_fetch_queue: new_features
+            .0
+            .disable_documents_fetch_queue
+            .unwrap_or(old_features.disable_documents_fetch_queue),
+        legacy_search: new_features.0.legacy_search.or(old_features.legacy_search),
+        render_route: new_features.0.render_route.unwrap_or(old_features.render_route),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -248,12 +304,17 @@ async fn patch_features(
         logs_route,
         edit_documents_by_function,
         contains_filter,
+        dynamic_search_rules,
         network,
         get_task_documents_route,
+        task_queue_compaction_route,
         composite_embedders,
         chat_completions,
         multimodal,
         foreign_keys,
+        disable_documents_fetch_queue,
+        legacy_search,
+        render_route,
     } = new_features;
 
     analytics.publish(
@@ -262,12 +323,17 @@ async fn patch_features(
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            dynamic_search_rules,
             network,
             get_task_documents_route,
+            task_queue_compaction_route,
             composite_embedders,
             chat_completions,
             multimodal,
             foreign_keys,
+            disable_documents_fetch_queue,
+            legacy_search: legacy_search.unwrap_or(false),
+            render_route,
         },
         &req,
     );

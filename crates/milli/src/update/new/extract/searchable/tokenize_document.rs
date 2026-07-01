@@ -13,6 +13,7 @@ use crate::{FieldId, InternalError, LocalizedAttributesRule, Result, MAX_WORD_LE
 // todo: should be crate::proximity::MAX_DISTANCE but it has been forgotten
 const MAX_DISTANCE: u32 = 8;
 
+#[derive(Clone, Copy)]
 pub struct DocumentTokenizer<'a> {
     pub tokenizer: &'a Tokenizer<'a>,
     pub localized_attributes_rules: &'a [LocalizedAttributesRule],

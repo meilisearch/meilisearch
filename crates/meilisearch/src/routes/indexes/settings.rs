@@ -6,6 +6,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::network::route;
 use meilisearch_types::settings::{
     settings, ChatSettings, SecretPolicy, SettingEmbeddingSettings, Settings, Unchecked,
 };
@@ -16,7 +17,7 @@ use super::settings_analytics::*;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body, OverrideEndpoint};
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
@@ -633,6 +634,8 @@ async fn register_new_settings(
     };
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
+    let settings_path = route::settings_path(&index_uid).unwrap();
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
     let task = KindWithContent::SettingsUpdate {
         index_uid: index_uid.clone(),
@@ -653,7 +656,13 @@ async fn register_new_settings(
         proxy(
             &index_scheduler,
             Some(&index_uid),
-            req,
+            // since we are sending a full settings object, we need to override the path and method to target the main settings route
+            &OverrideEndpoint::new(
+                req,
+                Some(settings_path),
+                Some(http_client::reqwest::Method::PATCH),
+                None,
+            ),
             task_network,
             network,
             Body::inline(new_settings),

@@ -298,6 +298,40 @@ pub static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
+#[cfg(feature = "enterprise")] // only used in sharding tests for now
+pub static C_EST_FRANÇAIS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+    json!([
+        {
+            "id": "A",
+            "facette": "L'école"
+        },
+        {
+            "id": "B",
+            "facette": "L'avion"
+        },
+        {
+            "id": "C",
+            "facette": "L'aventure"
+        },
+        {
+            "id": "D",
+            "facette": "L'école"
+        },
+        {
+            "id": "E",
+            "facette": "L'école"
+        },
+        {
+            "id": "F",
+            "facette": "\"Lécole"
+        },
+        {
+            "id": "G",
+            "facette": "\"Lécole"
+        }
+    ])
+});
+
 pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shared> {
     static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
     INDEX.get_or_init(|| async {
@@ -534,6 +568,13 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
 
             let (response, _code) = index
                 ._update_settings(
+                    json!({"filterableAttributes": ["_geo", "type"], "sortableAttributes": ["_geo"]}),
+                )
+                .await;
+            server.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) = index
+                ._update_settings(
                     json!({"filterableAttributes": ["_geo"], "sortableAttributes": ["_geo"]}),
                 )
                 .await;
@@ -557,6 +598,10 @@ pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared>
             server.wait_task(response.uid()).await.succeeded();
 
             let (response, _code) =
+                index._update_settings(json!({"filterableAttributes": ["_geojson", "name"]})).await;
+            server.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) =
                 index._update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
             server.wait_task(response.uid()).await.succeeded();
             index
@@ -565,6 +610,11 @@ pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared>
 }
 
 pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
+    shared_server_and_index_for_fragments().await.1
+}
+
+pub async fn shared_server_and_index_for_fragments(
+) -> (&'static Server<Shared>, Index<'static, Shared>) {
     static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
     let (server, uid) = INDEX
         .get_or_init(|| async {
@@ -572,10 +622,10 @@ pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
             (server.into_shared(), uid)
         })
         .await;
-    server._index(uid).to_shared()
+    (server, server._index(uid).to_shared())
 }
 
-async fn fragment_mock_server() -> String {
+pub async fn fragment_mock_server() -> String {
     let text_to_embedding: BTreeMap<_, _> = vec![
         ("kefir", [0.5, -0.5, 0.0]),
         ("intel", [1.0, 1.0, 0.0]),
@@ -615,7 +665,8 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     let server = Server::new().await;
     let index = server.unique_index();
 
-    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    let (_response, code) =
+        server.set_features(json!({"multimodal": true, "renderRoute": true})).await;
     assert_eq!(code, StatusCode::OK);
 
     // Configure the index to use our mock embedder

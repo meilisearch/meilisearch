@@ -6,7 +6,10 @@ use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
+pub use self::facet::{
+    serialize_index_filter_to_filter_string, FacetDistribution, Filter, IndexFilter, OrderBy,
+    DEFAULT_VALUES_PER_FACET,
+};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
@@ -17,7 +20,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Result, SearchContext, UserError,
+    Index, Position, Result, SearchContext, UserError,
 };
 
 // Building these factories is not free.
@@ -41,10 +44,16 @@ pub struct SemanticSearch {
     quantized: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PinDoc {
+    pub pos: Position,
+    pub doc_id: DocumentId,
+}
+
 pub struct Search<'a> {
     query: Option<String>,
     // this should be linked to the String in the query
-    filter: Option<Filter<'a>>,
+    filter: Option<IndexFilter<'a>>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
@@ -64,6 +73,7 @@ pub struct Search<'a> {
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
     progress: &'a Progress,
+    pins: Vec<PinDoc>,
 }
 
 impl<'a> Search<'a> {
@@ -90,6 +100,7 @@ impl<'a> Search<'a> {
             deadline: Deadline::never(),
             ranking_score_threshold: None,
             progress,
+            pins: vec![],
         }
     }
 
@@ -150,8 +161,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn filter(&mut self, condition: Filter<'a>) -> &mut Search<'a> {
-        self.filter = Some(condition);
+    pub fn filter(&mut self, condition: Option<IndexFilter<'a>>) -> &mut Search<'a> {
+        self.filter = condition;
         self
     }
 
@@ -199,8 +210,17 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
-        if has_vector_search {
+    pub fn pins(&mut self, pins: Vec<PinDoc>) -> &mut Search<'a> {
+        self.pins = pins;
+        self
+    }
+
+    pub fn execute_for_candidates(&self, is_hybrid_kind: bool) -> Result<RoaringBitmap> {
+        let has_vector = is_hybrid_kind || {
+            self.semantic.as_ref().and_then(|semantic| semantic.vector.as_ref()).is_some()
+        };
+
+        if has_vector {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
             filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)
         } else {
@@ -243,7 +263,18 @@ impl<'a> Search<'a> {
             }
         }
 
-        let universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
+        let mut universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
+        let pins = self
+            .pins
+            .iter()
+            .filter(|pin| universe.contains(pin.doc_id))
+            .copied()
+            .collect::<Vec<_>>();
+
+        for pin in &pins {
+            universe.remove(pin.doc_id);
+        }
+
         let mut query_vector = None;
         let PartialSearchResult {
             located_query_terms,
@@ -281,6 +312,7 @@ impl<'a> Search<'a> {
                     self.deadline.clone(),
                     self.ranking_score_threshold,
                     self.progress,
+                    pins,
                 )?
             }
             _ => execute_search(
@@ -303,6 +335,7 @@ impl<'a> Search<'a> {
                 self.ranking_score_threshold,
                 self.locales.as_ref(),
                 self.progress,
+                pins,
             )?,
         };
 
@@ -354,6 +387,7 @@ impl fmt::Debug for Search<'_> {
             ranking_score_threshold,
             locales,
             progress: _,
+            pins,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -377,6 +411,7 @@ impl fmt::Debug for Search<'_> {
             .field("deadline", deadline)
             .field("ranking_score_threshold", ranking_score_threshold)
             .field("locales", locales)
+            .field("pins", pins)
             .finish()
     }
 }
@@ -432,6 +467,54 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
     } else {
         lev.build_dfa(word)
     }
+}
+
+pub fn merge_positioned_hits_into_page<P, T, FPos, FMap>(
+    pins: Vec<P>,
+    skip: usize,
+    take: usize,
+    organic_hits: Vec<T>,
+    pin_position: FPos,
+    mut pin_into_hit: FMap,
+) -> Vec<T>
+where
+    FPos: Fn(&P) -> Position,
+    FMap: FnMut(P) -> T,
+{
+    if pins.is_empty() {
+        return organic_hits;
+    }
+
+    let page_end = skip.saturating_add(take);
+    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
+    let mut merged_hits = Vec::with_capacity(capacity);
+    let mut organic_hits = organic_hits.into_iter();
+    let mut pins = pins.into_iter().peekable();
+    let mut combined_index = 0usize;
+
+    while combined_index < page_end {
+        let next_hit = if let Some(pin) = pins.peek() {
+            if (pin_position(pin) as usize) <= combined_index {
+                Some(pin_into_hit(pins.next().expect("peeked pin must exist")))
+            } else if let Some(hit) = organic_hits.next() {
+                Some(hit)
+            } else {
+                Some(pin_into_hit(pins.next().expect("peeked pin must exist")))
+            }
+        } else {
+            organic_hits.next()
+        };
+
+        let Some(hit) = next_hit else { break };
+
+        if combined_index >= skip {
+            merged_hits.push(hit);
+        }
+
+        combined_index += 1;
+    }
+
+    merged_hits
 }
 
 #[cfg(test)]

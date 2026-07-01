@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ops::BitOr;
 
 use hashbrown::HashMap;
 use heed::types::Bytes;
@@ -13,25 +14,23 @@ use super::extract::{
     FacetKind, GeoExtractorData,
 };
 use crate::update::facet::new_incremental::FacetFieldIdChange;
-use crate::update::new::extract::cellulite::GeoJsonExtractorData;
-use crate::{CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
+use crate::{
+    CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, MustStopProcessing, Result,
+};
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_rtree<'extractor, MSP>(
+pub fn merge_and_send_rtree<'extractor>(
     datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
     rtxn: &RoTxn,
     index: &Index,
     geo_sender: GeoSender<'_, '_>,
-    must_stop_processing: &MSP,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync,
-{
+    must_stop_processing: &MustStopProcessing,
+) -> Result<()> {
     let mut rtree = index.geo_rtree(rtxn)?.unwrap_or_default();
     let mut faceted = index.geo_faceted_documents_ids(rtxn)?;
 
     for data in datastore {
-        if must_stop_processing() {
+        if must_stop_processing.get() {
             return Err(InternalError::AbortedIndexation.into());
         }
 
@@ -64,55 +63,65 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_cellulite<'extractor, MSP>(
-    datastore: impl IntoIterator<Item = RefCell<GeoJsonExtractorData<'extractor>>>,
-    _rtxn: &RoTxn,
-    _index: &Index,
-    geojson_sender: GeoJsonSender<'_, '_>,
-    must_stop_processing: &MSP,
+pub fn merge_and_send_docids<D>(
+    caches: Vec<BalancedCaches<'_>>,
+    database: Database<Bytes, Bytes>,
+    index: &Index,
+    docids_sender: WordDocidsSender<D>,
+    must_stop_processing: &MustStopProcessing,
 ) -> Result<()>
 where
-    MSP: Fn() -> bool + Sync,
+    D: DatabaseType + Sync,
 {
-    for data in datastore {
-        if must_stop_processing() {
-            return Err(InternalError::AbortedIndexation.into());
-        }
-
-        let mut frozen = data.into_inner().freeze()?;
-        frozen.iter_and_clear_removed(geojson_sender)?;
-        frozen.iter_and_clear_inserted(geojson_sender)?;
-    }
-
-    Ok(())
+    merge_scan_and_send_docids(
+        caches,
+        database,
+        index,
+        docids_sender,
+        // bool: BitOr + Default + Send + Sync
+        |_: &mut bool, _, _| Ok(()),
+        must_stop_processing,
+    )
+    .map(drop)
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids<MSP, D>(
+pub fn merge_scan_and_send_docids<D, CP, St>(
     mut caches: Vec<BalancedCaches<'_>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
     docids_sender: WordDocidsSender<D>,
-    must_stop_processing: &MSP,
-) -> Result<()>
+    scan: CP,
+    must_stop_processing: &MustStopProcessing,
+) -> Result<St>
 where
-    MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
+    St: Default + BitOr<Output = St> + Sync + Send,
+    CP: Fn(&mut St, &[u8], &Operation) -> Result<()> + Sync + Send,
 {
-    transpose_and_freeze_caches(&mut caches)?.into_par_iter().try_for_each(|frozen| {
-        let rtxn = index.read_txn()?;
-        if must_stop_processing() {
-            return Err(InternalError::AbortedIndexation.into());
-        }
-        merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
-            let current = database.get(&rtxn, key)?;
-            match merge_cbo_bitmaps(current, del, add)? {
-                Operation::Write(bitmap) => docids_sender.write(key, &bitmap),
-                Operation::Delete => docids_sender.delete(key),
-                Operation::Ignore => Ok(()),
+    transpose_and_freeze_caches(&mut caches)?
+        .into_par_iter()
+        .map(|frozen| -> Result<_> {
+            let rtxn = index.read_txn()?;
+            if must_stop_processing.get() {
+                return Err(InternalError::AbortedIndexation.into());
             }
+
+            let mut output = St::default();
+            merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
+                let current = database.get(&rtxn, key)?;
+                let operation = merge_cbo_bitmaps(current, del, add)?;
+                scan(&mut output, key, &operation)?;
+                match operation {
+                    Operation::Write { bitmap, status: _ } => docids_sender.write(key, &bitmap),
+                    Operation::Delete => docids_sender.delete(key),
+                    Operation::Ignore => Ok(()),
+                }
+            })?;
+
+            Ok(output)
         })
-    })
+        .try_reduce(Default::default, |lhs, rhs| Ok(lhs | rhs))
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
@@ -136,7 +145,7 @@ pub fn merge_and_send_facet_docids(
             merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
                 match merge_cbo_bitmaps(current, del, add)? {
-                    Operation::Write(bitmap) => {
+                    Operation::Write { bitmap, status: _ } => {
                         facet_field_ids_delta.register_from_key(key);
                         docids_sender.write(key, &bitmap)?;
                         Ok(())
@@ -313,8 +322,13 @@ impl FacetFieldIdsDelta {
     }
 }
 
-enum Operation {
-    Write(RoaringBitmap),
+pub enum EntryStatus {
+    Created,
+    Updated,
+}
+
+pub enum Operation {
+    Write { bitmap: RoaringBitmap, status: EntryStatus },
     Delete,
     Ignore,
 }
@@ -325,14 +339,18 @@ fn merge_cbo_bitmaps(
     del: Option<RoaringBitmap>,
     add: Option<RoaringBitmap>,
 ) -> Result<Operation> {
+    use EntryStatus::{Created, Updated};
+
     let current = current.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
     match (current, del, add) {
         (None, None, None) => Ok(Operation::Ignore), // but it's strange
-        (None, None, Some(add)) => Ok(Operation::Write(add)),
+        (None, None, Some(add)) => Ok(Operation::Write { bitmap: add, status: Created }),
         (None, Some(_del), None) => Ok(Operation::Ignore), // but it's strange
-        (None, Some(_del), Some(add)) => Ok(Operation::Write(add)),
+        (None, Some(_del), Some(add)) => Ok(Operation::Write { bitmap: add, status: Created }),
         (Some(_current), None, None) => Ok(Operation::Ignore), // but it's strange
-        (Some(current), None, Some(add)) => Ok(Operation::Write(current | add)),
+        (Some(current), None, Some(add)) => {
+            Ok(Operation::Write { bitmap: current | add, status: Updated })
+        }
         (Some(current), Some(del), add) => {
             debug_assert!(
                 del.is_subset(&current),
@@ -347,7 +365,7 @@ fn merge_cbo_bitmaps(
             } else if current == output {
                 Ok(Operation::Ignore)
             } else {
-                Ok(Operation::Write(output))
+                Ok(Operation::Write { bitmap: output, status: Updated })
             }
         }
     }

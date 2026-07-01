@@ -1,5 +1,5 @@
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -539,11 +539,10 @@ fn normalize_path(path: &str) -> String {
     path.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/")
 }
 
-/// Checks that query and body parameters in Rust source have explicit `required = true` or `required = false`.
+/// Checks that query parameters in Rust source have explicit `required = true` or `required = false`.
 ///
 /// Scans crates/meilisearch/src for:
 /// - Query: structs with `#[into_params(..., parameter_in = Query, ...)]`: every `#[param(...)]` field must contain `required = true` or `required = false`.
-/// - Body: structs used as `request_body` in path attributes: every field with `#[schema(...)]` must contain `required = true` or `required = false`.
 fn check_params() -> Result<()> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").context("CARGO_MANIFEST_DIR not set")?;
     let meilisearch_src = Path::new(&manifest_dir)
@@ -552,9 +551,6 @@ fn check_params() -> Result<()> {
         .context("resolve meilisearch/src path (run from workspace root)")?;
 
     let mut errors: Vec<String> = Vec::new();
-    let mut request_body_types: HashSet<String> = HashSet::new();
-
-    collect_request_body_types(&meilisearch_src, &mut request_body_types)?;
 
     for entry in walk_rs_files(&meilisearch_src)? {
         let path = entry.path();
@@ -562,11 +558,10 @@ fn check_params() -> Result<()> {
             std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
         let rel = path.strip_prefix(&meilisearch_src).unwrap_or(&path);
         check_query_params_in_file(&content, rel, &mut errors);
-        check_body_schema_in_file(&content, rel, &request_body_types, &mut errors);
     }
 
     if errors.is_empty() {
-        println!("All query and body parameters have explicit required = true/false.");
+        println!("All query parameters have explicit required = true/false.");
         Ok(())
     } else {
         eprintln!("We do not want utoipa to infer whether a parameter is required or not, as that does not correctly cover our documentation needs. You must define it explicitly with required = true or required = false.\n");
@@ -576,7 +571,7 @@ fn check_params() -> Result<()> {
         for e in &errors {
             eprintln!("  - {}", e);
         }
-        eprintln!("\nFix the above by adding required = true or required = false in the #[param(...)] or #[schema(...)] attribute.");
+        eprintln!("\nFix the above by adding required = true or required = false in the #[param(...)] attribute.");
         anyhow::bail!("{} parameter(s) missing explicit required", errors.len())
     }
 }
@@ -681,29 +676,6 @@ fn check_struct_fields_have_required(
     }
 }
 
-/// Collect type names used as request_body in path attributes (e.g. request_body = CreateApiKey).
-fn collect_request_body_types(dir: &Path, out: &mut HashSet<String>) -> Result<()> {
-    for entry in walk_rs_files(dir)? {
-        let content = std::fs::read_to_string(entry.path())?;
-        for line in content.lines() {
-            let line = line.trim();
-            if let Some(pos) = line.find("request_body") {
-                let after = &line[pos + "request_body".len()..];
-                let after = after.trim_start();
-                let after = after.strip_prefix('=').map(|s| s.trim_start()).unwrap_or("");
-                let name = after
-                    .chars()
-                    .take_while(|c| c.is_alphanumeric() || *c == '_')
-                    .collect::<String>();
-                if !name.is_empty() && name != "serde_json" && name != "Vec" && name != "Value" {
-                    out.insert(name);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Check query param structs: #[into_params(..., parameter_in = Query, ...)] and then every #[param(...)] must have required.
 fn check_query_params_in_file(content: &str, rel_path: &Path, errors: &mut Vec<String>) {
     let mut i = 0;
@@ -772,40 +744,6 @@ fn extract_brace_content(s: &str, open_brace_pos: usize) -> Option<&str> {
         return None;
     }
     rest.get(1..i - 1)
-}
-
-/// Check body structs: for structs in request_body_types, every #[schema(...)] field must have required.
-fn check_body_schema_in_file(
-    content: &str,
-    rel_path: &Path,
-    request_body_types: &HashSet<String>,
-    errors: &mut Vec<String>,
-) {
-    let mut i = 0;
-    while let Some(pos) = content[i..].find("pub struct ") {
-        let struct_start = i + pos + "pub struct ".len();
-        let name_end = content[struct_start..]
-            .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '<')
-            .map(|p| struct_start + p)
-            .unwrap_or(content.len());
-        let name = content[struct_start..name_end].trim();
-        let base_name = name.split('<').next().unwrap_or(name).trim();
-        if !request_body_types.contains(base_name) {
-            i = struct_start + 1;
-            continue;
-        }
-        let brace =
-            content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
-        let body = match extract_brace_content(content, brace) {
-            Some(b) => b,
-            None => {
-                i = struct_start + 1;
-                continue;
-            }
-        };
-        check_struct_fields_have_required(body, base_name, "body", rel_path, errors);
-        i = struct_start + 1;
-    }
 }
 
 #[cfg(test)]

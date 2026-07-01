@@ -12,6 +12,7 @@ use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::search::facet::IndexFilter;
 use crate::update::Setting;
 use crate::vector::settings::EmbeddingSettings;
 use crate::vector::{Embedder, EmbedderOptions};
@@ -81,7 +82,7 @@ fn degraded_search_cannot_skip_filter() {
     search.limit(100);
     search.deadline(Deadline::from_budget(Duration::from_millis(0)));
     let filter_condition = Filter::from_str("id > 2").unwrap().unwrap();
-    search.filter(filter_condition);
+    search.filter(Some(IndexFilter::from(filter_condition)));
 
     let result = search.execute().unwrap();
     assert!(result.degraded);
@@ -557,7 +558,6 @@ fn degraded_search_and_score_details_vector() {
                 }),
             );
             settings.set_embedder_settings(embedders);
-            settings.set_vector_store(crate::vector::VectorStoreBackend::Hannoy);
         })
         .unwrap();
 

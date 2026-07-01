@@ -6,6 +6,7 @@ pub mod error;
 pub mod analytics;
 #[macro_use]
 pub mod extractors;
+pub mod documents_retrieval;
 pub mod metrics;
 pub mod middleware;
 pub mod option;
@@ -42,6 +43,7 @@ use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
+use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
@@ -50,6 +52,7 @@ use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
     MissingDocumentPolicy,
 };
+use meilisearch_types::milli::MustStopProcessing;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -381,7 +384,7 @@ fn open_or_create_database_unchecked(
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     std::fs::create_dir_all(&index_scheduler_opt.auth_path)?;
-    let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path).unwrap();
+    let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path)?;
     let auth_controller = AuthController::new(auth_env.clone(), &opt.master_key);
     let index_scheduler_builder = || -> anyhow::Result<_> {
         Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version, Some(handle))?)
@@ -558,7 +561,17 @@ fn import_dump(
     index_scheduler.put_runtime_features(features)?;
 
     let network = dump_reader.network()?.cloned().unwrap_or_default();
-    index_scheduler.put_network(network)?;
+    let wtxn = index_scheduler.env.write_txn()?;
+    index_scheduler.put_network(wtxn, network)?;
+
+    let mut dynamic_search_rules = DynamicSearchRules::new();
+    for result in dump_reader.dynamic_search_rules()? {
+        let (uid, rule) = result?;
+        dynamic_search_rules.insert(uid, rule);
+    }
+    if !dynamic_search_rules.is_empty() {
+        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
+    }
 
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
@@ -606,7 +619,7 @@ fn import_dump(
         apply_settings_to_builder(&settings, &mut builder);
         let embedder_stats: Arc<EmbedderStats> = Default::default();
         builder.execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &progress,
             index_scheduler.ip_policy(),
             embedder_stats.clone(),
@@ -635,6 +648,7 @@ fn import_dump(
 
             let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
             let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
+            let must_stop_processing = MustStopProcessing::default();
 
             let builder = milli::update::IndexDocuments::new(
                 &mut wtxn,
@@ -645,7 +659,7 @@ fn import_dump(
                     ..Default::default()
                 },
                 |indexing_step| tracing::trace!("update: {:?}", indexing_step),
-                || false,
+                &must_stop_processing,
                 &embedder_stats,
                 index_scheduler.ip_policy(),
             )?;
@@ -679,7 +693,7 @@ fn import_dump(
                 &rtxn,
                 primary_key,
                 &mut new_fields_ids_map,
-                &|| false, // never stop processing a dump
+                &MustStopProcessing::default(), // never stop processing a dump
                 progress.clone(),
                 None,
             )?;
@@ -699,7 +713,7 @@ fn import_dump(
                 primary_key,
                 &document_changes,
                 embedders,
-                &|| false, // never stop processing a dump
+                &MustStopProcessing::default(), // never stop processing a dump
                 &progress,
                 index_scheduler.ip_policy(),
                 &embedder_stats,

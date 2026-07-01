@@ -6,6 +6,7 @@ use charabia::normalizer::NormalizerOption;
 use charabia::{Language, Normalize, StrDetection, Token};
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
+use heed::RoTxn;
 use roaring::RoaringBitmap;
 use tracing::error;
 
@@ -13,7 +14,7 @@ use crate::error::UserError;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
-use crate::{DocumentId, FieldId, OrderBy, Result, Search};
+use crate::{DocumentId, FieldId, Index, OrderBy, Result};
 
 /// The maximum number of values per facet returned by the facet search route.
 const DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET: usize = 100;
@@ -21,24 +22,20 @@ const DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET: usize = 100;
 pub struct SearchForFacetValues<'a> {
     query: Option<String>,
     facet: String,
-    search_query: Search<'a>,
+    index: &'a Index,
+    rtxn: &'a RoTxn<'a>,
     max_values: usize,
-    is_hybrid: bool,
     locales: Option<Vec<Language>>,
 }
 
 impl<'a> SearchForFacetValues<'a> {
-    pub fn new(
-        facet: String,
-        search_query: Search<'a>,
-        is_hybrid: bool,
-    ) -> SearchForFacetValues<'a> {
+    pub fn new(facet: String, index: &'a Index, rtxn: &'a RoTxn<'a>) -> SearchForFacetValues<'a> {
         SearchForFacetValues {
             query: None,
             facet,
-            search_query,
+            index,
+            rtxn,
             max_values: DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET,
-            is_hybrid,
             locales: None,
         }
     }
@@ -64,15 +61,14 @@ impl<'a> SearchForFacetValues<'a> {
         facet_str: &str,
         any_docid: DocumentId,
     ) -> Result<Option<String>> {
-        let index = self.search_query.index;
-        let rtxn = self.search_query.rtxn;
         let key: (FieldId, _, &str) = (field_id, any_docid, facet_str);
-        Ok(index.field_id_docid_facet_strings.get(rtxn, &key)?.map(|v| v.to_owned()))
+        Ok(self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?.map(|v| v.to_owned()))
     }
 
-    pub fn execute(&self) -> Result<Vec<FacetValueHit>> {
-        let index = self.search_query.index;
-        let rtxn = self.search_query.rtxn;
+    pub fn execute(&self, candidates: &RoaringBitmap) -> Result<(Vec<FacetValueHit>, OrderBy)> {
+        let index = self.index;
+        let rtxn = self.rtxn;
+        let order = index.sort_facet_values_by(rtxn)?.get(&self.facet);
 
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         let matched_rule = matching_features(&self.facet, &filterable_attributes_rules);
@@ -101,53 +97,55 @@ impl<'a> SearchForFacetValues<'a> {
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let Some(fid) = fields_ids_map.id(&self.facet) else {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), order));
         };
 
-        let fst = match self.search_query.index.facet_id_string_fst.get(rtxn, &fid)? {
+        let fst = match index.facet_id_string_fst.get(rtxn, &fid)? {
             Some(fst) => fst,
-            None => return Ok(Vec::new()),
+            None => return Ok((Vec::new(), order)),
         };
 
-        let search_candidates = self.search_query.execute_for_candidates(
-            self.is_hybrid
-                || self
-                    .search_query
-                    .semantic
-                    .as_ref()
-                    .and_then(|semantic| semantic.vector.as_ref())
-                    .is_some(),
-        )?;
+        let results = self.inner_execute(fid, fst, candidates, order)?;
 
-        let mut results = match index.sort_facet_values_by(rtxn)?.get(&self.facet) {
+        Ok((results.into_sorted_vec(), order))
+    }
+
+    fn inner_execute(
+        &self,
+        fid: u16,
+        fst: fst::Set<&[u8]>,
+        search_candidates: &RoaringBitmap,
+        order: OrderBy,
+    ) -> Result<ValuesCollection, crate::Error> {
+        let index = self.index;
+        let rtxn = self.rtxn;
+        let mut results = match order {
             OrderBy::Lexicographic => ValuesCollection::by_lexicographic(self.max_values),
             OrderBy::Count => ValuesCollection::by_count(self.max_values),
         };
-
         match self.query.as_ref() {
             Some(query) => {
                 let query = normalize_facet_string(query, self.locales.as_deref());
                 let query = query.as_ref();
 
-                let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
-                let field_authorizes_typos =
-                    !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
+                let authorize_typos = index.authorize_typos(rtxn)?;
+                let field_authorizes_typos = !index.exact_attributes_ids(rtxn)?.contains(&fid);
 
                 if authorize_typos && field_authorizes_typos {
-                    let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
+                    let exact_words_fst = index.exact_words(rtxn)?;
                     if exact_words_fst.is_some_and(|fst| fst.contains(query)) {
                         if fst.contains(query) {
                             let _ = self.fetch_original_facets_using_normalized(
                                 fid,
                                 query,
                                 query,
-                                &search_candidates,
+                                search_candidates,
                                 &mut results,
                             )?;
                         }
                     } else {
-                        let one_typo = self.search_query.index.min_word_len_one_typo(rtxn)?;
-                        let two_typos = self.search_query.index.min_word_len_two_typos(rtxn)?;
+                        let one_typo = index.min_word_len_one_typo(rtxn)?;
+                        let two_typos = index.min_word_len_two_typos(rtxn)?;
 
                         let is_prefix = true;
                         let automaton = if query.len() < one_typo as usize {
@@ -166,7 +164,7 @@ impl<'a> SearchForFacetValues<'a> {
                                     fid,
                                     value,
                                     query,
-                                    &search_candidates,
+                                    search_candidates,
                                     &mut results,
                                 )?
                                 .is_break()
@@ -185,7 +183,7 @@ impl<'a> SearchForFacetValues<'a> {
                                 fid,
                                 value,
                                 query,
-                                &search_candidates,
+                                search_candidates,
                                 &mut results,
                             )?
                             .is_break()
@@ -212,8 +210,7 @@ impl<'a> SearchForFacetValues<'a> {
                 }
             }
         }
-
-        Ok(results.into_sorted_vec())
+        Ok(results)
     }
 
     fn fetch_original_facets_using_normalized(
@@ -224,8 +221,8 @@ impl<'a> SearchForFacetValues<'a> {
         search_candidates: &RoaringBitmap,
         results: &mut ValuesCollection,
     ) -> Result<ControlFlow<()>> {
-        let index = self.search_query.index;
-        let rtxn = self.search_query.rtxn;
+        let index = self.index;
+        let rtxn = self.rtxn;
 
         let database = index.facet_id_normalized_string_strings;
         let key = (fid, value);
@@ -260,7 +257,8 @@ impl<'a> SearchForFacetValues<'a> {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct FacetValueHit {
     /// The original facet value
     pub value: String,

@@ -23,7 +23,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
-use crate::proxy::{Body, ProxyError, ReqwestErrorWithoutUrl};
+use crate::proxy::{Body, Endpoint, ProxyError, ReqwestErrorWithoutUrl};
 use crate::routes::SummarizedTaskView;
 
 mod timeouts {
@@ -185,10 +185,10 @@ pub fn task_network_and_check_leader_and_version(
 /// # Returns
 ///
 /// The updated task. The task is read back from the database to avoid erasing concurrent changes.
-pub async fn proxy<T, F>(
+pub async fn proxy<T, F, E: Endpoint>(
     index_scheduler: &IndexScheduler,
     index_uid: Option<&str>,
-    req: &HttpRequest,
+    req: &E,
     mut task_network: DbTaskNetwork,
     network: meilisearch_types::network::Network,
     body: Body<T, F>,
@@ -210,7 +210,7 @@ where
             // for file bodies, force x-ndjson
             Body::NdJsonPayload(_) => Some(b"application/x-ndjson".as_slice()),
             // otherwise get content type from request
-            _ => req.headers().get(CONTENT_TYPE).map(|h| h.as_bytes()),
+            _ => req.content_type(),
         };
 
         let mut in_flight_remote_queries = BTreeMap::new();
@@ -221,7 +221,7 @@ where
             .build_with_policies(index_scheduler.ip_policy().clone(), Default::default())
             .unwrap();
 
-        let method = from_old_http_method(req.method());
+        let method = req.method();
 
         // send payload to all remotes
         for (body, (node_name, node)) in body
@@ -237,11 +237,7 @@ where
             let this = this.clone();
             let task_uid = task.uid;
             let method = method.clone();
-            let path_and_query = req
-                .uri()
-                .path_and_query()
-                .cloned()
-                .unwrap_or_else(|| PathAndQuery::from_static("/"));
+            let path_and_query = req.path_and_query();
 
             in_flight_remote_queries.insert(
                 node_name,
@@ -462,21 +458,6 @@ where
         }
     };
     Ok(response)
-}
-
-fn from_old_http_method(method: &actix_http::Method) -> http_client::reqwest::Method {
-    match method {
-        &actix_http::Method::CONNECT => http_client::reqwest::Method::CONNECT,
-        &actix_http::Method::DELETE => http_client::reqwest::Method::DELETE,
-        &actix_http::Method::GET => http_client::reqwest::Method::GET,
-        &actix_http::Method::HEAD => http_client::reqwest::Method::HEAD,
-        &actix_http::Method::OPTIONS => http_client::reqwest::Method::OPTIONS,
-        &actix_http::Method::PATCH => http_client::reqwest::Method::PATCH,
-        &actix_http::Method::POST => http_client::reqwest::Method::POST,
-        &actix_http::Method::PUT => http_client::reqwest::Method::PUT,
-        &actix_http::Method::TRACE => http_client::reqwest::Method::TRACE,
-        method => http_client::reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap(),
-    }
 }
 
 #[allow(clippy::too_many_arguments)]

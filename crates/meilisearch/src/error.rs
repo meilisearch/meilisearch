@@ -36,18 +36,18 @@ pub enum MeilisearchHttpError {
     EmptyFilter,
     #[error("Invalid syntax for the filter parameter: `expected {}, found: {}`.", .0.join(", "), .1)]
     InvalidExpression(&'static [&'static str], Value),
-    #[error("Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #{0} or add `federation` to the request.")]
-    FederationOptionsInNonFederatedRequest(usize),
-    #[error("Inside `.queries[{0}]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `{1}` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search")]
-    PaginationInFederatedQuery(usize, &'static str),
-    #[error("Inside `.queries[{0}]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{1}: {2:?}` for facets in federated search")]
-    FacetsInFederatedQuery(usize, String, Vec<String>),
-    #[error("Inside `.queries[{0}]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #{0} or remove `federation` from the request")]
-    PersonalizationInFederatedQuery(usize),
-    #[error("Inside `.queries[{0}]`: Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from query #{0} or remove `federation` from the request")]
-    ShowPerformanceDetailsInFederatedQuery(usize),
-    #[error("Inside `.queries[{0}]`: Using `.useNetwork` is not allowed as the same time as `.federationOptions.remote`.\n  - Hint: to perform an explicit query against a remote, remove `.useNetwork`.\n  - Hint: to automatically perform queries against the entire network, remove `.federationOptions.remote`.")]
-    RemoteAndUseNetwork(usize),
+    #[error("Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from the query or add `federation` to the request.")]
+    FederationOptionsInNonFederatedRequest,
+    #[error("Using pagination options is not allowed in federated queries.\n - Hint: remove `{0}` from the query or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search")]
+    PaginationInFederatedQuery(&'static str),
+    #[error("Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from the query or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{0}: {1:?}` for facets in federated search")]
+    FacetsInFederatedQuery(String, Vec<String>),
+    #[error("Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request\n - Hint: pass `federation.personalize` for personalization in federated search")]
+    PersonalizationInFederatedQuery,
+    #[error("Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from the query or remove `federation` from the request")]
+    ShowPerformanceDetailsInFederatedQuery,
+    #[error("Using `.useNetwork` is not allowed as the same time as `.federationOptions.remote`.\n  - Hint: to perform an explicit query against a remote, remove `.useNetwork`.\n  - Hint: to automatically perform queries against the entire network, remove `.federationOptions.remote`.")]
+    RemoteAndUseNetwork,
     #[error("Inconsistent order for values in facet `{facet}`: index `{previous_uid}` orders {previous_facet_order}, but index `{current_uid}` orders {index_facet_order}.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.")]
     InconsistentFacetOrder {
         facet: String,
@@ -142,6 +142,8 @@ pub enum MeilisearchHttpError {
     InvalidHeaderValue { header_name: &'static str, msg: String },
     #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
     NotLeader { leader: String },
+    #[error("Renaming a remote is not supported when a leader is defined.\n  - Note: applying this change would rename `{old_self}` to `{new_self}`.\n  - Hint: Send this change to `{new_self}` if it already exists.")]
+    RenamedSelf { old_self: String, new_self: String },
     #[error("Unexpected `previousRemotes` in network call.\n  - Note: `previousRemote` is reserved for internal use.")]
     UnexpectedNetworkPreviousRemotes,
     #[error("The network version in request is too old.\n  - Received: {received}\n  - Expected at least: {expected_at_least}")]
@@ -153,6 +155,8 @@ if_remote=if let Some(remote) = remote {
     format!("Remote `{remote}` encountered an error: ")
 } else {"".into()} )]
     UnprocessedNetworkTask { remote: Option<String>, task_uid: meilisearch_types::tasks::TaskId },
+    #[error("Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from the query or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.")]
+    DistinctInFederatedQueryAndFederation,
 }
 
 impl MeilisearchHttpError {
@@ -188,21 +192,24 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::Join(_) => Code::Internal,
             MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
             MeilisearchHttpError::MediaAndVector => Code::InvalidSearchMediaAndVector,
-            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_)
-            | MeilisearchHttpError::RemoteAndUseNetwork(_) => {
+            MeilisearchHttpError::FederationOptionsInNonFederatedRequest
+            | MeilisearchHttpError::RemoteAndUseNetwork => {
                 Code::InvalidMultiSearchFederationOptions
             }
-            MeilisearchHttpError::PaginationInFederatedQuery(_, _) => {
+            MeilisearchHttpError::PaginationInFederatedQuery(_) => {
                 Code::InvalidMultiSearchQueryPagination
+            }
+            MeilisearchHttpError::DistinctInFederatedQueryAndFederation => {
+                Code::InvalidMultiSearchDistinct
             }
             MeilisearchHttpError::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
             MeilisearchHttpError::InconsistentFacetOrder { .. } => {
                 Code::InvalidMultiSearchFacetOrder
             }
-            MeilisearchHttpError::PersonalizationInFederatedQuery(_) => {
+            MeilisearchHttpError::PersonalizationInFederatedQuery => {
                 Code::InvalidMultiSearchQueryPersonalization
             }
-            MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery(_) => {
+            MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery => {
                 Code::InvalidMultiSearchQueryShowPerformanceDetails
             }
             MeilisearchHttpError::InconsistentOriginHeaders { .. }
@@ -213,6 +220,7 @@ impl ErrorCode for MeilisearchHttpError {
             }
             MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,
             MeilisearchHttpError::NotLeader { .. } => Code::NotLeader,
+            MeilisearchHttpError::RenamedSelf { .. } => Code::InvalidNetworkSelf,
             MeilisearchHttpError::UnexpectedNetworkPreviousRemotes => {
                 Code::UnexpectedNetworkPreviousRemotes
             }

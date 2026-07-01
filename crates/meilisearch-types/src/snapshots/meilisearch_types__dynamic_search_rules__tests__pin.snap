@@ -1,0 +1,8 @@
+---
+source: crates/meilisearch-types/src/dynamic_search_rules.rs
+expression: action
+---
+{
+  "type": "pin",
+  "position": 5
+}

@@ -49,18 +49,18 @@ jobs:
 
       - name: Check for Command
         id: command
-        uses: xt0rted/slash-command-action@v2
+        uses: xt0rted/slash-command-action@bf51f8f5f4ea3d58abc7eca58f77104182b23e88 # v2
         with:
           command: bench
           reaction-type: "rocket"
           repo-token: ${{ env.GH_TOKEN }}
 
-      - uses: xt0rted/pull-request-comment-branch@v3
+      - uses: xt0rted/pull-request-comment-branch@e8b8daa837e8ea7331c0003c9c316a64c6d8b0b1 # v3
         id: comment-branch
         with:
           repo_token: ${{ env.GH_TOKEN }}
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         if: success()
         with:
           fetch-depth: 0 # fetch full history to be able to get main commit sha
@@ -69,11 +69,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.91.1
 
       - name: Run benchmarks on PR ${{ github.event.issue.id }}
+        env:
+          BENCH_ARGS: ${{ steps.command.outputs.command-arguments }}
         run: |
           cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" \
              --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" \
              --reason "[Comment](${{ github.event.comment.html_url }}) on [#${{ github.event.issue.number }}](${{ github.event.issue.html_url }})" \
-             -- ${{ steps.command.outputs.command-arguments }} > benchlinks.txt
+             -- $BENCH_ARGS > benchlinks.txt
 
       - name: Send comment in PR
         run: |

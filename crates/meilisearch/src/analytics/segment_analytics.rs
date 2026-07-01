@@ -10,6 +10,7 @@ use actix_web::HttpRequest;
 use byte_unit::Byte;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
@@ -27,6 +28,7 @@ use super::{config_user_id_path, Aggregate, MEILISEARCH_CONFIG_PATH};
 use crate::option::{
     default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
 };
+use crate::routes::indexes::GetIndexStatsParams;
 use crate::routes::{create_all_stats, Stats};
 use crate::Opt;
 
@@ -196,6 +198,7 @@ struct Infos {
     experimental_dumpless_upgrade: bool,
     experimental_replication_parameters: bool,
     experimental_enable_logs_route: bool,
+    experimental_dynamic_search_rules: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
     experimental_limit_batched_tasks_total_size: Option<u64>,
@@ -203,14 +206,18 @@ struct Infos {
     experimental_multimodal: bool,
     experimental_chat_completions: bool,
     experimental_get_task_documents_route: bool,
+    experimental_task_queue_compaction_route: bool,
     experimental_composite_embedders: bool,
     experimental_embedding_cache_entries: usize,
     experimental_no_snapshot_compaction: bool,
     experimental_no_edition_2024_for_dumps: bool,
     experimental_no_edition_2024_for_settings: bool,
     experimental_foreign_keys: bool,
+    experimental_queue_documents_fetch: bool,
+    experimental_legacy_search: bool,
     experimental_personalization: bool,
     experimental_allowed_ip_networks: bool,
+    experimental_render_route: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -249,6 +256,7 @@ impl Infos {
             db_path,
             experimental_contains_filter,
             experimental_enable_metrics,
+            experimental_legacy_search_default,
             experimental_search_queue_size,
             experimental_drop_search_after,
             experimental_nb_searches_per_core,
@@ -313,12 +321,17 @@ impl Infos {
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            dynamic_search_rules,
             network,
             get_task_documents_route,
+            task_queue_compaction_route,
             composite_embedders,
             chat_completions,
             multimodal,
             foreign_keys,
+            disable_documents_fetch_queue,
+            legacy_search,
+            render_route,
         } = features;
 
         // We're going to override every sensible information.
@@ -335,17 +348,22 @@ impl Infos {
             experimental_dumpless_upgrade,
             experimental_replication_parameters,
             experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
+            experimental_dynamic_search_rules: dynamic_search_rules,
             experimental_reduce_indexing_memory_usage,
             experimental_network: network,
             experimental_chat_completions: chat_completions,
             experimental_multimodal: multimodal,
             experimental_get_task_documents_route: get_task_documents_route,
+            experimental_task_queue_compaction_route: task_queue_compaction_route,
             experimental_composite_embedders: composite_embedders,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
             experimental_no_edition_2024_for_dumps,
             experimental_allowed_ip_networks: !experimental_allowed_ip_networks.is_empty(),
             experimental_foreign_keys: foreign_keys,
+            experimental_queue_documents_fetch: !disable_documents_fetch_queue,
+            experimental_legacy_search: legacy_search.unwrap_or(experimental_legacy_search_default),
+            experimental_render_route: render_route,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),
@@ -483,6 +501,7 @@ impl Segment {
             index_scheduler.clone().into(),
             auth_controller.into(),
             &AuthFilter::default(),
+            GetIndexStatsParams { show_internal_database_sizes: Param(false), size_format: None },
         ) {
             // Replace the version number with the prototype name if any.
             let version = build_info::DescribeResult::from_build()

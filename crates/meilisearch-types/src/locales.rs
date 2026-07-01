@@ -1,24 +1,21 @@
-use deserr::Deserr;
 use milli::{AttributePatterns, LocalizedAttributesRule};
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 /// Defines a rule for associating specific locales (languages) with
 /// attributes. This allows Meilisearch to use language-specific tokenization
 /// and processing for matched attributes, improving search quality for
 /// multilingual content.
-#[derive(Debug, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
-#[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
+#[routes::request(no_error, setting)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedAttributesRuleView {
     /// Patterns to match attribute names. Use `*` as a wildcard to match any
     /// characters. For example, `["title_*", "description"]` matches
     /// `title_en`, `title_fr`, and `description`.
-    #[schema(value_type = Vec<String>, example = json!(["*_ja"]))]
+    #[request(required, schema_type = Vec<String>, example = json!(["*_ja"]))]
     pub attribute_patterns: AttributePatterns,
     /// The list of locales (languages) to apply to matching attributes. When
     /// these attributes are indexed, Meilisearch will use language-specific
     /// tokenization rules. Examples: `["en", "fr"]` or `["jpn", "zho"]`.
+    #[request(required)]
     pub locales: Vec<Locale>,
 }
 
@@ -45,9 +42,8 @@ impl From<LocalizedAttributesRuleView> for LocalizedAttributesRule {
 /// this enum implements `Deserr` in order to be used in the API.
 macro_rules! make_locale {
     ($(($iso_639_1:ident, $iso_639_1_str:expr) => ($iso_639_3:ident, $iso_639_3_str:expr),)+) => {
-        #[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, Ord, PartialOrd, ToSchema)]
-        #[deserr(rename_all = camelCase)]
-        #[serde(rename_all = "camelCase")]
+        #[routes::request(no_error, setting)]
+        #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
         pub enum Locale {
             $($iso_639_1,)+
             $($iso_639_3,)+
