@@ -65,7 +65,7 @@ pub fn upgrade_index_scheduler(
 
     if initial_version < (1, 12, 0) {
         bail!(
-                "Database version {initial_major}.{initial_minor}.{initial_patch} is too old for the experimental dumpless upgrade feature. Please generate a dump using the v{initial_major}.{initial_minor}.{initial_patch} and import it in the v{target_major}.{target_minor}.{target_patch}",
+                "Database version {initial_major}.{initial_minor}.{initial_patch} is too old for the automatic dumpless upgrade feature. Please generate a dump using the v{initial_major}.{initial_minor}.{initial_patch} and import it in the v{target_major}.{target_minor}.{target_patch}",
             );
     }
 
