@@ -25,7 +25,7 @@ use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes}
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    ChatConfig, PrefixSearch, SearchParameters, Synonyms, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    AssociatedSynonyms, ChatConfig, PrefixSearch, SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
@@ -746,7 +746,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                             return None;
                         }
 
-                        let synonyms = Synonyms::new(synonyms);
+                        let synonyms = AssociatedSynonyms::new(synonyms);
                         let has_synonyms = !synonyms.synonyms(&tokenizer).is_empty();
                         if has_synonyms {
                             Some((key, synonyms))

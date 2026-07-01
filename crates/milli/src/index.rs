@@ -2014,14 +2014,15 @@ impl Index {
     }
 }
 
+/// The synonyms that are associated to the synonyms key
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Synonyms {
+pub struct AssociatedSynonyms {
     synonyms: Vec<String>,
 }
 
-impl Synonyms {
-    pub fn new(synonyms: Vec<String>) -> Synonyms {
-        Synonyms { synonyms }
+impl AssociatedSynonyms {
+    pub fn new(synonyms: Vec<String>) -> AssociatedSynonyms {
+        AssociatedSynonyms { synonyms }
     }
 
     /// The original, unnormalized, unsplit, associated synonyms, e.g. "iphone".
