@@ -9,7 +9,7 @@ This guide is to describe how to make releases for the current repository.
 <summary>Check out the TODO 👇👇👇</summary>
 - [ ] Define the version of the release (`vX.Y.Z`) based on our <a href="https://github.com/meilisearch/meilisearch/blob/main/documentation/versioning-policy.md">Versioning Policy</a></br>.
 - [ ] Define the commit that will reference the tag release. Every PR merged after this commit will not be taken into account in the future release
-- [ ] Manually test `--experimental-dumpless-upgrade` on a DB of the previous Meilisearch minor version</br>
+- [ ] Manually test the dumpless upgrade by opening a DB of the previous Meilisearch minor version with the new binary</br>
 - [ ] Check recent <a href="https://github.com/meilisearch/meilisearch/actions">automated tests</a> on `main`</br>
     - [ ] Scheduled test suite</br>
     - [ ] Scheduled SDK tests</br>

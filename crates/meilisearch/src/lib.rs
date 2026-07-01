@@ -280,7 +280,6 @@ pub fn setup_meilisearch(
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features: opt.to_instance_features(),
-        auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
         ip_policy,
@@ -426,21 +425,12 @@ fn check_version(
     let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
 
     if db_major != bin_major || db_minor != bin_minor || db_patch != bin_patch {
-        if opt.experimental_dumpless_upgrade {
-            update_version_file_for_dumpless_upgrade(
-                opt,
-                index_scheduler_opt,
-                (db_major, db_minor, db_patch),
-                (bin_major, bin_minor, bin_patch),
-            )?;
-        } else {
-            return Err(VersionFileError::VersionMismatch {
-                major: db_major,
-                minor: db_minor,
-                patch: db_patch,
-            }
-            .into());
-        }
+        update_version_file_for_dumpless_upgrade(
+            opt,
+            index_scheduler_opt,
+            (db_major, db_minor, db_patch),
+            (bin_major, bin_minor, bin_patch),
+        )?;
     }
 
     Ok((db_major, db_minor, db_patch))
