@@ -758,7 +758,6 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 self.index.synonyms.clear(self.wtxn)?;
                 for (key, synonyms) in new_synonyms {
-                    let key: Vec<&str> = key.iter().map(|k| k.as_ref()).collect();
                     self.index.synonyms.put(self.wtxn, &key, &synonyms)?;
                 }
 

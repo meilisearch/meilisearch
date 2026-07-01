@@ -9,6 +9,7 @@ use heed::types::DecodeIgnore;
 use itertools::{merge_join_by, EitherOrBoth};
 
 use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
+use crate::heed_codec::SynonymsKeyCodec;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{Lazy, TwoTypoTerm};
@@ -221,6 +222,7 @@ pub fn partially_initialized_term_from_word(
     let synonyms = ctx
         .index
         .synonyms
+        .remap_key_type::<SynonymsKeyCodec<&str>>()
         .get(ctx.txn, &[word])?
         .map_or(Vec::<Vec<_>>::new(), |synonyms| synonyms.synonyms(tokenizer))
         .into_iter()

@@ -268,7 +268,6 @@ pub fn make_ngram(
     )?;
 
     // Now add the synonyms
-    let words: Vec<_> = words.iter().map(AsRef::as_ref).collect();
     if let Some(synonyms) = ctx.index.synonyms.get(ctx.txn, &words)? {
         for synonym in synonyms.synonyms(tokenizer) {
             let words =

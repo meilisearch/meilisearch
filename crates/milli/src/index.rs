@@ -143,7 +143,7 @@ pub struct Index {
     pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
 
     /// A list of words and the list of synonyms associated to it.
-    pub synonyms: heed::Database<SynonymsKeyCodec, SerdeJson<Synonyms>>,
+    pub synonyms: heed::Database<SynonymsKeyCodec<String>, SerdeJson<AssociatedSynonyms>>,
 
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
