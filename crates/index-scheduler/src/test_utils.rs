@@ -114,7 +114,6 @@ impl IndexScheduler {
             batched_tasks_size_limit: u64::MAX,
             instance_features: Default::default(),
             export_default_payload_size_bytes: byte_unit::Byte::parse_str("20MiB", false).unwrap(),
-            auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
