@@ -166,8 +166,6 @@ pub struct IndexSchedulerOptions {
     pub embedding_cache_cap: usize,
     /// IP policy for requests performed by the index scheduler.
     pub ip_policy: http_client::policy::IpPolicy,
-    /// Snapshot compaction status.
-    pub experimental_no_snapshot_compaction: bool,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -198,9 +196,6 @@ pub struct IndexScheduler {
 
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
-
-    /// Whether we should use the old document indexer or the new one.
-    pub(crate) experimental_no_edition_2024_for_dumps: bool,
 
     /// A database to store single-keyed data that is persisted across restarts.
     persisted: Database<Str, Str>,
@@ -253,7 +248,6 @@ impl IndexScheduler {
 
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             persisted: self.persisted,
             export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
@@ -371,9 +365,6 @@ impl IndexScheduler {
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: options
-                .indexer_config
-                .experimental_no_edition_2024_for_dumps,
             persisted,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
@@ -692,11 +683,6 @@ impl IndexScheduler {
         let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
         Ok(nbr_index_processing_tasks > 0)
-    }
-
-    /// Whether the index should use the old document indexer.
-    pub fn no_edition_2024_for_dumps(&self) -> bool {
-        self.experimental_no_edition_2024_for_dumps
     }
 
     /// Return the tasks matching the query from the user's point of view along

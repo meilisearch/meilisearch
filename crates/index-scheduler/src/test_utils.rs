@@ -118,7 +118,6 @@ impl IndexScheduler {
             embedding_cache_cap: 10,
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
-            experimental_no_snapshot_compaction: false,
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)

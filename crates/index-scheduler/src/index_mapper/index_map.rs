@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
-use std::env::VarError;
 use std::path::Path;
-use std::str::FromStr;
 use std::time::Duration;
 
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
@@ -315,18 +313,7 @@ fn create_or_open_index(
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(clamp_to_page_size(map_size));
-
-    // You can find more details about this experimental
-    // environment variable on the following GitHub discussion:
-    // <https://github.com/orgs/meilisearch/discussions/806>
-    let max_readers = match std::env::var("MEILI_EXPERIMENTAL_INDEX_MAX_READERS") {
-        Ok(value) => u32::from_str(&value).unwrap(),
-        Err(VarError::NotPresent) => 1024,
-        Err(VarError::NotUnicode(value)) => panic!(
-            "Invalid unicode for the `MEILI_EXPERIMENTAL_INDEX_MAX_READERS` env var: {value:?}"
-        ),
-    };
-    options.max_readers(max_readers);
+    options.max_readers(1024);
     if enable_mdb_writemap {
         unsafe { options.flags(EnvFlags::WRITE_MAP) };
     }

@@ -19,7 +19,6 @@ pub mod search;
 pub mod search_queue;
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -45,12 +44,10 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
-use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
-    default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
-    MissingDocumentPolicy,
+    default_thread_pool_and_threads, IndexerConfig, MissingDocumentPolicy,
 };
 use meilisearch_types::milli::MustStopProcessing;
 use meilisearch_types::settings::apply_settings_to_builder;
@@ -262,7 +259,7 @@ pub fn setup_meilisearch(
             IndexerConfig { s3_snapshot_options, ..(&opt.indexer_options).try_into()? }
         }),
         autobatching_enabled: true,
-        cleanup_enabled: !opt.experimental_replication_parameters,
+        cleanup_enabled: true,
         max_number_of_tasks: 1_000_000,
         export_default_payload_size_bytes: almost_as_big_as(opt.http_payload_size_limit),
         max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
@@ -282,7 +279,6 @@ pub fn setup_meilisearch(
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
-        experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
         ip_policy,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
@@ -639,96 +635,54 @@ fn import_dump(
         let mut wtxn = index.write_txn()?;
         let rtxn = index.read_txn()?;
 
-        if index_scheduler.no_edition_2024_for_dumps() {
-            // 6.3 Import the documents.
-            // 6.3.1 We need to recreate the grenad+obkv format accepted by the index.
-            tracing::info!("Importing the documents.");
-            let file = tempfile::tempfile()?;
-            let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
-            for document in index_reader.documents()? {
-                builder.append_json_object(&document?)?;
-            }
+        // 6.3 Import the documents.
+        let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let primary_key = index.primary_key(&rtxn)?;
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            // This flush the content of the batch builder.
-            let file = builder.into_inner()?.into_inner()?;
+        let mut indexer = indexer::IndexOperations::new();
+        let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
+        let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
 
-            // 6.3.2 We feed it to the milli index.
-            let reader = BufReader::new(file);
-            let reader = DocumentsBatchReader::from_reader(reader)?;
+        let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
-            let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
-            let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
-            let must_stop_processing = MustStopProcessing::default();
+        indexer.replace_documents(&mmap, MissingDocumentPolicy::default())?;
 
-            let builder = milli::update::IndexDocuments::new(
-                &mut wtxn,
-                &index,
-                indexer_config,
-                IndexDocumentsConfig {
-                    update_method: IndexDocumentsMethod::ReplaceDocuments,
-                    ..Default::default()
-                },
-                |indexing_step| tracing::trace!("update: {:?}", indexing_step),
-                &must_stop_processing,
-                &embedder_stats,
-                index_scheduler.ip_policy(),
-            )?;
+        let indexer_config = index_scheduler.indexer_config();
+        let pool = &indexer_config.thread_pool;
 
-            let builder = builder.with_embedders(embedders);
+        let indexer_alloc = Bump::new();
+        let (document_changes, mut operation_stats, primary_key) = indexer.into_changes(
+            &indexer_alloc,
+            &index,
+            &rtxn,
+            primary_key,
+            &mut new_fields_ids_map,
+            &MustStopProcessing::default(), // never stop processing a dump
+            progress.clone(),
+            None,
+        )?;
 
-            let (builder, user_result) = builder.add_documents(reader)?;
-            let user_result = user_result?;
-            tracing::info!(documents_found = user_result, "{} documents found.", user_result);
-            builder.execute()?;
-        } else {
-            let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
-            let primary_key = index.primary_key(&rtxn)?;
-            let mut new_fields_ids_map = db_fields_ids_map.clone();
-
-            let mut indexer = indexer::IndexOperations::new();
-            let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
-            let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
-
-            let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
-
-            indexer.replace_documents(&mmap, MissingDocumentPolicy::default())?;
-
-            let indexer_config = index_scheduler.indexer_config();
-            let pool = &indexer_config.thread_pool;
-
-            let indexer_alloc = Bump::new();
-            let (document_changes, mut operation_stats, primary_key) = indexer.into_changes(
-                &indexer_alloc,
-                &index,
-                &rtxn,
-                primary_key,
-                &mut new_fields_ids_map,
-                &MustStopProcessing::default(), // never stop processing a dump
-                progress.clone(),
-                None,
-            )?;
-
-            let operation_stats = operation_stats.pop().unwrap();
-            if let Some(error) = operation_stats.error {
-                return Err(error.into());
-            }
-
-            let _congestion = indexer::index(
-                &mut wtxn,
-                &index,
-                pool,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &MustStopProcessing::default(), // never stop processing a dump
-                &progress,
-                index_scheduler.ip_policy(),
-                &embedder_stats,
-            )?;
+        let operation_stats = operation_stats.pop().unwrap();
+        if let Some(error) = operation_stats.error {
+            return Err(error.into());
         }
+
+        let _congestion = indexer::index(
+            &mut wtxn,
+            &index,
+            pool,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &MustStopProcessing::default(), // never stop processing a dump
+            &progress,
+            index_scheduler.ip_policy(),
+            &embedder_stats,
+        )?;
 
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
