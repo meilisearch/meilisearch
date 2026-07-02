@@ -143,7 +143,7 @@ jobs:
     env:
       MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: "true"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: check free space before
         run: df -h
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
