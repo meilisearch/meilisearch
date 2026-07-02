@@ -105,7 +105,7 @@ pub struct ListIndexes {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
     /// The number of indexes to retrieve.
-    #[param(required = false, value_type = Option<usize>, default = 20, example = 1)]
+    #[param(required = false, value_type = Option<usize>, default = 20, example = 3)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
 }
@@ -133,11 +133,23 @@ impl ListIndexes {
                         "primaryKey": "movie_id",
                         "createdAt": "2019-11-20T09:40:33.711324Z",
                         "updatedAt": "2019-11-20T09:40:33.711324Z"
+                    },
+                    {
+                        "uid": "books",
+                        "primaryKey": "book_id",
+                        "createdAt": "2019-11-20T09:40:33.711324Z",
+                        "updatedAt": "2019-11-20T09:40:33.711324Z"
+                    },
+                    {
+                        "uid": "clothes",
+                        "primaryKey": "clothes_id",
+                        "createdAt": "2019-11-20T09:40:33.711324Z",
+                        "updatedAt": "2019-11-20T09:40:33.711324Z"
                     }
                 ],
-                "limit": 1,
+                "limit": 3,
                 "offset": 0,
-                "total": 1
+                "total": 3
             }
         )),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
