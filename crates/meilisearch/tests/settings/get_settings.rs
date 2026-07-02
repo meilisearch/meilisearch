@@ -46,7 +46,7 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (response, code) = server.service.delete(url).await;
+                    let (response, code) = server.service.delete(url, Default::default()).await;
                     assert_eq!(code, 202, "{response}");
                     let (response, code) = server.service.get(format!("/indixes/{index_name}")).await;
                     assert_eq!(code, 404, "{response}");

@@ -57,13 +57,14 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules, RuleUid};
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::index_uid::UserIndex;
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
@@ -90,6 +91,7 @@ pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
 
+use crate::dynamic_search_rules::DynamicSearchRules;
 use crate::index_mapper::IndexMapper;
 use crate::processing::ProcessingTasks;
 use crate::utils::clamp_to_page_size;
@@ -168,6 +170,8 @@ pub struct IndexSchedulerOptions {
     pub ip_policy: http_client::policy::IpPolicy,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
+    /// Fuel for Dynamic Search Rules
+    pub dsr_fuel: DsrFuel,
 }
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
@@ -187,8 +191,6 @@ pub struct IndexScheduler {
     pub(crate) index_mapper: IndexMapper,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
-    /// In charge of storing and retrieving search dynamic rules.
-    dynamic_search_rules: dynamic_search_rules::DynamicSearchRulesStore,
 
     /// Stores the custom chat prompts and other settings of the indexes.
     pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
@@ -240,6 +242,9 @@ pub struct IndexScheduler {
     runtime: Option<tokio::runtime::Handle>,
 
     web_client: http_client::reqwest::Client,
+
+    /// Fuel for dynamic search rules
+    dsr_fuel: DsrFuel,
 }
 
 impl IndexScheduler {
@@ -266,10 +271,10 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
-            dynamic_search_rules: self.dynamic_search_rules.clone(),
             chat_settings: self.chat_settings,
             runtime: self.runtime.clone(),
             web_client: self.web_client.clone(),
+            dsr_fuel: self.dsr_fuel,
         }
     }
 
@@ -278,9 +283,9 @@ impl IndexScheduler {
             + Queue::nb_db()
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
-            + dynamic_search_rules::DynamicSearchRulesStore::nb_db()
             + 1 // chat-prompts
             + 1 // persisted
+            + 1 // legacy dynamic search rules
     }
 
     /// Create an index scheduler and start its run loop.
@@ -337,14 +342,12 @@ impl IndexScheduler {
                 .open(&options.tasks_path)
         }?;
 
-        // We **must** starts by upgrading the version because it'll also upgrade the required database before we can open them
+        // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
-        let dynamic_search_rules =
-            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
@@ -386,10 +389,10 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
-            dynamic_search_rules,
             chat_settings,
             runtime,
-            web_client
+            web_client,
+            dsr_fuel: options.dsr_fuel,
         })
     }
 
@@ -537,7 +540,7 @@ impl IndexScheduler {
     }
 
     pub fn indexer_config(&self) -> &IndexerConfig {
-        &self.index_mapper.indexer_config
+        self.index_mapper.indexer_config()
     }
 
     /// Return the real database size (i.e.: The size **with** the free pages)
@@ -561,7 +564,7 @@ impl IndexScheduler {
             .saturating_sub(self.used_size()?))
     }
 
-    /// Return the index corresponding to the name.
+    /// Return the user index corresponding to the name.
     ///
     /// * If the index wasn't opened before, the index will be opened.
     /// * If the index doesn't exist on disk, the `IndexNotFoundError` is thrown.
@@ -574,21 +577,28 @@ impl IndexScheduler {
     /// Some configurations also can't reasonably open multiple indexes at once.
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
-    pub fn index(&self, name: &str) -> Result<Index> {
+    pub fn user_index(&self, name: &str) -> Result<Index> {
+        let name = UserIndex::try_from_uid(name)?;
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
     }
 
     /// Return the boolean referring if index exists.
-    pub fn index_exists(&self, name: &str) -> Result<bool> {
+    pub fn user_index_exists(&self, name: &str) -> Result<bool> {
+        let name = UserIndex::try_from_uid(name)?;
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index_exists(&rtxn, name)
     }
 
     /// Return the name of all indexes without opening them.
-    pub fn index_names(&self) -> Result<Vec<String>> {
+    pub fn user_index_names(&self) -> Result<Vec<String>> {
         let rtxn = self.env.read_txn()?;
-        self.index_mapper.index_names(&rtxn)
+        let res = self
+            .index_mapper
+            .index_names::<UserIndex>(&rtxn)?
+            .map(|i| i.map(|i| i.uid().to_string()))
+            .collect();
+        res
     }
 
     /// Attempts `f` for each index that exists known to the index scheduler.
@@ -601,17 +611,20 @@ impl IndexScheduler {
     ///
     /// If many indexes exist, this operation can take time to complete (in the order of seconds for a 1000 of indexes) as it needs to open
     /// all the indexes.
-    pub fn try_for_each_index<U, V>(&self, f: impl FnMut(&str, &Index) -> Result<U>) -> Result<V>
+    pub fn try_for_each_user_index<U, V>(
+        &self,
+        f: impl FnMut(UserIndex, &Index) -> Result<U>,
+    ) -> Result<V>
     where
         V: FromIterator<U>,
     {
         let rtxn = self.env.read_txn()?;
-        self.index_mapper.try_for_each_index(&rtxn, f)
+        self.index_mapper.try_for_each_index::<U, V, UserIndex>(&rtxn, f)
     }
 
     /// Returns the total number of indexes available for the specified filter.
     /// And a `Vec` of the index_uid + its stats
-    pub fn paginated_indexes_stats(
+    pub fn paginated_user_indexes_stats(
         &self,
         filters: &meilisearch_auth::AuthFilter,
         from: usize,
@@ -622,26 +635,18 @@ impl IndexScheduler {
         let mut total = 0;
         let mut iter = self
             .index_mapper
-            .index_mapping
-            .iter(&rtxn)?
+            .index_names::<UserIndex>(&rtxn)?
             // in case of an error we want to keep the value to return it
-            .filter(|ret| {
-                ret.as_ref().map_or(true, |(name, _uuid)| filters.is_index_authorized(name))
-            })
+            .filter(|ret| ret.as_ref().map_or(true, |name| filters.is_index_authorized(name.uid())))
             .inspect(|_| total += 1)
             .skip(from);
         let ret = iter
             .by_ref()
             .take(limit)
-            .map(|ret| ret.map_err(Error::from))
             .map(|ret| {
-                ret.and_then(|(name, uuid)| {
-                    self.index_mapper.index_stats.get(&rtxn, &uuid).map_err(Error::from).and_then(
-                        |stat| {
-                            stat.map(|stat| (name.to_string(), stat))
-                                .ok_or(Error::CorruptedTaskQueue)
-                        },
-                    )
+                ret.and_then(|name| {
+                    let stats = self.index_mapper.stats_of(&rtxn, name)?;
+                    Ok((name.uid().to_string(), stats))
                 })
             })
             .collect::<Result<Vec<(String, index_mapper::IndexStats)>>>();
@@ -1010,9 +1015,9 @@ impl IndexScheduler {
     }
 
     /// Create a new index without any associated task.
-    pub fn create_raw_index(
+    pub fn create_raw_index<'a>(
         &self,
-        name: &str,
+        name: impl IndexUid<'a>,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         shards: Option<Shards>,
     ) -> Result<Index> {
@@ -1021,13 +1026,13 @@ impl IndexScheduler {
         Ok(index)
     }
 
-    pub fn refresh_index_stats(&self, name: &str) -> Result<()> {
+    pub fn refresh_index_stats<'a>(&self, name: impl IndexUid<'a>) -> Result<()> {
         let mut mapper_wtxn = self.env.write_txn()?;
         let index = self.index_mapper.index(&mapper_wtxn, name)?;
         let index_rtxn = index.read_txn()?;
 
         let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
-            .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+            .map_err(|e| Error::from_milli(e, Some(name.uid().to_string())))?;
 
         self.index_mapper.store_stats_of(&mut mapper_wtxn, name, &stats)?;
         mapper_wtxn.commit()?;
@@ -1126,8 +1131,10 @@ impl IndexScheduler {
         });
     }
 
-    pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
-        let is_indexing = self.is_index_processing(index_uid)?;
+    pub fn user_index_stats(&self, index_uid: &str) -> Result<IndexStats> {
+        let index_uid = UserIndex::try_from_uid(index_uid)?;
+
+        let is_indexing = self.is_index_processing(index_uid.uid())?;
         let rtxn = self.read_txn()?;
         let index_stats = self.index_mapper.stats_of(&rtxn, index_uid)?;
 
@@ -1164,28 +1171,18 @@ impl IndexScheduler {
         self.features.network()
     }
 
-    pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.dynamic_search_rules.put(wtxn, rules)?;
-        Ok(())
+    pub fn dynamic_search_rules(
+        &self,
+        features: RoFeatures,
+        disabled_action: &'static str,
+    ) -> Result<DynamicSearchRules<'_>> {
+        features.check_dynamic_search_rules(disabled_action)?;
+
+        Ok(DynamicSearchRules::new(self))
     }
 
-    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
-        self.dynamic_search_rules.get()
-    }
-
-    pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
-        let mut wtxn = self.env.write_txn()?;
-        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
-        wtxn.commit()?;
-        Ok(())
-    }
-
-    pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
-        let mut wtxn = self.env.write_txn()?;
-        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
-        wtxn.commit()?;
-        Ok(deleted)
+    pub fn dsr_fuel(&self) -> DsrFuel {
+        self.dsr_fuel
     }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {
@@ -1342,7 +1339,7 @@ pub struct IndexStats {
     pub inner_stats: InnerIndexStats,
 }
 
-pub use index_mapper::IndexStats as InnerIndexStats;
+pub use index_mapper::{IndexStats as InnerIndexStats, IndexUid};
 
 /// These structure are not meant to be exposed to the end user, if needed, use the meilisearch-types::webhooks structure instead.
 /// /!\ Everytime you deserialize this structure you should fill the cli_webhook later on with the `with_cli` method. /!\

@@ -92,6 +92,13 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
+    pub enum UpgradeIndexesProgress {
+        UpgradingUserIndexes,
+        UpgradingDsrIndex,
+    }
+}
+
+make_enum_progress! {
     pub enum SnapshotCreationProgress {
         StartTheSnapshotCreation,
         SnapshotTheIndexScheduler,

@@ -738,6 +738,361 @@ async fn remote_sharding_auto_search() {
     assert!(response["performanceDetails"].is_object());
 }
 
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_auto_sharding_dsrs() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) =
+        ms0.set_features(json!({"network": true, "dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) =
+        ms1.set_features(json!({"network": true, "dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) =
+        ms2.set_features(json!({"network": true, "dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // dsr created on leader will be propagated after sharding
+    let (task, code) = ms0
+        .create_dynamic_search_rule(
+            "propagated-to-all-remotes",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // dsr created on follower will be deleted after sharding
+    let (task, code) = ms1
+        .create_dynamic_search_rule(
+            "deleted-after-sharding",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 2 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          },
+        },
+        "shards": {
+          "ms0": {
+            "remotes": ["ms0"]
+          },
+          "ms1": {
+            "remotes": ["ms1"]
+          },
+          "ms2": {
+            "remotes": ["ms2"]
+          }
+        }
+      }
+    );
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (value, code) = ms0.list_dynamic_search_rules().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "propagated-to-all-remotes",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    let (value, code) = ms1.list_dynamic_search_rules().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "propagated-to-all-remotes",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    let (value, code) = ms2.list_dynamic_search_rules().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "propagated-to-all-remotes",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    let (task, code) = ms0
+        .create_dynamic_search_rule(
+            "propagated-too",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (value, code) = ms0.list_dynamic_search_rules().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "propagated-to-all-remotes",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        },
+        {
+          "uid": "propagated-too",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 1
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    let (value, code) = ms1.list_dynamic_search_rules().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "propagated-to-all-remotes",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        },
+        {
+          "uid": "propagated-too",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 1
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    let (value, code) = ms2.list_dynamic_search_rules().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "propagated-to-all-remotes",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        },
+        {
+          "uid": "propagated-too",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 1
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+}
+
 #[actix_rt::test]
 async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
     let ms0 = Server::new().await;
@@ -787,14 +1142,16 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-filtered-remote",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "returns" }
-                ],
+                "conditions": {
+                    "query": {
+                        "words": "returns"
+                    }
+                },
                 "actions": [
                     {
                         "selector": { "id": "remote-filtered" },
@@ -804,7 +1161,8 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -901,7 +1259,7 @@ async fn remote_search_keeps_remote_pins() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote",
             json!({
@@ -915,7 +1273,8 @@ async fn remote_search_keeps_remote_pins() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -989,14 +1348,16 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote-query-miss",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "returns" }
-                ],
+                "conditions": {
+                  "query": {
+                    "words": "returns"
+                  }
+                },
                 "actions": [
                     {
                         "selector": { "id": "remote-pinned" },
@@ -1006,7 +1367,8 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -1107,9 +1469,11 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "pump-remote-pins",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "batman" }
-                ],
+                "conditions": {
+                  "query": {
+                    "words": "batman"
+                  }
+                },
                 "actions": [
                     {
                         "selector": { "id": "late-pin-1" },
@@ -1123,7 +1487,8 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -1303,7 +1668,7 @@ async fn remote_search_distinct_deduplicates_pinned_documents() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote-duplicate",
             json!({
@@ -1317,7 +1682,8 @@ async fn remote_search_distinct_deduplicates_pinned_documents() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -1435,14 +1801,16 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pin-remote-for-facets",
             json!({
                 "active": true,
-                "conditions": [
-                    { "scope": "query", "contains": "returns" }
-                ],
+                "conditions": {
+                  "query": {
+                    "words": "returns"
+                  }
+                },
                 "actions": [
                     {
                         "selector": { "id": "remote-pinned" },
@@ -1452,7 +1820,8 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
             }),
         )
         .await;
-    snapshot!(code, @"201 Created");
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
 
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -4552,7 +4921,7 @@ impl LocalMeili {
                         "PUT" => server.service.put_raw(&req.url, req.body, headers.clone()).await,
                         "PATCH" => server.service.patch_raw(&req.url, req.body, headers).await,
                         "GET" => server.service.get(&req.url).await,
-                        "DELETE" => server.service.delete(&req.url).await,
+                        "DELETE" => server.service.delete(&req.url, headers).await,
                         _ => unimplemented!(),
                     }
                 });

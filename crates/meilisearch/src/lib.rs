@@ -43,9 +43,9 @@ use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
@@ -243,6 +243,33 @@ pub fn setup_meilisearch(
         }
     };
 
+    let dsr_fuel = {
+        let max_counted_words = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_COUNTED_WORDS")
+        {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 10,
+            Err(err) => bail!(err),
+        };
+
+        let max_active_rules = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_ACTIVE_RULES") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 1000,
+            Err(err) => bail!(err),
+        };
+        let max_pin_actions = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_PIN_ACTIONS") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+        let word_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_WORD_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 4096,
+            Err(err) => bail!(err),
+        };
+
+        DsrFuel::new(max_counted_words, max_active_rules, max_pin_actions, word_fuel)
+    };
+
     let index_scheduler_opt = IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
@@ -284,6 +311,7 @@ pub fn setup_meilisearch(
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
         ip_policy,
+        dsr_fuel,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -574,15 +602,6 @@ fn import_dump(
     let wtxn = index_scheduler.env.write_txn()?;
     index_scheduler.put_network(wtxn, network)?;
 
-    let mut dynamic_search_rules = DynamicSearchRules::new();
-    for result in dump_reader.dynamic_search_rules()? {
-        let (uid, rule) = result?;
-        dynamic_search_rules.insert(uid, rule);
-    }
-    if !dynamic_search_rules.is_empty() {
-        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
-    }
-
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
     let base_config = index_scheduler.indexer_config();
@@ -609,11 +628,12 @@ fn import_dump(
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
         let uid = metadata.uid.clone();
-        tracing::info!("Importing index `{uid}`.");
+        let uid = meilisearch_types::index_uid::AnyIndex::new(&uid);
+        tracing::info!("Importing index `{uid}`.", uid = uid.uid());
 
         let date = Some((metadata.created_at, metadata.updated_at));
         // no shards at import time
-        let index = index_scheduler.create_raw_index(&metadata.uid, date, None)?;
+        let index = index_scheduler.create_raw_index(uid, date, None)?;
 
         let mut wtxn = index.write_txn()?;
 
@@ -657,7 +677,7 @@ fn import_dump(
             let reader = DocumentsBatchReader::from_reader(reader)?;
 
             let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
-            let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
+            let embedders = index_scheduler.embedders(uid.uid().to_string(), embedder_configs)?;
             let must_stop_processing = MustStopProcessing::default();
 
             let builder = milli::update::IndexDocuments::new(
@@ -687,7 +707,7 @@ fn import_dump(
 
             let mut indexer = indexer::IndexOperations::new();
             let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
-            let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
+            let embedders = index_scheduler.embedders(uid.uid().to_string(), embedders)?;
 
             let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
@@ -732,7 +752,7 @@ fn import_dump(
 
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
-        index_scheduler.refresh_index_stats(&uid)?;
+        index_scheduler.refresh_index_stats(uid)?;
     }
 
     // 7. Import the queue

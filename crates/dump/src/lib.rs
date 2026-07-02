@@ -11,7 +11,7 @@ use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
 use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyChange};
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
+    Details, DsrUpdate, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
@@ -166,6 +166,8 @@ pub enum KindDump {
         index_uid: String,
     },
     NetworkTopologyChange(NetworkTopologyChange),
+    DsrUpdate(DsrUpdate),
+    DsrClear,
 }
 
 impl From<Task> for TaskDump {
@@ -255,6 +257,8 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 KindDump::NetworkTopologyChange(network_topology_change)
             }
+            KindWithContent::DsrUpdate(update) => KindDump::DsrUpdate(update),
+            KindWithContent::DsrClear => KindDump::DsrClear,
         }
     }
 }
@@ -268,10 +272,6 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
-    use meilisearch_types::dynamic_search_rules::{
-        Condition, DynamicSearchRule, DynamicSearchRuleAction as RuleActionKind,
-        DynamicSearchRules, RuleAction, Selector,
-    };
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -554,12 +554,6 @@ pub(crate) mod test {
         let network = create_test_network();
         dump.create_network(network).unwrap();
 
-        // ========== dynamic search rules
-        let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules().unwrap();
-        for (_, rule) in create_test_dynamic_search_rules() {
-            dump_dynamic_search_rules.push_rule(&rule).unwrap();
-        }
-
         (dump, batch_queue)
     }
 
@@ -577,43 +571,6 @@ pub(crate) mod test {
 
     fn create_test_features() -> RuntimeTogglableFeatures {
         RuntimeTogglableFeatures::default()
-    }
-
-    fn create_test_dynamic_search_rules() -> DynamicSearchRules {
-        let mut rules = DynamicSearchRules::new();
-        rules.insert(
-            "black-friday".parse().unwrap(),
-            DynamicSearchRule {
-                uid: "black-friday".parse().unwrap(),
-                description: Some("Black Friday promo".to_string()),
-                priority: Some(1),
-                active: true,
-                conditions: vec![
-                    Condition::Query { is_empty: Some(false), contains: None },
-                    Condition::Time {
-                        start: Some(datetime!(2025-11-28 00:00:00 UTC)),
-                        end: Some(datetime!(2025-11-28 23:59:59 UTC)),
-                    },
-                ],
-                actions: vec![
-                    RuleAction {
-                        selector: Selector {
-                            index_uid: Some("products".parse().unwrap()),
-                            id: Some("42".to_string()),
-                        },
-                        action: RuleActionKind::Pin { position: 1 },
-                    },
-                    RuleAction {
-                        selector: Selector {
-                            index_uid: Some("products".parse().unwrap()),
-                            id: Some("84".to_string()),
-                        },
-                        action: RuleActionKind::Pin { position: 3 },
-                    },
-                ],
-            },
-        );
-        rules
     }
 
     fn create_test_network() -> Network {
@@ -681,11 +638,5 @@ pub(crate) mod test {
         expected.leader = None;
         expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
-
-        // ==== checking the dynamic search rules
-        let expected = create_test_dynamic_search_rules();
-        let actual: DynamicSearchRules =
-            dump.dynamic_search_rules().unwrap().map(|r| r.unwrap()).collect();
-        assert_eq!(expected, actual);
     }
 }

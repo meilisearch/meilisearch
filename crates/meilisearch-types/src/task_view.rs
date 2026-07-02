@@ -269,6 +269,14 @@ pub struct DetailsView {
     /// during processing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+
+    /// The updated dynamic search rule.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rule: Option<crate::dynamic_search_rules::DynamicSearchRuleUpdateRequest>,
+
+    /// Number of dynamic search rules that were created, modified or deleted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_rules: Option<u64>,
 }
 
 impl DetailsView {
@@ -480,6 +488,19 @@ impl DetailsView {
                 // same time.
                 (Some(left), Some(_right)) => Some(left),
             },
+
+            rule: match (self.rule.clone(), other.rule.clone()) {
+                (None, None) => None,
+                (None, Some(rule)) | (Some(rule), None) => Some(rule),
+                // When accumulating, we do not want to grow the number of rules indefinitely,
+                // so we will remove it and instead grow the `updatedRules` value.
+                (Some(_left), Some(_right)) => None,
+            },
+            updated_rules: match (self.updated_rules, other.updated_rules) {
+                (None, None) => None,
+                (None, Some(updated_rules)) | (Some(updated_rules), None) => Some(updated_rules),
+                (Some(left), Some(right)) => Some(left + right),
+            },
         }
     }
 }
@@ -594,6 +615,14 @@ impl From<Details> for DetailsView {
                 moved_documents: Some(moved_documents),
                 message: Some(message),
                 ..Default::default()
+            },
+            Details::DsrUpdate(update) => match update {
+                crate::tasks::DsrUpdate::CreateOrUpdate { rule_id: _, update: rule } => {
+                    DetailsView { rule: Some(rule), updated_rules: Some(1), ..Default::default() }
+                }
+                crate::tasks::DsrUpdate::Deletion(_) => {
+                    DetailsView { rule: None, updated_rules: Some(1), ..Default::default() }
+                }
             },
         }
     }

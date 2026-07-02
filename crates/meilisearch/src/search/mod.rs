@@ -57,9 +57,6 @@ pub use federated::{
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
-mod dynamic_rules;
-pub use dynamic_rules::{collect_active_rules, resolve_pins, DynamicSearchContext};
-
 mod hydration;
 mod value_paths_visitor;
 use hydration::hydrate_documents;
@@ -1611,6 +1608,8 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
 pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
+    index_uid: &'t str,
+    before_search: time::OffsetDateTime,
     query: &'t SearchQuery,
     filter: Option<IndexFilter<'t>>,
     search_kind: &SearchKind,
@@ -1621,7 +1620,7 @@ pub fn prepare_search<'t>(
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }
-    let mut search = index.search(rtxn, progress);
+    let mut search = index.search(rtxn, index_uid, before_search, progress);
     search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
@@ -1773,7 +1772,7 @@ pub fn perform_search(
         request_uid,
         include_metadata,
     } = params;
-    let before_search = Instant::now();
+    let before_search = time::OffsetDateTime::now_utc();
     let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
@@ -1793,6 +1792,8 @@ pub fn perform_search(
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,
         &rtxn,
+        &index_uid,
+        before_search,
         &query,
         filter,
         &search_kind,
@@ -1801,15 +1802,15 @@ pub fn perform_search(
         progress,
     )?;
 
-    let pins = if features.runtime_features().dynamic_search_rules {
-        let rules = index_scheduler.dynamic_search_rules();
-        resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
-    } else {
-        Vec::new()
-    };
+    let dsrs = index_scheduler
+        .dynamic_search_rules(params.features, "")
+        // ignore error: having the feature disabled is actually allowed in search
+        .ok()
+        .and_then(|dsrs| dsrs.milli_dsrs().transpose())
+        .transpose()?;
 
-    if !pins.is_empty() {
-        search.pins(pins);
+    if let Some(dsrs) = &dsrs {
+        search.dynamic_search_rules(dsrs, index_scheduler.dsr_fuel());
     }
 
     let (
@@ -1823,7 +1824,7 @@ pub fn perform_search(
             query_vector,
         },
         semantic_hit_count,
-    ) = search_from_kind(index_uid.clone(), search_kind, search)?;
+    ) = search_from_kind(search_kind, search)?;
 
     let metadata = if include_metadata {
         let query_uid = Uuid::now_v7();
@@ -1936,7 +1937,7 @@ pub fn perform_search(
         hits_info,
         query: q.unwrap_or_default(),
         query_vector,
-        processing_time_ms: before_search.elapsed().as_millis(),
+        processing_time_ms: elapsed(before_search).as_millis(),
         facet_distribution,
         facet_stats,
         degraded,
@@ -2053,27 +2054,25 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
 }
 
 pub fn search_from_kind(
-    index_uid: String,
     search_kind: SearchKind,
     search: milli::Search<'_>,
 ) -> Result<(milli::SearchResult, Option<u32>), MeilisearchHttpError> {
+    let from_milli =
+        |err| MeilisearchHttpError::from_milli(err, Some(search.index_uid().to_string()));
+
     let (milli_result, semantic_hit_count) = match &search_kind {
         SearchKind::KeywordOnly => {
-            let results = search
-                .execute()
-                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
+            let results = search.execute().map_err(from_milli)?;
             (results, None)
         }
         SearchKind::SemanticOnly { .. } => {
-            let results = search
-                .execute()
-                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
+            let results = search.execute().map_err(from_milli)?;
             let semantic_hit_count = results.document_scores.len() as u32;
             (results, Some(semantic_hit_count))
         }
-        SearchKind::Hybrid { semantic_ratio, .. } => search
-            .execute_hybrid(*semantic_ratio)
-            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid)))?,
+        SearchKind::Hybrid { semantic_ratio, .. } => {
+            search.execute_hybrid(*semantic_ratio).map_err(from_milli)?
+        }
     };
     Ok((milli_result, semantic_hit_count))
 }
@@ -2511,7 +2510,7 @@ pub fn perform_similar(
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let features = index_scheduler.features();
-    let index = index_scheduler.index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid)?;
     let rtxn = index.read_txn()?;
 
     let SimilarQuery {
@@ -2577,7 +2576,7 @@ pub fn perform_similar(
         ));
     };
 
-    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, progress)?;
+    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, None, progress)?;
     if docid_universe.contains(internal_id).not() {
         return Err(ResponseError::from_msg(
             MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
@@ -2974,5 +2973,15 @@ fn format_value(
             }
         }
         value => value,
+    }
+}
+
+pub fn elapsed(since: time::OffsetDateTime) -> std::time::Duration {
+    let now = time::OffsetDateTime::now_utc();
+    if now > since {
+        // unwrap: now > since
+        (now - since).try_into().unwrap()
+    } else {
+        std::time::Duration::ZERO
     }
 }

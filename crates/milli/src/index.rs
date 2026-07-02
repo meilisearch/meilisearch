@@ -1483,8 +1483,14 @@ impl Index {
         FacetDistribution::new(rtxn, self)
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>, progress: &'a Progress) -> Search<'a> {
-        Search::new(rtxn, self, progress)
+    pub fn search<'a>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        index_uid: &'a str,
+        before_search: time::OffsetDateTime,
+        progress: &'a Progress,
+    ) -> Search<'a> {
+        Search::new(rtxn, self, index_uid, before_search, progress)
     }
 
     /// Returns the index creation time.

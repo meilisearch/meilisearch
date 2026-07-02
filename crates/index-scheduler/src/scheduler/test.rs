@@ -787,7 +787,7 @@ fn test_settings_update() {
     }
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
     let embedders = index.embedding_configs();
@@ -840,6 +840,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -876,6 +878,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -919,6 +923,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -963,6 +969,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -1013,17 +1021,18 @@ fn create_and_list_index() {
     handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
     // The index creation has not been started, the index should not exists
 
-    let err = index_scheduler.index("kefir").map(|_| ()).unwrap_err();
+    let err = index_scheduler.user_index("kefir").map(|_| ()).unwrap_err();
     snapshot!(err, @"Index `kefir` not found.");
-    let empty = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    let empty =
+        index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(format!("{empty:?}"), @"(0, [])");
 
     // After advancing just once the index should've been created, the wtxn has been released and commited
     // but the indexUpdate task has not been processed yet
     handle.advance_till([InsideProcessBatch]);
 
-    index_scheduler.index("kefir").unwrap();
-    let list = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    index_scheduler.user_index("kefir").unwrap();
+    let list = index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]", "[1][0][1].internal_database_sizes" => "[bytes]" }), @r###"
     [
       1,

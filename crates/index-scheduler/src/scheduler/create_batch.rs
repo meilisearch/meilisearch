@@ -2,6 +2,7 @@ use std::fmt;
 use std::io::ErrorKind;
 
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyState, Origin};
@@ -69,6 +70,14 @@ pub(crate) enum Batch {
     NetworkReady {
         task: Task,
     },
+    DsrUpdate {
+        rules: Vec<meilisearch_types::tasks::DsrUpdate>,
+        tasks: Vec<Task>,
+        must_create_index: bool,
+    },
+    DsrClear {
+        tasks: Vec<Task>,
+    },
 }
 
 #[derive(Debug)]
@@ -132,7 +141,9 @@ impl Batch {
             Batch::SnapshotCreation(tasks)
             | Batch::TaskDeletions(tasks)
             | Batch::UpgradeDatabase { tasks }
-            | Batch::IndexDeletion { tasks, .. } => {
+            | Batch::IndexDeletion { tasks, .. }
+            | Batch::DsrUpdate { tasks, .. }
+            | Batch::DsrClear { tasks } => {
                 RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
             }
             Batch::IndexOperation { op, .. } => match op {
@@ -180,6 +191,7 @@ impl Batch {
             | IndexDeletion { index_uid, .. }
             | IndexCompaction { index_uid, .. } => Some(index_uid),
             NetworkIndexBatch { network_task: _, inner_batch } => inner_batch.index_uid(),
+            DsrUpdate { .. } | DsrClear { .. } => Some(DsrIndex::dsr_uid()),
         }
     }
 }
@@ -204,6 +216,8 @@ impl fmt::Display for Batch {
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
             Batch::NetworkIndexBatch { .. } => f.write_str("NetworkTopologyChange")?,
             Batch::NetworkReady { .. } => f.write_str("NetworkTopologyChange")?,
+            Batch::DsrUpdate { .. } => f.write_str("DsrUpdate")?,
+            Batch::DsrClear { .. } => f.write_str("DsrClear")?,
         };
         match index_uid {
             Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
@@ -472,6 +486,29 @@ impl IndexScheduler {
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
             }
+            BatchKind::DsrUpdate { rules } => {
+                let tasks = self.queue.get_existing_tasks_for_processing_batch(
+                    rtxn,
+                    current_batch,
+                    rules,
+                )?;
+
+                let rules: Vec<_> = tasks
+                    .iter()
+                    .map(|task| match &task.kind {
+                        KindWithContent::DsrUpdate(update) => update.clone(),
+                        _ => unreachable!(),
+                    })
+                    .collect();
+
+                Ok(Some(Batch::DsrUpdate { rules, tasks, must_create_index }))
+            }
+            BatchKind::DsrClear { ids } => {
+                let tasks =
+                    self.queue.get_existing_tasks_for_processing_batch(rtxn, current_batch, ids)?;
+
+                Ok(Some(Batch::DsrClear { tasks }))
+            }
         }
     }
 
@@ -673,10 +710,12 @@ impl IndexScheduler {
             };
         };
 
-        let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
+        let index_uid = AnyIndex::new(index_name);
+
+        let index_already_exists = self.index_mapper.exists(rtxn, index_uid)?;
         let mut primary_key = None;
         if index_already_exists {
-            let index = self.index_mapper.index(rtxn, index_name)?;
+            let index = self.index_mapper.index(rtxn, index_uid)?;
             let rtxn = index.read_txn()?;
             primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
         }

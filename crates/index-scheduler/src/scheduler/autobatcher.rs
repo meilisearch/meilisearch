@@ -25,6 +25,8 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
+    DsrUpdate,
+    DsrClear,
 }
 
 impl AutobatchKind {
@@ -68,6 +70,8 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
+            KindWithContent::DsrUpdate { .. } => AutobatchKind::DsrUpdate,
+            KindWithContent::DsrClear => AutobatchKind::DsrClear,
             KindWithContent::IndexCompaction { .. }
             | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
@@ -119,6 +123,12 @@ pub enum BatchKind {
     },
     IndexSwap {
         id: TaskId,
+    },
+    DsrUpdate {
+        rules: Vec<TaskId>,
+    },
+    DsrClear {
+        ids: Vec<TaskId>,
     },
 }
 
@@ -232,6 +242,8 @@ impl BatchKind {
                 Continue(BatchKind::Settings { allow_index_creation, settings_ids: vec![task_id] }),
                 allow_index_creation,
             ),
+            K::DsrUpdate => (Continue(BatchKind::DsrUpdate { rules: vec![task_id] }), true),
+            K::DsrClear => (Continue(BatchKind::DsrClear { ids: vec![task_id] }), false),
         }
     }
 
@@ -328,6 +340,36 @@ impl BatchKind {
                 this @ BatchKind::DocumentClear { .. },
                 K::DocumentImport { .. } | K::Settings { .. },
             ) => Break((this, BatchStopReason::DocumentOperationWithSettings { id })),
+            // can batch DSR clear with itself
+            (
+                BatchKind::DsrClear { mut ids },
+                K::DsrClear
+            ) => {
+                ids.push(id);
+                Continue(BatchKind::DsrClear { ids })
+            }
+            // can batch any DSR update with a DSR clear, resulting in a DSR clear
+            (
+                BatchKind::DsrUpdate { mut rules },
+                K::DsrClear
+            ) => {
+                rules.push(id);
+                Continue(BatchKind::DsrClear { ids: rules })
+            }
+            // cannot batch anything else with a DSR clear
+            (
+                this @ BatchKind::DsrClear { .. },
+                K::DocumentClear | K::DocumentDeletion { .. }  | K::DocumentImport { .. }  | K::IndexDeletion | K::Settings { .. } | K::DsrUpdate
+            ) => {
+                Break((this, BatchStopReason::TaskKindCannotBeBatched { kind: meilisearch_types::tasks::Kind::DsrClear }))
+            }
+            // cannot autobatch doc ops with DSR update or clear
+            (
+                this @ (BatchKind::DocumentClear { .. } | BatchKind::DocumentOperation { .. } |  BatchKind::DocumentDeletion { .. }),
+                K::DsrUpdate | K::DsrClear,
+            ) => Break((this, BatchStopReason::DocumentOperationWithDsrUpdate { id })),
+            // cannot autobatch settings with DSR
+            (this @ (BatchKind::ClearAndSettings { .. } | BatchKind::Settings {..}), K::DsrUpdate | K::DsrClear) => Break((this, BatchStopReason::SettingsWithDsrUpdate {id})),
             (
                 BatchKind::DocumentOperation { allow_index_creation: _, primary_key: _, mut operation_ids },
                 K::DocumentClear,
@@ -336,6 +378,22 @@ impl BatchKind {
                 Continue(BatchKind::DocumentClear { ids: operation_ids })
             }
 
+            // we can autobatch DSR updates with themselves
+            (
+                BatchKind::DsrUpdate { mut rules },
+                K::DsrUpdate
+            ) =>
+            {
+                rules.push(id);
+                Continue(BatchKind::DsrUpdate { rules })
+            }
+            // we cannot autobatch DSR with other kinds of batches
+            (
+                batch @ BatchKind::DsrUpdate { .. },
+                K::DocumentClear | K::DocumentDeletion { .. }  | K::DocumentImport { .. }  | K::IndexDeletion | K::Settings { .. }
+            ) => {
+                Break((batch, BatchStopReason::TaskKindCannotBeBatched { kind: meilisearch_types::tasks::Kind::DsrUpdate }))
+            }
             // we can autobatch different kind of document operations and mix replacements with updates
             (
                 BatchKind::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },

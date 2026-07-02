@@ -109,3 +109,42 @@ impl ErrorCode for IndexUidFormatError {
         Code::InvalidIndexUid
     }
 }
+
+#[derive(Clone, Copy)]
+pub struct AnyIndex<'a>(&'a str);
+
+impl<'a> AnyIndex<'a> {
+    pub fn new(uid: &'a str) -> Self {
+        Self(uid)
+    }
+
+    pub fn uid(&self) -> &'a str {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct UserIndex<'a>(&'a str);
+
+impl<'a> UserIndex<'a> {
+    pub fn new(uid: &'a str) -> Option<Self> {
+        if uid.starts_with(".meili") {
+            None
+        } else {
+            Some(Self(uid))
+        }
+    }
+
+    pub fn uid(&self) -> &'a str {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct DsrIndex;
+
+impl DsrIndex {
+    pub const fn dsr_uid() -> &'static str {
+        ".meili_dsr"
+    }
+}

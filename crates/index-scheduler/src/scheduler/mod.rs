@@ -28,6 +28,7 @@ use std::sync::Arc;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
+use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli::update::S3SnapshotOptions;
 use meilisearch_types::milli::{self, MustStopProcessing};
 use meilisearch_types::tasks::Status;
@@ -130,6 +131,7 @@ impl Scheduler {
             embedding_cache_cap,
             ip_policy,
             experimental_no_snapshot_compaction,
+            dsr_fuel: _,
         } = options;
 
         Scheduler {
@@ -356,7 +358,8 @@ impl IndexScheduler {
                 // fixme: add index_uid to match to avoid the unwrap
                 let index_uid = index_uid.unwrap();
                 // fixme: handle error more gracefully? not sure when this could happen
-                self.index_mapper.resize_index(&wtxn, &index_uid)?;
+
+                self.index_mapper.resize_index(&wtxn, AnyIndex::new(&index_uid))?;
                 wtxn.abort();
 
                 tracing::info!("The max database size was reached. Resizing the index.");

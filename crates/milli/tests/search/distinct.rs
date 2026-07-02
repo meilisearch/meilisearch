@@ -34,7 +34,8 @@ macro_rules! test_distinct {
             let rtxn = index.read_txn().unwrap();
 
             let progress = Progress::default();
-            let mut search = Search::new(&rtxn, &index, &progress);
+            let mut search =
+                Search::new(&rtxn, &index, "test", time::OffsetDateTime::now_utc(), &progress);
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);

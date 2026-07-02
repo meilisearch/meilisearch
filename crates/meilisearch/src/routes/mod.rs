@@ -250,6 +250,24 @@ pub struct PaginationView<T> {
 }
 
 impl Pagination {
+    pub fn empty(self) -> PaginationView<()> {
+        self.format_with(0, Default::default())
+    }
+
+    pub fn try_auto_paginate_sized<T, E>(
+        self,
+        content: impl IntoIterator<Item = Result<T, E>> + ExactSizeIterator,
+    ) -> Result<PaginationView<T>, E>
+    where
+        T: Serialize,
+    {
+        let total = content.len();
+        let content: Result<Vec<_>, _> =
+            content.into_iter().skip(self.offset).take(self.limit).collect();
+        let content = content?;
+        Ok(self.format_with(total, content))
+    }
+
     /// Given the full data to paginate, returns the selected section.
     pub fn auto_paginate_sized<T>(
         self,
@@ -502,11 +520,11 @@ pub fn create_all_stats(
     let size_format = params.size_format.unwrap_or(SizeFormat::Raw); // default to `raw` for backcompat.
     let Param(show_internal_database_sizes) = params.show_internal_database_sizes;
 
-    for index_uid in index_scheduler.index_names()? {
+    for index_uid in index_scheduler.user_index_names()? {
         // Accumulate the size of all indexes, even unauthorized ones, so
         // as to return a database_size representative of the correct database size on disk.
         // See <https://github.com/meilisearch/meilisearch/pull/3541#discussion_r1126747643> for context.
-        let stats = index_scheduler.index_stats(&index_uid)?;
+        let stats = index_scheduler.user_index_stats(&index_uid)?;
         database_size += stats.inner_stats.database_size;
         used_database_size += stats.inner_stats.used_database_size;
 

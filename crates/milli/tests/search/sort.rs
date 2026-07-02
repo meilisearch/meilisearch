@@ -13,7 +13,8 @@ fn sort_ranking_rule_missing() {
     let rtxn = index.read_txn().unwrap();
 
     let progress = Progress::default();
-    let mut search = Search::new(&rtxn, &index, &progress);
+    let mut search =
+        Search::new(&rtxn, &index, "index_uid", time::OffsetDateTime::now_utc(), &progress);
     search.query(search::TEST_QUERY);
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 

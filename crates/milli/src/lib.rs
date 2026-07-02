@@ -14,6 +14,7 @@ mod attribute_patterns;
 mod criterion;
 pub mod database_stats;
 pub mod disabled_typos_terms;
+pub mod dynamic_search_rules;
 mod error;
 mod external_documents_ids;
 pub mod facet;
@@ -64,13 +65,13 @@ pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::attribute_patterns::{AttributePatterns, PatternMatch};
 pub use self::criterion::{default_criteria, AttributeState, Criterion, CriterionError};
 pub use self::error::{
-    Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
+    Error, FaultSource, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
+pub use self::fields_ids_map::metadata::Metadata;
 pub use self::fields_ids_map::{
-    metadata::Metadata, FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap,
-    MetadataBuilder,
+    FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
 };
 pub use self::filterable_attributes_rules::{
     FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
@@ -139,6 +140,9 @@ pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 32;
 pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
+
+/// The maximum amount of words counted inside of a field.
+pub const MAX_COUNTED_WORDS: usize = 30;
 
 #[derive(Clone)]
 pub struct Deadline {

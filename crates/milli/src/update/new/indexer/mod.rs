@@ -8,7 +8,7 @@ use std::thread::{self, Builder};
 use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
-pub use document_operation::{IndexOperations, PayloadStats};
+pub use document_operation::{IndexOperations, Payload, PayloadStats};
 use fst::{IntoStreamer, Streamer as _};
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore, Str, Unit};

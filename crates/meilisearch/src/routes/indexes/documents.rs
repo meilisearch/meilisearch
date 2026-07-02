@@ -255,7 +255,7 @@ pub async fn get_document(
         &req,
     );
 
-    let index = index_scheduler.index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid)?;
     let document =
         retrieve_document(&index, &document_id, attributes_to_retrieve, retrieve_vectors)?;
     debug!(returns = ?document, "Get document");
@@ -732,7 +732,7 @@ async fn documents_by_query(
             None
         };
 
-        let index = index_scheduler.index(&index_uid)?;
+        let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
         let progress = Progress::default();
 
@@ -970,7 +970,7 @@ pub async fn replace_documents(
         DocumentsAggregator::<Replaced> {
             payload_types: content_types,
             primary_key: primary_keys,
-            index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+            index_creation: index_scheduler.user_index_exists(&index_uid).map_or(true, |x| !x),
             method: PhantomData,
         },
         &req,
@@ -1087,7 +1087,7 @@ pub async fn update_documents(
         DocumentsAggregator::<Updated> {
             payload_types: content_types,
             primary_key: primary_keys,
-            index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+            index_creation: index_scheduler.user_index_exists(&index_uid).map_or(true, |x| !x),
             method: PhantomData,
         },
         &req,
@@ -1675,7 +1675,7 @@ pub async fn edit_documents_by_function(
         EditDocumentsByFunctionAggregator {
             filtered: body.filter.is_some(),
             with_context: body.context.is_some(),
-            index_creation: index_scheduler.index(&index_uid).is_err(),
+            index_creation: index_scheduler.user_index(&index_uid).is_err(),
         },
         &req,
     );

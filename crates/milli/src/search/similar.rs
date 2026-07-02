@@ -62,7 +62,8 @@ impl<'a> Similar<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut universe = filtered_universe(self.index, self.rtxn, &self.filter, self.progress)?;
+        let mut universe =
+            filtered_universe(self.index, self.rtxn, &self.filter, None, self.progress)?;
 
         // we never want to receive the docid
         universe.remove(self.id);
