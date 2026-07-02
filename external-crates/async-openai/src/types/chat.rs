@@ -1,4 +1,5 @@
-use std::{collections::HashMap, pin::Pin};
+use std::collections::HashMap;
+use std::pin::Pin;
 
 use derive_builder::Builder;
 use futures::Stream;

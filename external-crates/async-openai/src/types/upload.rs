@@ -1,8 +1,8 @@
-use crate::error::OpenAIError;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
 use super::{InputSource, OpenAIFile};
+use crate::error::OpenAIError;
 
 /// Request to create an upload object that can accept byte chunks in the form of Parts.
 #[derive(Clone, Serialize, Default, Debug, Deserialize, Builder, PartialEq)]

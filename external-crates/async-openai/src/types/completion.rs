@@ -1,12 +1,12 @@
-use std::{collections::HashMap, pin::Pin};
+use std::collections::HashMap;
+use std::pin::Pin;
 
 use derive_builder::Builder;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 
-use crate::error::OpenAIError;
-
 use super::{ChatCompletionStreamOptions, Choice, CompletionUsage, Prompt, Stop};
+use crate::error::OpenAIError;
 
 #[derive(Clone, Serialize, Deserialize, Default, Debug, Builder, PartialEq)]
 #[builder(name = "CreateCompletionRequestArgs")]

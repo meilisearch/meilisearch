@@ -3,9 +3,8 @@ use std::collections::HashMap;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
-use crate::error::OpenAIError;
-
 use super::{ImageDetail, ImageUrl};
+use crate::error::OpenAIError;
 
 #[derive(Clone, Serialize, Debug, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]

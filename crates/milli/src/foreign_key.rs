@@ -1,5 +1,8 @@
+use deserr::Deserr;
 use heed::types::{SerdeJson, Str};
 use heed::{RoTxn, RwTxn};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::index::main_key;
 use crate::Index;

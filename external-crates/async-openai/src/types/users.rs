@@ -1,8 +1,8 @@
-use crate::types::OpenAIError;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
 use super::OrganizationRole;
+use crate::types::OpenAIError;
 
 /// Represents an individual `user` within an organization.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
