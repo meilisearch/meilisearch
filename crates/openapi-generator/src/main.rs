@@ -231,6 +231,13 @@ fn response_has_body(response: &Value) -> bool {
     response.get("content").and_then(|c| c.get("application/json")).is_some()
 }
 
+/// Returns true if the route returns a 202 Accepted, i.e. it enqueues an async task.
+/// Such routes do not synchronously return a 404 when the resource is missing: the
+/// returned task carries the "not found" error instead, so a 404 is not required.
+fn returns_async_task(responses: &JsonObject) -> bool {
+    responses.contains_key("202")
+}
+
 /// Returns true if the path has at least one parameter whose name contains "uid" (case insensitive).
 /// E.g. `{indexUid}`, `{taskUid}`, `{batchUid}`, `{uuid}`, `{uidOrKey}`.
 fn path_has_uid_parameter(path: &str) -> bool {
@@ -311,7 +318,7 @@ fn check_docs(openapi: &Value) -> Result<()> {
         println!("  - Parameters have descriptions");
         println!("  - Request/response schema properties have descriptions");
         println!("  - 2xx responses have examples where applicable");
-        println!("  - 401 (except GET /health), 404 (routes with *Uid param), and 400 responses have examples");
+        println!("  - 401 (except GET /health), 404 (routes with *Uid param, except async 202 routes), and 400 responses have examples");
         Ok(())
     } else {
         errors.sort();
@@ -464,7 +471,7 @@ fn check_404_response(
                 prefix
             ));
         }
-        None => {
+        None if !returns_async_task(resps) => {
             errors.push(format!(
                 "{}: response 404 is required for routes with a uid path parameter (e.g. resource not found)",
                 prefix
