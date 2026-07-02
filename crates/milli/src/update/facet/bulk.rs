@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
 
-use grenad::{CompressionType, Merger};
 use heed::types::Bytes;
 use heed::{BytesDecode, BytesEncode, Error, PutFlags, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
