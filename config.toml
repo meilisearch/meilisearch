@@ -132,3 +132,7 @@ experimental_reduce_indexing_memory_usage = false
 
 # Experimentally reduces the maximum number of tasks that will be processed at once, see: <https://github.com/orgs/meilisearch/discussions/713>
 # experimental_max_number_of_batched_tasks = 100
+
+# Experimental chat completions feature. For more information, see: <https://www.meilisearch.com/docs/learn/experimental/chat_completions>
+# Enable chat completion capabilities on the `/chats` routes.
+# experimental_chat_completions = false
