@@ -425,12 +425,21 @@ fn check_version(
     let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
 
     if db_major != bin_major || db_minor != bin_minor || db_patch != bin_patch {
-        update_version_file_for_dumpless_upgrade(
-            opt,
-            index_scheduler_opt,
-            (db_major, db_minor, db_patch),
-            (bin_major, bin_minor, bin_patch),
-        )?;
+        if opt.upgrade_db {
+            update_version_file_for_dumpless_upgrade(
+                opt,
+                index_scheduler_opt,
+                (db_major, db_minor, db_patch),
+                (bin_major, bin_minor, bin_patch),
+            )?;
+        } else {
+            return Err(VersionFileError::VersionMismatch {
+                major: db_major,
+                minor: db_minor,
+                patch: db_patch,
+            }
+            .into());
+        }
     }
 
     Ok((db_major, db_minor, db_patch))
