@@ -79,9 +79,16 @@ pub enum VersionFileError {
     MissingVersionFile,
     #[error("Version file is corrupted and thus Meilisearch is unable to determine the version of the database. {context}")]
     MalformedVersionFile { context: String },
+    #[error(
+        "Your database version ({major}.{minor}.{patch}) is incompatible with your current engine version ({}).\n\
+        To migrate data between Meilisearch versions, please follow our guide on https://www.meilisearch.com/docs/learn/update_and_migration/updating.\n\
+        Alternatively, you can set the `--upgrade-db` flag (or the `MEILI_UPGRADE_DB` environment variable) to upgrade the database automatically on startup.",
+        env!("CARGO_PKG_VERSION").to_string()
+    )]
+    VersionMismatch { major: u32, minor: u32, patch: u32 },
     #[error("Database version {major}.{minor}.{patch} is higher than the Meilisearch version {VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}. Downgrade is not supported")]
     DowngradeNotSupported { major: u32, minor: u32, patch: u32 },
-    #[error("Database version {major}.{minor}.{patch} is too old for the automatic dumpless upgrade feature. Please generate a dump using the v{major}.{minor}.{patch} and import it in the v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}")]
+    #[error("Database version {major}.{minor}.{patch} is too old to be upgraded automatically. Please generate a dump using the v{major}.{minor}.{patch} and import it in the v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}")]
     TooOldForAutomaticUpgrade { major: u32, minor: u32, patch: u32 },
     #[error("Error while modifying the database: {0}")]
     ErrorWhileModifyingTheDatabase(#[from] heed::Error),

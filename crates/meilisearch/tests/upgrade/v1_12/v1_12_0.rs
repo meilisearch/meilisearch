@@ -15,7 +15,11 @@ use crate::upgrade::copy_dir_all;
 async fn import_v1_12_0() {
     let temp = tempfile::tempdir().unwrap();
     let original_db_path = exist_relative_path!("tests/upgrade/v1_12/v1_12_0.ms");
-    let options = Opt { master_key: Some("kefir".to_string()), ..default_settings(temp.path()) };
+    let options = Opt {
+        upgrade_db: true,
+        master_key: Some("kefir".to_string()),
+        ..default_settings(temp.path())
+    };
     copy_dir_all(original_db_path, &options.db_path).unwrap();
     let mut server = Server::new_with_options(options).await.unwrap();
     server.use_api_key("kefir");

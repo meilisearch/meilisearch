@@ -140,6 +140,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -172,7 +173,10 @@
     {
       "binary": {
         "source": "build",
-        "edition": "community"
+        "edition": "community",
+        "extraCliArgs": [
+          "--upgrade-db"
+        ]
       }
     },
     {

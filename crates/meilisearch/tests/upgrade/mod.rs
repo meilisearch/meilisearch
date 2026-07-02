@@ -4,6 +4,7 @@ use std::path::Path;
 use std::{fs, io};
 
 use meili_snap::snapshot;
+use meilisearch::Opt;
 
 use crate::common::{default_settings, Server};
 
@@ -28,7 +29,7 @@ async fn malformed_version_file() {
     let db_path = default_settings.db_path.clone();
     std::fs::create_dir_all(&db_path).unwrap();
     std::fs::write(db_path.join("VERSION"), "kefir").unwrap();
-    let options = default_settings;
+    let options = Opt { upgrade_db: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err();
     snapshot!(err, @"Version file is corrupted and thus Meilisearch is unable to determine the version of the database. The version contains 1 parts instead of 3 (major, minor and patch)");
 }
@@ -40,7 +41,7 @@ async fn version_too_old() {
     let db_path = default_settings.db_path.clone();
     std::fs::create_dir_all(&db_path).unwrap();
     std::fs::write(db_path.join("VERSION"), "1.11.9999").unwrap();
-    let options = default_settings;
+    let options = Opt { upgrade_db: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err().to_string();
 
     let major = meilisearch_types::versioning::VERSION_MAJOR;
@@ -50,7 +51,7 @@ async fn version_too_old() {
     let current_version = format!("{major}.{minor}.{patch}");
     let err = err.replace(&current_version, "[current version]");
 
-    snapshot!(err, @"Database version 1.11.9999 is too old for the automatic dumpless upgrade feature. Please generate a dump using the v1.11.9999 and import it in the v[current version]");
+    snapshot!(err, @"Database version 1.11.9999 is too old to be upgraded automatically. Please generate a dump using the v1.11.9999 and import it in the v[current version]");
 }
 
 #[actix_rt::test]
@@ -68,7 +69,7 @@ async fn version_requires_downgrade() {
     let future_version = format!("{major}.{minor}.{patch}");
 
     std::fs::write(db_path.join("VERSION"), &future_version).unwrap();
-    let options = default_settings;
+    let options = Opt { upgrade_db: true, ..default_settings };
     let err = Server::new_with_options(options).await.map(|_| ()).unwrap_err();
 
     let err = err.to_string();
@@ -81,7 +82,10 @@ async fn version_requires_downgrade() {
 #[actix_rt::test]
 async fn upgrade_to_the_current_version() {
     let temp = tempfile::tempdir().unwrap();
-    let server = Server::new_with_options(default_settings(temp.path())).await.unwrap();
+    let server =
+        Server::new_with_options(Opt { upgrade_db: true, ..default_settings(temp.path()) })
+            .await
+            .unwrap();
     // The upgrade tasks should NOT be spawned => task queue is empty
     let (tasks, _status) = server.tasks().await;
     snapshot!(tasks, @r#"

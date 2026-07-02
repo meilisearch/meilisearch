@@ -137,6 +137,7 @@
         "edition": "community",
         "version": "1.35.0",
         "extraCliArgs": [
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -289,6 +290,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }

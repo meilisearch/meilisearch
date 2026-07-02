@@ -14,7 +14,7 @@ Fixes #...
 - [ ] Automated tests have been added.
 - [ ] If some tests cannot be automated, manual rigorous tests should be applied.
 - [ ] ⚠️ If there is any change in the DB:
-    - [ ] Test that any impacted DB still works as expected after using a DB created with the last released Meilisearch with the new binary (dumpless upgrade)
+    - [ ] Test that any impacted DB still works as expected after using `--upgrade-db` on a DB created with the last released Meilisearch
     - [ ] Test that during the upgrade, **search is still available** (artificially make the upgrade longer if needed)
     - [ ] Set the `db change` label.
 - [ ] If necessary, the feature have been tested in the Cloud production environment (with [prototypes](./documentation/prototypes.md)) and the Cloud UI is ready.
