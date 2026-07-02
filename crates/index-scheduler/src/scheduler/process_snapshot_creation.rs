@@ -130,12 +130,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
         let dst = temp_snapshot_dir.path().join("tasks");
         fs::create_dir_all(&dst)?;
-        let compaction_option = if self.scheduler.experimental_no_snapshot_compaction {
-            CompactionOption::Disabled
-        } else {
-            CompactionOption::Enabled
-        };
-        self.env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
+        self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 2.2 Remove the current snapshot tasks
         //
@@ -199,7 +194,7 @@ impl IndexScheduler {
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
             fs::create_dir_all(&dst)?;
             index
-                .copy_to_path(dst.join("data.mdb"), compaction_option)
+                .copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)
                 .map_err(|e| Error::from_milli(e, Some(name.uid().to_string())))?;
         }
 
@@ -209,7 +204,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
         let dst = temp_snapshot_dir.path().join("auth");
         fs::create_dir_all(&dst)?;
-        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
+        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 5. Copy and tarball the flat snapshot
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);
