@@ -1545,7 +1545,7 @@ async fn error_document_field_limit_reached_in_one_document() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "A document cannot contain more than 65,535 fields.",
+        "message": "An index cannot contain more than 65,535 unique attribute fields.",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
@@ -1628,7 +1628,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "Index `[uuid]`: A document cannot contain more than 65,535 fields.",
+        "message": "Index `[uuid]`: An index cannot contain more than 65,535 unique attribute fields.",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
