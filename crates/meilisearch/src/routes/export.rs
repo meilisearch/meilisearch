@@ -8,8 +8,8 @@ use byte_unit::Byte;
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::actions;
 use meilisearch_types::tasks::{ExportIndexSettings as DbExportIndexSettings, KindWithContent};
@@ -22,6 +22,7 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::export_analytics::ExportAnalytics;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
+use crate::search::parse_filter;
 use crate::Opt;
 
 #[routes::routes(
@@ -68,15 +69,21 @@ async fn export(
 
     let analytics_aggregate = ExportAnalytics::from_export(&export);
 
+    let features = index_scheduler.features();
+
     let Export { url, api_key, payload_size, indexes } = export;
 
     let indexes = match indexes {
         Some(indexes) => indexes
             .into_iter()
             .map(|(pattern, ExportIndexSettings { filter, override_settings })| {
-                (pattern, DbExportIndexSettings { filter, override_settings })
+                // check if the filter is valid and does not use unsupported features
+                if let Some(ref filter) = filter {
+                    let _ = parse_filter(filter, Code::InvalidDocumentFilter, features)?;
+                }
+                Ok((pattern, DbExportIndexSettings { filter, override_settings }))
             })
-            .collect(),
+            .collect::<Result<_, ResponseError>>()?,
         None => BTreeMap::from([(
             IndexUidPattern::new_unchecked("*"),
             DbExportIndexSettings::default(),
