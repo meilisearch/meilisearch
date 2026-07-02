@@ -126,7 +126,6 @@ impl Scheduler {
             batched_tasks_size_limit,
             export_default_payload_size_bytes: _,
             instance_features: _,
-            auto_upgrade: _,
             embedding_cache_cap,
             ip_policy,
             experimental_no_snapshot_compaction,
