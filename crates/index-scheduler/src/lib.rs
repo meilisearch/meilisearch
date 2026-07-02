@@ -1026,9 +1026,7 @@ impl IndexScheduler {
         Ok(index)
     }
 
-    pub fn refresh_user_index_stats(&self, name: &str) -> Result<()> {
-        let name = UserIndex::try_from_uid(name)?;
-
+    pub fn refresh_index_stats<'a>(&self, name: impl IndexUid<'a>) -> Result<()> {
         let mut mapper_wtxn = self.env.write_txn()?;
         let index = self.index_mapper.index(&mapper_wtxn, name)?;
         let index_rtxn = index.read_txn()?;

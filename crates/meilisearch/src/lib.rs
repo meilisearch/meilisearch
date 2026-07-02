@@ -752,7 +752,7 @@ fn import_dump(
 
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
-        index_scheduler.refresh_user_index_stats(uid.uid())?;
+        index_scheduler.refresh_index_stats(uid)?;
     }
 
     // 7. Import the queue
