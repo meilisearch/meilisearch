@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use charabia::normalizer::NormalizedTokenIter;
-use charabia::{SeparatorKind, TokenKind};
+use charabia::{SeparatorKind, TokenKind, Tokenizer};
 
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};
@@ -24,6 +24,7 @@ pub struct ExtractedTokens {
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext<'_>,
+    tokenizer: &Tokenizer<'_>,
     query: NormalizedTokenIter<'_, '_, '_, '_>,
     words_limit: Option<usize>,
 ) -> Result<ExtractedTokens> {
@@ -76,6 +77,7 @@ pub fn located_query_terms_from_tokens(
                             let word = token.lemma();
                             let term = partially_initialized_term_from_word(
                                 ctx,
+                                tokenizer,
                                 word,
                                 nbr_typos(word),
                                 false,
@@ -93,6 +95,7 @@ pub fn located_query_terms_from_tokens(
                     let word = token.lemma();
                     let term = partially_initialized_term_from_word(
                         ctx,
+                        tokenizer,
                         word,
                         nbr_typos(word),
                         allow_prefix_search,
@@ -216,6 +219,7 @@ pub fn number_of_typos_allowed<'ctx>(
 
 pub fn make_ngram(
     ctx: &mut SearchContext<'_>,
+    tokenizer: &Tokenizer<'_>,
     terms: &[LocatedQueryTerm],
     number_of_typos_allowed: &impl Fn(&str) -> u8,
 ) -> Result<Option<LocatedQueryTerm>> {
@@ -254,18 +258,24 @@ pub fn make_ngram(
     let max_nbr_typos =
         number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8 - 1);
 
-    let mut term =
-        partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix, true)?;
+    let mut term = partially_initialized_term_from_word(
+        ctx,
+        tokenizer,
+        &ngram_str,
+        max_nbr_typos,
+        is_prefix,
+        true,
+    )?;
 
     // Now add the synonyms
-    let index_synonyms = ctx.get_synonyms()?;
-
-    term.zero_typo.synonyms.extend(
-        index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(|words| {
-            let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
-            ctx.phrase_interner.insert(Phrase { words })
-        }),
-    );
+    if let Some(synonyms) = ctx.index.synonyms.get(ctx.txn, &words)? {
+        for synonym in synonyms.synonyms(tokenizer) {
+            let words =
+                synonym.into_iter().map(|w| Some(ctx.word_interner.insert(w.to_owned()))).collect();
+            let interned = ctx.phrase_interner.insert(Phrase { words });
+            term.zero_typo.synonyms.insert(interned);
+        }
+    }
 
     let term = QueryTerm {
         original: ngram_str_interned,
@@ -375,7 +385,7 @@ mod tests {
         let mut ctx = SearchContext::new(&index, &rtxn)?;
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
         let ExtractedTokens { query_terms, .. } =
-            located_query_terms_from_tokens(&mut ctx, tokens, None)?;
+            located_query_terms_from_tokens(&mut ctx, &tokenizer, tokens, None)?;
         assert!(query_terms.is_empty());
 
         Ok(())

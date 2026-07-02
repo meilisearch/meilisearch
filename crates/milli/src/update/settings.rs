@@ -25,7 +25,7 @@ use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes}
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::index::{
-    ChatConfig, PrefixSearch, SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
+    AssociatedSynonyms, ChatConfig, PrefixSearch, SearchParameters, DEFAULT_MIN_WORD_LEN_ONE_TYPO,
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
@@ -697,22 +697,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changes)
     }
 
-    fn update_synonyms(&mut self) -> Result<bool> {
+    fn update_synonyms(&mut self) -> Result<()> {
         match self.synonyms {
             Setting::Set(ref user_synonyms) => {
-                fn normalize(tokenizer: &Tokenizer<'_>, text: &str) -> Vec<String> {
-                    tokenizer
-                        .tokenize(text)
-                        .filter_map(|token| {
-                            if token.is_word() && !token.lemma().is_empty() {
-                                Some(token.lemma().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                }
-
                 let mut builder = TokenizerBuilder::new();
                 let stop_words = self.index.stop_words(self.wtxn)?;
                 if let Some(ref stop_words) = stop_words {
@@ -736,40 +723,54 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 let tokenizer = builder.build();
 
                 let mut new_synonyms = HashMap::new();
-                for (word, synonyms) in user_synonyms {
-                    // Normalize both the word and associated synonyms.
-                    let normalized_word = normalize(&tokenizer, word);
-                    let normalized_synonyms: Vec<_> = synonyms
-                        .iter()
-                        .map(|synonym| normalize(&tokenizer, synonym))
-                        .filter(|synonym| !synonym.is_empty())
-                        .collect();
+                for (original_word, synonyms) in user_synonyms {
+                    // Normalize only the key
+                    let normalized_word = normalize(&tokenizer, original_word);
 
                     // Store the normalized synonyms under the normalized word,
                     // merging the possible duplicate words.
-                    if !normalized_word.is_empty() && !normalized_synonyms.is_empty() {
-                        let entry = new_synonyms.entry(normalized_word).or_insert_with(Vec::new);
-                        entry.extend(normalized_synonyms.into_iter());
+                    if !normalized_word.is_empty() {
+                        new_synonyms
+                            .entry(normalized_word)
+                            .or_insert_with(Vec::new)
+                            .extend(synonyms.iter().cloned());
                     }
                 }
 
-                // Make sure that we don't have duplicate synonyms.
-                new_synonyms.iter_mut().for_each(|(_, synonyms)| {
-                    synonyms.sort_unstable();
-                    synonyms.dedup();
-                });
+                let new_synonyms: Vec<_> = new_synonyms
+                    .into_iter()
+                    .filter_map(|(key, mut synonyms)| {
+                        synonyms.sort_unstable();
+                        synonyms.dedup();
+                        if synonyms.is_empty() {
+                            return None;
+                        }
 
-                let old_synonyms = self.index.synonyms(self.wtxn)?;
+                        let synonyms = AssociatedSynonyms::new(synonyms);
+                        let has_synonyms = !synonyms.synonyms(&tokenizer).is_empty();
+                        if has_synonyms {
+                            Some((key, synonyms))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-                if new_synonyms != old_synonyms {
-                    self.index.put_synonyms(self.wtxn, &new_synonyms, user_synonyms)?;
-                    Ok(true)
-                } else {
-                    Ok(false)
+                self.index.synonyms.clear(self.wtxn)?;
+                for (key, synonyms) in new_synonyms {
+                    self.index.synonyms.put(self.wtxn, &key, &synonyms)?;
                 }
+
+                self.index.put_user_defined_synonyms(self.wtxn, user_synonyms)?;
+
+                Ok(())
             }
-            Setting::Reset => Ok(self.index.delete_synonyms(self.wtxn)?),
-            Setting::NotSet => Ok(false),
+            Setting::Reset => {
+                self.index.synonyms.clear(self.wtxn)?;
+                self.index.delete_user_defined_synonyms(self.wtxn)?;
+                Ok(())
+            }
+            Setting::NotSet => Ok(()),
         }
     }
 
@@ -1627,6 +1628,20 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             Ok(None)
         }
     }
+}
+
+/// Normalize and tokenize a text
+pub fn normalize(tokenizer: &Tokenizer<'_>, text: &str) -> Vec<String> {
+    tokenizer
+        .tokenize(text)
+        .filter_map(|token| {
+            if token.is_word() && !token.lemma().is_empty() {
+                Some(token.lemma().to_string())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
 }
 
 pub struct InnerIndexSettingsDiff {

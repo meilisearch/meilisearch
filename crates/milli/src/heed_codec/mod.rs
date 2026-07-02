@@ -10,6 +10,7 @@ mod roaring_bitmap_length;
 mod str_beu32_codec;
 mod str_ref;
 mod str_str_u8_codec;
+mod synonyms_key_codec;
 pub mod version;
 
 pub use byte_slice_ref::BytesRefCodec;
@@ -28,6 +29,7 @@ pub use self::roaring_bitmap_length::{
 };
 pub use self::str_beu32_codec::{StrBEU16Codec, StrBEU32Codec};
 pub use self::str_str_u8_codec::{U8StrStrCodec, UncheckedU8StrStrCodec};
+pub use self::synonyms_key_codec::{SynonymContainsUnitSeparator, SynonymsKeyCodec};
 
 pub trait BytesDecodeOwned {
     type DItem;
