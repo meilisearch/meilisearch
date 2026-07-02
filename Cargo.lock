@@ -3557,6 +3557,7 @@ dependencies = [
  "enum-iterator",
  "file-store",
  "flate2",
+ "futures",
  "hashbrown 0.15.5",
  "http-client",
  "indexmap",

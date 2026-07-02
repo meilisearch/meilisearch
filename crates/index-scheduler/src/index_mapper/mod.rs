@@ -12,15 +12,19 @@ use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CreateOrOpen, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tokio::runtime::Handle;
 use tracing::error;
 use uuid::Uuid;
 
-use self::index_map::IndexMap;
-use self::IndexStatus::{Available, BeingDeleted, Closing, Missing};
+use self::index_map::{IndexMap, TransferState};
+use self::IndexStatus::{Available, BeingDeleted, Closing, Missing, Transferring};
 use crate::uuid_codec::UuidCodec;
 use crate::{Error, IndexBudget, IndexSchedulerOptions, Result};
 
 mod index_map;
+
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
 
 /// The number of database used by index mapper
 const NUMBER_OF_DATABASES: u32 = 2;
@@ -93,6 +97,10 @@ pub enum IndexStatus {
     BeingDeleted,
     /// Temporarily do not insert the index in the index map as it is currently being resized/evicted from the map.
     Closing(index_map::ClosingIndex),
+    /// The index is currently being downloaded from or uploaded to the S3 bucket.
+    ///
+    /// Await the future and call either `end_download` or `end_upload` depending on the state.
+    Transferring(TransferState),
     /// You can use the index without worrying about anything.
     Available(Index),
 }
@@ -188,9 +196,15 @@ impl IndexMapper {
         wtxn: &mut RwTxn,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,
+        runtime: Option<Handle>,
     ) -> Result<Self> {
         Ok(Self {
-            index_map: Arc::new(RwLock::new(IndexMap::new(budget.index_count))),
+            index_map: Arc::new(RwLock::new(IndexMap::new(
+                2, // TBD available capacity
+                4, // TBD on-disk capacity,
+                runtime,
+                options.indexes_path.clone(),
+            ))),
             index_mapping: env.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
             index_stats: env.create_database(wtxn, Some(db_name::INDEX_STATS))?,
             base_path: options.indexes_path.clone(),
@@ -203,15 +217,16 @@ impl IndexMapper {
     }
 
     /// Get or create the index.
-    pub fn create_index(
+    pub async fn create_index(
         &self,
-        mut wtxn: RwTxn,
+        mut wtxn: RwTxn<'_>,
         name: &str,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         shards: Option<Shards>,
     ) -> Result<Index> {
-        match self.index(&wtxn, name) {
+        match self.index(&wtxn, name).await {
             Ok(index) => {
+                // TBD don't block here
                 wtxn.commit()?;
                 Ok(index)
             }
@@ -220,30 +235,40 @@ impl IndexMapper {
                 self.index_mapping.put(&mut wtxn, name, &uuid)?;
 
                 let index_path = self.index_path(uuid);
+                // TBD don't block here
                 fs::create_dir_all(&index_path)?;
 
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
                 // This is very unlikely to happen in practice.
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
-                let index = self
+                let index = match self
                     .index_map
                     .write()
                     .unwrap()
                     .create(
-                        &uuid,
+                        uuid,
                         &index_path,
                         date,
                         self.enable_mdb_writemap,
                         self.index_base_map_size,
                         CreateOrOpen::Create { shards },
                     )
-                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
+                    .await
+                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?
+                {
+                    Some(index) => index,
+                    None => unreachable!(
+                        "Attempt to download a non-existent index while it must be created"
+                    ),
+                };
+
                 let index_rtxn = index.read_txn()?;
                 let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
                     .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
                 self.store_stats_of(&mut wtxn, name, &stats)?;
                 drop(index_rtxn);
 
+                // TBD don't block here
                 wtxn.commit()?;
 
                 Ok(index)
@@ -388,7 +413,7 @@ impl IndexMapper {
     }
 
     /// Return an index, may open it if it wasn't already opened.
-    pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
+    pub async fn index(&self, rtxn: &RoTxn<'_>, name: &str) -> Result<Index> {
         if let Some((current_name, current_index)) =
             self.currently_updating_index.read().unwrap().as_ref()
         {
@@ -423,12 +448,13 @@ impl IndexMapper {
             }
 
             // we get the index here to drop the lock before entering the match
-            let index = self.index_map.read().unwrap().get(&uuid);
+            let index = self.index_map.read().unwrap().get(&uuid).await;
 
             match index {
                 Available(index) => break index,
                 Closing(reopen) => {
                     // Avoiding deadlocks: no lock taken while doing this operation.
+                    // TBD we must not wait timeout directly like that on the async runtime
                     let reopen = if let Some(reopen) = reopen.wait_timeout(Duration::from_secs(6)) {
                         reopen
                     } else {
@@ -438,8 +464,23 @@ impl IndexMapper {
                     // take the lock to reopen the environment.
                     reopen
                         .reopen(&mut self.index_map.write().unwrap(), &index_path)
+                        .await
                         .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                     continue;
+                }
+                Transferring(TransferState::Downloading(task)) => {
+                    // safety: we must ignore the error as it is extracted
+                    //         from an Arc in the end_downloading method
+                    let _ = task.await;
+                    // TBD correctly manage the error
+                    self.index_map.write().unwrap().end_transferring(&uuid).await.unwrap();
+                }
+                Transferring(TransferState::Uploading(task)) => {
+                    // safety: we must ignore the error as it is extracted
+                    //         from an Arc in the end_uploading method
+                    let _ = task.await;
+                    // TBD correctly manage the error
+                    self.index_map.write().unwrap().end_transferring(&uuid).await.unwrap();
                 }
                 BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
                 // since we're lazy, it's possible that the index has not been opened yet.
@@ -449,24 +490,28 @@ impl IndexMapper {
                     // that someone already opened the index (eg if two searches happen
                     // at the same time), thus before opening it we check a second time
                     // if it's not already there.
-                    match index_map.get(&uuid) {
+                    match index_map.get(&uuid).await {
                         Missing => {
                             let index_path = self.index_path(uuid);
-
-                            break index_map
+                            match index_map
                                 .create(
-                                    &uuid,
+                                    uuid,
                                     &index_path,
                                     None,
                                     self.enable_mdb_writemap,
                                     self.index_base_map_size,
                                     CreateOrOpen::Open,
                                 )
-                                .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
+                                .await
+                                .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?
+                            {
+                                Some(index) => break index,
+                                None => continue,
+                            }
                         }
                         Available(index) => break index,
-                        Closing(_) => {
-                            // the reopening will be handled in the next loop operation
+                        Closing(_) | Transferring(_) => {
+                            // awaiting the download/upload or reopening will be handled in the next loop operation
                             continue;
                         }
                         BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
@@ -486,9 +531,9 @@ impl IndexMapper {
         self.base_path.join(uuid.to_string())
     }
 
-    pub fn rollback_index(
+    pub async fn rollback_index(
         &self,
-        rtxn: &RoTxn,
+        rtxn: &RoTxn<'_>,
         name: &str,
         to: (u32, u32, u32),
     ) -> Result<RollbackOutcome> {
@@ -505,14 +550,14 @@ impl IndexMapper {
         let mut index_map = self.index_map.write().unwrap();
 
         'close_index: loop {
-            match index_map.get(&uuid) {
+            match index_map.get(&uuid).await {
                 Available(_) => {
                     index_map.close_for_resize(&uuid, self.enable_mdb_writemap, 0);
                     // index should now be `Closing`; try again
                     continue;
                 }
                 // index already closed
-                Missing => break 'close_index,
+                Missing | Transferring(_) => break 'close_index,
                 // closing requested by this thread or another one; wait for closing to complete, then exit
                 Closing(closing_index) => {
                     if closing_index.wait_timeout(Duration::from_secs(100)).is_none() {
@@ -527,6 +572,7 @@ impl IndexMapper {
         }
 
         let index_path = self.index_path(uuid);
+        // TBD don't block in here
         Index::rollback(milli::heed::EnvOpenOptions::new().read_txn_without_tls(), index_path, to)
             .map_err(|err| crate::Error::from_milli(err, Some(name.to_string())))
     }
@@ -538,21 +584,26 @@ impl IndexMapper {
     ///
     /// Since `f` is allowed to return a result, and `Index` is cloneable, it is still possible to wrongly build e.g. a vector of
     /// all the indexes, but this function makes it harder and so less likely to do accidentally.
-    pub fn try_for_each_index<U, V>(
+    pub async fn try_for_each_index<U, V>(
         &self,
-        rtxn: &RoTxn,
+        rtxn: &RoTxn<'_>,
         mut f: impl FnMut(&str, &Index) -> Result<U>,
     ) -> Result<V>
     where
         V: FromIterator<U>,
     {
-        self.index_mapping
-            .iter(rtxn)?
-            .map(|res| {
-                res.map_err(Error::from)
-                    .and_then(|(name, _)| self.index(rtxn, name).and_then(|index| f(name, &index)))
-            })
-            .collect()
+        let mut tmp = Vec::new();
+        for result in self.index_mapping.iter(rtxn)? {
+            match result {
+                Ok((name, _)) => {
+                    let index = self.index(rtxn, name).await?;
+                    // TBD not a big fan as `f` will block
+                    tmp.push(f(name, &index)?);
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(tmp.into_iter().collect::<V>())
     }
 
     /// Return the name of all indexes without opening them.
@@ -599,7 +650,7 @@ impl IndexMapper {
     /// If available in the cache, they are directly returned.
     /// Otherwise, the `Index` is opened to compute the stats on the fly (the result is not cached).
     /// The stats for an index are cached after each `Index` update.
-    pub fn stats_of(&self, rtxn: &RoTxn, index_uid: &str) -> Result<IndexStats> {
+    pub async fn stats_of(&self, rtxn: &RoTxn<'_>, index_uid: &str) -> Result<IndexStats> {
         let uuid = self
             .index_mapping
             .get(rtxn, index_uid)?
@@ -608,7 +659,7 @@ impl IndexMapper {
         match self.index_stats.get(rtxn, &uuid)? {
             Some(stats) => Ok(stats),
             None => {
-                let index = self.index(rtxn, index_uid)?;
+                let index = self.index(rtxn, index_uid).await?;
                 let index_rtxn = index.read_txn()?;
                 IndexStats::new(&index, &index_rtxn)
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))

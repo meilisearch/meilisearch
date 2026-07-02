@@ -190,6 +190,14 @@ where
         }
         None
     }
+
+    #[cfg(test)]
+    pub fn first_key_value(&self) -> Option<(&K, &V)>
+    where
+        K: Ord,
+    {
+        self.0.data.iter().min_by_key(|(_, (k, _))| k).map(|(_, (k, v))| (k, v))
+    }
 }
 
 /// The result of an insertion in a LRU map.

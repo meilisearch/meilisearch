@@ -346,7 +346,7 @@ impl IndexScheduler {
         let dynamic_search_rules =
             dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
-        let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
+        let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget, runtime.clone())?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
 
         let persisted = env.create_database(&mut wtxn, Some(db_name::PERSISTED))?;
@@ -574,9 +574,9 @@ impl IndexScheduler {
     /// Some configurations also can't reasonably open multiple indexes at once.
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
-    pub fn index(&self, name: &str) -> Result<Index> {
+    pub async fn index(&self, name: &str) -> Result<Index> {
         let rtxn = self.env.read_txn()?;
-        self.index_mapper.index(&rtxn, name)
+        self.index_mapper.index(&rtxn, name).await
     }
 
     /// Return the boolean referring if index exists.
@@ -601,12 +601,15 @@ impl IndexScheduler {
     ///
     /// If many indexes exist, this operation can take time to complete (in the order of seconds for a 1000 of indexes) as it needs to open
     /// all the indexes.
-    pub fn try_for_each_index<U, V>(&self, f: impl FnMut(&str, &Index) -> Result<U>) -> Result<V>
+    pub async fn try_for_each_index<U, V>(
+        &self,
+        f: impl FnMut(&str, &Index) -> Result<U>,
+    ) -> Result<V>
     where
         V: FromIterator<U>,
     {
         let rtxn = self.env.read_txn()?;
-        self.index_mapper.try_for_each_index(&rtxn, f)
+        self.index_mapper.try_for_each_index(&rtxn, f).await
     }
 
     /// Returns the total number of indexes available for the specified filter.
@@ -1010,20 +1013,20 @@ impl IndexScheduler {
     }
 
     /// Create a new index without any associated task.
-    pub fn create_raw_index(
+    pub async fn create_raw_index(
         &self,
         name: &str,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         shards: Option<Shards>,
     ) -> Result<Index> {
         let wtxn = self.env.write_txn()?;
-        let index = self.index_mapper.create_index(wtxn, name, date, shards)?;
+        let index = self.index_mapper.create_index(wtxn, name, date, shards).await?;
         Ok(index)
     }
 
-    pub fn refresh_index_stats(&self, name: &str) -> Result<()> {
+    pub async fn refresh_index_stats(&self, name: &str) -> Result<()> {
         let mut mapper_wtxn = self.env.write_txn()?;
-        let index = self.index_mapper.index(&mapper_wtxn, name)?;
+        let index = self.index_mapper.index(&mapper_wtxn, name).await?;
         let index_rtxn = index.read_txn()?;
 
         let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
@@ -1126,10 +1129,10 @@ impl IndexScheduler {
         });
     }
 
-    pub fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
+    pub async fn index_stats(&self, index_uid: &str) -> Result<IndexStats> {
         let is_indexing = self.is_index_processing(index_uid)?;
         let rtxn = self.read_txn()?;
-        let index_stats = self.index_mapper.stats_of(&rtxn, index_uid)?;
+        let index_stats = self.index_mapper.stats_of(&rtxn, index_uid).await?;
 
         Ok(IndexStats { is_indexing, inner_stats: index_stats })
     }
