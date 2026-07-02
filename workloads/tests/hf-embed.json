@@ -140,7 +140,7 @@
         "version": "1.35.1",
         "edition": "community",
         "extraCliArgs": [
-          "--upgrade-db",
+          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -244,7 +244,7 @@
         "source": "release",
         "version": "1.35.1",
         "edition": "community",
-        "extraCliArgs": ["--upgrade-db"]
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
@@ -438,7 +438,7 @@
         "version": "1.47.0",
         "edition": "community",
         "extraCliArgs": [
-          "--upgrade-db",
+          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -499,7 +499,7 @@
         "source": "release",
         "version": "1.47.0",
         "edition": "community",
-        "extraCliArgs": ["--upgrade-db"]
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
@@ -520,7 +520,7 @@
         "version": "1.48.0",
         "edition": "community",
         "extraCliArgs": [
-          "--upgrade-db",
+          "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -561,7 +561,7 @@
         "source": "release",
         "version": "1.48.0",
         "edition": "community",
-        "extraCliArgs": ["--upgrade-db"]
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
