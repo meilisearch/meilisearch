@@ -10,6 +10,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use http_client::ureq::http::header::AUTHORIZATION;
 use meilisearch_types::error::Code;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
@@ -57,6 +58,12 @@ impl IndexScheduler {
             })
             .collect();
 
+        // Resolve the target index name for each matched source index (see
+        // `resolve_target_index_names`).
+        let target_names = resolve_target_index_names(
+            indexes.iter().map(|(_, uid, settings)| (uid.as_str(), settings.name.as_deref())),
+        )?;
+
         let mut output = BTreeMap::new();
 
         let config = http_client::ureq::config::Config::builder()
@@ -81,7 +88,8 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
 
-            let ExportIndexSettings { filter, override_settings } = export_settings;
+            let ExportIndexSettings { filter, override_settings, name: _ } = export_settings;
+            let target_uid = &target_names[i];
 
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
@@ -114,7 +122,7 @@ impl IndexScheduler {
                 must_stop_processing: &must_stop_processing,
             };
             let options = ExportOptions {
-                index_uid: uid,
+                index_uid: target_uid,
                 payload_size,
                 override_settings: *override_settings,
                 export_mode: ExportMode::ExportRoute,
@@ -699,3 +707,78 @@ pub(super) enum ExportMode<'a> {
 
 // progress related
 enum ExportIndex {}
+
+/// Resolves the target index name for each matched source index.
+///
+/// Each item is a `(source_uid, name)` pair where `name` is the optional target-name template
+/// provided in the export settings. The `$name` variable in the template is replaced with the
+/// source index name; when no template is provided the source index name is used as-is.
+///
+/// Returns an error if a resolved name is not a valid index uid, or if two source indexes resolve
+/// to the same target name (which would silently merge or overwrite them).
+fn resolve_target_index_names<'a>(
+    sources: impl IntoIterator<Item = (&'a str, Option<&'a str>)>,
+) -> Result<Vec<String>> {
+    let mut target_names = Vec::new();
+    let mut sources_by_target: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (uid, name) in sources {
+        let target = match name {
+            Some(name) => name.replace("$name", uid),
+            None => uid.to_string(),
+        };
+        let target = IndexUid::try_from(target)
+            .map_err(|e| Error::InvalidIndexUid { index_uid: e.invalid_uid })?
+            .into_inner();
+        sources_by_target.entry(target.clone()).or_default().push(uid.to_string());
+        target_names.push(target);
+    }
+    if let Some((target, sources)) =
+        sources_by_target.into_iter().find(|(_, sources)| sources.len() > 1)
+    {
+        return Err(Error::ExportSameTargetIndexName { target, sources });
+    }
+    Ok(target_names)
+}
+
+#[cfg(test)]
+mod tests {
+    use meilisearch_types::error::{Code, ErrorCode};
+
+    use super::resolve_target_index_names;
+    use crate::Error;
+
+    #[test]
+    fn target_defaults_to_source_name() {
+        let targets = resolve_target_index_names([("movies", None), ("books", None)]).unwrap();
+        assert_eq!(targets, vec!["movies".to_string(), "books".to_string()]);
+    }
+
+    #[test]
+    fn name_variable_is_expanded() {
+        let targets = resolve_target_index_names([("super-toto", Some("mega-$name"))]).unwrap();
+        assert_eq!(targets, vec!["mega-super-toto".to_string()]);
+    }
+
+    #[test]
+    fn static_name_without_variable() {
+        let targets = resolve_target_index_names([("super-toto", Some("everyone"))]).unwrap();
+        assert_eq!(targets, vec!["everyone".to_string()]);
+    }
+
+    #[test]
+    fn colliding_target_names_are_rejected() {
+        let err = resolve_target_index_names([
+            ("super-toto", Some("everyone")),
+            ("super-boby", Some("everyone")),
+        ])
+        .unwrap_err();
+        assert!(matches!(err, Error::ExportSameTargetIndexName { .. }));
+        assert_eq!(err.error_code(), Code::ExportSameTargetIndexName);
+    }
+
+    #[test]
+    fn invalid_resolved_name_is_rejected() {
+        let err = resolve_target_index_names([("toto", Some("not a valid name"))]).unwrap_err();
+        assert!(matches!(err, Error::InvalidIndexUid { .. }));
+    }
+}
