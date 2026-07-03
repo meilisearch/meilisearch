@@ -45,6 +45,17 @@ impl<'a> WordFstBuilder<'a> {
         Ok(())
     }
 
+    /// Register a word that only exists in the exact-word database for prefix-FST building.
+    ///
+    /// Exact words must not be added to the words FST, otherwise typo tolerance would apply to
+    /// them, but their prefixes must still be discovered at indexing time.
+    pub fn register_exact_word_for_prefixes(&mut self, deladd: DelAdd, word: &[u8]) -> Result<()> {
+        if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
+            prefix_fst_builder.insert_word(word, deladd)?;
+        }
+        Ok(())
+    }
+
     pub fn build(mut self) -> Result<(Mmap, Option<PrefixData>)> {
         let words_fst_mmap = self.word_fst_builder.build(&mut |bytes, deladd| {
             if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
