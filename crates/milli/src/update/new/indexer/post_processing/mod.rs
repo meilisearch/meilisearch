@@ -173,17 +173,12 @@ pub fn recompute_exact_word_prefix_docids_from_database(
         exact_words.push(word.to_string());
     }
 
-    // Build a new prefix FST that contains both tolerant-word prefixes (via drain of the
-    // existing words FST) and exact-word prefixes (registered explicitly).
-    // `FstMergerBuilder::build` drains all remaining entries from the existing FST through
-    // the prefix callback, so we do not need to re-register tolerant words manually.
+    // Build a new prefix FST that contains both tolerant-word prefixes and exact-word prefixes
+    // (via drain of the existing words FST which already contains all words).
     let prefix_data = {
         let words_fst = index.words_fst(wtxn)?;
         let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
         word_fst_builder.with_prefix_settings(prefix_settings);
-        for word in &exact_words {
-            word_fst_builder.register_exact_word_for_prefixes(DelAdd::Addition, word.as_bytes())?;
-        }
         word_fst_builder.build()?.1
         // `words_fst` is dropped here, releasing the shared borrow on `wtxn`.
     };
@@ -218,7 +213,7 @@ pub fn recompute_exact_word_prefix_docids_from_database(
 /// Used when prefix search transitions from `Disabled` to `IndexingTime` via a settings change.
 /// Unlike [`recompute_exact_word_prefix_docids_from_database`], this rebuilds the prefix FST
 /// from scratch (both tolerant and exact words) and repopulates every prefix database.
-pub(super) fn recompute_all_prefix_databases_from_database(
+pub fn recompute_all_prefix_databases_from_database(
     index: &Index,
     wtxn: &mut RwTxn,
     progress: &Progress,
@@ -249,11 +244,11 @@ pub(super) fn recompute_all_prefix_databases_from_database(
         let empty_fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
         let mut word_fst_builder = WordFstBuilder::new(&empty_fst)?;
         word_fst_builder.with_prefix_settings(prefix_settings);
-        for word in &tolerant_words {
+        for eob in merge_join_by(tolerant_words.iter(), exact_words.iter(), |a, b| a.cmp(b)) {
+            let word = match eob {
+                EitherOrBoth::Both(w, _) | EitherOrBoth::Left(w) | EitherOrBoth::Right(w) => w,
+            };
             word_fst_builder.register_word(DelAdd::Addition, word.as_bytes())?;
-        }
-        for word in &exact_words {
-            word_fst_builder.register_exact_word_for_prefixes(DelAdd::Addition, word.as_bytes())?;
         }
         word_fst_builder.build()?.1
     };
@@ -338,27 +333,20 @@ fn compute_word_fst(
     let prefix_settings = index.prefix_settings(wtxn)?;
     word_fst_builder.with_prefix_settings(prefix_settings);
 
+    let mut combined_word_delta = WordDelta::default();
+    combined_word_delta.added.extend(word_delta.added.iter().cloned());
+    combined_word_delta.added.extend(exact_word_delta.added.iter().cloned());
+    combined_word_delta.deleted.extend(word_delta.deleted.iter().cloned());
+    combined_word_delta.deleted.extend(exact_word_delta.deleted.iter().cloned());
+
     // we ignore modifications when rebuilding the FST
-    for either in word_delta.added_or_deleted_words() {
+    for either in combined_word_delta.added_or_deleted_words() {
         match either {
             Either::Left(added_word) => {
                 word_fst_builder.register_word(DelAdd::Addition, added_word.as_ref())?;
             }
             Either::Right(deleted_word) => {
                 word_fst_builder.register_word(DelAdd::Deletion, deleted_word.as_ref())?;
-            }
-        }
-    }
-
-    for either in exact_word_delta.added_or_deleted_words() {
-        match either {
-            Either::Left(added_word) => {
-                word_fst_builder
-                    .register_exact_word_for_prefixes(DelAdd::Addition, added_word.as_ref())?;
-            }
-            Either::Right(deleted_word) => {
-                word_fst_builder
-                    .register_exact_word_for_prefixes(DelAdd::Deletion, deleted_word.as_ref())?;
             }
         }
     }
@@ -387,8 +375,15 @@ pub fn recompute_word_fst_from_word_docids_database(
     let fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
     let mut word_fst_builder = WordFstBuilder::new(&fst)?;
     let words = index.word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>();
-    for res in words {
-        let (word, _) = res?;
+    let exact_words = index.exact_word_docids.iter(wtxn)?.remap_data_type::<DecodeIgnore>();
+
+    for eob in merge_join_by(words, exact_words, |lhs, rhs| match (lhs, rhs) {
+        (Ok((word, _)), Ok((exact_word, _))) => word.cmp(exact_word),
+        (Err(_), _) | (_, Err(_)) => Ordering::Equal,
+    }) {
+        let (word, _) = match eob {
+            EitherOrBoth::Both(kv, _) | EitherOrBoth::Left(kv) | EitherOrBoth::Right(kv) => kv?,
+        };
         word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
     }
     let (word_fst_mmap, _) = word_fst_builder.build()?;
