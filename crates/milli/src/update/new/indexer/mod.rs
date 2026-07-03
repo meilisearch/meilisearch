@@ -16,7 +16,8 @@ use heed::{BytesDecode, Database, RoTxn, RwTxn};
 pub use mini_string::MiniString;
 pub use partial_dump::PartialDump;
 pub use post_processing::{
-    recompute_exact_word_prefix_docids_from_database, recompute_word_fst_from_word_docids_database,
+    recompute_all_prefix_databases_from_database, recompute_exact_word_prefix_docids_from_database,
+    recompute_word_fst_from_word_docids_database,
 };
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 pub use settings_changes::settings_change_extract;
