@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 4320 # 72h
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@1.96.1
 
       # Run benchmarks
       - name: Run the fuzzer
