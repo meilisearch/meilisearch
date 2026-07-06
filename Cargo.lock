@@ -4560,6 +4560,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float 5.3.0",
+ "permissive-json-pointer",
  "rand 0.8.6",
  "rayon",
  "rhai",

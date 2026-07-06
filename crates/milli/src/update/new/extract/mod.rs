@@ -14,33 +14,14 @@ pub use geo::*;
 pub use searchable::*;
 pub use vectors::{EmbeddingExtractor, SettingsChangeEmbeddingExtractor};
 
-/// TODO move in permissive json pointer
+// TODO move in permissive json pointer
+// can't be done for now because of the use of `PatternMatch`
 pub mod perm_json_p {
     use serde_json::{Map, Value};
 
     use crate::attribute_patterns::PatternMatch;
     use crate::Result;
-    const SPLIT_SYMBOL: char = '.';
-
-    /// Returns `true` if the `selector` match the `key`.
-    ///
-    /// ```text
-    /// Example:
-    /// `animaux`           match `animaux`
-    /// `animaux.chien`     match `animaux`
-    /// `animaux.chien`     match `animaux`
-    /// `animaux.chien.nom` match `animaux`
-    /// `animaux.chien.nom` match `animaux.chien`
-    /// -----------------------------------------
-    /// `animaux`    doesn't match `animaux.chien`
-    /// `animaux.`   doesn't match `animaux`
-    /// `animaux.ch` doesn't match `animaux.chien`
-    /// `animau`     doesn't match `animaux`
-    /// ```
-    pub fn contained_in(selector: &str, key: &str) -> bool {
-        selector.starts_with(key)
-            && selector[key.len()..].chars().next().map(|c| c == SPLIT_SYMBOL).unwrap_or(true)
-    }
+    use permissive_json_pointer::SPLIT_SYMBOL;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Depth {

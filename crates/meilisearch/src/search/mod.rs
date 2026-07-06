@@ -28,7 +28,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
+    make_document, filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
     OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::network::Network;
@@ -39,9 +39,7 @@ use milli::{
     AscDesc, FieldId, FieldsIdsMap, FormatOptions, Index, LocalizedAttributesRule, MatchBounds,
     MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
-use permissive_json_pointer::contained_in;
 use regex::Regex;
-use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 #[cfg(test)]
@@ -50,7 +48,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
-use crate::search::value_paths_visitor::ValuePathsVisitor;
 
 pub mod federated;
 pub use federated::{
@@ -59,7 +56,6 @@ pub use federated::{
 };
 
 mod hydration;
-mod value_paths_visitor;
 use hydration::hydrate_documents;
 mod ranking_rules;
 
@@ -2837,34 +2833,6 @@ fn add_non_formatted_ids_to_formatted_options(
     for id in to_retrieve_ids {
         formatted_options.entry(*id).or_insert(FormatOptions { highlight: false, crop: None });
     }
-}
-
-fn make_document<S, I>(
-    obkv: &obkv::KvReaderU16,
-    field_ids_map: &FieldsIdsMap,
-    selectors: impl IntoIterator<IntoIter = I>,
-) -> milli::Result<Document>
-where
-    S: AsRef<str>,
-    I: Clone + Iterator<Item = S>,
-{
-    let selectors = selectors.into_iter();
-    let mut document = serde_json::Map::new();
-
-    for (key, value_bytes) in obkv {
-        let key = field_ids_map.name(key).expect("Missing field name");
-        if !selectors.clone().any(|selector| contained_in(selector.as_ref(), key)) {
-            // If the key is not part of the selection, skip this value
-            continue;
-        }
-
-        let visitor = ValuePathsVisitor::new_from_path(selectors.clone(), key);
-        let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
-        let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
-        document.insert(key.to_string(), value);
-    }
-
-    Ok(document)
 }
 
 #[allow(clippy::too_many_arguments)]

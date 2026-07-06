@@ -5,13 +5,13 @@ use std::ops::DerefMut as _;
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
+use permissive_json_pointer::contained_in;
 
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::{match_searchable_field, OneOrTwoTokenizers};
 use crate::fields_ids_map::metadata::Metadata;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
-use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };

@@ -29,7 +29,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter, Member};
+use meilisearch_types::milli::{make_document, AscDesc, DocumentId, IndexFilter, Member};
 use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
@@ -63,8 +63,7 @@ use crate::search::proxy::{
     json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search::{
-    make_document, ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors,
-    VisitFacetValues,
+    ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
 };
 use crate::{aggregate_methods, Opt};
 
