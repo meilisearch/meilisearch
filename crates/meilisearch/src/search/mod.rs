@@ -1310,7 +1310,7 @@ pub enum FacetValue {
 }
 
 impl FacetValue {
-    pub fn from_value(field: &serde_json::Value) -> impl Iterator<Item = FacetValue> + '_ {
+    pub fn from_value(field: &Value) -> impl Iterator<Item = FacetValue> + '_ {
         match field {
             Value::Array(values) => {
                 either::Either::Left(values.iter().flat_map(Self::from_leaf_value))
@@ -1319,7 +1319,7 @@ impl FacetValue {
         }
     }
 
-    fn from_leaf_value(field: &serde_json::Value) -> Option<FacetValue> {
+    fn from_leaf_value(field: &Value) -> Option<FacetValue> {
         match field {
             Value::Bool(b) => Some(FacetValue::Normalized(b.to_string())),
             Value::Number(number) => Some(FacetValue::Number(number.clone())),

@@ -20,7 +20,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, Deadline,
-    DocumentId, FederatingResultsStep, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET,
+    DocumentId, FederatingResultsStep, OrderBy, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -50,7 +50,8 @@ use crate::search::federated::types::{
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
-    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues, DEFAULT_SEARCH_LIMIT,
+    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues,
+    DEFAULT_SEARCH_LIMIT,
 };
 
 #[allow(clippy::too_many_arguments)]

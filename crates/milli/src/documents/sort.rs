@@ -412,7 +412,7 @@ impl<'ctx> SortedDocuments<'ctx> {
 pub fn recursive_sort<'ctx>(
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
-    sort: Vec<AscDesc>,
+    sort: &[AscDesc],
     candidates: &'ctx RoaringBitmap,
 ) -> crate::Result<SortedDocuments<'ctx>> {
     let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
@@ -452,6 +452,7 @@ pub fn recursive_sort<'ctx>(
                     fields_ids_map.id(RESERVED_GEO_LNG_FIELD_NAME),
                 ) {
                     need_geo_candidates = true;
+                    let target_point = [target_point[0], target_point[1]];
                     fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
                     continue;
                 }

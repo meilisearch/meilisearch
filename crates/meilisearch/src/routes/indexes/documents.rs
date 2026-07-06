@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::io::{ErrorKind, Seek as _};
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -19,12 +20,16 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::constants::{
+    RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
+};
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter};
+use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter, Member};
 use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
@@ -53,15 +58,20 @@ use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
     PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::{ExternalDocumentId, RetrieveVectors};
+use crate::search::federated::weighted_scores;
 use crate::search::proxy::{
     json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+};
+use crate::search::{
+    make_document, ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors,
+    VisitFacetValues,
 };
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
+use crate::search::federated::types::{FEDERATION_HIT, WEIGHTED_SCORE_VALUES};
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -1071,6 +1081,7 @@ async fn retrieve_documents_local(
         } else {
             None
         };
+
         let (total, documents) = retrieve_documents(
             &index,
             &rtxn,
