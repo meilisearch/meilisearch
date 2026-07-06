@@ -1696,3 +1696,69 @@ async fn duplicated_word_constraints() {
     ]
     "###);
 }
+
+#[actix_web::test]
+async fn list_many_rules() {
+    let server = dynamic_search_rules_server().await;
+
+    let index = server.index("movies");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "pinned" },
+                { "id": "mario" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let mut last_task = None;
+    for i in 0..1_001 {
+        let (task, code) = server
+            .create_dynamic_search_rule(
+                format!("dsr-number-{i}"),
+                json!({
+                    "description": "Some DSR rule",
+                    "active": false,
+                }),
+            )
+            .await;
+        snapshot!(code, @"202 Accepted");
+
+        last_task = Some(task);
+    }
+
+    if let Some(last_task) = last_task {
+        server.wait_task(last_task.uid()).await.succeeded();
+    }
+
+    let (value, code) = server
+        .list_dynamic_search_rules_with(json!({
+          "filter": {
+            "query": "DSR"
+          },
+          "offset": 1000
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r###"
+    {
+      "results": [
+        {
+          "uid": "dsr-number-1000",
+          "description": "Some DSR rule",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        }
+      ],
+      "offset": 1000,
+      "limit": 20,
+      "total": 1001
+    }
+    "###);
+}
