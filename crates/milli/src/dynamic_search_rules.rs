@@ -145,9 +145,6 @@ impl<'a> DynamicSearchRulesView<'a> {
         search.candidates(&universe);
 
         search.exhaustive_number_hits(true);
-        search.max_total_hits(Some(
-            self.index.pagination_max_total_hits(self.rtxn)?.unwrap_or(1000) as usize,
-        ));
         search.limit(limit);
         search.offset(offset);
         let searchable_attrs = ["description".into(), "conditions.query.words".into()];
