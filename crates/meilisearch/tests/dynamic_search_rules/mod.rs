@@ -1622,3 +1622,77 @@ async fn search_pumps_pins_when_organic_results_run_out() {
 
     snapshot!(json_string!(value["hits"]), name: "offset_2_limit_2");
 }
+
+#[actix_web::test]
+async fn duplicated_word_constraints() {
+    let server = dynamic_search_rules_server().await;
+
+    let index = server.index("movies");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "pinned" },
+                { "id": "mario" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "double-words-constraints",
+            json!({
+                "active": true,
+                "conditions": {
+                  "query": {
+                    "words": "Mario Luigi"
+                  }
+                },
+                "actions": [
+                    {
+                        "selector": { "id": "pinned" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = index.search_post(json!({ "q": "mario luigi" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "mario"
+      },
+      {
+        "id": "pinned"
+      }
+    ]
+    "###);
+
+    let (value, code) = index.search_post(json!({ "q": "mario" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "mario"
+      }
+    ]
+    "###);
+
+    let (value, code) = index.search_post(json!({ "q": "mario mario" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "mario"
+      }
+    ]
+    "###);
+}
