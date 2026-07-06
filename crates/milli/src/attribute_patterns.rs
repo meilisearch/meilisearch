@@ -15,7 +15,7 @@ pub struct AttributePatterns {
     /// An array of attribute name patterns. Each pattern can be an exact
     /// attribute name, or include wildcards (`*`) at the start, end, or
     /// both. Examples: `["title", "description_*", "*_date", "*content*"]`.
-    #[schema(value_type = Vec<String>, example = json!(["title", "overview_*", "release_date"]))]
+    #[schema(example = json!(["title", "overview_*", "release_date"]))]
     pub patterns: Vec<String>,
 }
 
@@ -50,6 +50,10 @@ impl AttributePatterns {
             }
         }
         pattern_match
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
     }
 }
 

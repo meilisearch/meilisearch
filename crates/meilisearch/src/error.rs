@@ -4,8 +4,7 @@ use byte_unit::{Byte, UnitType};
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
-use meilisearch_types::milli;
-use meilisearch_types::milli::OrderBy;
+use meilisearch_types::milli::{self, AttributePatterns, OrderBy};
 use meilisearch_types::tasks::network::headers::{
     PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_INDEX_COUNT_HEADER, PROXY_IMPORT_INDEX_HEADER,
     PROXY_IMPORT_REMOTE_HEADER, PROXY_IMPORT_TASK_KEY_HEADER, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
@@ -41,7 +40,7 @@ pub enum MeilisearchHttpError {
     #[error("Using pagination options is not allowed in federated queries.\n - Hint: remove `{0}` from the query or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search")]
     PaginationInFederatedQuery(&'static str),
     #[error("Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from the query or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{0}: {1:?}` for facets in federated search")]
-    FacetsInFederatedQuery(String, Vec<String>),
+    FacetsInFederatedQuery(String, AttributePatterns),
     #[error("Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from the query or remove `federation` from the request\n - Hint: pass `federation.personalize` for personalization in federated search")]
     PersonalizationInFederatedQuery,
     #[error("Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from the query or remove `federation` from the request")]

@@ -224,6 +224,7 @@ pub struct SearchQueryGet {
     ///
     /// The response includes `facetDistribution` and, for numeric facets, `facetStats` (min/max).
     ///
+    /// // TODO change the doc
     /// Use `["*"]` to request counts for all [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
     ///
     /// The number of values returned per facet is limited by the index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-faceting#body-max-values-per-facet-one-of-0) setting; attributes not in filterableAttributes are ignored.
@@ -435,7 +436,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             distinct: other.distinct,
-            facets: other.facets.map(|o| o.into_iter().collect()),
+            facets: other.facets.map(|o| o.into_iter().collect::<Vec<_>>().into()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             matching_strategy: other.matching_strategy,
