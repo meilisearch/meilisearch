@@ -286,9 +286,10 @@ impl<'a> DynamicSearchRulesView<'a> {
 
             // 4. exclude words with more word constraints than present in the query
             if let Some(words_count_plus_one) = words_count.checked_add(1) {
-                for res in
-                    word_count_db.range(self.rtxn, &((query_words_fid, words_count_plus_one)..))?
-                {
+                for res in word_count_db.range(
+                    self.rtxn,
+                    &((query_words_fid, words_count_plus_one)..=(query_words_fid, u8::MAX)),
+                )? {
                     let ((_, _constraint_count), more_constraints_than_query_rules) = res?;
                     active_rules -= more_constraints_than_query_rules;
                 }
