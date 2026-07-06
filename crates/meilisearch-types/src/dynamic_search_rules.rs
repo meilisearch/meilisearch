@@ -276,18 +276,12 @@ pub struct RuleAction {
 // manual impl: no support for schema_type = Object
 impl routes::RequestBody for RuleAction {}
 
-#[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(
-    rename_all = camelCase,
-    deny_unknown_fields,
-    where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>
-)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(db, where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>, no_error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selector {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[deserr(default)]
+    #[request(default, skip_serializing_if = "Option::is_none")]
     pub index_uid: Option<IndexUid>,
+    #[request(required)]
     pub id: String,
 }
 
