@@ -6,6 +6,7 @@ use fst::IntoStreamer;
 use heed::RwTxn;
 use http_client::policy::IpPolicy;
 use maplit::hashset;
+use time::OffsetDateTime;
 
 use super::*;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
@@ -17,7 +18,7 @@ use crate::search::TermsMatchingStrategy;
 use crate::update::new::indexer;
 use crate::update::Setting;
 use crate::vector::db::IndexEmbeddingConfig;
-use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
+use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, UserError};
 
 #[test]
 fn simple_document_replacement() {
@@ -603,7 +604,8 @@ fn index_documents_with_nested_primary_key() {
     let rtxn = index.read_txn().unwrap();
 
     // testing the simple query search
-    let mut search = crate::Search::new(&rtxn, &index, &progress);
+    let mut search =
+        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
     search.query("document");
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     // all documents should be returned
@@ -713,7 +715,8 @@ fn test_facets_generation() {
     let rtxn = index.read_txn().unwrap();
 
     for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
-        let mut search = crate::Search::new(&rtxn, &index, &progress);
+        let mut search =
+            crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
         let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
         let filter = crate::Filter::from_str(&filter).unwrap().unwrap();
         search.filter(Some(IndexFilter::from(filter)));
@@ -752,7 +755,8 @@ fn test_facets_generation() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = crate::Search::new(&rtxn, &index, &progress);
+    let mut search =
+        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
     search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
         "dog.race.bernese mountain",
     )))]);
@@ -2872,7 +2876,7 @@ fn delete_words_exact_attributes() {
     let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
     insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
 
-    let mut s = Search::new(&txn, &index, &progress);
+    let mut s = crate::Search::new(&txn, &index, "test", OffsetDateTime::now_utc(), &progress);
     s.query("hello");
     let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");

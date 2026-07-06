@@ -245,7 +245,7 @@ impl TempIndex {
     }
 
     pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
-        self.inner.search(rtxn, &self.progress)
+        self.inner.search(rtxn, "test", time::OffsetDateTime::now_utc(), &self.progress)
     }
 }
 

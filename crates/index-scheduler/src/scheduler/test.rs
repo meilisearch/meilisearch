@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::milli::{self};
@@ -787,7 +788,7 @@ fn test_settings_update() {
     }
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
     let embedders = index.embedding_configs();
@@ -840,6 +841,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -876,6 +879,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -919,6 +924,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -963,6 +970,8 @@ fn basic_get_stats() {
         "documentAdditionOrUpdate": 0,
         "documentDeletion": 0,
         "documentEdition": 0,
+        "dsrClear": 0,
+        "dsrUpdate": 0,
         "dumpCreation": 0,
         "export": 0,
         "indexCompaction": 0,
@@ -1013,17 +1022,18 @@ fn create_and_list_index() {
     handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
     // The index creation has not been started, the index should not exists
 
-    let err = index_scheduler.index("kefir").map(|_| ()).unwrap_err();
+    let err = index_scheduler.user_index("kefir").map(|_| ()).unwrap_err();
     snapshot!(err, @"Index `kefir` not found.");
-    let empty = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    let empty =
+        index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(format!("{empty:?}"), @"(0, [])");
 
     // After advancing just once the index should've been created, the wtxn has been released and commited
     // but the indexUpdate task has not been processed yet
     handle.advance_till([InsideProcessBatch]);
 
-    index_scheduler.index("kefir").unwrap();
-    let list = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
+    index_scheduler.user_index("kefir").unwrap();
+    let list = index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]", "[1][0][1].internal_database_sizes" => "[bytes]" }), @r###"
     [
       1,
@@ -1077,4 +1087,57 @@ fn test_scheduler_doesnt_run_with_zero_batched_tasks() {
     let (index_scheduler, mut handle) = handle.restart(index_scheduler, true, vec![], |_| None);
     handle.advance_n_successful_batches(1);
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_restart");
+}
+
+#[test]
+fn test_index_uid_count() {
+    let (index_scheduler, _) = IndexScheduler::test(true, vec![]);
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"0");
+
+    drop(
+        index_scheduler
+            .index_mapper
+            .create_index(wtxn, UserIndex::new("test").unwrap(), None, None)
+            .unwrap(),
+    );
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"1");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"1");
+
+    drop(
+        index_scheduler
+            .index_mapper
+            .create_index(wtxn, UserIndex::new("test-2").unwrap(), None, None)
+            .unwrap(),
+    );
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"2");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"2");
+
+    drop(index_scheduler.index_mapper.create_index(wtxn, DsrIndex, None, None).unwrap());
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"2");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"1");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"3");
+
+    drop(
+        index_scheduler
+            .index_mapper
+            .create_index(wtxn, UserIndex::new("test-3").unwrap(), None, None)
+            .unwrap(),
+    );
+
+    let rtxn = index_scheduler.env.read_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&rtxn).unwrap(), @"3");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&rtxn).unwrap(), @"1");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&rtxn).unwrap(), @"4");
 }

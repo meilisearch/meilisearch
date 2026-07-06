@@ -164,7 +164,7 @@ pub async fn render_post(
                     (Some(index_uid), _) => {
                         // avoid simultaneously opening several indexes
                         drop(template_index_rtxn);
-                        input_index = index_scheduler.index(index_uid).map_err(|error| {
+                        input_index = index_scheduler.user_index(index_uid).map_err(|error| {
                             Error::CannotOpenIndex { error, index: index_uid.to_string() }
                         })?;
                         let input_index_rtxn =
@@ -686,7 +686,7 @@ fn fetch_template<'a>(
                     kind,
                     missing_param: "embedder",
                 })?;
-            let index = index_scheduler.index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
@@ -731,7 +731,7 @@ fn fetch_template<'a>(
                 });
             }
 
-            let index = index_scheduler.index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
@@ -781,7 +781,7 @@ fn fetch_template<'a>(
                 });
             }
 
-            let index = index_scheduler.index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
@@ -824,7 +824,7 @@ fn fetch_template<'a>(
                 });
             }
 
-            let index = index_scheduler.index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),

@@ -118,6 +118,11 @@ pub enum Error {
         "{index_uid} is not a valid index uid. Index uid can be an integer or a string containing only alphanumeric characters, hyphens (-) and underscores (_), and can not be more than 400 bytes."
     )]
     InvalidIndexUid { index_uid: String },
+    #[error(
+        "Expected DSR-specific uid `{}`, got `{index_uid}`",
+        meilisearch_types::index_uid::DsrIndex::dsr_uid()
+    )]
+    ExpectedDsrUid { index_uid: String },
     #[error("Task `{0}` not found.")]
     TaskNotFound(TaskId),
     #[error("Task `{0}` does not contain any documents. Only `documentAdditionOrUpdate` tasks with the statuses `enqueued` or `processing` contain documents")]
@@ -246,6 +251,7 @@ impl Error {
             | Error::InvalidTaskTypes { .. }
             | Error::InvalidTaskCanceledBy { .. }
             | Error::InvalidIndexUid { .. }
+            | Error::ExpectedDsrUid { .. }
             | Error::TaskNotFound(_)
             | Error::TaskFileNotFound(_)
             | Error::BatchNotFound(_)
@@ -325,7 +331,7 @@ impl ErrorCode for Error {
             Error::InvalidTaskStatuses { .. } => Code::InvalidTaskStatuses,
             Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
-            Error::InvalidIndexUid { .. } => Code::InvalidIndexUid,
+            Error::InvalidIndexUid { .. } | Error::ExpectedDsrUid { .. } => Code::InvalidIndexUid,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskFileNotFound(_) => Code::TaskFileNotFound,
             Error::BatchNotFound(_) => Code::BatchNotFound,

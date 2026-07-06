@@ -278,12 +278,15 @@ impl Search<'_> {
             max_total_hits: self.max_total_hits,
             rtxn: self.rtxn,
             index: self.index,
+            index_uid: self.index_uid,
+            before_search: self.before_search,
             semantic: self.semantic.clone(),
             deadline: self.deadline.clone(),
             ranking_score_threshold: self.ranking_score_threshold,
             locales: self.locales.clone(),
             progress: self.progress,
-            pins: self.pins.clone(),
+            dynamic_search_rules: self.dynamic_search_rules,
+            candidates: self.candidates,
         };
 
         let semantic = search.semantic.take();

@@ -1,17 +1,25 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
+use meilisearch_types::index_uid::DsrIndex;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
-use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
-use meilisearch_types::milli::update::DocumentAdditionResult;
-use meilisearch_types::milli::{self, ChannelCongestion};
+use meilisearch_types::milli::update::new::indexer::{
+    self, IndexOperations, Payload, UpdateByFunction,
+};
+use meilisearch_types::milli::update::{DocumentAdditionResult, Setting};
+use meilisearch_types::milli::vector::RuntimeEmbedders;
+use meilisearch_types::milli::{
+    self, ChannelCongestion, FilterFeatures, FilterableAttributesFeatures,
+    FilterableAttributesPatterns, FilterableAttributesRule, MustStopProcessing,
+};
 use meilisearch_types::network::Network;
-use meilisearch_types::settings::apply_settings_to_builder;
-use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
+use meilisearch_types::settings::{apply_settings_to_builder, Settings, TypoSettings};
+use meilisearch_types::tasks::{Details, DsrUpdate, KindWithContent, Status, Task};
 use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 
@@ -564,4 +572,219 @@ impl IndexScheduler {
             }
         }
     }
+
+    pub(crate) fn apply_dsr_settings<'i>(
+        &self,
+        index_wtxn: &mut RwTxn<'i>,
+        index: &'i Index,
+        progress: &Progress,
+        must_stop_processing: &MustStopProcessing,
+        embedder_stats: Arc<EmbedderStats>,
+    ) -> Result<Option<ChannelCongestion>> {
+        progress.update_progress(SettingsProgress::RetrievingAndMergingTheSettings);
+        let indexer_config = self.index_mapper.indexer_config();
+        let mut builder = milli::update::Settings::new(index_wtxn, index, indexer_config);
+
+        let checked_settings = Settings {
+            displayed_attributes: Setting::Set(vec!["*".to_string()]).into(),
+            searchable_attributes: Setting::Set(vec![
+                // used to find query word constraints
+                "conditions.query.words".to_string(),
+                // used in list rules
+                "description".to_string(),
+            ])
+            .into(),
+            filterable_attributes: Setting::Set(vec![
+                // filter by active or inactive rules
+                eq_attr("active".into()),
+                // used to find time constraints
+                cmp_attr("conditions.time.start".into()),
+                // used to find time constraints
+                cmp_attr("conditions.time.end".into()),
+                // used to find query isEmpty constraints
+                eq_attr("conditions.query.isEmpty".into()),
+            ]),
+            sortable_attributes: {
+                let mut sortable_attributes: BTreeSet<_> = Default::default();
+                // used to sort rules by precedence in responses
+                sortable_attributes.insert("precedence".to_string());
+                Setting::Set(sortable_attributes)
+            },
+            foreign_keys: Setting::NotSet,
+            ranking_rules: Setting::NotSet,
+            stop_words: Setting::NotSet,
+            non_separator_tokens: Setting::NotSet,
+            separator_tokens: Setting::NotSet,
+            dictionary: Setting::NotSet,
+            synonyms: Setting::NotSet,
+            distinct_attribute: Setting::NotSet,
+            proximity_precision: Setting::Set(
+                meilisearch_types::settings::ProximityPrecisionView::ByAttribute,
+            ),
+            typo_tolerance: Setting::Set(TypoSettings {
+                enabled: Setting::Set(false),
+                min_word_size_for_typos: Setting::NotSet,
+                disable_on_words: Setting::NotSet,
+                disable_on_attributes: Setting::NotSet,
+                disable_on_numbers: Setting::Set(true),
+            }),
+            faceting: Setting::NotSet,
+            pagination: Setting::NotSet,
+            embedders: Setting::NotSet,
+            search_cutoff_ms: Setting::NotSet,
+            localized_attributes: Setting::NotSet,
+            facet_search: Setting::Set(false),
+            prefix_search: Setting::Set(
+                meilisearch_types::settings::PrefixSearchSettings::Disabled,
+            ),
+            chat: Setting::NotSet,
+            _kind: std::marker::PhantomData,
+        };
+        apply_settings_to_builder(&checked_settings, &mut builder);
+
+        progress.update_progress(SettingsProgress::ApplyTheSettings);
+        let congestion = builder
+            .execute(must_stop_processing, progress, self.ip_policy(), embedder_stats)
+            .map_err(|err| Error::from_milli(err, None))?;
+        Ok(congestion)
+    }
+
+    pub(crate) fn apply_dsr_update<'i>(
+        &self,
+        index_wtxn: &mut RwTxn<'i>,
+        index: &'i Index,
+        updates: &'i [DsrUpdate],
+        embedder_stats: Arc<EmbedderStats>,
+        mut tasks: Vec<Task>,
+        progress: &Progress,
+    ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
+        let indexer_alloc = Bump::new();
+        let from_milli = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_owned()));
+        let started_processing_at = std::time::Instant::now();
+
+        progress.update_progress(DocumentOperationProgress::RetrievingConfig);
+        let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
+        let rtxn = index.read_txn()?;
+        let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+
+        let mut indexer = IndexOperations::new();
+
+        for update in updates {
+            match update {
+                DsrUpdate::CreateOrUpdate { rule_id, update } => {
+                    // unwrap: dynamic search rule always serializable
+                    let mut rule = serde_json::to_value(update).unwrap();
+
+                    // unwrap: DynamicSearchRuleUpdateRequest always serializes as an object
+                    rule.as_object_mut().unwrap().insert(
+                        "uid".into(),
+                        serde_json::Value::String(rule_id.as_str().to_owned()),
+                    );
+
+                    let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
+                    // unwrap: vec writing cannot fail + dynamic search rule always serializable
+                    serde_json::to_writer(&mut vec, &rule).unwrap();
+                    let vec = vec.into_bump_slice();
+                    indexer.push_raw_operation(Payload::Update {
+                        payload: vec,
+                        on_missing_document: milli::update::MissingDocumentPolicy::Create,
+                    });
+                }
+                DsrUpdate::Deletion(to_delete) => {
+                    let to_delete = &*indexer_alloc.alloc_str(to_delete.as_str());
+                    let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
+                    vec.push(to_delete);
+                    let vec = vec.into_bump_slice();
+                    indexer.push_raw_operation(Payload::DeletionByExternalIds(vec));
+                }
+            }
+        }
+
+        let indexer_config = self.index_mapper.indexer_config();
+        let pool = &indexer_config.thread_pool;
+
+        progress.update_progress(DocumentOperationProgress::ComputingDocumentChanges);
+
+        let (document_changes, operation_stats, primary_key) = indexer
+            .into_changes(
+                &indexer_alloc,
+                index,
+                &rtxn,
+                Some("uid"),
+                &mut new_fields_ids_map,
+                &must_stop_processing,
+                progress.clone(),
+                // no sharding for the DSR index: DSR rules are fully replicated on all remotes
+                None,
+            )
+            .map_err(from_milli)?;
+
+        progress.update_progress(DocumentOperationProgress::ReadingPayloadStats);
+        let mut candidates_count = 0;
+        for (stats, task) in operation_stats.into_iter().zip(&mut tasks) {
+            candidates_count += stats.document_count;
+            match stats.error {
+                Some(error) => {
+                    task.status = Status::Failed;
+                    task.error = Some(milli::Error::UserError(error).into());
+                }
+                None => task.status = Status::Succeeded,
+            }
+        }
+
+        progress.update_progress(DocumentOperationProgress::Indexing);
+        let mut congestion = None;
+        let embedders = RuntimeEmbedders::default();
+        if tasks.iter().any(|res| res.error.is_none()) {
+            congestion = Some(
+                indexer::index(
+                    index_wtxn,
+                    index,
+                    pool,
+                    indexer_config.grenad_parameters(),
+                    &db_fields_ids_map,
+                    new_fields_ids_map,
+                    primary_key,
+                    &document_changes,
+                    embedders,
+                    &must_stop_processing,
+                    progress,
+                    self.ip_policy(),
+                    &embedder_stats,
+                )
+                .map_err(from_milli)?,
+            );
+
+            let addition = DocumentAdditionResult {
+                indexed_documents: candidates_count,
+                number_of_documents: index.number_of_documents(index_wtxn).map_err(from_milli)?,
+            };
+
+            tracing::info!(indexing_result = ?addition, processed_in = ?started_processing_at.elapsed(), "DSR update done");
+        }
+
+        Ok((tasks, congestion))
+    }
+}
+
+fn eq_attr(name: String) -> FilterableAttributesRule {
+    FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
+        attribute_patterns: vec![name].into(),
+        features: FilterableAttributesFeatures {
+            facet_search: false,
+            filter: FilterFeatures { equality: true, comparison: false },
+        },
+    })
+}
+
+fn cmp_attr(name: String) -> FilterableAttributesRule {
+    FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
+        attribute_patterns: vec![name].into(),
+        features: FilterableAttributesFeatures {
+            facet_search: false,
+            filter: FilterFeatures { equality: true, comparison: true },
+        },
+    })
 }

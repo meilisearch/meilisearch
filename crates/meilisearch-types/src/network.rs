@@ -135,6 +135,10 @@ pub mod route {
 
     use crate::tasks::network::Origin;
 
+    pub fn dynamic_search_rules_path() -> PathAndQuery {
+        PathAndQuery::from_static("/dynamic-search-rules")
+    }
+
     pub fn network_control_path() -> PathAndQuery {
         // WARNING: if you change this path, you must also change the path in the network route macro in the meilisearch crate.
         PathAndQuery::from_static("/network/control")

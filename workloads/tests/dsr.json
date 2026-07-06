@@ -1,0 +1,829 @@
+{
+  "type": "test",
+  "name": "dsr",
+  "binary": {
+    "source": "release",
+    "edition": "community",
+    "version": "1.48.3"
+  },
+  "assets": {
+    "movies.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies.json",
+      "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
+    }
+  },
+  "commands": [
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "searchableAttributes": [
+            "title",
+            "overview",
+            "genres"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ],
+          "typoTolerance": {
+            "disableOnAttributes": [
+              "genres"
+            ]
+          }
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 0,
+        "type": "settingsUpdate"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies.json"
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 1,
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "experimental-features",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "dynamicSearchRules": true
+        }
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/existing-rule-to-migrate",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "super hero"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "movies",
+                "id": "15242"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "uid": "existing-rule-to-migrate",
+        "active": true,
+        "conditions": [
+          {
+            "scope": "query",
+            "contains": "super hero"
+          }
+        ],
+        "actions": [
+          {
+            "selector": {
+              "indexUid": "movies",
+              "id": "15242"
+            },
+            "action": {
+              "type": "pin",
+              "position": 0
+            }
+          }
+        ]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/impossible-rule-skips-migration",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "conditions": [
+            {
+              "scope": "query",
+              "isEmpty": true
+            },
+            {
+              "scope": "query",
+              "isEmpty": false
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "movies",
+                "id": "15242"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "uid": "impossible-rule-skips-migration",
+        "active": true,
+        "conditions": [
+          {
+            "scope": "query",
+            "isEmpty": true
+          },
+          {
+            "scope": "query",
+            "isEmpty": false
+          }
+        ],
+        "actions": [
+          {
+            "selector": {
+              "indexUid": "movies",
+              "id": "15242"
+            },
+            "action": {
+              "type": "pin",
+              "position": 0
+            }
+          }
+        ]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/impossible-rule-skips-migration-2",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "conditions": [
+            {
+              "scope": "time",
+              "start": "2026-07-01T09:50:12Z",
+              "end": "2026-07-03T09:50:12Z"
+            },
+            {
+              "scope": "time",
+              "start": "2026-12-01T09:50:12Z",
+              "end": "2026-12-03T09:50:12Z"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "movies",
+                "id": "15242"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "uid": "impossible-rule-skips-migration-2",
+        "active": true,
+        "conditions": [
+          {
+            "scope": "time",
+            "start": "2026-07-01T09:50:12Z",
+            "end": "2026-07-03T09:50:12Z"
+          },
+          {
+            "scope": "time",
+            "start": "2026-12-01T09:50:12Z",
+            "end": "2026-12-03T09:50:12Z"
+          }
+        ],
+        "actions": [
+          {
+            "selector": {
+              "indexUid": "movies",
+              "id": "15242"
+            },
+            "action": {
+              "type": "pin",
+              "position": 0
+            }
+          }
+        ]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/skips-action-without-selector-id",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "conditions": [
+            {
+              "scope": "time",
+              "start": "2020-01-01T09:50:12Z",
+              "end": "2032-12-31T09:50:12Z"
+            },
+            {
+              "scope": "time",
+              "start": "2023-01-01T09:50:12Z",
+              "end": "2035-12-03T09:50:12Z"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "movies"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "uid": "skips-action-without-selector-id",
+        "active": true,
+        "conditions": [
+          {
+            "scope": "time",
+            "start": "2020-01-01T09:50:12Z",
+            "end": "2032-12-31T09:50:12Z"
+          },
+          {
+            "scope": "time",
+            "start": "2023-01-01T09:50:12Z",
+            "end": "2035-12-03T09:50:12Z"
+          }
+        ],
+        "actions": [
+          {
+            "selector": {
+              "indexUid": "movies"
+            },
+            "action": {
+              "type": "pin",
+              "position": 0
+            }
+          }
+        ]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search?q=super hero&limit=3",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 373,
+        "hits": [
+          {
+            "genres": [
+              "Family",
+              "Animation"
+            ],
+            "id": 15242,
+            "overview": "When Snoopy receives a letter from his original owner Lila, he goes to visit her in the hospital while Charlie Brown and the gang are on the lookout for him. Suddenly, Snoopy feels that he must go live with Lila, but must say goodbye to all his friends. In his adventure to the hospital, he encounters numerous \"No Dogs Allowed\" signs, an annoying little girl who desires to keep him, and more!",
+            "poster": "https://image.tmdb.org/t/p/w500/vGYhYtoXkpjXTZ7KLQMJehwfLG0.jpg",
+            "release_date": 84758400,
+            "title": "Snoopy, Come Home"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Family"
+            ],
+            "id": 452931,
+            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
+            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
+            "release_date": 1494288000,
+            "title": "DC Super Hero Girls: Intergalactic Games"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Fantasy"
+            ],
+            "id": 372631,
+            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
+            "release_date": 1450137600,
+            "title": "Marvel Super Hero Adventures: Frost Fight!"
+          }
+        ],
+        "limit": 3,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "super hero",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/search?q=hero super&limit=3",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 340,
+        "hits": [
+          {
+            "genres": [
+              "Animation",
+              "Family"
+            ],
+            "id": 452931,
+            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
+            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
+            "release_date": 1494288000,
+            "title": "DC Super Hero Girls: Intergalactic Games"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Fantasy"
+            ],
+            "id": 372631,
+            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
+            "release_date": 1450137600,
+            "title": "Marvel Super Hero Adventures: Frost Fight!"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Family",
+              "Action"
+            ],
+            "id": 401650,
+            "overview": "Wonder Woman, Supergirl, Batgirl, Harley Quinn, Bumblebee, Poison Ivy and Katana band together to navigate the twists and turns of high school in DC Super Hero Girls: Hero of the Year.",
+            "poster": "https://image.tmdb.org/t/p/w500/jDixhOwE3MszqEdZ87464mMaESB.jpg",
+            "release_date": 1470700800,
+            "title": "DC Super Hero Girls: Hero of the Year"
+          }
+        ],
+        "limit": 3,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "hero super",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "dynamic-search-rules",
+      "method": "POST",
+      "body": {
+        "inline": {}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "limit": 20,
+        "offset": 0,
+        "results": [
+          {
+            "actions": [
+              {
+                "action": {
+                  "position": 0,
+                  "type": "pin"
+                },
+                "selector": {
+                  "id": "15242",
+                  "indexUid": "movies"
+                }
+              }
+            ],
+            "active": true,
+            "conditions": [
+              {
+                "contains": "super hero",
+                "scope": "query"
+              }
+            ],
+            "uid": "existing-rule-to-migrate"
+          },
+          {
+            "actions": [
+              {
+                "action": {
+                  "position": 0,
+                  "type": "pin"
+                },
+                "selector": {
+                  "id": "15242",
+                  "indexUid": "movies"
+                }
+              }
+            ],
+            "active": true,
+            "conditions": [
+              {
+                "isEmpty": true,
+                "scope": "query"
+              },
+              {
+                "isEmpty": false,
+                "scope": "query"
+              }
+            ],
+            "uid": "impossible-rule-skips-migration"
+          },
+          {
+            "actions": [
+              {
+                "action": {
+                  "position": 0,
+                  "type": "pin"
+                },
+                "selector": {
+                  "id": "15242",
+                  "indexUid": "movies"
+                }
+              }
+            ],
+            "active": true,
+            "conditions": [
+              {
+                "scope": "time",
+                "start": "2026-07-01T09:50:12Z",
+                "end": "2026-07-03T09:50:12Z"
+              },
+              {
+                "scope": "time",
+                "start": "2026-12-01T09:50:12Z",
+                "end": "2026-12-03T09:50:12Z"
+              }
+            ],
+            "uid": "impossible-rule-skips-migration-2"
+          },
+          {
+            "actions": [
+              {
+                "action": {
+                  "position": 0,
+                  "type": "pin"
+                },
+                "selector": {
+                  "indexUid": "movies"
+                }
+              }
+            ],
+            "active": true,
+            "conditions": [
+              {
+                "scope": "time",
+                "start": "2020-01-01T09:50:12Z",
+                "end": "2032-12-31T09:50:12Z"
+              },
+              {
+                "scope": "time",
+                "start": "2023-01-01T09:50:12Z",
+                "end": "2035-12-03T09:50:12Z"
+              }
+            ],
+            "uid": "skips-action-without-selector-id"
+          }
+        ],
+        "total": 4
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "route": "dynamic-search-rules",
+      "method": "POST",
+      "body": {
+        "inline": {}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "limit": 20,
+        "offset": 0,
+        "results": [],
+        "total": 0
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "tasks?types=dsrUpdate",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 3,
+        "limit": 20,
+        "next": null,
+        "results": [
+          {
+            "batchUid": null,
+            "canceledBy": null,
+            "details": {
+              "rule": {
+                "actions": [],
+                "active": true,
+                "conditions": {
+                  "time": {
+                    "start": "2023-01-01T09:50:12Z",
+                    "end": "2032-12-31T09:50:12Z"
+                  }
+                }
+              },
+              "updatedRules": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": ".meili_dsr",
+            "startedAt": "[timestamp]",
+            "status": "enqueued",
+            "type": "dsrUpdate",
+            "uid": 3
+          },
+          {
+            "batchUid": null,
+            "canceledBy": null,
+            "details": {
+              "rule": {
+                "actions": [
+                  {
+                    "action": {
+                      "position": 0,
+                      "type": "pin"
+                    },
+                    "selector": {
+                      "id": "15242",
+                      "indexUid": "movies"
+                    }
+                  }
+                ],
+                "active": true,
+                "conditions": {
+                  "query": {
+                    "words": "super hero"
+                  }
+                }
+              },
+              "updatedRules": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": ".meili_dsr",
+            "startedAt": "[timestamp]",
+            "status": "enqueued",
+            "type": "dsrUpdate",
+            "uid": 2
+          }
+        ],
+        "total": 2
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade"
+        ]
+      }
+    },
+    {
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "dynamic-search-rules",
+      "method": "POST",
+      "body": {
+        "inline": {}
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "limit": 20,
+        "offset": 0,
+        "total": 2,
+        "results": [
+          {
+            "actions": [
+              {
+                "action": {
+                  "type": "pin",
+                  "position": 0
+                },
+                "selector": {
+                  "id": "15242",
+                  "indexUid": "movies"
+                }
+              }
+            ],
+            "active": true,
+            "conditions": {
+              "query": {
+                "words": "super hero"
+              }
+            },
+            "uid": "existing-rule-to-migrate"
+          },
+          {
+            "actions": [],
+            "active": true,
+            "conditions": {
+              "time": {
+                "start": "2023-01-01T09:50:12Z",
+                "end": "2032-12-31T09:50:12Z"
+              }
+            },
+            "uid": "skips-action-without-selector-id"
+          }
+        ]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search?q=super hero&limit=3",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 373,
+        "hits": [
+          {
+            "genres": [
+              "Family",
+              "Animation"
+            ],
+            "id": 15242,
+            "overview": "When Snoopy receives a letter from his original owner Lila, he goes to visit her in the hospital while Charlie Brown and the gang are on the lookout for him. Suddenly, Snoopy feels that he must go live with Lila, but must say goodbye to all his friends. In his adventure to the hospital, he encounters numerous \"No Dogs Allowed\" signs, an annoying little girl who desires to keep him, and more!",
+            "poster": "https://image.tmdb.org/t/p/w500/vGYhYtoXkpjXTZ7KLQMJehwfLG0.jpg",
+            "release_date": 84758400,
+            "title": "Snoopy, Come Home"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Family"
+            ],
+            "id": 452931,
+            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
+            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
+            "release_date": 1494288000,
+            "title": "DC Super Hero Girls: Intergalactic Games"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Fantasy"
+            ],
+            "id": 372631,
+            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
+            "release_date": 1450137600,
+            "title": "Marvel Super Hero Adventures: Frost Fight!"
+          }
+        ],
+        "limit": 3,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "super hero",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/search?q=hero super&limit=3",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 341,
+        "hits": [
+          {
+            "genres": [
+              "Family",
+              "Animation"
+            ],
+            "id": 15242,
+            "overview": "When Snoopy receives a letter from his original owner Lila, he goes to visit her in the hospital while Charlie Brown and the gang are on the lookout for him. Suddenly, Snoopy feels that he must go live with Lila, but must say goodbye to all his friends. In his adventure to the hospital, he encounters numerous \"No Dogs Allowed\" signs, an annoying little girl who desires to keep him, and more!",
+            "poster": "https://image.tmdb.org/t/p/w500/vGYhYtoXkpjXTZ7KLQMJehwfLG0.jpg",
+            "release_date": 84758400,
+            "title": "Snoopy, Come Home"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Family"
+            ],
+            "id": 452931,
+            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
+            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
+            "release_date": 1494288000,
+            "title": "DC Super Hero Girls: Intergalactic Games"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Fantasy"
+            ],
+            "id": 372631,
+            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
+            "release_date": 1450137600,
+            "title": "Marvel Super Hero Adventures: Frost Fight!"
+          }
+        ],
+        "limit": 3,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "hero super",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "tasks?types=upgradeDatabase",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 4,
+        "limit": 20,
+        "next": null,
+        "results": [
+          {
+            "batchUid": 2,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.48.3",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 4
+          }
+        ],
+        "total": 1
+      },
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}

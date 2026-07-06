@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 use byte_unit::Byte;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, ChannelCongestion};
@@ -26,7 +27,7 @@ use crate::processing::{
     TaskDeletionProgress, UpdateIndexProgress,
 };
 use crate::utils::{consecutive_ranges, swap_index_uid_in_task, ProcessingBatch};
-use crate::{Error, IndexScheduler, Result, TaskId, BEI128};
+use crate::{Error, IndexScheduler, IndexUid, Result, TaskId, BEI128};
 
 /// The name of the copy of the data.mdb file used during compaction.
 const DATA_MDB_COPY_NAME: &str = "data.mdb.cpy";
@@ -147,14 +148,16 @@ impl IndexScheduler {
                 .process_dump_creation(progress, task)
                 .map(|tasks| (tasks, ProcessBatchInfo::default())),
             Batch::IndexOperation { op, must_create_index } => {
-                let index_uid = op.index_uid().to_string();
+                let index_name = op.index_uid().to_string();
+                let index_uid = UserIndex::try_from_uid(&index_name)?;
+
                 let index = if must_create_index {
                     // create the index if it doesn't already exist
                     let wtxn = self.env.write_txn()?;
-                    self.index_mapper.create_index(wtxn, &index_uid, None, network.shards())?
+                    self.index_mapper.create_index(wtxn, index_uid, None, network.shards())?
                 } else {
                     let rtxn = self.env.read_txn()?;
-                    self.index_mapper.index(&rtxn, &index_uid)?
+                    self.index_mapper.index(&rtxn, index_uid)?
                 };
 
                 let mut index_wtxn = index.write_txn()?;
@@ -162,7 +165,7 @@ impl IndexScheduler {
                 let package_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
                 if index_version != package_version {
                     return Err(Error::IndexVersionMismatch {
-                        index: index_uid,
+                        index: index_name,
                         index_version,
                         package_version,
                     });
@@ -170,7 +173,7 @@ impl IndexScheduler {
 
                 // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
                 self.index_mapper
-                    .set_currently_updating_index(Some((index_uid.clone(), index.clone())));
+                    .set_currently_updating_index(Some((index_name.clone(), index.clone())));
 
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
                 let (tasks, congestion) = self.apply_index_operation(
@@ -199,9 +202,9 @@ impl IndexScheduler {
                     progress.update_progress(FinalizingIndexStep::ComputingStats);
                     let index_rtxn = index.read_txn()?;
                     let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
-                        .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.uid().to_string())))?;
                     let mut wtxn = self.env.write_txn()?;
-                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
+                    self.index_mapper.store_stats_of(&mut wtxn, index_uid, &stats)?;
                     post_commit_dabases_sizes = Some(index.database_sizes(&index_rtxn)?);
                     wtxn.commit()?;
                     Ok(())
@@ -226,48 +229,57 @@ impl IndexScheduler {
 
                 Ok((tasks, info))
             }
-            Batch::IndexCreation { index_uid, primary_key, task } => {
+            Batch::IndexCreation { index_uid: index_name, primary_key, task } => {
                 progress.update_progress(CreateIndexProgress::CreatingTheIndex);
+                let index_uid = UserIndex::try_from_uid(&index_name)?;
 
                 let wtxn = self.env.write_txn()?;
-                if self.index_mapper.exists(&wtxn, &index_uid)? {
-                    return Err(Error::IndexAlreadyExists(index_uid));
+                if self.index_mapper.exists(&wtxn, index_uid)? {
+                    return Err(Error::IndexAlreadyExists(index_name));
                 }
 
-                self.index_mapper.create_index(wtxn, &index_uid, None, network.shards())?;
+                self.index_mapper.create_index(wtxn, index_uid, None, network.shards())?;
 
                 self.process_batch(
-                    Batch::IndexUpdate { index_uid, primary_key, new_index_uid: None, task },
+                    Batch::IndexUpdate {
+                        index_uid: index_name,
+                        primary_key,
+                        new_index_uid: None,
+                        task,
+                    },
                     current_batch,
                     progress,
                     network,
                 )
             }
             Batch::IndexUpdate { index_uid, primary_key, new_index_uid, mut task } => {
+                // reserve index update to user indexes, reserved indexes have a Meilisearch-controlled uid and pk
+                let index_uid = UserIndex::try_from_uid(&index_uid)?;
                 progress.update_progress(UpdateIndexProgress::UpdatingTheIndex);
 
                 // Get the index (renamed or not)
                 let rtxn = self.env.read_txn()?;
-                let index = self.index_mapper.index(&rtxn, &index_uid)?;
+                let index = self.index_mapper.index(&rtxn, index_uid)?;
                 let mut index_wtxn = index.write_txn()?;
 
                 // Handle rename if new_index_uid is provided
                 let final_index_uid = if let Some(new_uid) = &new_index_uid {
-                    if new_uid != &index_uid {
+                    let new_uid = UserIndex::try_from_uid(new_uid)?;
+                    if new_uid.uid() != index_uid.uid() {
                         index.set_updated_at(&mut index_wtxn, &OffsetDateTime::now_utc())?;
 
                         let mut wtxn = self.env.write_txn()?;
                         self.apply_index_swap(
-                            &mut wtxn, &progress, task.uid, &index_uid, new_uid, true,
+                            &mut wtxn, &progress, task.uid, index_uid, new_uid, true,
                         )?;
                         wtxn.commit()?;
 
-                        new_uid.clone()
+                        new_uid
                     } else {
-                        new_uid.clone()
+                        new_uid
                     }
                 } else {
-                    index_uid.clone()
+                    index_uid
                 };
 
                 // Handle primary key update if provided
@@ -287,7 +299,9 @@ impl IndexScheduler {
                             self.ip_policy(),
                             current_batch.embedder_stats.clone(),
                         )
-                        .map_err(|e| Error::from_milli(e, Some(final_index_uid.to_string())))?;
+                        .map_err(|e| {
+                            Error::from_milli(e, Some(final_index_uid.uid().to_string()))
+                        })?;
                 }
 
                 index_wtxn.commit()?;
@@ -299,7 +313,7 @@ impl IndexScheduler {
                     primary_key: primary_key.clone(),
                     new_index_uid: new_index_uid.clone(),
                     // we only display the old index uid if a rename happened => there is a new_index_uid
-                    old_index_uid: new_index_uid.map(|_| index_uid.clone()),
+                    old_index_uid: new_index_uid.as_ref().map(|_| index_uid.uid().to_string()),
                 });
 
                 // if the update processed successfully, we're going to store the new
@@ -309,9 +323,11 @@ impl IndexScheduler {
                 let res = || -> Result<()> {
                     let mut wtxn = self.env.write_txn()?;
                     let index_rtxn = index.read_txn()?;
-                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
-                        .map_err(|e| Error::from_milli(e, Some(final_index_uid.clone())))?;
-                    self.index_mapper.store_stats_of(&mut wtxn, &final_index_uid, &stats)?;
+                    let stats =
+                        crate::index_mapper::IndexStats::new(&index, &index_rtxn).map_err(|e| {
+                            Error::from_milli(e, Some(final_index_uid.uid().to_string()))
+                        })?;
+                    self.index_mapper.store_stats_of(&mut wtxn, final_index_uid, &stats)?;
                     wtxn.commit()?;
                     Ok(())
                 }();
@@ -327,25 +343,9 @@ impl IndexScheduler {
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::IndexDeletion { index_uid, index_has_been_created, mut tasks } => {
-                progress.update_progress(DeleteIndexProgress::DeletingTheIndex);
-                let wtxn = self.env.write_txn()?;
-
-                // it's possible that the index doesn't exist
-                let number_of_documents = || -> Result<u64> {
-                    let index = self.index_mapper.index(&wtxn, &index_uid)?;
-                    let index_rtxn = index.read_txn()?;
-                    index
-                        .number_of_documents(&index_rtxn)
-                        .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))
-                }()
-                .unwrap_or_default();
-
-                // The write transaction is directly owned and committed inside.
-                match self.index_mapper.delete_index(wtxn, &index_uid) {
-                    Ok(()) => (),
-                    Err(Error::IndexNotFound(_)) if index_has_been_created => (),
-                    Err(e) => return Err(e),
-                }
+                let index_uid = UserIndex::try_from_uid(&index_uid)?;
+                let number_of_documents =
+                    self.process_index_deletion(index_uid, &progress, index_has_been_created)?;
 
                 // We set all the tasks details to the default value.
                 for task in &mut tasks {
@@ -374,36 +374,38 @@ impl IndexScheduler {
                 let mut not_found_indexes = BTreeSet::new();
                 let mut found_indexes_but_should_not = BTreeSet::new();
                 for IndexSwap { indexes: (lhs, rhs), rename } in swaps {
+                    // only support user indexes: it doesn't make sense to swap reserved indexes.
+                    let lhs = UserIndex::try_from_uid(lhs)?;
+                    let rhs = UserIndex::try_from_uid(rhs)?;
                     let index_exists = self.index_mapper.index_exists(&wtxn, lhs)?;
                     if !index_exists {
-                        not_found_indexes.insert(lhs);
+                        not_found_indexes.insert(lhs.uid());
                     }
                     let index_exists = self.index_mapper.index_exists(&wtxn, rhs)?;
                     match (index_exists, rename) {
-                        (true, true) => found_indexes_but_should_not.insert((lhs, rhs)),
-                        (false, false) => not_found_indexes.insert(rhs),
+                        (true, true) => found_indexes_but_should_not.insert((lhs.uid(), rhs.uid())),
+                        (false, false) => not_found_indexes.insert(rhs.uid()),
                         (true, false) | (false, true) => true, // random value we don't read it anyway
                     };
                 }
                 if !not_found_indexes.is_empty() {
                     if not_found_indexes.len() == 1 {
                         return Err(Error::SwapIndexNotFound(
-                            not_found_indexes.into_iter().next().unwrap().clone(),
+                            not_found_indexes.into_iter().next().unwrap().to_owned(),
                         ));
                     } else {
                         return Err(Error::SwapIndexesNotFound(
-                            not_found_indexes.into_iter().cloned().collect(),
+                            not_found_indexes.into_iter().map(ToString::to_string).collect(),
                         ));
                     }
                 }
                 if !found_indexes_but_should_not.is_empty() {
                     if found_indexes_but_should_not.len() == 1 {
-                        let (lhs, rhs) = found_indexes_but_should_not
-                            .into_iter()
-                            .next()
-                            .map(|(lhs, rhs)| (lhs.clone(), rhs.clone()))
-                            .unwrap();
-                        return Err(Error::SwapIndexFoundDuringRename(lhs, rhs));
+                        let (lhs, rhs) = found_indexes_but_should_not.into_iter().next().unwrap();
+                        return Err(Error::SwapIndexFoundDuringRename(
+                            lhs.to_owned(),
+                            rhs.to_owned(),
+                        ));
                     } else {
                         return Err(Error::SwapIndexesFoundDuringRename(
                             found_indexes_but_should_not
@@ -420,14 +422,10 @@ impl IndexScheduler {
                         step as u32,
                         swaps.len() as u32,
                     ));
-                    self.apply_index_swap(
-                        &mut wtxn,
-                        &progress,
-                        task.uid,
-                        &swap.indexes.0,
-                        &swap.indexes.1,
-                        swap.rename,
-                    )?;
+
+                    let lhs = UserIndex::try_from_uid(&swap.indexes.0)?;
+                    let rhs = UserIndex::try_from_uid(&swap.indexes.1)?;
+                    self.apply_index_swap(&mut wtxn, &progress, task.uid, lhs, rhs, swap.rename)?;
                 }
                 wtxn.commit()?;
                 task.status = Status::Succeeded;
@@ -437,6 +435,8 @@ impl IndexScheduler {
                 let KindWithContent::IndexCompaction { index_uid } = &task.kind else {
                     unreachable!()
                 };
+
+                let index_uid = UserIndex::try_from_uid(index_uid)?;
 
                 let rtxn = self.env.read_txn()?;
                 let ret = catch_unwind(AssertUnwindSafe(|| {
@@ -554,18 +554,145 @@ impl IndexScheduler {
                 self.process_network_index_batch(network_task, inner_batch, current_batch, progress)
             }
             Batch::NetworkReady { task } => self.process_network_ready(task, progress),
+            Batch::DsrUpdate { rules, tasks, must_create_index } => {
+                let index_uid = DsrIndex;
+                let index;
+
+                let settings_congestion = if must_create_index {
+                    // create the index if it doesn't already exist
+                    let wtxn = self.env.write_txn()?;
+
+                    index = self.index_mapper.create_index(wtxn, index_uid, None, None)?;
+                    let mut index_wtxn = index.write_txn()?;
+
+                    let must_stop_processing = self.scheduler.must_stop_processing.clone();
+
+                    let settings_congestion = self.apply_dsr_settings(
+                        &mut index_wtxn,
+                        &index,
+                        &progress,
+                        &must_stop_processing,
+                        current_batch.embedder_stats.clone(),
+                    )?;
+
+                    // commit the settings change before applying the document change
+                    // this is because the document indexer relies on read transactions that will not see
+                    // the settings changes.
+                    index_wtxn.commit()?;
+
+                    settings_congestion
+                } else {
+                    let rtxn = self.env.read_txn()?;
+                    index = self.index_mapper.index(&rtxn, index_uid)?;
+                    None
+                };
+
+                let mut index_wtxn = index.write_txn()?;
+
+                let index_version = index.get_version(&index_wtxn)?.unwrap_or((1, 12, 0));
+                let package_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
+                if index_version != package_version {
+                    return Err(Error::IndexVersionMismatch {
+                        index: index_uid.uid().to_string(),
+                        index_version,
+                        package_version,
+                    });
+                }
+
+                // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
+                self.index_mapper.set_currently_updating_index(Some((
+                    index_uid.uid().to_string(),
+                    index.clone(),
+                )));
+
+                let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
+                let (tasks, update_congestion) = self.apply_dsr_update(
+                    &mut index_wtxn,
+                    &index,
+                    rules.as_slice(),
+                    current_batch.embedder_stats.clone(),
+                    tasks,
+                    &progress,
+                )?;
+
+                {
+                    progress.update_progress(FinalizingIndexStep::Committing);
+                    let span = tracing::trace_span!(target: "indexing::scheduler", "commit");
+                    let _entered = span.enter();
+
+                    index_wtxn.commit()?;
+                }
+
+                // if the update processed successfully, we're going to store the new
+                // stats of the index. Since the tasks have already been processed and
+                // this is a non-critical operation. If it fails, we should not fail
+                // the entire batch.
+                let mut post_commit_dabases_sizes = None;
+                let res = || -> Result<()> {
+                    progress.update_progress(FinalizingIndexStep::ComputingStats);
+                    let index_rtxn = index.read_txn()?;
+                    let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                        .map_err(|e| Error::from_milli(e, Some(index_uid.uid().to_string())))?;
+                    let mut wtxn = self.env.write_txn()?;
+                    self.index_mapper.store_stats_of(&mut wtxn, index_uid, &stats)?;
+                    post_commit_dabases_sizes = Some(index.database_sizes(&index_rtxn)?);
+                    wtxn.commit()?;
+                    Ok(())
+                }();
+
+                match res {
+                    Ok(_) => (),
+                    Err(e) => tracing::error!(
+                        error = &e as &dyn std::error::Error,
+                        "Could not write the stats of the index"
+                    ),
+                }
+
+                let info = ProcessBatchInfo {
+                    congestion: ChannelCongestion::merge(settings_congestion, update_congestion),
+                    // In case we fail to the get post-commit sizes we decide
+                    // that nothing changed and use the pre-commit sizes.
+                    post_commit_dabases_sizes: post_commit_dabases_sizes
+                        .unwrap_or_else(|| pre_commit_dabases_sizes.clone()),
+                    pre_commit_dabases_sizes,
+                };
+
+                Ok((tasks, info))
+            }
+            Batch::DsrClear { mut tasks } => {
+                let index_uid = DsrIndex;
+
+                let number_of_documents = self.process_index_deletion(
+                    index_uid, &progress, true, // do not error if the DSR index does not exist
+                )?;
+
+                // We set all the tasks details to the default value.
+                for task in &mut tasks {
+                    task.status = Status::Succeeded;
+                    task.details = match &task.kind {
+                        KindWithContent::DsrClear => {
+                            Some(Details::ClearAll { deleted_documents: Some(number_of_documents) })
+                        }
+                        otherwise => otherwise.default_finished_details(),
+                    };
+                }
+
+                // Here we could also show that all the internal database sizes goes to 0
+                // but it would mean opening the index and that's costly.
+                Ok((tasks, ProcessBatchInfo::default()))
+            }
         }
     }
 
-    fn apply_compaction(
+    fn apply_compaction<'a>(
         &self,
         rtxn: &RoTxn,
         progress: &Progress,
-        index_uid: &str,
+        index_uid: impl IndexUid<'a>,
     ) -> Result<(u64, u64)> {
         // 1. Verify that the index exists
         if !self.index_mapper.index_exists(rtxn, index_uid)? {
-            return Err(Error::IndexNotFound(index_uid.to_owned()));
+            return Err(Error::IndexNotFound(index_uid.uid().to_owned()));
         }
 
         // 2. We retrieve the index and create a temporary file in the index directory
@@ -574,7 +701,7 @@ impl IndexScheduler {
 
         // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
         self.index_mapper
-            .set_currently_updating_index(Some((index_uid.to_string(), index.clone())));
+            .set_currently_updating_index(Some((index_uid.uid().to_string(), index.clone())));
 
         progress.update_progress(IndexCompaction::CreateTemporaryFile);
         let src_path = index.path().join("data.mdb");
@@ -586,9 +713,9 @@ impl IndexScheduler {
 
         // 3. We copy the index data to the temporary file
         progress.update_progress(IndexCompaction::CopyAndCompactTheIndex);
-        index
-            .copy_to_file(file.as_file_mut(), CompactionOption::Enabled)
-            .map_err(|error| Error::Milli { error, index_uid: Some(index_uid.to_string()) })?;
+        index.copy_to_file(file.as_file_mut(), CompactionOption::Enabled).map_err(|error| {
+            Error::Milli { error, index_uid: Some(index_uid.uid().to_string()) }
+        })?;
         // ...and reset the file position as specified in the documentation
         file.seek(SeekFrom::Start(0))?;
 
@@ -623,7 +750,7 @@ impl IndexScheduler {
             let mut wtxn = self.env.write_txn()?;
             let index_rtxn = index.read_txn()?;
             let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
-                .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
+                .map_err(|e| Error::from_milli(e, Some(index_uid.uid().to_string())))?;
             self.index_mapper.store_stats_of(&mut wtxn, index_uid, &stats)?;
             wtxn.commit()?;
             Ok(stats.database_size)
@@ -649,27 +776,27 @@ impl IndexScheduler {
         wtxn: &mut RwTxn,
         progress: &Progress,
         task_id: u32,
-        lhs: &str,
-        rhs: &str,
+        lhs: UserIndex<'_>,
+        rhs: UserIndex<'_>,
         rename: bool,
     ) -> Result<()> {
         progress.update_progress(InnerSwappingTwoIndexes::RetrieveTheTasks);
         // 1. Verify that both lhs and rhs are existing indexes
         let index_lhs_exists = self.index_mapper.index_exists(wtxn, lhs)?;
         if !index_lhs_exists {
-            return Err(Error::IndexNotFound(lhs.to_owned()));
+            return Err(Error::IndexNotFound(lhs.uid().to_owned()));
         }
         if !rename {
             let index_rhs_exists = self.index_mapper.index_exists(wtxn, rhs)?;
             if !index_rhs_exists {
-                return Err(Error::IndexNotFound(rhs.to_owned()));
+                return Err(Error::IndexNotFound(rhs.uid().to_owned()));
             }
         }
 
         // 2. Get the task set for index = name that appeared before the index swap task
-        let mut index_lhs_task_ids = self.queue.tasks.index_tasks(wtxn, lhs)?;
+        let mut index_lhs_task_ids = self.queue.tasks.index_tasks(wtxn, lhs.uid())?;
         index_lhs_task_ids.remove_range(task_id..);
-        let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs)?;
+        let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs.uid())?;
         index_rhs_task_ids.remove_range(task_id..);
 
         // 3. before_name -> new_name in the task's KindWithContent
@@ -681,7 +808,7 @@ impl IndexScheduler {
         for task_id in tasks_to_update {
             let mut task =
                 self.queue.tasks.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
-            swap_index_uid_in_task(&mut task, (lhs, rhs));
+            swap_index_uid_in_task(&mut task, (lhs.uid(), rhs.uid()));
             self.queue.tasks.all_tasks.put(wtxn, &task_id, &task)?;
             atomic.fetch_add(1, Ordering::Relaxed);
         }
@@ -689,11 +816,11 @@ impl IndexScheduler {
         // 4. remove the task from indexuid = before_name
         // 5. add the task to indexuid = after_name
         progress.update_progress(InnerSwappingTwoIndexes::UpdateTheIndexesMetadata);
-        self.queue.tasks.update_index(wtxn, lhs, |lhs_tasks| {
+        self.queue.tasks.update_index(wtxn, lhs.uid(), |lhs_tasks| {
             *lhs_tasks -= &index_lhs_task_ids;
             *lhs_tasks |= &index_rhs_task_ids;
         })?;
-        self.queue.tasks.update_index(wtxn, rhs, |rhs_tasks| {
+        self.queue.tasks.update_index(wtxn, rhs.uid(), |rhs_tasks| {
             *rhs_tasks -= &index_rhs_task_ids;
             *rhs_tasks |= &index_lhs_task_ids;
         })?;
@@ -1152,9 +1279,10 @@ impl IndexScheduler {
                 unreachable!("wrong details for compaction task {compaction_task}")
             };
 
-            let index_path = match self.index_mapper.index_mapping.get(rtxn, &index_uid)? {
-                Some(index_uuid) => self.index_mapper.index_path(index_uuid),
-                None => continue,
+            let index_uid = AnyIndex::new(&index_uid);
+
+            let Some(index_path) = self.index_mapper.index_path(rtxn, index_uid)? else {
+                continue;
             };
 
             if let Err(e) = remove_file(index_path.join(DATA_MDB_COPY_NAME)) {
@@ -1188,5 +1316,33 @@ impl IndexScheduler {
         }
 
         Ok(tasks)
+    }
+
+    fn process_index_deletion<'a>(
+        &self,
+        index_uid: impl IndexUid<'a>,
+        progress: &Progress,
+        index_has_been_created: bool,
+    ) -> Result<u64> {
+        progress.update_progress(DeleteIndexProgress::DeletingTheIndex);
+        let wtxn = self.env.write_txn()?;
+
+        // it's possible that the index doesn't exist
+        let number_of_documents = || -> Result<u64> {
+            let index = self.index_mapper.index(&wtxn, index_uid)?;
+            let index_rtxn = index.read_txn()?;
+            index
+                .number_of_documents(&index_rtxn)
+                .map_err(|e| Error::from_milli(e, Some(index_uid.uid().to_string())))
+        }()
+        .unwrap_or_default();
+
+        // The write transaction is directly owned and committed inside.
+        match self.index_mapper.delete_index(wtxn, index_uid) {
+            Ok(()) => (),
+            Err(Error::IndexNotFound(_)) if index_has_been_created => (),
+            Err(e) => return Err(e),
+        }
+        Ok(number_of_documents)
     }
 }

@@ -118,7 +118,7 @@ impl Server<Owned> {
 
     pub async fn delete_api_key(&self, key: impl AsRef<str>) -> (Value, StatusCode) {
         let url = format!("/keys/{}", key.as_ref());
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     /// Returns a view to an index. There is no guarantee that the index exists.
@@ -132,7 +132,7 @@ impl Server<Owned> {
 
     pub async fn delete_index(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
-        let (value, code) = self.service.delete(url).await;
+        let (value, code) = self.service.delete(url, Default::default()).await;
         (value, code)
     }
 
@@ -197,7 +197,7 @@ impl Server<Owned> {
 
     pub async fn delete_webhook(&self, uuid: impl AsRef<str>) -> (Value, StatusCode) {
         let url = format!("/webhooks/{}", uuid.as_ref());
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn patch_webhook(&self, uuid: impl AsRef<str>, value: Value) -> (Value, StatusCode) {
@@ -238,7 +238,7 @@ impl Server<Owned> {
 
     pub async fn delete_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
         let url = format!("/dynamic-search-rules/{}", uid.as_ref());
-        self.service.delete(url).await
+        self.service.delete(url, Default::default()).await
     }
 
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
@@ -294,7 +294,7 @@ impl Server<Shared> {
 
     pub async fn delete_index_fail(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencoding::encode(uid.as_ref()));
-        let (value, code) = self.service.delete(url).await;
+        let (value, code) = self.service.delete(url, Default::default()).await;
         if code.is_success() {
             panic!("`delete_index_fail` succeeded with uid: {}", uid.as_ref());
         }
@@ -378,7 +378,7 @@ impl<State> Server<State> {
             "PUT" => self.service.put(url, json!({})).await,
             "PATCH" => self.service.patch(url, json!({})).await,
             "GET" => self.service.get(url).await,
-            "DELETE" => self.service.delete(url).await,
+            "DELETE" => self.service.delete(url, Default::default()).await,
             _ => unreachable!(),
         }
     }
@@ -475,7 +475,7 @@ impl<State> Server<State> {
     }
 
     pub async fn delete_tasks(&self, value: &str) -> (Value, StatusCode) {
-        self.service.delete(format!("/tasks?{}", value)).await
+        self.service.delete(format!("/tasks?{}", value), Default::default()).await
     }
 
     pub async fn compact_task_queue(&self) -> (Value, StatusCode) {

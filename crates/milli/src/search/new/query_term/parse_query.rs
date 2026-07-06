@@ -5,6 +5,7 @@ use charabia::{SeparatorKind, TokenKind, Tokenizer};
 
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};
+use crate::search::new::query_graph::QueryGraph;
 use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
 use crate::search::new::Word;
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
@@ -14,6 +15,8 @@ use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 pub struct ExtractedTokens {
     /// The terms to search for in the database.
     pub query_terms: Vec<LocatedQueryTerm>,
+    /// The graph associated with these query terms
+    pub graph: QueryGraph,
     /// The words that must not appear in the results.
     pub negative_words: Vec<Word>,
     /// The phrases that must not appear in the results.
@@ -53,7 +56,9 @@ pub fn located_query_terms_from_tokens(
 
         // early return if word limit is exceeded
         if query_terms.len() >= parts_limit {
-            return Ok(ExtractedTokens { query_terms, negative_words, negative_phrases });
+            let (graph, query_terms) = QueryGraph::from_query(ctx, tokenizer, &query_terms)?;
+
+            return Ok(ExtractedTokens { query_terms, graph, negative_words, negative_phrases });
         }
 
         match token.kind {
@@ -191,7 +196,9 @@ pub fn located_query_terms_from_tokens(
         }
     }
 
-    Ok(ExtractedTokens { query_terms, negative_words, negative_phrases })
+    let (graph, query_terms) = QueryGraph::from_query(ctx, tokenizer, &query_terms)?;
+
+    Ok(ExtractedTokens { query_terms, graph, negative_words, negative_phrases })
 }
 
 pub fn number_of_typos_allowed<'ctx>(
@@ -382,7 +389,7 @@ mod tests {
         let tokens = tokenizer.tokenize(".");
         let index = temp_index_with_documents();
         let rtxn = index.read_txn()?;
-        let mut ctx = SearchContext::new(&index, &rtxn)?;
+        let mut ctx = SearchContext::new(&index, &rtxn, "test", time::OffsetDateTime::now_utc())?;
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
         let ExtractedTokens { query_terms, .. } =
             located_query_terms_from_tokens(&mut ctx, &tokenizer, tokens, None)?;
@@ -395,7 +402,7 @@ mod tests {
     fn test_unicode_typo_tolerance_fixed() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
-        let ctx = SearchContext::new(&temp_index, &rtxn)?;
+        let ctx = SearchContext::new(&temp_index, &rtxn, "test", time::OffsetDateTime::now_utc())?;
 
         let nbr_typos = number_of_typos_allowed(&ctx)?;
 
@@ -424,7 +431,7 @@ mod tests {
     fn test_various_unicode_scripts() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
-        let ctx = SearchContext::new(&temp_index, &rtxn)?;
+        let ctx = SearchContext::new(&temp_index, &rtxn, "test", time::OffsetDateTime::now_utc())?;
 
         let nbr_typos = number_of_typos_allowed(&ctx)?;
 

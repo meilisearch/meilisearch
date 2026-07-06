@@ -726,7 +726,7 @@ pub(crate) async fn search(
 
         Ok(search_result)
     } else {
-        let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
+        let index = index_scheduler.user_index(&index_uid).map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
                 let mut err = ResponseError::from(err);
                 err.code = index_not_found_http_code;

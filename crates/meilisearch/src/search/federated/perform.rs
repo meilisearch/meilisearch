@@ -3,8 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::iter::Zip;
 use std::rc::Rc;
 use std::str::FromStr as _;
-use std::sync::Arc;
-use std::time::Duration;
 use std::vec::{IntoIter, Vec};
 
 use actix_http::StatusCode;
@@ -15,7 +13,6 @@ use index_scheduler::filter::{
 };
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
@@ -34,9 +31,9 @@ use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
 use super::super::{
-    compute_facet_distribution_stats, prepare_search, resolve_pins, AttributesFormat,
-    ComputedFacets, HitMaker, HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata,
-    SearchQuery, SearchQueryWithIndex,
+    compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
+    HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata, SearchQuery,
+    SearchQueryWithIndex,
 };
 use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
 use super::types::{
@@ -72,7 +69,7 @@ pub async fn perform_federated_search(
     if is_proxy {
         features.check_network("Performing a remote federated search").without_index()?;
     }
-    let before_search = std::time::Instant::now();
+    let before_search = time::OffsetDateTime::now_utc();
 
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -93,7 +90,6 @@ pub async fn perform_federated_search(
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
-    let dynamic_search_rules = index_scheduler.dynamic_search_rules();
 
     // Preconstruct metadata keeping the original queries order for later metadata building
     let precomputed_query_metadata: Vec<_> = {
@@ -213,7 +209,6 @@ pub async fn perform_federated_search(
         has_remote: partitioned_queries.has_remote,
         is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
-        dynamic_search_rules,
     };
     let mut search_by_index = SearchByIndex::new(
         federation,
@@ -229,8 +224,13 @@ pub async fn perform_federated_search(
         move || -> Result<_, (ResponseError, Option<usize>)> {
             for (index_uid, queries) in partitioned_queries.local_queries_by_index {
                 // note: this is the only place we open `index_uid`
-                let index_deadline =
-                    search_by_index.execute(index_uid, queries, &params, &progress)?;
+                let index_deadline = search_by_index.execute(
+                    index_uid,
+                    before_search,
+                    queries,
+                    &params,
+                    &progress,
+                )?;
                 deadline = Deadline::earliest(deadline, index_deadline);
             }
 
@@ -256,12 +256,12 @@ pub async fn perform_federated_search(
     } = search_by_index;
 
     progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
-    let before_waiting_remote_results = std::time::Instant::now();
+    let before_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 2.3. Wait for proxy search requests to complete
     let (mut remote_results, remote_errors) = remote_search.finish().await;
 
-    let after_waiting_remote_results = std::time::Instant::now();
+    let after_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 3. merge hits and metadata across indexes and hosts
     progress.update_progress(FederatingResultsStep::MergeResults);
@@ -444,11 +444,11 @@ pub async fn perform_federated_search(
     let (facet_distribution, facet_stats, facets_by_index) =
         facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits);
 
-    let after_merge = std::time::Instant::now();
+    let after_merge = time::OffsetDateTime::now_utc();
 
     let local_duration = (before_waiting_remote_results - before_search)
         + (after_merge - after_waiting_remote_results);
-    let max_duration = Duration::max(local_duration, max_remote_duration);
+    let max_duration = time::Duration::max(local_duration, max_remote_duration);
 
     let hits_info = match (federation.page, federation.hits_per_page) {
         // no pagination
@@ -484,7 +484,7 @@ pub async fn perform_federated_search(
     Ok((
         FederatedSearchResult {
             hits: merged_hits,
-            processing_time_ms: max_duration.as_millis(),
+            processing_time_ms: max_duration.whole_milliseconds().max(0) as u128,
             hits_info,
             query_vectors,
             semantic_hit_count,
@@ -957,12 +957,12 @@ fn build_query_metadata(
 fn merge_metadata(
     results_by_index: &mut Vec<SearchResultByIndex>,
     remote_results: &Vec<FederatedSearchResult>,
-) -> (usize, bool, bool, FederatedFacets, Duration) {
+) -> (usize, bool, bool, FederatedFacets, time::Duration) {
     let mut estimated_total_hits = 0;
     let mut degraded = false;
     let mut used_negative_operator = false;
     let mut facets: FederatedFacets = FederatedFacets::default();
-    let mut max_remote_duration = Duration::ZERO;
+    let mut max_remote_duration = time::Duration::ZERO;
     for SearchResultByIndex {
         index,
         primary_key: _,
@@ -998,8 +998,8 @@ fn merge_metadata(
         performance_details: _,
     } in remote_results
     {
-        let this_remote_duration = Duration::from_millis(*processing_time_ms as u64);
-        max_remote_duration = Duration::max(this_remote_duration, max_remote_duration);
+        let this_remote_duration = time::Duration::milliseconds(*processing_time_ms as i64);
+        max_remote_duration = time::Duration::max(this_remote_duration, max_remote_duration);
         estimated_total_hits += match hits_info {
             HitsInfo::Pagination { total_hits: estimated_total_hits, .. }
             | HitsInfo::OffsetLimit { estimated_total_hits, .. } => estimated_total_hits,
@@ -1299,7 +1299,6 @@ struct SearchByIndexParams {
     is_proxy: bool,
     has_remote: bool,
     network: Network,
-    dynamic_search_rules: Arc<DynamicSearchRules>,
 }
 
 struct SearchByIndex {
@@ -1341,12 +1340,13 @@ impl SearchByIndex {
     fn execute(
         &mut self,
         index_uid: String,
+        before_search: time::OffsetDateTime,
         queries: Vec<QueryByIndex>,
         params: &SearchByIndexParams,
         progress: &Progress,
     ) -> Result<Deadline, (ResponseError, Option<usize>)> {
         let first_query_index = queries.first().map(|query| query.query_index);
-        let index = match params.index_scheduler.index(&index_uid) {
+        let index = match params.index_scheduler.user_index(&index_uid) {
             Ok(index) => index,
             Err(err) => {
                 let mut err = ResponseError::from(err);
@@ -1483,6 +1483,8 @@ impl SearchByIndex {
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
+                    &index_uid,
+                    before_search,
                     &query,
                     filter,
                     &search_kind,
@@ -1497,13 +1499,17 @@ impl SearchByIndex {
                 search.offset(0);
                 search.limit(required_hit_count);
                 search.exhaustive_number_hits(params.is_exhaustive);
-                let pins = if params.features.runtime_features().dynamic_search_rules {
-                    resolve_pins(&params.dynamic_search_rules, &query, &index_uid, &index, &rtxn)?
-                } else {
-                    Vec::new()
-                };
-                if !pins.is_empty() {
-                    search.pins(pins);
+
+                let dsrs = params
+                    .index_scheduler
+                    .dynamic_search_rules(params.features, "")
+                    // ignore error: having the feature disabled is actually allowed in search
+                    .ok()
+                    .and_then(|dsrs| dsrs.milli_dsrs().transpose())
+                    .transpose()?;
+
+                if let Some(dsrs) = &dsrs {
+                    search.dynamic_search_rules(dsrs, params.index_scheduler.dsr_fuel());
                 }
 
                 if let Some(distinct) = self.federation.distinct.as_deref() {
@@ -1511,7 +1517,7 @@ impl SearchByIndex {
                 }
 
                 let (result, _semantic_hit_count) =
-                    super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
+                    super::super::search_from_kind(search_kind, search)?;
                 let format = AttributesFormat {
                     attributes_to_retrieve: query.attributes_to_retrieve,
                     extra_attributes_to_retrieve: extra_attributes_to_retrieve.clone(),
@@ -1707,7 +1713,7 @@ impl SearchByIndex {
         index_scheduler: &IndexScheduler,
     ) -> Result<(), ResponseError> {
         for (index_uid, facets) in std::mem::take(&mut self.federation.facets_by_index) {
-            let index = match index_scheduler.index(&index_uid) {
+            let index = match index_scheduler.user_index(&index_uid) {
                 Ok(index) => index,
                 Err(err) => {
                     let mut err = ResponseError::from(err);

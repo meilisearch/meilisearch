@@ -12,6 +12,8 @@ mod v1_29;
 mod v1_30;
 mod v1_37;
 mod v1_38;
+mod v1_49;
+mod v1_50;
 
 trait UpgradeIndexScheduler {
     fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()>;
@@ -50,6 +52,7 @@ pub fn upgrade_index_scheduler(
         &v1_37::MigrateNetwork,
         &v1_38::RemoveOrphanBatches,
         &v1_38::FixupIndexTasks,
+        &v1_50::MigrateDynamicSearchRules,
     ];
 
     let (initial_major, initial_minor, initial_patch) = initial_version;

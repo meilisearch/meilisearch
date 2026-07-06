@@ -4,14 +4,13 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
 {
   "uid": "preserve",
   "description": "updated",
-  "priority": 5,
+  "precedence": 5,
   "active": true,
-  "conditions": [
-    {
-      "scope": "query",
+  "conditions": {
+    "query": {
       "isEmpty": true
     }
-  ],
+  },
   "actions": [
     {
       "selector": {

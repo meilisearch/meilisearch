@@ -115,6 +115,20 @@ impl ChannelCongestion {
     pub fn congestion_ratio(&self) -> f32 {
         self.blocking_attempts as f32 / self.attempts as f32
     }
+
+    pub fn merge(left: Option<Self>, right: Option<Self>) -> Option<Self> {
+        match (left, right) {
+            (None, None) => None,
+            (None, Some(this)) | (Some(this), None) => Some(this),
+            (
+                Some(Self { attempts: left_attempts, blocking_attempts: left_blocking_attempts }),
+                Some(Self { attempts: right_attempts, blocking_attempts: right_blocking_attempts }),
+            ) => Some(Self {
+                attempts: left_attempts + right_attempts,
+                blocking_attempts: left_blocking_attempts + right_blocking_attempts,
+            }),
+        }
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]

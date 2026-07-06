@@ -47,6 +47,10 @@ impl<'pl> IndexOperations<'pl> {
         Self { operations: Default::default() }
     }
 
+    pub fn push_raw_operation(&mut self, payload: Payload<'pl>) {
+        self.operations.push(payload);
+    }
+
     /// Append a replacement of documents.
     ///
     /// The payload is expected to be in the NDJSON format

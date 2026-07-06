@@ -259,7 +259,9 @@ pub(crate) mod tests {
     fn matching_words() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let mut ctx = SearchContext::new(&temp_index, &rtxn).unwrap();
+        let mut ctx =
+            SearchContext::new(&temp_index, &rtxn, "test", time::OffsetDateTime::now_utc())
+                .unwrap();
         let mut builder = TokenizerBuilder::default();
         let tokenizer = builder.build();
         let tokens = tokenizer.tokenize("split this world");

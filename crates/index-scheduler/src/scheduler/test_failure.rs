@@ -223,7 +223,7 @@ fn fail_in_process_batch_for_document_deletion() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_removing_the_documents");
 
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();

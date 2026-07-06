@@ -28,7 +28,7 @@ pub fn hydrate_documents(
 
     // Open each foreign index once
     for (foreign_index_uid, field_names) in foreign_keys_by_index_uid {
-        let index = index_scheduler.index(foreign_index_uid)?;
+        let index = index_scheduler.user_index(foreign_index_uid)?;
         let rtxn = index.read_txn()?;
         let formatter = HydrationFormatter::new(&index, &rtxn, field_names.as_slice())?;
 
@@ -215,7 +215,7 @@ impl FederatedHydrationFormatter {
         // Fetch the documents from the foreign indexes
         let mut hydration_documents = HashMap::new();
         for (index_uid, docids) in hydration_docids {
-            let index = index_scheduler.index(index_uid.as_ref())?;
+            let index = index_scheduler.user_index(index_uid.as_ref())?;
             let rtxn = index.read_txn()?;
             let document_maker = IndexDocumentMaker::new(&index, &rtxn)?;
             for docid in docids {

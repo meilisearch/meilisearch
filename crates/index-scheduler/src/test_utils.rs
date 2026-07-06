@@ -8,6 +8,7 @@ use file_store::File;
 use http_client::policy::IpPolicy;
 use meilisearch_auth::open_auth_store_env;
 use meilisearch_types::document_formats::DocumentFormatError;
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use meilisearch_types::milli::update::{IndexerConfig, MissingDocumentPolicy};
 use meilisearch_types::tasks::KindWithContent;
@@ -119,6 +120,7 @@ impl IndexScheduler {
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
             experimental_no_snapshot_compaction: false,
+            dsr_fuel: DsrFuel::new(3, 10, 3, 10),
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)

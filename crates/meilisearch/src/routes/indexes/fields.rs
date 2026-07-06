@@ -304,7 +304,7 @@ pub async fn post_index_fields(
     index_uid: web::Path<String>,
     body: AwebJson<ListFields, DeserrJsonError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = index_scheduler.index(index_uid.as_str())?;
+    let index = index_scheduler.user_index(index_uid.as_str())?;
     let rtxn = index.read_txn()?;
     let builder = MetadataBuilder::from_index(&index, &rtxn)?;
     let fields = builder
