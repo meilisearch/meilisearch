@@ -45,13 +45,61 @@ enum RankOrValue<'a> {
     Score(f64),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum WeightedScoreValue {
     WeightedScore(f64),
     Sort { asc: bool, value: serde_json::Value },
     GeoSort { asc: bool, distance: Option<f64> },
     VectorSort(f64),
+}
+
+impl PartialOrd for WeightedScoreValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        use WeightedScoreValue::*;
+        match (self, other) {
+            (WeightedScore(left) | VectorSort(left), WeightedScore(right) | VectorSort(right)) => {
+                if (left - right).abs() <= f64::EPSILON {
+                    Some(Ordering::Equal)
+                } else {
+                    Some(left.partial_cmp(&right).unwrap())
+                }
+            }
+            (Sort { asc: left_asc, value: left }, Sort { asc: right_asc, value: right }) => {
+                if left_asc != right_asc {
+                    return None;
+                }
+                Some(compare_sort_values(*left_asc, &left, &right))
+            }
+            (
+                GeoSort { asc: left_asc, distance: left },
+                GeoSort { asc: right_asc, distance: right },
+            ) => {
+                if left_asc != right_asc {
+                    return None;
+                }
+                Some(match (left, right) {
+                    (None, None) => Ordering::Equal,
+                    (None, Some(_)) => Ordering::Less,
+                    (Some(_), None) => Ordering::Greater,
+                    (Some(left), Some(right)) => {
+                        if (left - right).abs() <= f64::EPSILON {
+                            Ordering::Equal
+                        } else {
+                            left.partial_cmp(&right).unwrap()
+                        }
+                    }
+                })
+            }
+            // not comparable details, use global
+            (WeightedScore(_), _)
+            | (_, WeightedScore(_))
+            | (VectorSort(_), _)
+            | (_, VectorSort(_))
+            | (GeoSort { .. }, Sort { .. })
+            | (Sort { .. }, GeoSort { .. }) => None,
+        }
+    }
 }
 
 impl ScoreDetails {
