@@ -440,6 +440,23 @@ pub struct BrowseQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
+    pub use_network: Option<bool>,
 }
 
 /// Request body for browsing and retrieving documents from an index. Use
@@ -781,7 +798,7 @@ pub async fn get_documents(
     let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
-    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
+    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort, use_network } =
         params.into_inner();
 
     let filter = match filter {
@@ -800,7 +817,7 @@ pub async fn get_documents(
         filter,
         ids: ids.map(|ids| ids.into_iter().map(Into::into).collect()),
         sort: sort.map(|attr| fix_sort_query_parameters(&attr)),
-        use_network: None,
+        use_network,
     };
 
     analytics.publish(
