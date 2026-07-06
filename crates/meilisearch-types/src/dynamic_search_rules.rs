@@ -62,23 +62,23 @@ impl DynamicSearchRule {
         doc: impl Document<'a>,
         fault_source: FaultSource,
     ) -> Result<Self, milli::Error> {
-        let to_milli_error = |err| {
-            if let FaultSource::User = fault_source {
-                milli::Error::UserError(milli::UserError::SerdeJson(err))
-            } else {
+        let to_milli_error = |err| match fault_source {
+            FaultSource::User => milli::Error::UserError(milli::UserError::SerdeJson(err)),
+            FaultSource::Runtime | FaultSource::Bug | FaultSource::Undecided => {
                 milli::Error::InternalError(milli::InternalError::SerdeJson(err))
             }
         };
 
         let uid = serde_json::from_str(
             doc.top_level_field("uid")?
-                .ok_or_else(|| {
-                    if let FaultSource::User = fault_source {
+                .ok_or_else(|| match fault_source {
+                    FaultSource::User => {
                         milli::Error::UserError(milli::UserError::MissingDocumentId {
                             primary_key: "uid".to_string(),
                             document: Default::default(),
                         })
-                    } else {
+                    }
+                    FaultSource::Runtime | FaultSource::Bug | FaultSource::Undecided => {
                         milli::Error::InternalError(milli::InternalError::DatabaseMissingEntry {
                             db_name: "dsr index",
                             key: None,
@@ -273,7 +273,7 @@ pub struct RuleAction {
     pub action: DynamicSearchRuleAction,
 }
 
-// manual impl: no support for schema_type = Object
+// manual impl: no support for schema_type = Object and tag in DynamicSearchRuleAction
 impl routes::RequestBody for RuleAction {}
 
 #[routes::request(db, where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>, no_error)]

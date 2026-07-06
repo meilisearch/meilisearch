@@ -998,7 +998,7 @@ fn merge_metadata(
         performance_details: _,
     } in remote_results
     {
-        let this_remote_duration = time::Duration::nanoseconds(*processing_time_ms as i64);
+        let this_remote_duration = time::Duration::milliseconds(*processing_time_ms as i64);
         max_remote_duration = time::Duration::max(this_remote_duration, max_remote_duration);
         estimated_total_hits += match hits_info {
             HitsInfo::Pagination { total_hits: estimated_total_hits, .. }
