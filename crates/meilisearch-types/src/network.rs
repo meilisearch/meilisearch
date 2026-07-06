@@ -156,6 +156,13 @@ pub mod route {
         Ok(PathAndQuery::try_from(format!("/indexes/{index_uid}/facet-search"))?)
     }
 
+    pub fn documents_fetch_path(
+        index_uid: &crate::index_uid::IndexUid,
+    ) -> Result<PathAndQuery, HttpError> {
+        // WARNING: if you change this path, you must also change the path in the documents route macro in the meilisearch crate.
+        Ok(PathAndQuery::try_from(format!("/indexes/{index_uid}/documents/fetch"))?)
+    }
+
     pub fn indexes_root_path() -> PathAndQuery {
         PathAndQuery::from_static("/indexes")
     }

@@ -25,6 +25,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter};
+use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -53,6 +54,9 @@ use crate::routes::{
     PAGINATION_DEFAULT_LIMIT_FN,
 };
 use crate::search::{ExternalDocumentId, RetrieveVectors};
+use crate::search::proxy::{
+    json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+};
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -433,8 +437,8 @@ pub struct BrowseQueryGet {
 /// this to fetch documents with optional filtering, sorting, and pagination.
 /// This is useful for displaying document lists, exporting data, or
 /// inspecting index contents.
-#[routes::request]
-#[derive(Debug)]
+#[routes::request(proxied)]
+#[derive(Debug, Clone)]
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
@@ -478,6 +482,49 @@ pub struct BrowseQuery {
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
     #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     sort: Option<Vec<String>>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[request(default, error = DeserrJsonError<InvalidDocumentUseNetwork>)]
+    pub use_network: Option<bool>,
+}
+
+impl NetworkableQuery for BrowseQuery {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
+}
+
+impl ProxyQuery for &BrowseQuery {
+    /// The only things that can change are the filter on shard and the remote, so recover this
+    type ProxiedQuery = (String, BrowseQuery);
+
+    fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
+        let mut query = (*self).clone();
+        query.limit += self.offset;
+        query.offset = 0;
+        (remote, query)
+    }
+
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+        &mut query.1.filter
+    }
+}
 }
 
 /// List documents with POST
@@ -554,6 +601,12 @@ pub async fn documents_by_query_post(
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
+    // check remote header
+    let is_proxy = req
+        .headers()
+        .get(PROXY_SEARCH_HEADER)
+        .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsPOST> {
             per_filter: body.filter.is_some(),
@@ -572,7 +625,7 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, body).await;
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, body, is_proxy).await;
     if let Some(permit) = permit {
         permit.drop().await;
     }
@@ -666,6 +719,7 @@ pub async fn get_documents(
         filter,
         ids: ids.map(|ids| ids.into_iter().map(Into::into).collect()),
         sort: sort.map(|attr| fix_sort_query_parameters(&attr)),
+        use_network: None,
     };
 
     analytics.publish(
@@ -686,7 +740,7 @@ pub async fn get_documents(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, query).await;
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, query, false).await;
 
     if let Some(permit) = permit {
         permit.drop().await;
@@ -699,6 +753,7 @@ async fn documents_by_query(
     index_scheduler: Data<IndexScheduler>,
     index_uid: web::Path<String>,
     query: BrowseQuery,
+    is_proxy: bool,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort } = query;
