@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
+pub use federated::ProxyQuery;
 use index_scheduler::filter::{
     filter_into_index_filter, filters_into_index_filters, parse_filter,
     retrieve_foreign_keys_settings, SourceIndexUid,
@@ -51,7 +52,7 @@ use uuid::Uuid;
 use crate::error::MeilisearchHttpError;
 use crate::search::value_paths_visitor::ValuePathsVisitor;
 
-mod federated;
+pub mod federated;
 pub use federated::{
     perform_federated_search, proxy, FederatedSearch, FederatedSearchResult, Federation,
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
@@ -1267,18 +1268,18 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-impl SearchHit {
+pub trait VisitFacetValues {
     fn facet_values<F>(&self, field_name: &str, mut visit: F)
     where
         F: FnMut(FacetValue),
     {
-        permissive_json_pointer::visit_leaf_values(&self.document, field_name, &mut |value| {
+        permissive_json_pointer::visit_leaf_values(self.document(), field_name, &mut |value| {
             for value in FacetValue::from_value(value) {
                 visit(value);
             }
         });
         permissive_json_pointer::visit_leaf_values(
-            &self.extra_document,
+            self.extra_document(),
             field_name,
             &mut |value| {
                 for value in FacetValue::from_value(value) {
@@ -1286,6 +1287,19 @@ impl SearchHit {
                 }
             },
         );
+    }
+
+    fn document(&self) -> &Document;
+    fn extra_document(&self) -> &Document;
+}
+
+impl VisitFacetValues for SearchHit {
+    fn document(&self) -> &Document {
+        &self.document
+    }
+
+    fn extra_document(&self) -> &Document {
+        &self.extra_document
     }
 }
 
@@ -1314,6 +1328,13 @@ impl FacetValue {
                 Some(FacetValue::Normalized(normalized))
             }
             _ => None,
+        }
+    }
+
+    pub fn into_value(self) -> Value {
+        match self {
+            FacetValue::Normalized(s) => Value::String(s),
+            FacetValue::Number(number) => Value::Number(number),
         }
     }
 }

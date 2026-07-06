@@ -135,6 +135,10 @@ impl AscDesc {
     pub fn field(&self) -> Option<&str> {
         self.member().field()
     }
+
+    pub fn is_asc(&self) -> bool {
+        matches!(self, AscDesc::Asc(_))
+    }
 }
 
 impl FromStr for AscDesc {

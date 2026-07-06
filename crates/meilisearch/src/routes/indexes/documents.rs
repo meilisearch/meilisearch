@@ -2015,6 +2015,15 @@ fn retrieve_documents<S: AsRef<str>>(
     Ok((number_of_documents, documents))
 }
 
+impl VisitFacetValues for (&Document, &Document) {
+    fn document(&self) -> &Document {
+        self.0
+    }
+
+    fn extra_document(&self) -> &Document {
+        self.1
+    }
+}
 fn retrieve_document<S: AsRef<str>>(
     index: &Index,
     doc_id: &str,
