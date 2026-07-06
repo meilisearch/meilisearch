@@ -62,14 +62,14 @@ impl PartialOrd for WeightedScoreValue {
                 if (left - right).abs() <= f64::EPSILON {
                     Some(Ordering::Equal)
                 } else {
-                    Some(left.partial_cmp(&right).unwrap())
+                    Some(left.partial_cmp(right).unwrap())
                 }
             }
             (Sort { asc: left_asc, value: left }, Sort { asc: right_asc, value: right }) => {
                 if left_asc != right_asc {
                     return None;
                 }
-                Some(compare_sort_values(*left_asc, &left, &right))
+                Some(compare_sort_values(*left_asc, left, right))
             }
             (
                 GeoSort { asc: left_asc, distance: left },
@@ -86,7 +86,7 @@ impl PartialOrd for WeightedScoreValue {
                         if (left - right).abs() <= f64::EPSILON {
                             Ordering::Equal
                         } else {
-                            left.partial_cmp(&right).unwrap()
+                            left.partial_cmp(right).unwrap()
                         }
                     }
                 })

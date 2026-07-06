@@ -28,8 +28,8 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    make_document, filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
-    OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
+    filtered_universe, make_document, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter,
+    InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;

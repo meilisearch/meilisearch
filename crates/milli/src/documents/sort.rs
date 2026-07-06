@@ -429,12 +429,12 @@ pub fn recursive_sort<'ctx>(
             AscDesc::Desc(Member::Geo(target_point)) => (None, Some((target_point, false))),
         };
         if let Some((field, ascending)) = field {
-            if is_faceted(&field, &sortable_fields) {
+            if is_faceted(field, &sortable_fields) {
                 // The field may be in sortable_fields but not in fields_ids_map if no document
                 // has ever contained this field. In that case, we just skip this sort criterion
                 // since there are no values to sort by. Documents will be returned in their
                 // default order for this field.
-                if let Some(field_id) = fields_ids_map.id(&field) {
+                if let Some(field_id) = fields_ids_map.id(field) {
                     fields.push(AscDescId::Facet { field_id, ascending });
                 }
                 continue;
