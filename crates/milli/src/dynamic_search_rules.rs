@@ -72,8 +72,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     ) -> Result<Vec<PinDoc>> {
         let active_rules = self.active_rules_for_query(query_terms, search_context, fuel)?;
 
-        self.find_pins(self.rule_ids_sorted_by_precedence(active_rules)?, search_context)
-            .take(fuel.max_active_rules())
+        self.find_pins(self.rule_ids_sorted_by_precedence(active_rules)?, search_context, fuel)
             .filter(
                 |pin| {
                     if let Ok(pin) = pin.as_ref() {
@@ -131,7 +130,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     pub fn search_in_description_and_words(
         &self,
         query: Option<String>,
-        universe: RoaringBitmap,
+        universe: &RoaringBitmap,
         limit: usize,
         offset: usize,
     ) -> Result<SearchResult> {
@@ -142,7 +141,7 @@ impl<'a> DynamicSearchRulesView<'a> {
             search.query(query);
         }
 
-        search.candidates(&universe);
+        search.candidates(universe);
 
         search.exhaustive_number_hits(true);
         search.limit(limit);
@@ -157,9 +156,11 @@ impl<'a> DynamicSearchRulesView<'a> {
         self,
         sorted_active_rules: impl IntoIterator<Item = Result<RuleId>> + 'a,
         search_context: &'a SearchContext,
+        fuel: DsrFuel,
     ) -> impl Iterator<Item = Result<PinDoc>> + 'a {
         sorted_active_rules
             .into_iter()
+            .take(fuel.max_active_rules())
             .map(move |rule_id| {
                 let rule_id = rule_id?;
                 let Some(rule) =
@@ -255,22 +256,14 @@ impl<'a> DynamicSearchRulesView<'a> {
         // 3. exclude rules that have the a different query emptiness condition
         let is_query_empty = query_terms.is_empty();
         if let Some(is_query_empty_fid) = self.db_fields_ids_map.id("conditions.query.isEmpty") {
-            if is_query_empty {
-                let is_query_not_empty_key =
-                    FacetGroupKey { field_id: is_query_empty_fid, level: 0, left_bound: "false" };
-                if let Some(FacetGroupValue { size: _, bitmap: is_query_not_empty_rules }) =
-                    self.index.facet_id_string_docids.get(self.rtxn, &is_query_not_empty_key)?
-                {
-                    active_rules -= is_query_not_empty_rules;
-                }
-            } else {
-                let is_query_empty_key =
-                    FacetGroupKey { field_id: is_query_empty_fid, level: 0, left_bound: "true" };
-                if let Some(FacetGroupValue { size: _, bitmap: is_query_empty_rules }) =
-                    self.index.facet_id_string_docids.get(self.rtxn, &is_query_empty_key)?
-                {
-                    active_rules -= is_query_empty_rules;
-                }
+            let left_bound = if is_query_empty { "false" } else { "true" };
+            let is_not_query_empty_key =
+                FacetGroupKey { field_id: is_query_empty_fid, level: 0, left_bound };
+
+            if let Some(FacetGroupValue { size: _, bitmap: is_not_query_empty_rules }) =
+                self.index.facet_id_string_docids.get(self.rtxn, &is_not_query_empty_key)?
+            {
+                active_rules -= is_not_query_empty_rules;
             }
         };
 
@@ -293,10 +286,9 @@ impl<'a> DynamicSearchRulesView<'a> {
 
             // 4. exclude words with more word constraints than present in the query
             if let Some(words_count_plus_one) = words_count.checked_add(1) {
-                for res in word_count_db.range(
-                    self.rtxn,
-                    &((query_words_fid, words_count_plus_one)..=(query_words_fid, u8::MAX)),
-                )? {
+                for res in
+                    word_count_db.range(self.rtxn, &((query_words_fid, words_count_plus_one)..))?
+                {
                     let ((_, _constraint_count), more_constraints_than_query_rules) = res?;
                     active_rules -= more_constraints_than_query_rules;
                 }
@@ -453,7 +445,7 @@ impl DynamicSearchRules {
     pub fn search_in_description_and_words(
         &self,
         query: Option<String>,
-        universe: RoaringBitmap,
+        universe: &RoaringBitmap,
         limit: usize,
         offset: usize,
     ) -> Result<SearchResult> {
