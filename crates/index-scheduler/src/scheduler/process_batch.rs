@@ -231,7 +231,7 @@ impl IndexScheduler {
             }
             Batch::IndexCreation { index_uid: index_name, primary_key, task } => {
                 progress.update_progress(CreateIndexProgress::CreatingTheIndex);
-                let index_uid = AnyIndex::new(&index_name);
+                let index_uid = UserIndex::try_from_uid(&index_name)?;
 
                 let wtxn = self.env.write_txn()?;
                 if self.index_mapper.exists(&wtxn, index_uid)? {
@@ -436,7 +436,7 @@ impl IndexScheduler {
                     unreachable!()
                 };
 
-                let index_uid = AnyIndex::new(index_uid);
+                let index_uid = UserIndex::try_from_uid(index_uid)?;
 
                 let rtxn = self.env.read_txn()?;
                 let ret = catch_unwind(AssertUnwindSafe(|| {
@@ -684,11 +684,11 @@ impl IndexScheduler {
         }
     }
 
-    fn apply_compaction(
+    fn apply_compaction<'a>(
         &self,
         rtxn: &RoTxn,
         progress: &Progress,
-        index_uid: AnyIndex<'_>,
+        index_uid: impl IndexUid<'a>,
     ) -> Result<(u64, u64)> {
         // 1. Verify that the index exists
         if !self.index_mapper.index_exists(rtxn, index_uid)? {

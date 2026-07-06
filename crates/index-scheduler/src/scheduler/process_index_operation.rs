@@ -14,7 +14,8 @@ use meilisearch_types::milli::update::new::indexer::{
 use meilisearch_types::milli::update::{DocumentAdditionResult, Setting};
 use meilisearch_types::milli::vector::RuntimeEmbedders;
 use meilisearch_types::milli::{
-    self, ChannelCongestion, FilterableAttributesRule, MustStopProcessing,
+    self, ChannelCongestion, FilterFeatures, FilterableAttributesFeatures,
+    FilterableAttributesPatterns, FilterableAttributesRule, MustStopProcessing,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::{apply_settings_to_builder, Settings, TypoSettings};
@@ -595,13 +596,13 @@ impl IndexScheduler {
             .into(),
             filterable_attributes: Setting::Set(vec![
                 // filter by active or inactive rules
-                FilterableAttributesRule::Field("active".into()),
+                eq_attr("active".into()),
                 // used to find time constraints
-                FilterableAttributesRule::Field("conditions.time.start".into()),
+                cmp_attr("conditions.time.start".into()),
                 // used to find time constraints
-                FilterableAttributesRule::Field("conditions.time.end".into()),
+                cmp_attr("conditions.time.end".into()),
                 // used to find query isEmpty constraints
-                FilterableAttributesRule::Field("conditions.query.isEmpty".into()),
+                eq_attr("conditions.query.isEmpty".into()),
             ]),
             sortable_attributes: {
                 let mut sortable_attributes: BTreeSet<_> = Default::default();
@@ -715,6 +716,7 @@ impl IndexScheduler {
                 &mut new_fields_ids_map,
                 &must_stop_processing,
                 progress.clone(),
+                // no sharding for the DSR index: DSR rules are fully replicated on all remotes
                 None,
             )
             .map_err(from_milli)?;
@@ -765,4 +767,24 @@ impl IndexScheduler {
 
         Ok((tasks, congestion))
     }
+}
+
+fn eq_attr(name: String) -> FilterableAttributesRule {
+    FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
+        attribute_patterns: vec![name].into(),
+        features: FilterableAttributesFeatures {
+            facet_search: false,
+            filter: FilterFeatures { equality: true, comparison: false },
+        },
+    })
+}
+
+fn cmp_attr(name: String) -> FilterableAttributesRule {
+    FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
+        attribute_patterns: vec![name].into(),
+        features: FilterableAttributesFeatures {
+            facet_search: false,
+            filter: FilterFeatures { equality: true, comparison: true },
+        },
+    })
 }
