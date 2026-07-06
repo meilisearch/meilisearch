@@ -5,7 +5,7 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex, RESERVED_UID_PREFIX};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::milli::sharding::Shards;
@@ -713,7 +713,13 @@ impl<'a> IndexUid<'a> for UserIndex<'a> {
     }
 
     fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
-        Ok(AnyIndex::count(db, rtxn)?.saturating_sub(DsrIndex::count(db, rtxn)?))
+        let reserved_index_count =
+            db.prefix_iter(rtxn, RESERVED_UID_PREFIX)?.try_fold(0, |count, res| {
+                res?;
+                Ok::<_, crate::Error>(count + 1)
+            })?;
+
+        Ok(AnyIndex::count(db, rtxn)?.saturating_sub(reserved_index_count))
     }
 }
 

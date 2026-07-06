@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::milli::{self};
@@ -1086,4 +1087,57 @@ fn test_scheduler_doesnt_run_with_zero_batched_tasks() {
     let (index_scheduler, mut handle) = handle.restart(index_scheduler, true, vec![], |_| None);
     handle.advance_n_successful_batches(1);
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_restart");
+}
+
+#[test]
+fn test_index_uid_count() {
+    let (index_scheduler, _) = IndexScheduler::test(true, vec![]);
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"0");
+
+    drop(
+        index_scheduler
+            .index_mapper
+            .create_index(wtxn, UserIndex::new("test").unwrap(), None, None)
+            .unwrap(),
+    );
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"1");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"1");
+
+    drop(
+        index_scheduler
+            .index_mapper
+            .create_index(wtxn, UserIndex::new("test-2").unwrap(), None, None)
+            .unwrap(),
+    );
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"2");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"0");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"2");
+
+    drop(index_scheduler.index_mapper.create_index(wtxn, DsrIndex, None, None).unwrap());
+
+    let wtxn = index_scheduler.env.write_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&wtxn).unwrap(), @"2");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&wtxn).unwrap(), @"1");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&wtxn).unwrap(), @"3");
+
+    drop(
+        index_scheduler
+            .index_mapper
+            .create_index(wtxn, UserIndex::new("test-3").unwrap(), None, None)
+            .unwrap(),
+    );
+
+    let rtxn = index_scheduler.env.read_txn().unwrap();
+    snapshot!(index_scheduler.index_mapper.index_count::<UserIndex>(&rtxn).unwrap(), @"3");
+    snapshot!(index_scheduler.index_mapper.index_count::<DsrIndex>(&rtxn).unwrap(), @"1");
+    snapshot!(index_scheduler.index_mapper.index_count::<AnyIndex>(&rtxn).unwrap(), @"4");
 }

@@ -126,9 +126,11 @@ impl<'a> AnyIndex<'a> {
 #[derive(Clone, Copy)]
 pub struct UserIndex<'a>(&'a str);
 
+pub const RESERVED_UID_PREFIX: &str = ".meili";
+
 impl<'a> UserIndex<'a> {
     pub fn new(uid: &'a str) -> Option<Self> {
-        if uid.starts_with(".meili") {
+        if uid.starts_with(RESERVED_UID_PREFIX) {
             None
         } else {
             Some(Self(uid))
