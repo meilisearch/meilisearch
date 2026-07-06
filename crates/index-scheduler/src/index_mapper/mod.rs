@@ -492,12 +492,7 @@ impl IndexMapper {
     }
 
     pub fn index_path<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<Option<PathBuf>> {
-        let name = name.uid();
-        let index_path = match self.index_mapping.get(rtxn, name)? {
-            Some(index_uuid) => self.index_path_from_uuid(index_uuid),
-            None => return Ok(None),
-        };
-        Ok(Some(index_path))
+        Ok(self.index_uuid(rtxn, name)?.map(|index_uuid| self.index_path_from_uuid(index_uuid)))
     }
 
     pub fn index_uuid<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<Option<Uuid>> {
