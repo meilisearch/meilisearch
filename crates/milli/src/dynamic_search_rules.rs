@@ -277,6 +277,18 @@ impl<'a> DynamicSearchRulesView<'a> {
             }
         };
 
+        let mut query_terms: Vec<&str> = query_terms
+            .iter()
+            .filter_map(|word| {
+                word.value
+                    .original_single_word(search_context)
+                    .map(|word| search_context.word_interner.get(word).as_str())
+            })
+            .collect();
+
+        query_terms.sort_unstable();
+        query_terms.dedup();
+
         let words_count =
             query_terms.len().min(MAX_COUNTED_WORDS).min(fuel.max_counted_words()) as u8;
         if let Some(query_words_fid) = self.db_fields_ids_map.id("conditions.query.words") {
@@ -295,10 +307,6 @@ impl<'a> DynamicSearchRulesView<'a> {
 
             let mut words_rules = Vec::new();
             for word in query_terms.iter().take(words_count.into()) {
-                let Some(word) = word.value.original_single_word(search_context) else {
-                    continue;
-                };
-                let word = search_context.word_interner.get(word).as_str();
                 let Some(mut word_rules) =
                     self.index.word_fid_docids.get(self.rtxn, &(word, query_words_fid))?
                 else {
