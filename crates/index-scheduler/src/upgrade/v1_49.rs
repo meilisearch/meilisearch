@@ -60,7 +60,6 @@ impl LegacyDynamicSearchRule {
             .filter_map(|action| action.into_new_action())
             .collect();
 
-        let mut have_impossible_conditions = false;
         let mut time = None;
         let mut query = None;
 
@@ -72,8 +71,7 @@ impl LegacyDynamicSearchRule {
                             (existing_is_empty, is_empty)
                         {
                             if *existing_is_empty != is_empty {
-                                have_impossible_conditions = true;
-                                break;
+                                return None;
                             }
                         }
 
@@ -104,8 +102,7 @@ impl LegacyDynamicSearchRule {
 
                         if let (Some(start), Some(end)) = (new_start, new_end) {
                             if start > end {
-                                have_impossible_conditions = true;
-                                break;
+                                return None;
                             }
                         }
                         *existing_start = new_start;
@@ -117,10 +114,6 @@ impl LegacyDynamicSearchRule {
         }
 
         let conditions = NewConditions { time, query };
-
-        if have_impossible_conditions {
-            return None;
-        }
 
         Some(NewDynamicSearchRule {
             uid,
