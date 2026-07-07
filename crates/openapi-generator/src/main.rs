@@ -112,10 +112,8 @@ fn routes_missing_operation_field(paths: &JsonObject, field: &str) -> Vec<String
             path_item.as_object().map(|path_item| {
                 HTTP_METHODS.iter().filter_map(move |method| {
                     let op = path_item.get(*method)?;
-                    let has_field = op
-                        .get(field)
-                        .and_then(Value::as_str)
-                        .is_some_and(|s| !s.trim().is_empty());
+                    let has_field =
+                        op.get(field).and_then(Value::as_str).is_some_and(|s| !s.trim().is_empty());
                     if has_field {
                         None
                     } else {
