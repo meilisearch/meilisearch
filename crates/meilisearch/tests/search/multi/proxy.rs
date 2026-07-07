@@ -5,7 +5,7 @@ use meili_snap::{json_string, snapshot};
 use wiremock::matchers::{method, path, AnyMatcher};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{GetAllDocumentsOptions, Server, Value, SCORE_DOCUMENTS};
+use crate::common::{Server, Value, SCORE_DOCUMENTS};
 use crate::json;
 
 #[actix_rt::test]
@@ -8899,7 +8899,7 @@ async fn remote_auto_sharding_auto_documents_fetch() {
 
     println!("list documents using GET /indexes/:uid/documents");
     let (response, code) = index0
-        .get_all_documents(GetAllDocumentsOptions {
+        .get_all_documents(crate::common::GetAllDocumentsOptions {
             limit: Some(100),
             fields: Some(vec!["id", "title", "_geo"]),
             ..Default::default()
