@@ -134,6 +134,33 @@ pub struct GetDocument {
     #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
+    use_network: Option<bool>,
+}
+
+impl NetworkableQuery for GetDocument {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
 }
 
 aggregate_methods!(
@@ -248,14 +275,18 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors } = params.into_inner();
+    let features = index_scheduler.features();
+    let network = index_scheduler.network();
+    let mut query = params.into_inner();
+    let must_use_network = query.must_use_network(&network, &features)?;
+    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors, use_network: _ } = query;
     let attributes_to_retrieve = fields.merge_star_and_none();
 
     let retrieve_vectors = RetrieveVectors::new(param_retrieve_vectors.0);
 
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsGET> {
-            retrieve_vectors: param_retrieve_vectors.0,
+            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
             per_document_id: true,
             per_filter: false,
             with_vector_filter: false,
@@ -269,8 +300,35 @@ pub async fn get_document(
     );
 
     let index = index_scheduler.user_index(&index_uid)?;
-    let document =
-        retrieve_document(&index, &document_id, attributes_to_retrieve, retrieve_vectors)?;
+
+    // Try to retrieve the document locally first
+    let local_result = retrieve_document(
+        &index,
+        &document_id,
+        attributes_to_retrieve.as_deref(),
+        retrieve_vectors,
+    );
+
+    // If the document is not found locally, try to retrieve it from the network if it is enabled
+    let document = if must_use_network && local_result.is_err() {
+        let query = BrowseQuery {
+            offset: 0,
+            limit: 1,
+            fields: attributes_to_retrieve,
+            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
+            filter: None,
+            ids: Some(vec![serde_json::Value::String(document_id.clone())]),
+            sort: None,
+            use_network: Some(true),
+        };
+        let mut ret =
+            retrieve_documents_federated(index_scheduler.clone(), index_uid, query, network)
+                .await?;
+        ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
+    } else {
+        local_result?
+    };
+
     debug!(returns = ?document, "Get document");
     Ok(HttpResponse::Ok().json(document))
 }
@@ -2442,7 +2500,7 @@ fn build_federation_hit(scores: Vec<WeightedScoreValue>) -> serde_json::Value {
 fn retrieve_document<S: AsRef<str>>(
     index: &Index,
     doc_id: &str,
-    attributes_to_retrieve: Option<Vec<S>>,
+    attributes_to_retrieve: Option<&[S]>,
     retrieve_vectors: RetrieveVectors,
 ) -> Result<Document, ResponseError> {
     let txn = index.read_txn()?;

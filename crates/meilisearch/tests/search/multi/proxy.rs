@@ -8430,7 +8430,7 @@ async fn remote_auto_sharding_auto_documents_fetch() {
       }
     ]);
     let index0 = ms0.index("test");
-    let _index1 = ms1.index("test");
+    let index1 = ms1.index("test");
     let _index2 = ms2.index("test");
 
     let (task, code) = index0.add_documents(documents, None).await;
@@ -8954,6 +8954,59 @@ async fn remote_auto_sharding_auto_documents_fetch() {
       "offset": 0,
       "limit": 100,
       "total": 6
+    }
+    "###);
+
+    println!("GET one document using GET /indexes/:uid/documents/:document_id");
+    let (response, code) = index0.get_document(1, None).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "id": 1,
+      "title": "Carol",
+      "genres": [
+        "Romance",
+        "Drama"
+      ],
+      "color": [
+        "red"
+      ],
+      "platforms": [
+        "MacOS",
+        "Linux",
+        "Windows"
+      ],
+      "_geo": {
+        "lat": 34.0522,
+        "lng": -118.2437
+      }
+    }
+    "###);
+
+    let (response, code) = index1.get_document(1, None).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "id": 1,
+      "title": "Carol",
+      "genres": [
+        "Romance",
+        "Drama"
+      ],
+      "color": [
+        "red"
+      ],
+      "platforms": [
+        "MacOS",
+        "Linux",
+        "Windows"
+      ],
+      "_geo": {
+        "lat": 34.0522,
+        "lng": -118.2437
+      }
     }
     "###);
 }
