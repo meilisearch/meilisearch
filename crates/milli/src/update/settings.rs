@@ -48,7 +48,7 @@ use crate::vector::{
 };
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
-    LocalizedAttributesRule, MustStopProcessing, Result,
+    LocalizedAttributesRule, MustStopProcessing, Result, MAX_LMDB_KEY_LENGTH,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
@@ -758,7 +758,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 self.index.synonyms.clear(self.wtxn)?;
                 for (key, synonyms) in new_synonyms {
-                    self.index.synonyms.put(self.wtxn, &key, &synonyms)?;
+                    // length of all words + count of delimiters
+                    let total_length = key.iter().map(String::len).sum::<usize>() + key.len();
+                    if total_length < MAX_LMDB_KEY_LENGTH && total_length != 0 {
+                        self.index.synonyms.put(self.wtxn, &key, &synonyms)?;
+                    }
                 }
 
                 self.index.put_user_defined_synonyms(self.wtxn, user_synonyms)?;

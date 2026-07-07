@@ -5,7 +5,9 @@ use heed::types::Str;
 use heed::RwTxn;
 
 use super::{UpgradeIndex, UpgradeParams};
-use crate::{index::AssociatedSynonyms, update::settings::normalize, Index, Result};
+use crate::index::AssociatedSynonyms;
+use crate::update::settings::normalize;
+use crate::{Index, Result, MAX_LMDB_KEY_LENGTH};
 
 pub const SYNONYMS_KEY: &str = "synonyms";
 
@@ -47,6 +49,10 @@ impl UpgradeIndex for MigrateSynonymsToDedicatedDatabase {
         let mut entries = BTreeMap::new();
         for (original_key, synonyms) in user_defined_synonyms {
             let normalized = normalize(&tokenizer, &original_key);
+            if normalized.is_empty() {
+                continue;
+            }
+
             let synonyms = AssociatedSynonyms::new(synonyms);
             if synonyms.synonyms(&tokenizer).is_empty() {
                 continue;
@@ -56,7 +62,11 @@ impl UpgradeIndex for MigrateSynonymsToDedicatedDatabase {
         }
 
         for (key, synonyms) in entries {
-            index.synonyms.put(wtxn, &key, &synonyms)?;
+            // length of all words + count of delimiters
+            let total_length = key.iter().map(String::len).sum::<usize>() + key.len();
+            if total_length < MAX_LMDB_KEY_LENGTH && total_length != 0 {
+                index.synonyms.put(wtxn, &key, &synonyms)?;
+            }
         }
 
         Ok(false)
