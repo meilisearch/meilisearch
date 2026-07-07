@@ -846,16 +846,16 @@ fn serialize_index_filter_condition(
             write!(f, ")")?;
         }
         IndexFilterCondition::Condition { fid, op } => {
-            write!(f, "\"{}\" ", fid.escaped_fragment())?;
+            write!(f, "{} ", fid.escaped_fragment())?;
             serialize_condition(f, op)?;
         }
         IndexFilterCondition::In { fid, els } => {
-            write!(f, "\"{}\" IN [", fid.escaped_fragment())?;
+            write!(f, "{} IN [", fid.escaped_fragment())?;
             for (i, el) in els.iter().enumerate() {
                 if i > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "\"{}\"", el.escaped_fragment())?;
+                write!(f, "{}", el.escaped_fragment())?;
             }
             write!(f, "]")?;
         }
@@ -882,11 +882,11 @@ fn serialize_index_filter_condition(
         IndexFilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
             write!(f, "_vectors")?;
             if let Some(embedder) = embedder {
-                write!(f, ".\"{}\"", embedder.escaped_fragment())?;
+                write!(f, ".{}", embedder.escaped_fragment())?;
             }
             match inner {
                 VectorFilter::Fragment(fragment) => {
-                    write!(f, ".fragments.\"{}\"", fragment.escaped_fragment())?
+                    write!(f, ".fragments.{}", fragment.escaped_fragment())?
                 }
                 VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                 VectorFilter::UserProvided => write!(f, ".userProvided")?,
@@ -944,23 +944,23 @@ fn serialize_index_filter_condition(
 
 fn serialize_condition(f: &mut impl FmtWrite, condition: &Condition<'_>) -> std::fmt::Result {
     match condition {
-        Condition::GreaterThan(token) => write!(f, "> \"{}\"", token.escaped_fragment()),
-        Condition::GreaterThanOrEqual(token) => write!(f, ">= \"{}\"", token.escaped_fragment()),
-        Condition::Equal(token) => write!(f, "= \"{}\"", token.escaped_fragment()),
-        Condition::NotEqual(token) => write!(f, "!= \"{}\"", token.escaped_fragment()),
+        Condition::GreaterThan(token) => write!(f, "> {}", token.escaped_fragment()),
+        Condition::GreaterThanOrEqual(token) => write!(f, ">= {}", token.escaped_fragment()),
+        Condition::Equal(token) => write!(f, "= {}", token.escaped_fragment()),
+        Condition::NotEqual(token) => write!(f, "!= {}", token.escaped_fragment()),
         Condition::Null => write!(f, "IS NULL"),
         Condition::Empty => write!(f, "IS EMPTY"),
         Condition::Exists => write!(f, "EXISTS"),
-        Condition::LowerThan(token) => write!(f, "< \"{}\"", token.escaped_fragment()),
-        Condition::LowerThanOrEqual(token) => write!(f, "<= \"{}\"", token.escaped_fragment()),
+        Condition::LowerThan(token) => write!(f, "< {}", token.escaped_fragment()),
+        Condition::LowerThanOrEqual(token) => write!(f, "<= {}", token.escaped_fragment()),
         Condition::Between { from, to } => {
-            write!(f, "\"{}\" TO \"{}\"", from.escaped_fragment(), to.escaped_fragment())
+            write!(f, "{} TO {}", from.escaped_fragment(), to.escaped_fragment())
         }
         Condition::Contains { word, keyword: _ } => {
-            write!(f, "CONTAINS \"{}\"", word.escaped_fragment())
+            write!(f, "CONTAINS {}", word.escaped_fragment())
         }
         Condition::StartsWith { word, keyword: _ } => {
-            write!(f, "STARTS WITH \"{}\"", word.escaped_fragment())
+            write!(f, "STARTS WITH {}", word.escaped_fragment())
         }
     }
 }

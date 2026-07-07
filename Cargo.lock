@@ -2274,6 +2274,7 @@ dependencies = [
  "levenshtein_automata",
  "nom",
  "nom_locate",
+ "serde_json",
  "unescaper",
 ]
 
