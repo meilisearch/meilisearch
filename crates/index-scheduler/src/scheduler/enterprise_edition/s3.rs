@@ -402,7 +402,7 @@ async fn multipart_stream_to_s3(
     use std::path::PathBuf;
 
     use bytes::{BufMut as _, Bytes, BytesMut};
-    use http_client::reqwest::{Client, Response};
+    use http_client::reqwest::{Client, Response, StatusCode};
     use rusty_s3::actions::CreateMultipartUpload;
     use rusty_s3::{Bucket, BucketError, Credentials, S3Action as _, UrlStyle};
     use tokio::task::JoinHandle;
@@ -429,19 +429,35 @@ async fn multipart_stream_to_s3(
     let url = action.sign(s3_signature_duration);
 
     let client = Client::builder().build_with_policies(ip_policy, Default::default()).unwrap();
-    let resp = client.post(url).send().await.map_err(Error::S3HttpError)?;
-    let status = resp.status();
-
-    let body = match resp.error_for_status_ref() {
-        Ok(_) => resp
-            .text()
-            .await
-            .map_err(http_client::reqwest::Error::from)
-            .map_err(Error::S3HttpError)?,
-        Err(_) => {
-            return Err(Error::S3Error { status, body: resp.text().await.unwrap_or_default() })
+    let request = client.post(url);
+    let body = backoff::future::retry(retry_backoff.clone(), move || {
+        // safety: it fails only with stream body. We send a request without a body.
+        let request = request.try_clone().unwrap();
+        let request = request.send();
+        async {
+            let resp =
+                request.await.map_err(Error::S3HttpError).map_err(backoff::Error::transient)?;
+            let status = resp.status();
+            let result = resp.text().await;
+            match status {
+                status if status.is_success() => result
+                    .map_err(http_client::reqwest::Error::from)
+                    .map_err(Error::S3HttpError)
+                    .map_err(backoff::Error::transient),
+                status if status.is_client_error() && status != StatusCode::TOO_MANY_REQUESTS => {
+                    result
+                        .map_err(http_client::reqwest::Error::from)
+                        .map_err(Error::S3HttpError)
+                        .map_err(backoff::Error::Permanent)
+                }
+                _ => Err(backoff::Error::transient(Error::S3Error {
+                    status,
+                    body: result.unwrap_or_default(),
+                })),
+            }
         }
-    };
+    })
+    .await?;
 
     let multipart =
         CreateMultipartUpload::parse_response(&body).map_err(|e| Error::S3XmlError(Box::new(e)))?;
