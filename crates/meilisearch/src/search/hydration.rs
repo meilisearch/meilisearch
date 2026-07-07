@@ -4,12 +4,14 @@ use index_scheduler::filter::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexU
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
-use meilisearch_types::milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey};
+use meilisearch_types::milli::{
+    self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
+};
 use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
-use crate::search::{make_document, ExternalDocumentId, SearchHit};
+use crate::search::{ExternalDocumentId, SearchHit};
 
 /// Hydrate the documents based on the foreign keys
 ///

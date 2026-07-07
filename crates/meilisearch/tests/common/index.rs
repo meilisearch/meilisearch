@@ -643,6 +643,8 @@ pub struct GetAllDocumentsOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort: Option<Vec<&'static str>>,
     pub retrieve_vectors: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_network: Option<bool>,
 }
 
 #[derive(Serialize)]

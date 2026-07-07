@@ -50,7 +50,8 @@ use crate::search::federated::types::{
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
-    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, DEFAULT_SEARCH_LIMIT,
+    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues,
+    DEFAULT_SEARCH_LIMIT,
 };
 
 #[allow(clippy::too_many_arguments)]

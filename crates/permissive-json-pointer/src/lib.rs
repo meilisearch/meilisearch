@@ -6,7 +6,7 @@ use serde_json::*;
 
 type Document = Map<String, Value>;
 
-const SPLIT_SYMBOL: char = '.';
+pub const SPLIT_SYMBOL: char = '.';
 
 /// Returns `true` if the `selector` match the `key`.
 ///

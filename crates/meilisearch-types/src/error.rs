@@ -244,6 +244,7 @@ MissingDocumentEditionFunction                 , InvalidRequest       , BAD_REQU
 InconsistentDocumentChangeHeaders              , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentUseNetwork                      , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST ;
 InvalidHeaderValue                             , InvalidRequest       , BAD_REQUEST ;

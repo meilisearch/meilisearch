@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
+pub use federated::ProxyQuery;
 use index_scheduler::filter::{
     filter_into_index_filter, filters_into_index_filters, parse_filter,
     retrieve_foreign_keys_settings, SourceIndexUid,
@@ -27,8 +28,8 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    filtered_universe, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter, InternalError,
-    OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
+    filtered_universe, make_document, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter,
+    InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -38,9 +39,7 @@ use milli::{
     AscDesc, FieldId, FieldsIdsMap, FormatOptions, Index, LocalizedAttributesRule, MatchBounds,
     MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
-use permissive_json_pointer::contained_in;
 use regex::Regex;
-use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 #[cfg(test)]
@@ -49,16 +48,14 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
-use crate::search::value_paths_visitor::ValuePathsVisitor;
 
-mod federated;
+pub mod federated;
 pub use federated::{
     perform_federated_search, proxy, FederatedSearch, FederatedSearchResult, Federation,
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
 mod hydration;
-mod value_paths_visitor;
 use hydration::hydrate_documents;
 mod ranking_rules;
 
@@ -327,8 +324,6 @@ pub struct SearchQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
     ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
@@ -893,8 +888,6 @@ pub struct SearchQueryWithIndex {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
-    ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
@@ -1271,18 +1264,18 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-impl SearchHit {
+pub trait VisitFacetValues {
     fn facet_values<F>(&self, field_name: &str, mut visit: F)
     where
         F: FnMut(FacetValue),
     {
-        permissive_json_pointer::visit_leaf_values(&self.document, field_name, &mut |value| {
+        permissive_json_pointer::visit_leaf_values(self.document(), field_name, &mut |value| {
             for value in FacetValue::from_value(value) {
                 visit(value);
             }
         });
         permissive_json_pointer::visit_leaf_values(
-            &self.extra_document,
+            self.extra_document(),
             field_name,
             &mut |value| {
                 for value in FacetValue::from_value(value) {
@@ -1290,6 +1283,19 @@ impl SearchHit {
                 }
             },
         );
+    }
+
+    fn document(&self) -> &Document;
+    fn extra_document(&self) -> &Document;
+}
+
+impl VisitFacetValues for SearchHit {
+    fn document(&self) -> &Document {
+        &self.document
+    }
+
+    fn extra_document(&self) -> &Document {
+        &self.extra_document
     }
 }
 
@@ -1300,7 +1306,7 @@ pub enum FacetValue {
 }
 
 impl FacetValue {
-    pub fn from_value(field: &serde_json::Value) -> impl Iterator<Item = FacetValue> + '_ {
+    pub fn from_value(field: &Value) -> impl Iterator<Item = FacetValue> + '_ {
         match field {
             Value::Array(values) => {
                 either::Either::Left(values.iter().flat_map(Self::from_leaf_value))
@@ -1309,7 +1315,7 @@ impl FacetValue {
         }
     }
 
-    fn from_leaf_value(field: &serde_json::Value) -> Option<FacetValue> {
+    fn from_leaf_value(field: &Value) -> Option<FacetValue> {
         match field {
             Value::Bool(b) => Some(FacetValue::Normalized(b.to_string())),
             Value::Number(number) => Some(FacetValue::Number(number.clone())),
@@ -1318,6 +1324,13 @@ impl FacetValue {
                 Some(FacetValue::Normalized(normalized))
             }
             _ => None,
+        }
+    }
+
+    pub fn into_value(self) -> Value {
+        match self {
+            FacetValue::Normalized(s) => Value::String(s),
+            FacetValue::Number(number) => Value::Number(number),
         }
     }
 }
@@ -2820,34 +2833,6 @@ fn add_non_formatted_ids_to_formatted_options(
     for id in to_retrieve_ids {
         formatted_options.entry(*id).or_insert(FormatOptions { highlight: false, crop: None });
     }
-}
-
-fn make_document<S, I>(
-    obkv: &obkv::KvReaderU16,
-    field_ids_map: &FieldsIdsMap,
-    selectors: impl IntoIterator<IntoIter = I>,
-) -> milli::Result<Document>
-where
-    S: AsRef<str>,
-    I: Clone + Iterator<Item = S>,
-{
-    let selectors = selectors.into_iter();
-    let mut document = serde_json::Map::new();
-
-    for (key, value_bytes) in obkv {
-        let key = field_ids_map.name(key).expect("Missing field name");
-        if !selectors.clone().any(|selector| contained_in(selector.as_ref(), key)) {
-            // If the key is not part of the selection, skip this value
-            continue;
-        }
-
-        let visitor = ValuePathsVisitor::new_from_path(selectors.clone(), key);
-        let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
-        let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
-        document.insert(key.to_string(), value);
-    }
-
-    Ok(document)
 }
 
 #[allow(clippy::too_many_arguments)]

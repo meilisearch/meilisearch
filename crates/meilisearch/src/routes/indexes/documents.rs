@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::io::{ErrorKind, Seek as _};
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -19,12 +20,17 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::constants::{
+    RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
+};
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter};
+use meilisearch_types::milli::{make_document, AscDesc, DocumentId, IndexFilter, Member};
+use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -52,12 +58,19 @@ use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
     PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::{ExternalDocumentId, RetrieveVectors};
+use crate::search::federated::weighted_scores;
+use crate::search::proxy::{
+    json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+};
+use crate::search::{
+    ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
+};
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
+use crate::search::federated::types::{FEDERATION_HIT, WEIGHTED_SCORE_VALUES};
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -121,6 +134,33 @@ pub struct GetDocument {
     #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
+    use_network: Option<bool>,
+}
+
+impl NetworkableQuery for GetDocument {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
 }
 
 aggregate_methods!(
@@ -235,14 +275,18 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors } = params.into_inner();
+    let features = index_scheduler.features();
+    let network = index_scheduler.network();
+    let mut query = params.into_inner();
+    let must_use_network = query.must_use_network(&network, &features)?;
+    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors, use_network: _ } = query;
     let attributes_to_retrieve = fields.merge_star_and_none();
 
     let retrieve_vectors = RetrieveVectors::new(param_retrieve_vectors.0);
 
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsGET> {
-            retrieve_vectors: param_retrieve_vectors.0,
+            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
             per_document_id: true,
             per_filter: false,
             with_vector_filter: false,
@@ -256,8 +300,35 @@ pub async fn get_document(
     );
 
     let index = index_scheduler.user_index(&index_uid)?;
-    let document =
-        retrieve_document(&index, &document_id, attributes_to_retrieve, retrieve_vectors)?;
+
+    // Try to retrieve the document locally first
+    let local_result = retrieve_document(
+        &index,
+        &document_id,
+        attributes_to_retrieve.as_deref(),
+        retrieve_vectors,
+    );
+
+    // If the document is not found locally, try to retrieve it from the network if it is enabled
+    let document = if must_use_network && local_result.is_err() {
+        let query = BrowseQuery {
+            offset: 0,
+            limit: 1,
+            fields: attributes_to_retrieve,
+            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
+            filter: None,
+            ids: Some(vec![serde_json::Value::String(document_id.clone())]),
+            sort: None,
+            use_network: Some(true),
+        };
+        let mut ret =
+            retrieve_documents_federated(index_scheduler.clone(), index_uid, query, network)
+                .await?;
+        ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
+    } else {
+        local_result?
+    };
+
     debug!(returns = ?document, "Get document");
     Ok(HttpResponse::Ok().json(document))
 }
@@ -427,14 +498,31 @@ pub struct BrowseQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
+    pub use_network: Option<bool>,
 }
 
 /// Request body for browsing and retrieving documents from an index. Use
 /// this to fetch documents with optional filtering, sorting, and pagination.
 /// This is useful for displaying document lists, exporting data, or
 /// inspecting index contents.
-#[routes::request]
-#[derive(Debug)]
+#[routes::request(proxied)]
+#[derive(Debug, Clone)]
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
@@ -478,6 +566,122 @@ pub struct BrowseQuery {
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
     #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     sort: Option<Vec<String>>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[request(default, error = DeserrJsonError<InvalidDocumentUseNetwork>)]
+    pub use_network: Option<bool>,
+}
+
+impl NetworkableQuery for BrowseQuery {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
+}
+
+impl ProxyQuery for &BrowseQuery {
+    type ProxiedQuery = (String, BrowseQuery);
+
+    fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
+        let mut query = (*self).clone();
+        // because we merge the results from multiple sources,
+        // we must always start from the first document and retrieve offset+limit documents
+        query.limit += self.offset;
+        query.offset = 0;
+        (remote, query)
+    }
+
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+        &mut query.1.filter
+    }
+}
+
+/// Response from a documents retrieval query
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct DocumentsResult {
+    /// Documents for the current page.
+    #[schema(value_type = Vec<serde_json::Map<String, serde_json::Value>>)]
+    pub results: Vec<Document>,
+    /// Number of items skipped.
+    pub offset: usize,
+    /// Maximum number of items returned.
+    pub limit: usize,
+    /// Total number of items matching the query.
+    pub total: usize,
+    /// Errors from remote servers
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
+}
+
+/// A single merged document.
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct MergedDocument {
+    /// Document fields as stored in the index.
+    ///
+    /// According to `attributesToRetrieve`.
+    #[serde(flatten)]
+    #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
+    pub document: Document,
+
+    /// Weighted score values for the document.
+    /// This contains each facet value needed to sort the document.
+    ///
+    /// They are never de/serialized and must be manually
+    /// mounted to/unmounted from `_federation.weightedScoreValues` in a federated context.
+    ///
+    #[serde(default, skip)]
+    #[schema(ignore)]
+    score: Vec<WeightedScoreValue>,
+}
+
+impl TryFrom<Document> for MergedDocument {
+    type Error = ResponseError;
+
+    fn try_from(mut document: Document) -> Result<Self, Self::Error> {
+        let mut federation = document
+            .remove(FEDERATION_HIT)
+            .ok_or(ProxySearchError::MissingPathInResponse("._federation").as_response_error())?;
+
+        let federation = match federation.as_object_mut() {
+            Some(federation) => federation,
+            None => {
+                return Err(ProxySearchError::UnexpectedValueInPath {
+                    path: "._federation",
+                    expected_type: "map",
+                    received_value: federation.to_string(),
+                }
+                .as_response_error());
+            }
+        };
+
+        let score: Vec<WeightedScoreValue> = serde_json::from_value(
+            federation.remove(WEIGHTED_SCORE_VALUES).ok_or(
+                ProxySearchError::MissingPathInResponse("._federation.weightedScoreValues")
+                    .as_response_error(),
+            )?,
+        )
+        .map_err(ProxySearchError::CouldNotParseWeightedScoreValues)
+        .map_err(|err| err.as_response_error())?;
+
+        Ok(MergedDocument { document, score })
+    }
 }
 
 /// List documents with POST
@@ -554,6 +758,12 @@ pub async fn documents_by_query_post(
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
+    // check remote header
+    let is_proxy = req
+        .headers()
+        .get(PROXY_SEARCH_HEADER)
+        .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsPOST> {
             per_filter: body.filter.is_some(),
@@ -572,7 +782,7 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, body).await;
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, body, is_proxy).await;
     if let Some(permit) = permit {
         permit.drop().await;
     }
@@ -647,7 +857,7 @@ pub async fn get_documents(
     let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
-    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
+    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort, use_network } =
         params.into_inner();
 
     let filter = match filter {
@@ -666,6 +876,7 @@ pub async fn get_documents(
         filter,
         ids: ids.map(|ids| ids.into_iter().map(Into::into).collect()),
         sort: sort.map(|attr| fix_sort_query_parameters(&attr)),
+        use_network,
     };
 
     analytics.publish(
@@ -686,7 +897,7 @@ pub async fn get_documents(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, query).await;
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, query, false).await;
 
     if let Some(permit) = permit {
         permit.drop().await;
@@ -698,14 +909,199 @@ pub async fn get_documents(
 async fn documents_by_query(
     index_scheduler: Data<IndexScheduler>,
     index_uid: web::Path<String>,
-    query: BrowseQuery,
+    mut query: BrowseQuery,
+    is_proxy: bool,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort } = query;
 
-    let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
+    let features = index_scheduler.features();
+    let network = index_scheduler.network();
 
-    let ret = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+    let ret = if query.must_use_network(&network, &features)? {
+        retrieve_documents_federated(index_scheduler, index_uid, query, network).await
+    } else {
+        retrieve_documents_local(index_scheduler, index_uid, query, is_proxy).await
+    };
+
+    Ok(HttpResponse::Ok().json(ret?))
+}
+
+async fn retrieve_documents_federated(
+    index_scheduler: Data<IndexScheduler>,
+    index_uid: IndexUid,
+    query: BrowseQuery,
+    network: Network,
+) -> Result<DocumentsResult, ResponseError> {
+    let params =
+        ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
+    let remote_availability = index_scheduler.remote_availability();
+    let partition = Partition::new(network.clone(), remote_availability);
+
+    let (local_queries, remote_queries): (Vec<_>, Vec<_>) =
+        partition.into_partition(&query)?.enumerate().partition(
+            // true is left, false is right
+            |(_, (remote, _))| Some(remote) == network.local.as_ref(),
+        );
+
+    let mut results: Vec<_> = Vec::with_capacity(remote_queries.len() + local_queries.len());
+    let mut errors: BTreeMap<String, ResponseError> = BTreeMap::new();
+
+    const MAX_IN_FLIGHT_REQUESTS: usize = 40;
+    let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
+
+    for (query_id, (remote_name, query)) in remote_queries {
+        let Some(remote) = network.remotes.get(&remote_name) else {
+            errors.insert(
+                remote_name.clone(),
+                ProxySearchError::UnknownRemote { remote: remote_name }.as_response_error(),
+            );
+            continue;
+        };
+
+        let path_and_query =
+            match meilisearch_types::network::route::documents_fetch_path(&index_uid) {
+                Ok(path_and_query) => path_and_query,
+                Err(err) => {
+                    errors.insert(
+                        remote_name,
+                        ProxySearchError::InvalidRemoteUrl { cause: err.to_string() }
+                            .as_response_error(),
+                    );
+                    continue;
+                }
+            };
+
+        let request = match json_proxy(
+            path_and_query,
+            http_client::reqwest::Method::POST,
+            remote,
+            &query,
+            &params,
+            false, // no metadata on documents-fetch
+        ) {
+            Ok(request) => request,
+            Err(err) => {
+                errors.insert(remote_name, err.as_response_error());
+                continue;
+            }
+        };
+
+        if in_flight_requests.len() == MAX_IN_FLIGHT_REQUESTS {
+            // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
+            let task: tokio::task::JoinHandle<(
+                Result<DocumentsResult, ProxySearchError>,
+                String,
+                usize,
+            )> = in_flight_requests.pop_front().unwrap();
+            match task.await.unwrap() {
+                (Ok(result), _, query_id) => results.push((result, query_id)),
+                (Err(err), remote_name, _) => {
+                    errors.insert(remote_name, err.as_response_error());
+                    continue;
+                }
+            }
+        }
+        in_flight_requests
+            .push_back(tokio::spawn(async move { (request.await, remote_name, query_id) }));
+    }
+
+    // Perform local search
+    for (query_id, (_, query)) in local_queries {
+        let result =
+            retrieve_documents_local(index_scheduler.clone(), index_uid.clone(), query, true)
+                .await?;
+        results.push((result, query_id));
+    }
+
+    // Retrieve remote results
+    for task in in_flight_requests {
+        match task.await.unwrap() {
+            (Ok(result), _, query_id) => results.push((result, query_id)),
+            (Err(err), remote_name, _) => {
+                errors.insert(remote_name, err.as_response_error());
+            }
+        }
+    }
+
+    // merge metadata
+    let (total, mut remote_errors) = merge_metadata(&mut results);
+    if !errors.is_empty() {
+        remote_errors.get_or_insert_with(BTreeMap::new).extend(errors);
+    }
+
+    // Merge results
+    let merged_results: Result<_, ResponseError> =
+        merge_documents_results(results).skip(query.offset).take(query.limit).collect();
+
+    Ok(DocumentsResult {
+        results: merged_results?,
+        offset: query.offset,
+        limit: query.limit,
+        total,
+        remote_errors,
+    })
+}
+
+fn merge_documents_results(
+    results: Vec<(DocumentsResult, usize)>,
+) -> impl Iterator<Item = Result<Document, ResponseError>> {
+    itertools::kmerge_by(
+        results.into_iter().map(|(results, query_id)| {
+            results
+                .results
+                .into_iter()
+                .map(move |result| (MergedDocument::try_from(result), query_id))
+        }),
+        |left: &(Result<MergedDocument, ResponseError>, usize),
+         right: &(Result<MergedDocument, ResponseError>, usize)| {
+            let Ok(left_hit) = left.0.as_ref() else {
+                return true;
+            };
+            let Ok(right_hit) = right.0.as_ref() else {
+                return false;
+            };
+            match compare_documents(left_hit, right_hit) {
+                Ordering::Greater => true,
+                Ordering::Less => false,
+                // break ties using query index
+                Ordering::Equal => left.1 < right.1,
+            }
+        },
+    )
+    .map(|(merged_document, _query_id)| merged_document.map(|md| md.document))
+}
+
+fn compare_documents(left: &MergedDocument, right: &MergedDocument) -> Ordering {
+    weighted_scores::compare_partial(left.score.iter().cloned(), right.score.iter().cloned())
+        // unwrap: comparison should be always possible because all documents use the same sorting strategy
+        .unwrap()
+}
+
+fn merge_metadata(
+    results: &mut [(DocumentsResult, usize)],
+) -> (usize, Option<BTreeMap<String, ResponseError>>) {
+    let mut errors = None;
+    let mut total = 0;
+    for (result, _query_id) in results {
+        total += result.total;
+        if let Some(remote_errors) = result.remote_errors.take() {
+            errors.get_or_insert_with(BTreeMap::new).extend(remote_errors);
+        }
+    }
+
+    (total, errors)
+}
+
+async fn retrieve_documents_local(
+    index_scheduler: Data<IndexScheduler>,
+    index_uid: IndexUid,
+    query: BrowseQuery,
+    is_proxy: bool,
+) -> Result<DocumentsResult, ResponseError> {
+    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort, use_network: _ } =
+        query;
+    tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+        let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
         let ids = if let Some(ids) = ids {
             let mut parsed_ids = Vec::with_capacity(ids.len());
             for (index, id) in ids.into_iter().enumerate() {
@@ -759,6 +1155,7 @@ async fn documents_by_query(
         } else {
             None
         };
+
         let (total, documents) = retrieve_documents(
             &index,
             &rtxn,
@@ -769,13 +1166,19 @@ async fn documents_by_query(
             fields,
             retrieve_vectors,
             sort_criteria,
+            is_proxy,
         )?;
-        Ok(PaginationView::new(offset, limit, total as usize, documents))
+
+        Ok(DocumentsResult {
+            results: documents,
+            offset,
+            limit,
+            total: total as usize,
+            remote_errors: None,
+        })
     })
     .await
-    .unwrap()?;
-
-    Ok(HttpResponse::Ok().json(ret))
+    .unwrap()
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -1836,18 +2239,56 @@ pub async fn clear_all_documents(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-fn some_documents<'a, 't: 'a>(
+fn some_documents<'a, 't: 'a, 'i, I1, I2, S1, S2>(
     index: &'a Index,
     rtxn: &'t RoTxn,
     doc_ids: impl IntoIterator<Item = DocumentId> + 'a,
     retrieve_vectors: RetrieveVectors,
-) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
+    attributes_to_retrieve: Option<I1>,
+    extra_attributes_to_retrieve: Option<I2>,
+) -> Result<impl Iterator<Item = Result<(Document, Document), ResponseError>> + 'a, ResponseError>
+where
+    I1: IntoIterator<Item = S1> + 'i,
+    I2: IntoIterator<Item = S2> + 'i,
+    S1: AsRef<str> + 'i,
+    S2: AsRef<str> + 'i,
+{
     let fields_ids_map = index.fields_ids_map(rtxn)?;
-    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+
+    let attributes_to_retrieve: BTreeSet<_> = match attributes_to_retrieve {
+        Some(attributes) => attributes
+            .into_iter()
+            .filter(|attribute| fields_ids_map.id(attribute.as_ref()).is_some())
+            .map(|attribute| attribute.as_ref().to_string())
+            .collect(),
+        None => fields_ids_map.iter().map(|(_, name)| name.to_string()).collect(),
+    };
+
+    let extra_attributes_to_retrieve: Option<Vec<_>> = match extra_attributes_to_retrieve {
+        Some(attributes) => Some(
+            attributes
+                .into_iter()
+                .filter(|attribute| {
+                    fields_ids_map
+                        .id(attribute.as_ref())
+                        .is_some()
+                        // skip attributes that are already in attributes_to_retrieve
+                        && !attributes_to_retrieve.contains(attribute.as_ref())
+                })
+                .map(|attribute| attribute.as_ref().to_string())
+                .collect(),
+        )
+        .filter(|ids: &Vec<_>| !ids.is_empty()),
+        None => None,
+    };
 
     Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
-        ret.map_err(ResponseError::from).and_then(|(key, document)| -> Result<_, ResponseError> {
-            let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
+        ret.map_err(ResponseError::from).and_then(|(key, obkv)| -> Result<_, ResponseError> {
+            let mut document = make_document(obkv, &fields_ids_map, &attributes_to_retrieve)?;
+            let extra_document = extra_attributes_to_retrieve
+                .as_ref()
+                .map(|extra_attributes| make_document(obkv, &fields_ids_map, extra_attributes))
+                .transpose()?;
             match retrieve_vectors {
                 RetrieveVectors::Hide => {
                     document.remove("_vectors");
@@ -1873,7 +2314,7 @@ fn some_documents<'a, 't: 'a>(
                 }
             }
 
-            Ok(document)
+            Ok((document, extra_document.unwrap_or_default()))
         })
     }))
 }
@@ -1889,6 +2330,7 @@ fn retrieve_documents<S: AsRef<str>>(
     attributes_to_retrieve: Option<Vec<S>>,
     retrieve_vectors: RetrieveVectors,
     sort_criteria: Option<Vec<AscDesc>>,
+    is_proxy: bool,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
@@ -1913,7 +2355,7 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let (it, number_of_documents) = if let Some(sort) = sort_criteria {
+    let (it, number_of_documents) = if let Some(sort) = sort_criteria.as_ref() {
         let number_of_documents = candidates.len();
         let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
         let iter = facet_sort.iter()?;
@@ -1921,49 +2363,144 @@ fn retrieve_documents<S: AsRef<str>>(
         for result in iter.skip(offset).take(limit) {
             documents.push(result?);
         }
+
+        // retrieve each facet values for the documents if is_proxy is true
+        let extra_attributes_to_retrieve: Option<_> = if is_proxy {
+            Some(sort.iter().map(|asc_desc| asc_desc.field().unwrap_or(RESERVED_GEO_FIELD_NAME)))
+        } else {
+            None
+        };
+
         (
             itertools::Either::Left(some_documents(
                 index,
                 rtxn,
                 documents.into_iter(),
                 retrieve_vectors,
+                attributes_to_retrieve,
+                extra_attributes_to_retrieve,
             )?),
             number_of_documents,
         )
     } else {
         let number_of_documents = candidates.len();
+        let extra_attributes_to_retrieve: Option<Vec<String>> = None;
         (
             itertools::Either::Right(some_documents(
                 index,
                 rtxn,
                 candidates.into_iter().skip(offset).take(limit),
                 retrieve_vectors,
+                attributes_to_retrieve,
+                extra_attributes_to_retrieve,
             )?),
             number_of_documents,
         )
     };
 
     let documents: Vec<_> = it
-        .map(|document| {
-            Ok(match &attributes_to_retrieve {
-                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
-                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
-                    ),
-                ),
-                None => document?,
-            })
+        .map(|res| {
+            let (mut document, extra_document) = res?;
+
+            // retrieve each facet values for the documents if is_proxy is true
+            if is_proxy {
+                let mut weighted_score_values = Vec::new();
+                if let Some(sort) = sort_criteria.as_ref() {
+                    for asc_desc in sort {
+                        let weighted_score_value =
+                            build_weighted_score_value(asc_desc, &(&document, &extra_document));
+
+                        weighted_score_values.push(weighted_score_value);
+                    }
+                }
+
+                // insert the federation hit
+                document.insert(
+                    FEDERATION_HIT.to_string(),
+                    build_federation_hit(weighted_score_values),
+                );
+            }
+            Ok(document)
         })
         .collect::<Result<_, ResponseError>>()?;
 
     Ok((number_of_documents, documents))
 }
 
+impl VisitFacetValues for (&Document, &Document) {
+    fn document(&self) -> &Document {
+        self.0
+    }
+
+    fn extra_document(&self) -> &Document {
+        self.1
+    }
+}
+
+fn build_weighted_score_value<D: VisitFacetValues>(
+    asc_desc: &AscDesc,
+    document: &D,
+) -> WeightedScoreValue {
+    let asc = asc_desc.is_asc();
+    let member = asc_desc.member();
+
+    match member {
+        Member::Field(field) => {
+            let mut best: Option<WeightedScoreValue> = None;
+            document.facet_values(field, |facet_value| {
+                let weighted_score_value =
+                    WeightedScoreValue::Sort { asc, value: facet_value.into_value() };
+                best = match best.take() {
+                    Some(best) => {
+                        // unwrap: comparison should be always possible, we are comparing the same type of scores
+                        match best.partial_cmp(&weighted_score_value).unwrap() {
+                            Ordering::Greater | Ordering::Equal => Some(best),
+                            Ordering::Less => Some(weighted_score_value),
+                        }
+                    }
+                    None => Some(weighted_score_value),
+                };
+            });
+
+            best.unwrap_or(WeightedScoreValue::Sort { asc, value: Value::Null })
+        }
+        Member::Geo(target_point) => {
+            let mut lat = None;
+            document.facet_values(RESERVED_GEO_LAT_FIELD_NAME, |facet_value| {
+                lat = facet_value.into_value().as_f64();
+            });
+
+            let mut lng = None;
+            document.facet_values(RESERVED_GEO_LNG_FIELD_NAME, |facet_value| {
+                lng = facet_value.into_value().as_f64();
+            });
+
+            let distance = if let (Some(lat), Some(lng)) = (lat, lng) {
+                GeoSort { target_point: *target_point, ascending: asc, value: Some([lat, lng]) }
+                    .distance()
+            } else {
+                None
+            };
+
+            WeightedScoreValue::GeoSort { asc, distance }
+        }
+    }
+}
+
+// TODO: factorize with build_federation_hit in search/federated/perform.rs by using a serializable struct?
+fn build_federation_hit(scores: Vec<WeightedScoreValue>) -> serde_json::Value {
+    let mut federation = serde_json::Map::new();
+
+    // insert the weighted score values
+    federation.insert(WEIGHTED_SCORE_VALUES.to_string(), serde_json::json!(scores));
+
+    serde_json::Value::Object(federation)
+}
+
 fn retrieve_document<S: AsRef<str>>(
     index: &Index,
     doc_id: &str,
-    attributes_to_retrieve: Option<Vec<S>>,
+    attributes_to_retrieve: Option<&[S]>,
     retrieve_vectors: RetrieveVectors,
 ) -> Result<Document, ResponseError> {
     let txn = index.read_txn()?;
@@ -1973,20 +2510,17 @@ fn retrieve_document<S: AsRef<str>>(
         .get(&txn, doc_id)?
         .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
 
-    let document = some_documents(index, &txn, Some(internal_id), retrieve_vectors)?
-        .next()
-        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))??;
-
-    let document = match &attributes_to_retrieve {
-        Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-            document,
-            attributes_to_retrieve
-                .iter()
-                .map(|s| s.as_ref())
-                .chain((retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors")),
-        ),
-        None => document,
-    };
+    let extra_attributes_to_retrieve: Option<Vec<String>> = None;
+    let (document, _extra_document) = some_documents(
+        index,
+        &txn,
+        Some(internal_id),
+        retrieve_vectors,
+        attributes_to_retrieve,
+        extra_attributes_to_retrieve,
+    )?
+    .next()
+    .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))??;
 
     Ok(document)
 }

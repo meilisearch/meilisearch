@@ -8098,3 +8098,915 @@ async fn remote_auto_sharding_auto_facet_search() {
     }
     "###);
 }
+
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_auto_sharding_auto_documents_fetch() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          }
+        },
+        "shards": {
+            "a": {
+              "remotes": ["ms0", "ms1"]
+            },
+            "b": {
+              "remotes": ["ms1", "ms2"]
+            },
+            "c": {
+              "remotes": ["ms2", "ms0"]
+            }
+        }
+      }
+    );
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (response, status_code) = ms0.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "a": {
+          "remotes": [
+            "ms0",
+            "ms1"
+          ]
+        },
+        "b": {
+          "remotes": [
+            "ms1",
+            "ms2"
+          ]
+        },
+        "c": {
+          "remotes": [
+            "ms0",
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms1.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "a": {
+          "remotes": [
+            "ms0",
+            "ms1"
+          ]
+        },
+        "b": {
+          "remotes": [
+            "ms1",
+            "ms2"
+          ]
+        },
+        "c": {
+          "remotes": [
+            "ms0",
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms2.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "a": {
+          "remotes": [
+            "ms0",
+            "ms1"
+          ]
+        },
+        "b": {
+          "remotes": [
+            "ms1",
+            "ms2"
+          ]
+        },
+        "c": {
+          "remotes": [
+            "ms0",
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    // add documents
+    let documents = json!([
+      {
+        "id": 1,
+        "title": "Carol",
+        "genres": [
+          "Romance",
+          "Drama"
+        ],
+        "color": [
+          "red"
+        ],
+        "platforms": [
+          "MacOS",
+          "Linux",
+          "Windows"
+        ],
+        "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+        }
+      },
+      {
+        "id": 2,
+        "title": "Wonder Woman",
+        "genres": [
+          "Action",
+          "Adventure"
+        ],
+        "color": [
+          "green"
+        ],
+        "platforms": [
+          "MacOS"
+        ],
+        "_geo": {
+            "lat": "45.4777599",
+            "lng": "9.1967508"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Life of Pi",
+        "genres": [
+          "Adventure",
+          "Drama"
+        ],
+        "color": [
+          "blue"
+        ],
+        "platforms": [
+          "Windows"
+        ],
+        "_geo": {
+            "lat": 42.4777599,
+            "lng": 12.1967508
+        }
+      },
+      {
+        "id": 4,
+        "title": "Mad Max: Fury Road",
+        "genres": [
+          "Adventure",
+          "Science Fiction"
+        ],
+        "color": [
+          "red"
+        ],
+        "platforms": [
+          "MacOS",
+          "Linux"
+        ],
+        "_geo": {
+            "lat": 61.4777599,
+            "lng": 23.1967508
+        }
+      },
+      {
+        "id": 5,
+        "title": "Moana",
+        "genres": [
+          "Fantasy",
+          "Action"
+        ],
+        "color": [
+          "red"
+        ],
+        "platforms": [
+          "Windows"
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Philadelphia",
+        "genres": [
+          "Drama"
+        ],
+        "color": [
+          "blue"
+        ],
+        "platforms": [
+          "MacOS",
+          "Linux",
+          "Windows"
+        ]
+      }
+    ]);
+    let index0 = ms0.index("test");
+    let index1 = ms1.index("test");
+    let _index2 = ms2.index("test");
+
+    let (task, code) = index0.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (_task, _status_code) = index0
+        .update_settings_sortable_attributes(json!(["genres", "color", "platforms", "_geo"]))
+        .await;
+    let (_task, _status_code) = index0
+        .update_settings_filterable_attributes(json!(["genres", "color", "platforms", "_geo"]))
+        .await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    println!("platforms:asc");
+    let (response, code) =
+        index0.fetch_documents(json!({"offset": 0, "limit": 5, "sort": ["platforms:asc"]})).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "title": "Carol",
+          "genres": [
+            "Romance",
+            "Drama"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          }
+        },
+        {
+          "id": 6,
+          "title": "Philadelphia",
+          "genres": [
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Mad Max: Fury Road",
+          "genres": [
+            "Adventure",
+            "Science Fiction"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux"
+          ],
+          "_geo": {
+            "lat": 61.4777599,
+            "lng": 23.1967508
+          }
+        },
+        {
+          "id": 2,
+          "title": "Wonder Woman",
+          "genres": [
+            "Action",
+            "Adventure"
+          ],
+          "color": [
+            "green"
+          ],
+          "platforms": [
+            "MacOS"
+          ],
+          "_geo": {
+            "lat": "45.4777599",
+            "lng": "9.1967508"
+          }
+        },
+        {
+          "id": 3,
+          "title": "Life of Pi",
+          "genres": [
+            "Adventure",
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 42.4777599,
+            "lng": 12.1967508
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 5,
+      "total": 6
+    }
+    "###);
+    println!("platforms:asc, useNetwork: false");
+    let (response, code) = index0
+        .fetch_documents(
+            json!({"offset": 0, "limit": 5, "sort": ["platforms:asc"], "useNetwork": false}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "title": "Carol",
+          "genres": [
+            "Romance",
+            "Drama"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          }
+        },
+        {
+          "id": 6,
+          "title": "Philadelphia",
+          "genres": [
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Wonder Woman",
+          "genres": [
+            "Action",
+            "Adventure"
+          ],
+          "color": [
+            "green"
+          ],
+          "platforms": [
+            "MacOS"
+          ],
+          "_geo": {
+            "lat": "45.4777599",
+            "lng": "9.1967508"
+          }
+        },
+        {
+          "id": 3,
+          "title": "Life of Pi",
+          "genres": [
+            "Adventure",
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 42.4777599,
+            "lng": 12.1967508
+          }
+        },
+        {
+          "id": 5,
+          "title": "Moana",
+          "genres": [
+            "Fantasy",
+            "Action"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "Windows"
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 5,
+      "total": 5
+    }
+    "###);
+
+    println!("genres:asc, filter: platforms = Linux");
+    let (response, code) = index0
+        .fetch_documents(
+            json!({"offset": 0, "limit": 5, "sort": ["genres:asc"], "filter": "platforms = Linux"}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 4,
+          "title": "Mad Max: Fury Road",
+          "genres": [
+            "Adventure",
+            "Science Fiction"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux"
+          ],
+          "_geo": {
+            "lat": 61.4777599,
+            "lng": 23.1967508
+          }
+        },
+        {
+          "id": 1,
+          "title": "Carol",
+          "genres": [
+            "Romance",
+            "Drama"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          }
+        },
+        {
+          "id": 6,
+          "title": "Philadelphia",
+          "genres": [
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 5,
+      "total": 3
+    }
+    "###);
+
+    println!("_geoPoint(48.8561446,2.2978204):asc");
+    let (response, code) = index0
+        .fetch_documents(
+            json!({"offset": 0, "limit": 5, "sort": ["_geoPoint(48.8561446,2.2978204):asc"]}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "title": "Carol",
+          "genres": [
+            "Romance",
+            "Drama"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          }
+        },
+        {
+          "id": 4,
+          "title": "Mad Max: Fury Road",
+          "genres": [
+            "Adventure",
+            "Science Fiction"
+          ],
+          "color": [
+            "red"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux"
+          ],
+          "_geo": {
+            "lat": 61.4777599,
+            "lng": 23.1967508
+          }
+        },
+        {
+          "id": 6,
+          "title": "Philadelphia",
+          "genres": [
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "MacOS",
+            "Linux",
+            "Windows"
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Wonder Woman",
+          "genres": [
+            "Action",
+            "Adventure"
+          ],
+          "color": [
+            "green"
+          ],
+          "platforms": [
+            "MacOS"
+          ],
+          "_geo": {
+            "lat": "45.4777599",
+            "lng": "9.1967508"
+          }
+        },
+        {
+          "id": 3,
+          "title": "Life of Pi",
+          "genres": [
+            "Adventure",
+            "Drama"
+          ],
+          "color": [
+            "blue"
+          ],
+          "platforms": [
+            "Windows"
+          ],
+          "_geo": {
+            "lat": 42.4777599,
+            "lng": 12.1967508
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 5,
+      "total": 6
+    }
+    "###);
+
+    println!("attributes to retrieve");
+    let (response, code) = index0
+        .fetch_documents(json!({"offset": 0, "limit": 5, "fields": ["id", "title", "_geo"]}))
+        .await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "title": "Carol",
+          "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          }
+        },
+        {
+          "id": 6,
+          "title": "Philadelphia"
+        },
+        {
+          "id": 4,
+          "title": "Mad Max: Fury Road",
+          "_geo": {
+            "lat": 61.4777599,
+            "lng": 23.1967508
+          }
+        },
+        {
+          "id": 2,
+          "title": "Wonder Woman",
+          "_geo": {
+            "lat": "45.4777599",
+            "lng": "9.1967508"
+          }
+        },
+        {
+          "id": 3,
+          "title": "Life of Pi",
+          "_geo": {
+            "lat": 42.4777599,
+            "lng": 12.1967508
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 5,
+      "total": 6
+    }
+    "###);
+
+    println!("list documents using GET /indexes/:uid/documents");
+    let (response, code) = index0
+        .get_all_documents(crate::common::GetAllDocumentsOptions {
+            limit: Some(100),
+            fields: Some(vec!["id", "title", "_geo"]),
+            ..Default::default()
+        })
+        .await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "title": "Carol",
+          "_geo": {
+            "lat": 34.0522,
+            "lng": -118.2437
+          }
+        },
+        {
+          "id": 6,
+          "title": "Philadelphia"
+        },
+        {
+          "id": 4,
+          "title": "Mad Max: Fury Road",
+          "_geo": {
+            "lat": 61.4777599,
+            "lng": 23.1967508
+          }
+        },
+        {
+          "id": 2,
+          "title": "Wonder Woman",
+          "_geo": {
+            "lat": "45.4777599",
+            "lng": "9.1967508"
+          }
+        },
+        {
+          "id": 3,
+          "title": "Life of Pi",
+          "_geo": {
+            "lat": 42.4777599,
+            "lng": 12.1967508
+          }
+        },
+        {
+          "id": 5,
+          "title": "Moana"
+        }
+      ],
+      "offset": 0,
+      "limit": 100,
+      "total": 6
+    }
+    "###);
+
+    println!("GET one document using GET /indexes/:uid/documents/:document_id");
+    let (response, code) = index0.get_document(1, None).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "id": 1,
+      "title": "Carol",
+      "genres": [
+        "Romance",
+        "Drama"
+      ],
+      "color": [
+        "red"
+      ],
+      "platforms": [
+        "MacOS",
+        "Linux",
+        "Windows"
+      ],
+      "_geo": {
+        "lat": 34.0522,
+        "lng": -118.2437
+      }
+    }
+    "###);
+
+    let (response, code) = index1.get_document(1, None).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "id": 1,
+      "title": "Carol",
+      "genres": [
+        "Romance",
+        "Drama"
+      ],
+      "color": [
+        "red"
+      ],
+      "platforms": [
+        "MacOS",
+        "Linux",
+        "Windows"
+      ],
+      "_geo": {
+        "lat": 34.0522,
+        "lng": -118.2437
+      }
+    }
+    "###);
+}
