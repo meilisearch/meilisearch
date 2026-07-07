@@ -66,6 +66,12 @@ use crate::search::{add_search_rules, elapsed, prepare_search, search_from_kind,
 use crate::search_queue::SearchQueue;
 
 /// Request a chat completion
+///
+/// Answer a conversational question with the OpenAI-compatible chat completions API,
+/// using the documents of the authorized indexes as context.
+/// Only streamed responses (`stream: true`) are supported.
+///
+/// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
     params(
         ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
