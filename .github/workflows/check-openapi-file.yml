@@ -42,6 +42,9 @@ jobs:
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
 
+      - name: Check all routes have descriptions
+        run: cargo run --release -p openapi-generator -- --check-descriptions
+
       - name: Check for duplicate or malformed paths
         run: cargo run --release -p openapi-generator -- --check-paths
 

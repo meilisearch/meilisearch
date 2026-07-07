@@ -30,6 +30,10 @@ struct Cli {
     #[arg(long)]
     check_summaries: bool,
 
+    /// Check that all routes have a description (useful for CI)
+    #[arg(long)]
+    check_descriptions: bool,
+
     /// Check for duplicate routes and path issues (useful for CI)
     #[arg(long)]
     check_paths: bool,
@@ -55,6 +59,11 @@ fn main() -> Result<()> {
     // Check that all routes have summaries if requested
     if cli.check_summaries {
         check_all_routes_have_summaries(&openapi_value)?;
+    }
+
+    // Check that all routes have descriptions if requested
+    if cli.check_descriptions {
+        check_all_routes_have_descriptions(&openapi_value)?;
     }
 
     // Check for path issues (duplicates, malformed paths) if requested
@@ -95,21 +104,17 @@ fn get_paths_object(openapi: &Value) -> Result<&JsonObject> {
     openapi.get("paths").and_then(Value::as_object).context("OpenAPI spec missing 'paths' object")
 }
 
-/// Checks that all routes have a summary field.
-///
-/// Returns an error if any route is missing a summary.
-fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
-    let paths = get_paths_object(openapi)?;
-
-    let mut missing_summaries: Vec<String> = paths
+/// Returns the routes whose operation is missing a non-empty string `field` (e.g. "summary" or "description").
+fn routes_missing_operation_field(paths: &JsonObject, field: &str) -> Vec<String> {
+    let mut missing: Vec<String> = paths
         .iter()
         .flat_map(|(path, path_item)| {
             path_item.as_object().map(|path_item| {
                 HTTP_METHODS.iter().filter_map(move |method| {
                     let op = path_item.get(*method)?;
-                    let has_summary =
-                        op.get("summary").and_then(Value::as_str).is_some_and(|s| !s.is_empty());
-                    if has_summary {
+                    let has_field =
+                        op.get(field).and_then(Value::as_str).is_some_and(|s| !s.trim().is_empty());
+                    if has_field {
                         None
                     } else {
                         Some(format!("{} {}", method.to_uppercase(), path))
@@ -119,8 +124,29 @@ fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
         })
         .flatten()
         .collect();
-    missing_summaries.sort_unstable();
-    missing_summaries.dedup();
+    missing.sort_unstable();
+    missing.dedup();
+    missing
+}
+
+/// Prints the doc-comment example shared by the summary and description checks.
+fn print_doc_comment_help() {
+    eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
+    eprintln!("The first line becomes the summary, subsequent lines become the description.");
+    eprintln!("\nExample:");
+    eprintln!("  /// List webhooks");
+    eprintln!("  ///");
+    eprintln!("  /// Get the list of all registered webhooks.");
+    eprintln!("  #[utoipa::path(...)]");
+    eprintln!("  async fn get_webhooks(...) {{ ... }}");
+}
+
+/// Checks that all routes have a summary field.
+///
+/// Returns an error if any route is missing a summary.
+fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
+    let paths = get_paths_object(openapi)?;
+    let missing_summaries = routes_missing_operation_field(paths, "summary");
 
     if missing_summaries.is_empty() {
         println!("All routes have summaries.");
@@ -131,15 +157,28 @@ fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
     for route in &missing_summaries {
         eprintln!("  - {}", route);
     }
-    eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
-    eprintln!("The first line becomes the summary, subsequent lines become the description.");
-    eprintln!("\nExample:");
-    eprintln!("  /// List webhooks");
-    eprintln!("  ///");
-    eprintln!("  /// Get the list of all registered webhooks.");
-    eprintln!("  #[utoipa::path(...)]");
-    eprintln!("  async fn get_webhooks(...) {{ ... }}");
+    print_doc_comment_help();
     anyhow::bail!("{} route(s) missing summary", missing_summaries.len());
+}
+
+/// Checks that all routes have a description field.
+///
+/// Returns an error if any route is missing a description.
+fn check_all_routes_have_descriptions(openapi: &Value) -> Result<()> {
+    let paths = get_paths_object(openapi)?;
+    let missing_descriptions = routes_missing_operation_field(paths, "description");
+
+    if missing_descriptions.is_empty() {
+        println!("All routes have descriptions.");
+        return Ok(());
+    }
+
+    eprintln!("The following routes are missing a description:");
+    for route in &missing_descriptions {
+        eprintln!("  - {}", route);
+    }
+    print_doc_comment_help();
+    anyhow::bail!("{} route(s) missing description", missing_descriptions.len());
 }
 
 /// Checks for path issues in the OpenAPI specification.
@@ -768,6 +807,28 @@ mod tests {
         assert_eq!(normalize_path("indexes//{indexUid}"), "indexes/{indexUid}");
         assert_eq!(normalize_path("/indexes//{indexUid}/compact"), "indexes/{indexUid}/compact");
         assert_eq!(normalize_path("//indexes///compact//"), "indexes/compact");
+    }
+
+    #[test]
+    fn test_routes_missing_operation_field() {
+        let openapi = json!({
+            "paths": {
+                "/indexes": {
+                    "get": { "summary": "List indexes", "description": "List all indexes." },
+                    "post": { "summary": "Create an index" }
+                },
+                "/health": {
+                    "get": { "summary": "Get health", "description": "  " }
+                }
+            }
+        });
+        let paths = get_paths_object(&openapi).unwrap();
+
+        assert!(routes_missing_operation_field(paths, "summary").is_empty());
+        assert_eq!(
+            routes_missing_operation_field(paths, "description"),
+            vec!["GET /health", "POST /indexes"]
+        );
     }
 
     #[test]
