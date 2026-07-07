@@ -175,7 +175,7 @@ impl<'a> Token<'a> {
 
     /// The fragment with escaped double quotes.
     pub fn escaped_fragment(&self) -> String {
-        self.fragment().replace('"', r#"\""#)
+        serde_json::to_string(self.fragment()).unwrap()
     }
 
     /// Returns the extra fragment of the token.
