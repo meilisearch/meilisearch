@@ -595,11 +595,12 @@ impl NetworkableQuery for BrowseQuery {
 }
 
 impl ProxyQuery for &BrowseQuery {
-    /// The only things that can change are the filter on shard and the remote, so recover this
     type ProxiedQuery = (String, BrowseQuery);
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         let mut query = (*self).clone();
+        // because we merge the results from multiple sources,
+        // we must always start from the first document and retrieve offset+limit documents
         query.limit += self.offset;
         query.offset = 0;
         (remote, query)
@@ -1006,7 +1007,6 @@ async fn retrieve_documents_federated(
 
     // Perform local search
     for (query_id, (_, query)) in local_queries {
-        // TODO: clone index_scheduler and index_uid maybe not needed
         let result =
             retrieve_documents_local(index_scheduler.clone(), index_uid.clone(), query, true)
                 .await?;
