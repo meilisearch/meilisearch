@@ -406,7 +406,7 @@ impl<'a> FacetDistribution<'a> {
                 .map(String::from)
                 .collect();
             return Err(Error::UserError(UserError::InvalidFacetsDistribution {
-                invalid_facets_name: invalid_facets,
+                invalid_facet_patterns: invalid_facets,
                 valid_patterns,
                 matching_rule_indices,
             }));

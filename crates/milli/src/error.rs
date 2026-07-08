@@ -147,21 +147,21 @@ and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
     #[error("Invalid facet distribution: {}",
-        if .invalid_facets_name.len() == 1 {
-            let field = .invalid_facets_name.iter().next().unwrap();
+        if .invalid_facet_patterns.len() == 1 {
+            let field = .invalid_facet_patterns.iter().next().unwrap();
             match .matching_rule_indices.get(field) {
                 Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}",
                     field, rule_index, rule_index, field, rule_index),
                 None => match .valid_patterns.is_empty() {
-                    true => format!("Attribute `{}` is not filterable. This index does not have configured filterable attributes.", field),
-                    false => format!("Attribute `{}` is not filterable. Available filterable attributes patterns are: `{}`.",
+                    true => format!("Pattern `{}` is not filterable. This index does not have configured filterable attributes.", field),
+                    false => format!("Pattern `{}` is not filterable. Available filterable attributes patterns are: `{}`.",
                         field,
                         .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
                 }
             }
         } else {
             format!("Attributes `{}` are not filterable. {}",
-                .invalid_facets_name.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
+                .invalid_facet_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
                 match .valid_patterns.is_empty() {
                     true => "This index does not have configured filterable attributes.".to_string(),
                     false => format!("Available filterable attributes patterns are: `{}`.",
@@ -171,7 +171,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
         }
     )]
     InvalidFacetsDistribution {
-        invalid_facets_name: BTreeSet<String>,
+        invalid_facet_patterns: BTreeSet<String>,
         valid_patterns: BTreeSet<String>,
         matching_rule_indices: HashMap<String, usize>,
     },

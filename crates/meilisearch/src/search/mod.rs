@@ -2034,7 +2034,7 @@ pub enum Route {
 }
 
 fn compute_facet_distribution_stats(
-    attribute_patterns: &AttributePatterns,
+    facet_patterns: &AttributePatterns,
     index: &Index,
     rtxn: &RoTxn,
     candidates: roaring::RoaringBitmap,
@@ -2050,12 +2050,72 @@ fn compute_facet_distribution_stats(
     facet_distribution.max_values_per_facet(max_values_by_facet);
 
     let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
+    let filter_rules = index.filterable_attributes_rules(rtxn)?;
+
+    // 'facet for facet in facets {
+    //   for filterable in filterable_attributes {
+    //     if filterable.is_filterable() {
+    //     // field is superset or subset of any filterable
+    //       if filterable.patterns.iter().any(|filt| facet.match_str(filt) == Match | Parent) {
+    //         // valid facet, check the next one
+    //         continue 'facet;
+    //       }
+    //     // field is subset of any filterable but current setting doesn't allow filterable
+    //     } else if filterable.patterns.match_str(field) == Match {
+    //       return Err("pas filterable")
+    //     }
+    //   }
+
+    //   return Err("pas de pattern")
+    // }
+
+    use milli::FilterableAttributesRule::{Field, Pattern};
+
+    'facet: for facet_pattern in &facet_patterns.patterns {
+        for rule in filter_rules {
+            if rule.features().is_filterable() {
+                // // field is superset or subset of any filterable
+                // match rule {
+                //     Field(pattern) => match_pattern(facet_pattern, pattern),
+                //     Pattern(patterns) => patterns.attribute_patterns,
+                // }
+
+                // field is superset or subset of any filterable
+                match facet_pattern.match_str(rule) {
+                    // valid facet, check the next one
+                    Pattern::Parent | Pattern::Match => continue 'facet,
+                    // field is subset of any filterable but current setting doesn't allow filterable
+                    Pattern::NoMatch => {
+                        if filterable.patterns.match_str(field) == Pattern::Match {
+                            // return Err("pas filterable");
+                            todo!("non filterable");
+                        }
+                    }
+                }
+            }
+        }
+
+        todo!("no pattern found");
+        // return Err("pas de pattern")
+    }
+
+    // let valid_patterns =
+    //     filtered_matching_patterns(filterable_attributes_rules, &|features| {
+    //         features.is_filterable()
+    //     })
+    //     .into_iter()
+    //     .map(String::from)
+    //     .collect();
+    // return Err(Error::UserError(UserError::InvalidFacetsDistribution {
+    //     invalid_facet_patterns: invalid_facets,
+    //     valid_patterns,
+    //     matching_rule_indices,
+    // }));
 
     let fidmap = index.fields_ids_map_with_metadata(rtxn)?;
-    let filter_rules = index.filterable_attributes_rules(rtxn)?;
     let fields = fidmap.iter().filter_map(|(_fid, fname, meta)| {
         if meta.filterable_attributes_features(&filter_rules).is_filterable()
-            && attribute_patterns.match_str(fname) == PatternMatch::Match
+            && facet_patterns.match_str(fname) == PatternMatch::Match
         {
             Some((fname, sort_facet_values_by.get(fname)))
         } else {
