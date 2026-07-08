@@ -153,6 +153,16 @@ impl<T> Setting<T> {
             Setting::NotSet => Setting::NotSet,
         }
     }
+
+    /// Sets this setting to `NotSet` if it is equal to `other`.
+    pub fn difference(&mut self, other: &Self)
+    where
+        T: PartialEq,
+    {
+        if self == other {
+            *self = Setting::NotSet
+        }
+    }
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
