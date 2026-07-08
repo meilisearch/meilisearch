@@ -74,6 +74,7 @@ use meilisearch_types::milli::vector::{
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::network::route::Status;
 use meilisearch_types::network::{Network, RemoteAvailability};
+use meilisearch_types::settings::{SecretPolicy, SettingsTarget};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -1303,6 +1304,127 @@ impl IndexScheduler {
         let deleted = self.chat_settings.delete(&mut wtxn, uid)?;
         wtxn.commit()?;
         Ok(deleted)
+    }
+
+    pub fn user_index_settings_target(
+        &self,
+        uid: &str,
+        secret_policy: SecretPolicy,
+    ) -> Result<SettingsTarget> {
+        let uid = UserIndex::try_from_uid(uid)?;
+        let err = |err| Error::from_milli(err, Some(uid.uid().to_string()));
+        let rtxn = self.env.read_txn()?;
+        let current = match self.index_mapper.index(&rtxn, uid) {
+            Ok(index) => {
+                let rtxn = index.read_txn()?;
+                Some(
+                    meilisearch_types::settings::settings(&index, &rtxn, secret_policy)
+                        .map_err(err)?,
+                )
+            }
+            Err(Error::IndexNotFound(_)) => None,
+            Err(err) => return Err(err),
+        };
+
+        let tasks_by_status =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Enqueued)?;
+
+        let tasks_by_index = self.queue.tasks.index_tasks(&rtxn, uid.uid())?;
+
+        let mut tasks = tasks_by_index & tasks_by_status;
+
+        // error if the index doesn't currently exist and no pending task will change this
+        if tasks.is_empty() && current.is_none() {
+            return Err(Error::IndexNotFound(uid.uid().to_string()));
+        }
+
+        let tasks_by_kind = self
+            .queue
+            .tasks
+            .get_kind(&rtxn, meilisearch_types::tasks::Kind::SettingsUpdate)?
+            | self.queue.tasks.get_kind(&rtxn, meilisearch_types::tasks::Kind::IndexDeletion)?;
+
+        tasks &= tasks_by_kind;
+
+        if tasks.is_empty() {
+            let target = current.as_ref().map(|current| {
+                let mut target = current.clone();
+                target.difference(current);
+                target
+            });
+
+            return Ok(SettingsTarget {
+                current,
+                target,
+                task_ids: Default::default(),
+                needs_processing: false,
+            });
+        }
+
+        let mut target = current.clone().map(|settings| settings.into_unchecked());
+
+        for task_id in &tasks {
+            let task = self
+                .queue
+                .tasks
+                .get_task(&rtxn, task_id)
+                .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))?;
+            match task.kind {
+                KindWithContent::SettingsUpdate {
+                    index_uid: _,
+                    new_settings,
+                    is_deletion: _,
+                    allow_index_creation: _,
+                } => {
+                    target = Some(match target.take() {
+                        Some(mut target) => {
+                            target.merge(&new_settings);
+                            target
+                        }
+                        None => *new_settings,
+                    });
+                }
+                KindWithContent::IndexDeletion { index_uid: _ } => target = None,
+                KindWithContent::DocumentAdditionOrUpdate { .. }
+                | KindWithContent::DocumentDeletion { .. }
+                | KindWithContent::DocumentDeletionByFilter { .. }
+                | KindWithContent::DocumentEdition { .. }
+                | KindWithContent::DocumentClear { .. }
+                | KindWithContent::IndexCreation { .. }
+                | KindWithContent::IndexUpdate { .. }
+                | KindWithContent::IndexSwap { .. }
+                | KindWithContent::TaskCancelation { .. }
+                | KindWithContent::TaskDeletion { .. }
+                | KindWithContent::DumpCreation { .. }
+                | KindWithContent::SnapshotCreation
+                | KindWithContent::Export { .. }
+                | KindWithContent::UpgradeDatabase { .. }
+                | KindWithContent::IndexCompaction { .. }
+                | KindWithContent::NetworkTopologyChange(_)
+                | KindWithContent::DsrUpdate(_)
+                | KindWithContent::DsrClear => (),
+            }
+        }
+
+        let mut target = target.map(|settings| {
+            let mut settings = settings.check();
+
+            if let SecretPolicy::HideSecrets = secret_policy {
+                settings.hide_secrets();
+            }
+            settings
+        });
+
+        if let (Some(current), Some(target)) = (current.as_ref(), target.as_mut()) {
+            target.difference(current);
+        }
+
+        Ok(SettingsTarget {
+            current,
+            target,
+            task_ids: tasks.into_iter().collect(),
+            needs_processing: true,
+        })
     }
 }
 
