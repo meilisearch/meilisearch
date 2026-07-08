@@ -36,8 +36,18 @@ The prototype name must [follow this convention](https://semver.org/#spec-item-1
 Steps to create a prototype:
 
 1. In your terminal, go to the last commit of your branch (the one you want to provide as a prototype).
-2. Use the `cargo xtask generate-prototype` command to generate the prototype name.
-3. Create the tag using the `git tag` command.
+2. Use the `cargo xtask generate-prototype` command to generate the prototype name. Pass the feature name (without any iteration suffix, it is handled by the command):
+   - If this is the first iteration of the prototype, use the `--generate-new` flag:
+     ```bash
+     cargo xtask generate-prototype <name> --generate-new
+     # -> prototype-v<version>-<name>.0
+     ```
+   - If a prototype with this name already exists and you want to publish a new iteration, omit the flag to increment it:
+     ```bash
+     cargo xtask generate-prototype <name>
+     # -> prototype-v<version>-<name>.1
+     ```
+3. Create the tag using the `git tag` command with the generated name, e.g. `git tag prototype-v<version>-<name>.0`.
 4. Checkout the tag, run Meilisearch and check that it launches summary features a line: `Prototype: prototype-v<version>-<name>.<iteration>`.
 5. Checkout back to your branch: `git checkout -`.
 6. Push the tag: `git push origin prototype-v<version>-<name>.<iteration>`
