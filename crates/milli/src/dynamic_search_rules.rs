@@ -1,5 +1,8 @@
 use std::ops::{Bound, ControlFlow};
 
+use filter_parser::{
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraints,
+};
 use heed::{RoTxn, WithoutTls};
 use itertools::Itertools as _;
 use roaring::RoaringBitmap;
@@ -10,14 +13,15 @@ use time::OffsetDateTime;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::facet::ascending_facet_sort;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
+use crate::search::facet::value_bounds::{evaluate_equal, to_str_bounds, ValueBounds};
 use crate::search::new::LocatedQueryTerm;
 use crate::update::new::document::DocumentFromDb;
 use crate::{
-    DocumentId, FieldsIdsMap, Index, PinDoc, Result, SearchContext, SearchResult, UserError,
-    MAX_COUNTED_WORDS,
+    DocumentId, FieldId, FieldsIdsMap, Index, IndexFilter, PinDoc, Result, SearchContext,
+    SearchResult, UserError, MAX_COUNTED_WORDS,
 };
 
-type RuleId = u32;
+pub type RuleId = u32;
 
 /// Wrapper around the DSR index, allowing to search for active rules
 pub struct DynamicSearchRules {
@@ -218,6 +222,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         let target_time = search_context.before_search.format(&Rfc3339).unwrap();
         self.apply_time_conditions(&mut active_rules, target_time.as_str())?;
         self.apply_query_conditions(&mut active_rules, query_terms, search_context, fuel)?;
+        self.apply_filter_conditions(&mut active_rules, filter, fuel)?;
 
         Ok(active_rules)
     }
@@ -359,18 +364,107 @@ impl<'a> DynamicSearchRulesView<'a> {
                         }
                     }
                 }
-                // remove all rules that have that number of words but don't verify the constraints
+                // 3. exclude rules that have that number of word constraints but don't verify the constraints
                 match fuel.consume_word_combination() {
                     ControlFlow::Continue(()) => {
-                        active_rules -= constraint_count_rules - verifying_constraints_rules
+                        *active_rules -= constraint_count_rules - verifying_constraints_rules
                     }
                     // no more fuel, we have to remove all rules because we couldn't complete `verifying_constraints_rules`
-                    ControlFlow::Break(()) => active_rules -= constraint_count_rules,
+                    ControlFlow::Break(()) => *active_rules -= constraint_count_rules,
                 }
             }
+        })
+    }
+
+    fn apply_filter_conditions(
+        &self,
+        active_rules: &mut RoaringBitmap,
+        filter: Option<&IndexFilter<'_>>,
+        mut fuel: DsrFuel,
+    ) -> Result<(), crate::Error> {
+        let constraints =
+            filter.map(|filter| FilterConstraints::new(&filter.condition)).unwrap_or_default();
+
+        let Some(nb_constraints_fid) = self.db_fields_ids_map.id("conditions.filter.nbConstraints")
+        else {
+            return Ok(());
+        };
+
+        active_rules.len();
+
+        let max_constraints = constraints.max_number_of_constraints();
+
+        // 1. exclude rules that have more constraints than max_constraints
+        let mut too_many_constraints = Default::default();
+        find_docids_of_facet_within_bounds(
+            self.rtxn,
+            self.index.facet_id_f64_docids,
+            nb_constraints_fid,
+            &Bound::Excluded(max_constraints as f64),
+            &Bound::Unbounded,
+            Some(active_rules),
+            &mut too_many_constraints,
+        )?;
+
+        *active_rules -= too_many_constraints;
+
+        if max_constraints == 0 {
+            return Ok(());
         }
 
-        Ok(active_rules)
+        // solve all constraints
+        let mut solved_constraints = Vec::new();
+
+        for constraints in &constraints.constraints {
+            let mut solved_constraint = Vec::new();
+            for (target, constraints) in constraints {
+                let matching = match target {
+                    ConstraintTarget::Fid(fid) => {
+                        let facet_value_name =
+                            format!("conditions.filter.values.{}", fid.original_fragment());
+                        match self.db_fields_ids_map.id(&facet_value_name) {
+                            Some(fid) => {
+                                self.resolve_constraints(fid, constraints, active_rules)?
+                            }
+                            None => RoaringBitmap::new(),
+                        }
+                    }
+                    ConstraintTarget::Vector { .. } | ConstraintTarget::Geo => {
+                        // not solving for vector or geo currently
+                        RoaringBitmap::default()
+                    }
+                };
+                solved_constraint.push(matching);
+            }
+            solved_constraints.push(solved_constraint);
+        }
+        wip::fixme!("consider an optimization where empty roarings are not pushed, to limit number of combinations");
+
+        // exclude rules with k constraints that don't verify k constraints
+        for constraint_count in 1..=max_constraints {
+            let key = FacetGroupKey {
+                field_id: nb_constraints_fid,
+                level: 0,
+                left_bound: constraint_count as f64,
+            };
+            let Some(FacetGroupValue { size: _, bitmap: constraint_count_rules }) =
+                self.index.facet_id_f64_docids.get(self.rtxn, &key)?
+            else {
+                continue;
+            };
+            let mut verifying_constraints_rules = RoaringBitmap::new();
+
+            for solved_constraint in &solved_constraints {
+                for combination in solved_constraint.iter().combinations(constraint_count) {
+                    verifying_constraints_rules |= roaring::MultiOps::intersection(
+                        std::iter::once(&constraint_count_rules).chain(combination.into_iter()),
+                    );
+                }
+            }
+            *active_rules -= constraint_count_rules - verifying_constraints_rules;
+        }
+
+        Ok(())
     }
 
     fn rule_ids_sorted_by_precedence(
@@ -393,6 +487,102 @@ impl<'a> DynamicSearchRulesView<'a> {
         } else {
             Ok(either::Right(active_rules.into_iter().map(Ok)))
         }
+    }
+
+    fn resolve_constraints(
+        &self,
+        fid: FieldId,
+        constraints: &[ConstraintCondition],
+        active_rules: &RoaringBitmap,
+    ) -> Result<RoaringBitmap> {
+        let mut matching = active_rules.clone();
+        wip::fixme!("DSR index update");
+
+        for constraint in constraints {
+            let mut polarity = constraint.polarity;
+            let evaluated = match &constraint.kind {
+                ConstraintConditionKind::Condition { condition } => {
+                    match ValueBounds::new(condition) {
+                        ValueBounds::Range { normalized, number } => {
+                            let mut evaluated = RoaringBitmap::new();
+
+                            {
+                                let (left, right) = to_str_bounds(&normalized);
+                                let db = self.index.facet_id_string_docids;
+                                find_docids_of_facet_within_bounds(
+                                    self.rtxn,
+                                    db,
+                                    fid,
+                                    &left,
+                                    &right,
+                                    Some(active_rules),
+                                    &mut evaluated,
+                                )?;
+                            };
+
+                            if let Some((left, right)) = number {
+                                let db = self.index.facet_id_f64_docids;
+                                find_docids_of_facet_within_bounds(
+                                    self.rtxn,
+                                    db,
+                                    fid,
+                                    &left,
+                                    &right,
+                                    Some(active_rules),
+                                    &mut evaluated,
+                                )?;
+                            }
+                            evaluated
+                        }
+                        // no effect if polarity = false, removes everything otherwise
+                        ValueBounds::FieldIsEmpty | ValueBounds::FieldIsNull => {
+                            RoaringBitmap::new()
+                        }
+                        // no effect if polarity = true, removes everything otherwise
+                        ValueBounds::FieldExists => active_rules.clone(),
+                        ValueBounds::Equal { normalized, number } => evaluate_equal(
+                            self.rtxn,
+                            fid,
+                            self.index.facet_id_f64_docids,
+                            self.index.facet_id_string_docids,
+                            normalized,
+                            number,
+                        )?,
+                        ValueBounds::NotEqual { normalized, number } => {
+                            polarity = !polarity;
+                            evaluate_equal(
+                                self.rtxn,
+                                fid,
+                                self.index.facet_id_f64_docids,
+                                self.index.facet_id_string_docids,
+                                normalized,
+                                number,
+                            )?
+                        }
+                        ValueBounds::Contains { normalized: _ }
+                        | ValueBounds::StartsWith { normalized: _ } => {
+                            return Ok(Default::default())
+                        }
+                    }
+                }
+                // always unsupported, considered unsatisfiable
+                ConstraintConditionKind::VectorExists { .. }
+                | ConstraintConditionKind::GeoLowerThan { .. }
+                | ConstraintConditionKind::GeoBoundingBox { .. }
+                | ConstraintConditionKind::GeoPolygon { .. } => return Ok(Default::default()),
+            };
+            if polarity {
+                // exclude rules that were evaluated to 0
+                matching &= evaluated;
+            } else {
+                // exclude rules that were evaluated to 1
+                matching -= evaluated;
+            }
+            if matching.is_empty() {
+                break;
+            }
+        }
+        Ok(matching)
     }
 }
 
