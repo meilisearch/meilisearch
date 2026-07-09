@@ -29,12 +29,15 @@ impl FilterableAttributesRule {
         }
     }
 
-    pub fn rev_match_pattern(&self, left_pattern: &str) -> PatternMatch {
+    pub fn intersect_patterns(&self, other: &str) -> bool {
         match self {
             // If the rule is a field, match the field against the provided pattern using the legacy behavior
-            FilterableAttributesRule::Field(field) => match_field_legacy(left_pattern, field),
+            FilterableAttributesRule::Field(field) => matches!(
+                match_field_legacy(other, field),
+                PatternMatch::Parent | PatternMatch::Match
+            ),
             // If the rule is a pattern, match each one of them against the provided pattern using the new behavior
-            FilterableAttributesRule::Pattern(patterns) => patterns.rev_match_pattern(left_pattern),
+            FilterableAttributesRule::Pattern(patterns) => patterns.intersect_patterns(other),
         }
     }
 
@@ -87,8 +90,8 @@ impl FilterableAttributesPatterns {
         self.attribute_patterns.match_str(field)
     }
 
-    pub fn rev_match_pattern(&self, left_pattern: &str) -> PatternMatch {
-        self.attribute_patterns.rev_match_pattern(left_pattern)
+    pub fn intersect_patterns(&self, other: &str) -> bool {
+        self.attribute_patterns.intersect_patterns(other)
     }
 
     pub fn features(&self) -> FilterableAttributesFeatures {

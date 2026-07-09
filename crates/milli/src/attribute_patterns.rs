@@ -54,16 +54,17 @@ impl AttributePatterns {
         pattern_match
     }
 
-    pub fn rev_match_pattern(&self, left_pattern: &str) -> PatternMatch {
-        let mut pattern_match = PatternMatch::NoMatch;
+    pub fn intersect_patterns(&self, other: &str) -> bool {
         for pattern in &self.patterns {
-            match match_pattern(left_pattern, pattern) {
-                PatternMatch::Match => return PatternMatch::Match,
-                PatternMatch::Parent => pattern_match = PatternMatch::Parent,
-                PatternMatch::NoMatch => (),
+            match match_pattern(other, pattern) {
+                PatternMatch::Match | PatternMatch::Parent => return true,
+                PatternMatch::NoMatch => match match_pattern(pattern, other) {
+                    PatternMatch::Match | PatternMatch::Parent => return true,
+                    PatternMatch::NoMatch => (),
+                },
             }
         }
-        pattern_match
+        false
     }
 
     pub fn is_empty(&self) -> bool {

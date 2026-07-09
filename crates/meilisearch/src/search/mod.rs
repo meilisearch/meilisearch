@@ -48,7 +48,6 @@ use serde_json::{json, Value};
 mod mod_test;
 use utoipa::ToSchema;
 use uuid::Uuid;
-use PatternMatch::{Match, Parent};
 
 use crate::error::MeilisearchHttpError;
 
@@ -2065,12 +2064,12 @@ fn compute_facet_distribution_stats(
         for (rule_id, rule) in filter_rules.iter().enumerate() {
             if rule.features().is_filterable() {
                 // field is superset or subset of any filterable
-                if matches!(rule.rev_match_pattern(facet_pattern), Parent | Match) {
+                if rule.intersect_patterns(facet_pattern) {
                     // valid facet, check the next one
                     continue 'facet;
                 }
             // field is subset of any filterable but current setting doesn't allow filterable
-            } else if rule.match_str(facet_pattern) == Match {
+            } else if rule.match_str(facet_pattern) == PatternMatch::Match {
                 return Err(Error::UserError(UserError::InvalidFacetsDistribution {
                     invalid_facet_pattern: facet_pattern.clone(),
                     valid_patterns: fetch_valid_patterns(),
