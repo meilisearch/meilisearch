@@ -122,6 +122,7 @@ twox-hash = { version = "2.1.2", default-features = false, features = [
 ] }
 geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meilisearch/pull/6118>
 zerometry = "0.3.0"
+wip = "0.2.0"
 
 [dev-dependencies]
 mimalloc = { workspace = true }

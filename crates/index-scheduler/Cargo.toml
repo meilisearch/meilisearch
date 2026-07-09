@@ -47,6 +47,7 @@ uuid = { version = "1.18.1", features = ["serde", "v4"] }
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 rusty-s3 = "0.8.1"
 tokio = { version = "1.52.3", features = ["full"] }
+wip = "0.2.0"
 
 [dev-dependencies]
 big_s = "1.0.2"

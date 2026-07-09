@@ -18,6 +18,7 @@ unescaper = "0.1.6"
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 itertools = "0.14.0"
 serde_json = { version = "1.0.150", features = ["preserve_order"] }
+wip = "0.2.0"
 
 [dev-dependencies]
 # fixed version due to format breakages in v1.40
