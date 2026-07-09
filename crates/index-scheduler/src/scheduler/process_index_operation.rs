@@ -596,13 +596,17 @@ impl IndexScheduler {
             .into(),
             filterable_attributes: Setting::Set(vec![
                 // filter by active or inactive rules
-                eq_attr("active".into()),
+                eq_attr_pattern("active".into()),
                 // used to find time constraints
-                cmp_attr("conditions.time.start".into()),
+                cmp_attr_pattern("conditions.time.start".into()),
                 // used to find time constraints
-                cmp_attr("conditions.time.end".into()),
+                cmp_attr_pattern("conditions.time.end".into()),
                 // used to find query isEmpty constraints
-                eq_attr("conditions.query.isEmpty".into()),
+                eq_attr_pattern("conditions.query.isEmpty".into()),
+                // used to find filter constraints
+                cmp_attr_pattern("conditions.filter.values.*".into()),
+                // use to count filter constraints
+                cmp_attr_pattern("conditions.filter.nbConstraints".into()),
             ]),
             sortable_attributes: {
                 let mut sortable_attributes: BTreeSet<_> = Default::default();
@@ -769,9 +773,9 @@ impl IndexScheduler {
     }
 }
 
-fn eq_attr(name: String) -> FilterableAttributesRule {
+fn eq_attr_pattern(pattern: String) -> FilterableAttributesRule {
     FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
-        attribute_patterns: vec![name].into(),
+        attribute_patterns: vec![pattern].into(),
         features: FilterableAttributesFeatures {
             facet_search: false,
             filter: FilterFeatures { equality: true, comparison: false },
@@ -779,9 +783,9 @@ fn eq_attr(name: String) -> FilterableAttributesRule {
     })
 }
 
-fn cmp_attr(name: String) -> FilterableAttributesRule {
+fn cmp_attr_pattern(pattern: String) -> FilterableAttributesRule {
     FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
-        attribute_patterns: vec![name].into(),
+        attribute_patterns: vec![pattern].into(),
         features: FilterableAttributesFeatures {
             facet_search: false,
             filter: FilterFeatures { equality: true, comparison: true },
