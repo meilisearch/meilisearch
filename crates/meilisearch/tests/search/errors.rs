@@ -527,7 +527,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution: Attributes `doggo, neko` are not filterable. Available filterable attributes patterns are: `genres, title`.",
+      "message": "Invalid facet distribution: Pattern `doggo` is not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -538,7 +538,7 @@ async fn search_non_filterable_facets_multiple_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Invalid facet distribution: Attributes `doggo, neko` are not filterable. Available filterable attributes patterns are: `genres, title`.",
+      "message": "Invalid facet distribution: Pattern `doggo` is not filterable. Available filterable attributes patterns are: `genres, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
