@@ -73,13 +73,13 @@ pub struct FilterableAttributesPatterns {
     /// characters. For example, `["price_*", "stock"]` matches `price_usd`,
     /// `price_eur`, and `stock`.
     #[schema(value_type = Vec<String>)]
-    pub attribute_patterns: AttributePatterns, // try match
+    pub attribute_patterns: AttributePatterns,
     /// The filtering and faceting features enabled for attributes matching
     /// these patterns. If not specified, defaults to equality filtering
     /// enabled.
     #[serde(default)]
     #[deserr(default)]
-    pub features: FilterableAttributesFeatures, // if ok, check is_filterable, if nobody matches it's an error
+    pub features: FilterableAttributesFeatures,
 }
 
 impl FilterableAttributesPatterns {
