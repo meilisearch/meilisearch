@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, ValuePointerRef};
@@ -171,6 +172,9 @@ pub struct Conditions {
     /// Conditions on the search query that determines whether the rule is active
     #[request(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<QueryCondition>,
+    /// Conditions on the values matching the filter of the search query that determines whether the rule is active
+    #[request(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<FilterCondition>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema, Deserr)]
@@ -216,6 +220,13 @@ pub struct QueryCondition {
     /// present in the search query.
     #[request(default, skip_serializing_if = "Option::is_none")]
     pub words: Option<String>,
+}
+
+#[routes::request(db, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct FilterCondition {
+    #[request(default)]
+    pub values: BTreeMap<String, serde_json::Value>,
 }
 
 // We manually check the exclusivity of `is_empty` and `contains` because Deserr does not support
