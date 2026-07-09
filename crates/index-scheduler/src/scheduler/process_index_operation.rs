@@ -1,12 +1,14 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, RuleUid};
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::index_uid::DsrIndex;
 use meilisearch_types::milli::documents::PrimaryKey;
+use meilisearch_types::milli::dynamic_search_rules::DynamicSearchRulesView;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{
     self, IndexOperations, Payload, UpdateByFunction,
@@ -14,7 +16,7 @@ use meilisearch_types::milli::update::new::indexer::{
 use meilisearch_types::milli::update::{DocumentAdditionResult, Setting};
 use meilisearch_types::milli::vector::RuntimeEmbedders;
 use meilisearch_types::milli::{
-    self, ChannelCongestion, FilterFeatures, FilterableAttributesFeatures,
+    self, ChannelCongestion, FaultSource, FilterFeatures, FilterableAttributesFeatures,
     FilterableAttributesPatterns, FilterableAttributesRule, MustStopProcessing,
 };
 use meilisearch_types::network::Network;
@@ -673,31 +675,81 @@ impl IndexScheduler {
         let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = IndexOperations::new();
+        enum DsrPayload {
+            Replace(DynamicSearchRule),
+            Delete,
+        }
+
+        let mut dsr_payloads = BTreeMap::<&RuleUid, DsrPayload>::new();
+        let view = DynamicSearchRulesView::new(index, &rtxn, &db_fields_ids_map);
 
         for update in updates {
             match update {
                 DsrUpdate::CreateOrUpdate { rule_id, update } => {
-                    // unwrap: dynamic search rule always serializable
-                    let mut rule = serde_json::to_value(update).unwrap();
+                    let last_payload = dsr_payloads
+                        .remove(rule_id)
+                        .map(Ok)
+                        .unwrap_or_else(|| {
+                            let existing_rule = view
+                                .get(rule_id)?
+                                .map(|rule| {
+                                    DynamicSearchRule::try_from_meili_doc(
+                                        rule,
+                                        FaultSource::Runtime,
+                                    )
+                                })
+                                .transpose()?
+                                .unwrap_or_else(|| DynamicSearchRule::new(rule_id.clone()));
+                            Ok(DsrPayload::Replace(existing_rule))
+                        })
+                        .map_err(from_milli)?;
+                    let mut existing_rule = match last_payload {
+                        DsrPayload::Replace(dynamic_search_rule) => dynamic_search_rule,
+                        DsrPayload::Delete => DynamicSearchRule::new(rule_id.clone()),
+                    };
+                    existing_rule.apply_update(update.clone());
+                    dsr_payloads.insert(rule_id, DsrPayload::Replace(existing_rule));
+                }
+                DsrUpdate::Deletion(rule_id) => {
+                    dsr_payloads.insert(rule_id, DsrPayload::Delete);
+                }
+            }
+        }
 
-                    // unwrap: DynamicSearchRuleUpdateRequest always serializes as an object
-                    rule.as_object_mut().unwrap().insert(
-                        "uid".into(),
-                        serde_json::Value::String(rule_id.as_str().to_owned()),
-                    );
+        let mut indexer = IndexOperations::new();
+
+        for (rule_id, payload) in dsr_payloads {
+            match payload {
+                DsrPayload::Replace(rule) => {
+                    let nb_constraints = rule.facet_count();
+
+                    // unwrap: dynamic search rule always serializable
+                    let mut rule = serde_json::to_value(rule).unwrap();
+
+                    'inject_nb_constraints: {
+                        let Some(conditions) = rule.get_mut("conditions") else {
+                            break 'inject_nb_constraints;
+                        };
+                        let Some(filter) = conditions.get_mut("filter") else {
+                            break 'inject_nb_constraints;
+                        };
+                        filter
+                            .as_object_mut()
+                            .unwrap()
+                            .insert("nbConstraints".into(), nb_constraints.into());
+                    }
 
                     let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
                     // unwrap: vec writing cannot fail + dynamic search rule always serializable
                     serde_json::to_writer(&mut vec, &rule).unwrap();
                     let vec = vec.into_bump_slice();
-                    indexer.push_raw_operation(Payload::Update {
+                    indexer.push_raw_operation(Payload::Replace {
                         payload: vec,
                         on_missing_document: milli::update::MissingDocumentPolicy::Create,
                     });
                 }
-                DsrUpdate::Deletion(to_delete) => {
-                    let to_delete = &*indexer_alloc.alloc_str(to_delete.as_str());
+                DsrPayload::Delete => {
+                    let to_delete = &*indexer_alloc.alloc_str(rule_id.as_str());
                     let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
                     vec.push(to_delete);
                     let vec = vec.into_bump_slice();

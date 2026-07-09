@@ -133,6 +133,85 @@ impl DynamicSearchRule {
             },
         )
     }
+
+    pub fn apply_update(&mut self, update: DynamicSearchRuleUpdateRequest) {
+        let Self { uid: _, description, precedence, active, conditions, actions } = self;
+
+        let DynamicSearchRuleUpdateRequest {
+            description: new_description,
+            precedence: new_precedence,
+            active: new_active,
+            conditions: new_conditions,
+            actions: new_actions,
+        } = update;
+
+        *description = match new_description {
+            Setting::Set(new_description) => Some(new_description),
+            Setting::Reset => None,
+            Setting::NotSet => description.take(),
+        };
+        *precedence = match new_precedence {
+            Setting::Set(new_precedence) => Some(new_precedence),
+            Setting::Reset => None,
+            Setting::NotSet => precedence.take(),
+        };
+
+        *active = match new_active {
+            Setting::Set(new_active) => new_active,
+            Setting::Reset => true,
+            Setting::NotSet => *active,
+        };
+
+        match new_conditions {
+            Setting::Set(Conditions { time: new_time, query: new_query, filter: new_filter }) => {
+                let Conditions { time, query, filter } = conditions;
+                *time = new_time;
+                *query = new_query;
+                *filter = new_filter;
+            }
+            Setting::Reset => *conditions = Conditions::default(),
+            Setting::NotSet => (),
+        }
+
+        *actions = match new_actions {
+            Setting::Set(new_actions) => new_actions,
+            Setting::Reset => vec![],
+            Setting::NotSet => std::mem::take(actions),
+        };
+    }
+
+    pub fn facet_count(&self) -> usize {
+        let Some(filter) = self.conditions.filter.as_ref() else {
+            return 0;
+        };
+
+        let mut count = 0;
+        for value in filter.values.values() {
+            count_value(value, &mut count);
+        }
+        count
+    }
+}
+
+fn count_value(value: &serde_json::Value, count: &mut usize) {
+    match value {
+        serde_json::Value::Null => {}
+        serde_json::Value::String(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::Bool(_) => {
+            *count += 1;
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                count_value(value, count)
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for value in map.values() {
+                count_value(value, count);
+            }
+        }
+    }
 }
 
 const fn default_dynamic_search_rule_active() -> bool {
