@@ -1,8 +1,6 @@
 use core::fmt;
 use std::cmp::min;
-use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::iter;
 use std::ops::Not as _;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -2075,23 +2073,20 @@ fn compute_facet_distribution_stats(
             // field is subset of any filterable but current setting doesn't allow filterable
             } else if rule.match_str(facet_pattern) == Match {
                 return Err(Error::UserError(UserError::InvalidFacetsDistribution {
-                    invalid_facet_patterns: BTreeSet::from_iter(iter::once(facet_pattern.clone())),
+                    invalid_facet_pattern: facet_pattern.clone(),
                     valid_patterns: fetch_valid_patterns(),
                     // We found the rule matching our facet pattern but it's not filterable
-                    matching_rule_indices: HashMap::from_iter(iter::once((
-                        facet_pattern.clone(),
-                        rule_id,
-                    ))),
+                    matching_rule_index: Some(rule_id),
                 })
                 .into());
             }
         }
 
         return Err(Error::UserError(UserError::InvalidFacetsDistribution {
-            invalid_facet_patterns: BTreeSet::from_iter(iter::once(facet_pattern.clone())),
+            invalid_facet_pattern: facet_pattern.clone(),
             valid_patterns: fetch_valid_patterns(),
             // Not a single pattern matched our facet pattern
-            matching_rule_indices: HashMap::new(),
+            matching_rule_index: None,
         })
         .into());
     }

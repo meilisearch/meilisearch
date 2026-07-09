@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
@@ -377,39 +377,29 @@ impl<'a> FacetDistribution<'a> {
         &self,
         filterable_attributes_rules: &[FilterableAttributesRule],
     ) -> Result<()> {
-        let mut invalid_facets = BTreeSet::new();
-        let mut matching_rule_indices = HashMap::new();
-
         if let Some(facets) = &self.facets {
             for field in facets.keys() {
                 let matched_rule = matching_features(field, filterable_attributes_rules);
                 let is_filterable = matched_rule.is_some_and(|(_, f)| f.is_filterable());
 
                 if !is_filterable {
-                    invalid_facets.insert(field.to_string());
+                    let valid_patterns =
+                        filtered_matching_patterns(filterable_attributes_rules, &|features| {
+                            features.is_filterable()
+                        })
+                        .into_iter()
+                        .map(String::from)
+                        .collect();
 
-                    // If the field matched a rule but that rule doesn't enable filtering,
-                    // store the rule index for better error messages
-                    if let Some((rule_index, _)) = matched_rule {
-                        matching_rule_indices.insert(field.to_string(), rule_index);
-                    }
+                    return Err(Error::UserError(UserError::InvalidFacetsDistribution {
+                        invalid_facet_pattern: field.to_string(),
+                        valid_patterns,
+                        // If the field matched a rule but that rule doesn't enable filtering,
+                        // store the rule index for better error messages
+                        matching_rule_index: matched_rule.map(|(rule_index, _)| rule_index),
+                    }));
                 }
             }
-        }
-
-        if !invalid_facets.is_empty() {
-            let valid_patterns =
-                filtered_matching_patterns(filterable_attributes_rules, &|features| {
-                    features.is_filterable()
-                })
-                .into_iter()
-                .map(String::from)
-                .collect();
-            return Err(Error::UserError(UserError::InvalidFacetsDistribution {
-                invalid_facet_patterns: invalid_facets,
-                valid_patterns,
-                matching_rule_indices,
-            }));
         }
 
         Ok(())

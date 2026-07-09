@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::fmt::Write;
 use std::{io, str};
@@ -147,9 +147,9 @@ and can not be more than 511 bytes.", .document_id.to_string()
     )]
     InvalidDocumentId { document_id: Value },
     #[error("Invalid facet distribution: {}",
-        if .invalid_facet_patterns.len() == 1 {
-            let field = .invalid_facet_patterns.iter().next().unwrap();
-            match .matching_rule_indices.get(field) {
+        {
+            let field = .invalid_facet_pattern;
+            match .matching_rule_index {
                 Some(rule_index) => format!("Attribute `{}` matched rule #{} in filterableAttributes, but this rule does not enable filtering.\nHint: enable filtering in rule #{} by modifying the features.filter object\nHint: prepend another rule matching `{}` with appropriate filter features before rule #{}",
                     field, rule_index, rule_index, field, rule_index),
                 None => match .valid_patterns.is_empty() {
@@ -159,21 +159,12 @@ and can not be more than 511 bytes.", .document_id.to_string()
                         .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
                 }
             }
-        } else {
-            format!("Attributes `{}` are not filterable. {}",
-                .invalid_facet_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", "),
-                match .valid_patterns.is_empty() {
-                    true => "This index does not have configured filterable attributes.".to_string(),
-                    false => format!("Available filterable attributes patterns are: `{}`.",
-                        .valid_patterns.iter().map(AsRef::as_ref).collect::<Vec<&str>>().join(", ")),
-                }
-            )
         }
     )]
     InvalidFacetsDistribution {
-        invalid_facet_patterns: BTreeSet<String>,
+        invalid_facet_pattern: String,
         valid_patterns: BTreeSet<String>,
-        matching_rule_indices: HashMap<String, usize>,
+        matching_rule_index: Option<usize>,
     },
     #[error(transparent)]
     InvalidGeoField(#[from] Box<GeoError>),
