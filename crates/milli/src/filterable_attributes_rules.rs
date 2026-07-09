@@ -29,6 +29,15 @@ impl FilterableAttributesRule {
         }
     }
 
+    pub fn rev_match_pattern(&self, left_pattern: &str) -> PatternMatch {
+        match self {
+            // If the rule is a field, match the field against the provided pattern using the legacy behavior
+            FilterableAttributesRule::Field(field) => match_field_legacy(left_pattern, field),
+            // If the rule is a pattern, match each one of them against the provided pattern using the new behavior
+            FilterableAttributesRule::Pattern(patterns) => patterns.rev_match_pattern(left_pattern),
+        }
+    }
+
     /// Check if the rule is a geo field.
     ///
     /// prefer using `index.is_geo_enabled`, `index.is_geo_filtering_enabled`
@@ -76,6 +85,10 @@ pub struct FilterableAttributesPatterns {
 impl FilterableAttributesPatterns {
     pub fn match_str(&self, field: &str) -> PatternMatch {
         self.attribute_patterns.match_str(field)
+    }
+
+    pub fn rev_match_pattern(&self, left_pattern: &str) -> PatternMatch {
+        self.attribute_patterns.rev_match_pattern(left_pattern)
     }
 
     pub fn features(&self) -> FilterableAttributesFeatures {

@@ -46,7 +46,19 @@ impl AttributePatterns {
             match match_pattern(pattern, str) {
                 PatternMatch::Match => return PatternMatch::Match,
                 PatternMatch::Parent => pattern_match = PatternMatch::Parent,
-                PatternMatch::NoMatch => {}
+                PatternMatch::NoMatch => (),
+            }
+        }
+        pattern_match
+    }
+
+    pub fn rev_match_pattern(&self, left_pattern: &str) -> PatternMatch {
+        let mut pattern_match = PatternMatch::NoMatch;
+        for pattern in &self.patterns {
+            match match_pattern(left_pattern, pattern) {
+                PatternMatch::Match => return PatternMatch::Match,
+                PatternMatch::Parent => pattern_match = PatternMatch::Parent,
+                PatternMatch::NoMatch => (),
             }
         }
         pattern_match

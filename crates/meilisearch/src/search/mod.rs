@@ -6,6 +6,8 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
+use std::collections::HashMap;
+use std::iter;
 
 use deserr::Deserr;
 pub use federated::ProxyQuery;
@@ -22,14 +24,16 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use meilisearch_types::milli::filtered_matching_patterns;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    filtered_universe, make_document, AttributePatterns, AttributeState, Deadline, FacetValueHit,
-    Filter, IndexFilter, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
+    filtered_universe, make_document, AttributePatterns, AttributeState, Deadline, Error,
+    FacetValueHit, Filter, IndexFilter, InternalError, OrderBy, PatternMatch, SearchForFacetValues,
+    SearchStep, UserError,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -46,6 +50,7 @@ use serde_json::{json, Value};
 mod mod_test;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use PatternMatch::{Match, Parent};
 
 use crate::error::MeilisearchHttpError;
 
@@ -2052,65 +2057,51 @@ fn compute_facet_distribution_stats(
     let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
     let filter_rules = index.filterable_attributes_rules(rtxn)?;
 
-    // 'facet for facet in facets {
-    //   for filterable in filterable_attributes {
-    //     if filterable.is_filterable() {
-    //     // field is superset or subset of any filterable
-    //       if filterable.patterns.iter().any(|filt| facet.match_str(filt) == Match | Parent) {
-    //         // valid facet, check the next one
-    //         continue 'facet;
-    //       }
-    //     // field is subset of any filterable but current setting doesn't allow filterable
-    //     } else if filterable.patterns.match_str(field) == Match {
-    //       return Err("pas filterable")
-    //     }
-    //   }
-
-    //   return Err("pas de pattern")
-    // }
-
-    use milli::FilterableAttributesRule::{Field, Pattern};
-
     'facet: for facet_pattern in &facet_patterns.patterns {
-        for rule in filter_rules {
+        for (rule_id, rule) in filter_rules.iter().enumerate() {
             if rule.features().is_filterable() {
-                // // field is superset or subset of any filterable
-                // match rule {
-                //     Field(pattern) => match_pattern(facet_pattern, pattern),
-                //     Pattern(patterns) => patterns.attribute_patterns,
-                // }
-
                 // field is superset or subset of any filterable
-                match facet_pattern.match_str(rule) {
+                if matches!(rule.rev_match_pattern(facet_pattern), Parent | Match) {
                     // valid facet, check the next one
-                    Pattern::Parent | Pattern::Match => continue 'facet,
-                    // field is subset of any filterable but current setting doesn't allow filterable
-                    Pattern::NoMatch => {
-                        if filterable.patterns.match_str(field) == Pattern::Match {
-                            // return Err("pas filterable");
-                            todo!("non filterable");
-                        }
-                    }
+                    continue 'facet;
                 }
+            // field is subset of any filterable but current setting doesn't allow filterable
+            } else if rule.match_str(facet_pattern) == Match {
+                // TODO do it in one place (a closure)
+                let valid_patterns =
+                    filtered_matching_patterns(&filter_rules, &|features| features.is_filterable())
+                        .into_iter()
+                        .map(String::from)
+                        .collect();
+
+                return Err(Error::UserError(UserError::InvalidFacetsDistribution {
+                    invalid_facet_patterns: BTreeSet::from_iter(iter::once(facet_pattern.clone())),
+                    valid_patterns,
+                    // We found the rule matching our facet pattern but it's not filterable
+                    matching_rule_indices: HashMap::from_iter(iter::once((
+                        facet_pattern.clone(),
+                        rule_id,
+                    ))),
+                })
+                .into());
             }
         }
 
-        todo!("no pattern found");
-        // return Err("pas de pattern")
-    }
+        // TODO do it in one place (a closure)
+        let valid_patterns =
+            filtered_matching_patterns(&filter_rules, &|features| features.is_filterable())
+                .into_iter()
+                .map(String::from)
+                .collect();
 
-    // let valid_patterns =
-    //     filtered_matching_patterns(filterable_attributes_rules, &|features| {
-    //         features.is_filterable()
-    //     })
-    //     .into_iter()
-    //     .map(String::from)
-    //     .collect();
-    // return Err(Error::UserError(UserError::InvalidFacetsDistribution {
-    //     invalid_facet_patterns: invalid_facets,
-    //     valid_patterns,
-    //     matching_rule_indices,
-    // }));
+        return Err(Error::UserError(UserError::InvalidFacetsDistribution {
+            invalid_facet_patterns: BTreeSet::from_iter(iter::once(facet_pattern.clone())),
+            valid_patterns,
+            // Not a single pattern matched our facet pattern
+            matching_rule_indices: HashMap::new(),
+        })
+        .into());
+    }
 
     let fidmap = index.fields_ids_map_with_metadata(rtxn)?;
     let fields = fidmap.iter().filter_map(|(_fid, fname, meta)| {
