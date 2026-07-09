@@ -917,7 +917,7 @@ async fn search_one_query_error() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Invalid facet distribution: Attribute `color` is not filterable. Available filterable attributes patterns are: `id, title`.",
+      "message": "Inside `.queries[0]`: Invalid facet distribution: Pattern `color` is not filterable. Available filterable attributes patterns are: `id, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"

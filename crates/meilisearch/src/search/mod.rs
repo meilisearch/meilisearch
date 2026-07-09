@@ -929,7 +929,7 @@ impl SearchQueryWithIndex {
     }
 
     pub fn has_facets(&self) -> Option<&AttributePatterns> {
-        self.facets.as_ref()
+        self.facets.as_ref().filter(|v| !v.is_empty())
     }
 
     pub fn has_personalize(&self) -> bool {

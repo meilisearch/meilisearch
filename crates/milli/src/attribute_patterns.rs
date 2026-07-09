@@ -1,3 +1,5 @@
+use std::fmt;
+
 use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -8,7 +10,7 @@ use crate::is_faceted_by;
 /// include wildcards (`*`) for flexible matching. For example, `title`
 /// matches exactly, `overview_*` matches any attribute starting with
 /// `overview_`, and `*_date` matches any attribute ending with `_date`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct AttributePatterns {
@@ -66,6 +68,12 @@ impl AttributePatterns {
 
     pub fn is_empty(&self) -> bool {
         self.patterns.is_empty()
+    }
+}
+
+impl fmt::Debug for AttributePatterns {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.patterns.iter()).finish()
     }
 }
 
