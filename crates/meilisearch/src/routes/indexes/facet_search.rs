@@ -573,8 +573,13 @@ async fn search_local(
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
-        let search_kind =
-            search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
+        let search_kind = search_kind(
+            &search_query,
+            &index_scheduler,
+            index_uid.to_string(),
+            &index,
+            Some(&rtxn),
+        )?;
         let filter = match &search_query.filter {
             Some(filter) => {
                 let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
