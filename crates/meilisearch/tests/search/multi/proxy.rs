@@ -564,13 +564,122 @@ async fn remote_sharding_federated_pattern_facets() {
     });
 
     let (response, code) = index0.search_post(request).await;
-    snapshot!(code, @"400 Bad Request");
+    snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Invalid facet distribution: Pattern `doggos.name` is not filterable. Available filterable attributes patterns are: `doggos.*`.",
-      "code": "invalid_search_facets",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+      "hits": [
+        {
+          "id": 852,
+          "father": "jean",
+          "mother": "michelle",
+          "doggos": [
+            {
+              "name": "bobby",
+              "age": 2
+            },
+            {
+              "name": "buddy",
+              "age": 4
+            }
+          ],
+          "cattos": "pésti",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 654,
+          "father": "pierre",
+          "mother": "sabine",
+          "doggos": [
+            {
+              "name": "gros bill",
+              "age": 8
+            }
+          ],
+          "cattos": [
+            "simba",
+            "pestiféré"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 750,
+          "father": "romain",
+          "mother": "michelle",
+          "cattos": [
+            "enigma"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 951,
+          "father": "jean-baptiste",
+          "mother": "sophie",
+          "doggos": [
+            {
+              "name": "turbo",
+              "age": 5
+            },
+            {
+              "name": "fast",
+              "age": 6
+            }
+          ],
+          "cattos": [
+            "moumoute",
+            "gomez"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "facetDistribution": {
+        "doggos.age": {
+          "2": 1,
+          "4": 1,
+          "5": 1,
+          "6": 1,
+          "8": 1
+        },
+        "doggos.name": {
+          "bobby": 1,
+          "buddy": 1,
+          "fast": 1,
+          "gros bill": 1,
+          "turbo": 1
+        }
+      },
+      "facetStats": {
+        "doggos.age": {
+          "min": 2.0,
+          "max": 8.0
+        }
+      },
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
     }
     "###);
 

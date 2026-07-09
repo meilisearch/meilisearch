@@ -138,7 +138,7 @@ tempfile = { version = "3.27.0", optional = true }
 zip = { version = "6.0.0", optional = true, default-features = false, features = ["deflate-flate2"] }
 
 [features]
-default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
+default = ["enterprise", "meilisearch-types/all-tokenizations", "mini-dashboard"]
 swagger = ["utoipa-scalar"]
 test-ollama = []
 mini-dashboard = [
