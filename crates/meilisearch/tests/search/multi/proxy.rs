@@ -5,7 +5,7 @@ use meili_snap::{json_string, snapshot};
 use wiremock::matchers::{method, path, AnyMatcher};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{Server, Value, SCORE_DOCUMENTS};
+use crate::common::{Server, Value, NESTED_DOCUMENTS, SCORE_DOCUMENTS};
 use crate::json;
 
 #[actix_rt::test]
@@ -419,6 +419,296 @@ async fn remote_sharding() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+}
+
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_sharding_federated_pattern_facets() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // set self
+
+    let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+    let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+    let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!({
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+            "ms0": {
+                "url": rms0.url()
+            },
+            "ms1": {
+                "url": rms1.url()
+            },
+            "ms2": {
+                "url": rms2.url()
+            }
+        },
+        "shards": {
+            // Full replication
+            "shard1": { "remotes": ["ms0", "ms1", "ms2"] }
+        }
+    });
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    // list indexes
+    let index0 = ms0.index("test");
+
+    // update settings
+    let (task, code) = index0
+        .update_settings_filterable_attributes(json!([{
+            "attributePatterns": ["doggos.*"],
+            "features": {
+                "facetSearch": true,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // add documents
+    let documents = NESTED_DOCUMENTS.clone();
+    let documents = documents.as_array().unwrap();
+    let (task, code) = index0.add_documents(json!(documents), None).await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // Wait for all the tasks
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    // perform multi-search
+    let request = json!({
+        "q": null,
+        "facets": ["doggos.name", "doggos.age"],
+        "useNetwork": true
+    });
+
+    let (response, code) = index0.search_post(request).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Invalid facet distribution: Pattern `doggos.name` is not filterable. Available filterable attributes patterns are: `doggos.*`.",
+      "code": "invalid_search_facets",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
+    }
+    "###);
+
+    // update settings
+    let (task, code) = index0
+        .update_settings_filterable_attributes(json!([{
+            "attributePatterns": ["doggos.name", "doggos.age"],
+            "features": {
+                "facetSearch": true,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // perform multi-search
+    let request = json!({
+        "q": null,
+        "facets": ["doggos.*"],
+        "useNetwork": true
+    });
+
+    let (response, code) = index0.search_post(request).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 852,
+          "father": "jean",
+          "mother": "michelle",
+          "doggos": [
+            {
+              "name": "bobby",
+              "age": 2
+            },
+            {
+              "name": "buddy",
+              "age": 4
+            }
+          ],
+          "cattos": "pésti",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 654,
+          "father": "pierre",
+          "mother": "sabine",
+          "doggos": [
+            {
+              "name": "gros bill",
+              "age": 8
+            }
+          ],
+          "cattos": [
+            "simba",
+            "pestiféré"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 750,
+          "father": "romain",
+          "mother": "michelle",
+          "cattos": [
+            "enigma"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 951,
+          "father": "jean-baptiste",
+          "mother": "sophie",
+          "doggos": [
+            {
+              "name": "turbo",
+              "age": 5
+            },
+            {
+              "name": "fast",
+              "age": 6
+            }
+          ],
+          "cattos": [
+            "moumoute",
+            "gomez"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "facetDistribution": {
+        "doggos.age": {
+          "2": 1,
+          "4": 1,
+          "5": 1,
+          "6": 1,
+          "8": 1
+        },
+        "doggos.name": {
+          "bobby": 1,
+          "buddy": 1,
+          "fast": 1,
+          "gros bill": 1,
+          "turbo": 1
+        }
+      },
+      "facetStats": {
+        "doggos.age": {
+          "min": 2.0,
+          "max": 8.0
+        }
+      },
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
