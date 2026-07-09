@@ -66,11 +66,13 @@ impl<'a> DynamicSearchRulesView<'a> {
     pub fn resolve_pins(
         &self,
         query_terms: &[LocatedQueryTerm],
+        filter: Option<&IndexFilter<'_>>,
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
     ) -> Result<Vec<PinDoc>> {
-        let active_rules = self.active_rules_for_query(query_terms, search_context, fuel)?;
+        let active_rules =
+            self.active_rules_for_query(query_terms, filter, search_context, fuel)?;
 
         self.find_pins(self.rule_ids_sorted_by_precedence(active_rules)?, search_context, fuel)
             .filter(
@@ -208,6 +210,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     fn active_rules_for_query(
         &self,
         query_terms: &[LocatedQueryTerm],
+        filter: Option<&IndexFilter<'_>>,
         search_context: &SearchContext,
         mut fuel: DsrFuel,
     ) -> Result<RoaringBitmap> {
@@ -414,11 +417,12 @@ impl DynamicSearchRules {
     pub fn resolve_pins(
         &self,
         query_terms: &[LocatedQueryTerm],
+        filter: Option<&IndexFilter<'_>>,
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
     ) -> Result<Vec<PinDoc>> {
-        self.as_view().resolve_pins(query_terms, universe, search_context, fuel)
+        self.as_view().resolve_pins(query_terms, filter, universe, search_context, fuel)
     }
 
     pub fn rules_from_rule_ids<'t, I>(
