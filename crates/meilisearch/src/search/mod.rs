@@ -1,13 +1,13 @@
 use core::fmt;
 use std::cmp::min;
+use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::iter;
 use std::ops::Not as _;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
-use std::collections::HashMap;
-use std::iter;
 
 use deserr::Deserr;
 pub use federated::ProxyQuery;
@@ -2057,6 +2057,13 @@ fn compute_facet_distribution_stats(
     let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
     let filter_rules = index.filterable_attributes_rules(rtxn)?;
 
+    let fetch_valid_patterns = || {
+        filtered_matching_patterns(&filter_rules, &|features| features.is_filterable())
+            .into_iter()
+            .map(String::from)
+            .collect()
+    };
+
     'facet: for facet_pattern in &facet_patterns.patterns {
         for (rule_id, rule) in filter_rules.iter().enumerate() {
             if rule.features().is_filterable() {
@@ -2067,16 +2074,9 @@ fn compute_facet_distribution_stats(
                 }
             // field is subset of any filterable but current setting doesn't allow filterable
             } else if rule.match_str(facet_pattern) == Match {
-                // TODO do it in one place (a closure)
-                let valid_patterns =
-                    filtered_matching_patterns(&filter_rules, &|features| features.is_filterable())
-                        .into_iter()
-                        .map(String::from)
-                        .collect();
-
                 return Err(Error::UserError(UserError::InvalidFacetsDistribution {
                     invalid_facet_patterns: BTreeSet::from_iter(iter::once(facet_pattern.clone())),
-                    valid_patterns,
+                    valid_patterns: fetch_valid_patterns(),
                     // We found the rule matching our facet pattern but it's not filterable
                     matching_rule_indices: HashMap::from_iter(iter::once((
                         facet_pattern.clone(),
@@ -2087,16 +2087,9 @@ fn compute_facet_distribution_stats(
             }
         }
 
-        // TODO do it in one place (a closure)
-        let valid_patterns =
-            filtered_matching_patterns(&filter_rules, &|features| features.is_filterable())
-                .into_iter()
-                .map(String::from)
-                .collect();
-
         return Err(Error::UserError(UserError::InvalidFacetsDistribution {
             invalid_facet_patterns: BTreeSet::from_iter(iter::once(facet_pattern.clone())),
-            valid_patterns,
+            valid_patterns: fetch_valid_patterns(),
             // Not a single pattern matched our facet pattern
             matching_rule_indices: HashMap::new(),
         })
