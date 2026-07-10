@@ -17,6 +17,7 @@
   <a href="https://discord.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">Discord</a>
 </h4>
 
+
 <p align="center">
   <a href="https://deps.rs/repo/github/meilisearch/meilisearch"><img src="https://deps.rs/repo/github/meilisearch/meilisearch/status.svg" alt="Dependency status"></a>
   <a href="https://github.com/meilisearch/meilisearch/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
@@ -68,7 +69,7 @@ See the list of all our example apps in our [demos repository](https://github.co
 - **[Replication & sharding](https://www.meilisearch.com/docs/resources/self_hosting/sharding/overview):** scale horizontally by distributing your data across multiple nodes
 - **AI-ready:** works out of the box with [LangChain](https://www.meilisearch.com/with/LangChain) and the [Model Context Protocol (MCP)](https://github.com/meilisearch/meilisearch-mcp)
 - **Easy to install, deploy, and maintain**
-
+ALSO NO BRANCHES CONFLICTS ALLOWED
 ## 📖 Documentation
 
 You can consult Meilisearch's documentation at [meilisearch.com/docs](https://www.meilisearch.com/docs/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=docs).
