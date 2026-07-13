@@ -8,8 +8,8 @@ use crate::Result;
 
 use crate::{search::facet::filter::MAX_FILTER_DEPTH, Filter, SHARD_FIELD};
 
-impl<'a> Filter<'a> {
-    pub fn from_json(facets: &'a Value) -> Result<Option<Self>> {
+impl Filter {
+    pub fn from_json(facets: &Value) -> Result<Option<Self>> {
         match facets {
             Value::String(expr) => {
                 let condition = Self::from_str(expr)?;
@@ -23,7 +23,7 @@ impl<'a> Filter<'a> {
         }
     }
 
-    fn parse_filter_array(arr: &'a [Value]) -> Result<Option<Self>> {
+    fn parse_filter_array(arr: &[Value]) -> Result<Option<Self>> {
         let mut ands = Vec::new();
         for value in arr {
             match value {
@@ -55,7 +55,7 @@ impl<'a> Filter<'a> {
         Self::from_array(ands)
     }
 
-    pub fn from_array<I, J>(array: I) -> Result<Option<Self>>
+    pub fn from_array<'a, I, J>(array: I) -> Result<Option<Self>>
     where
         I: IntoIterator<Item = Either<J, &'a str>>,
         J: IntoIterator<Item = &'a str>,
@@ -101,7 +101,7 @@ impl<'a> Filter<'a> {
     }
 
     #[allow(clippy::should_implement_trait)]
-    pub fn from_str(expression: &'a str) -> Result<Option<Self>> {
+    pub fn from_str(expression: &str) -> Result<Option<Self>> {
         let condition = match FilterCondition::parse(expression) {
             Ok(Some(fc)) => Ok(fc),
             Ok(None) => return Ok(None),
@@ -115,19 +115,19 @@ impl<'a> Filter<'a> {
         Ok(Some(Self { condition }))
     }
 
-    pub fn use_contains_operator(&self) -> Option<&Token<'_>> {
+    pub fn use_contains_operator(&self) -> Option<&Token> {
         self.condition.use_contains_operator()
     }
 
-    pub fn use_vector_filter(&self) -> Option<&Token<'_>> {
+    pub fn use_vector_filter(&self) -> Option<&Token> {
         self.condition.use_vector_filter()
     }
 
-    pub fn use_shard_filter(&self) -> Option<&Token<'_>> {
+    pub fn use_shard_filter(&self) -> Option<&Token> {
         self.condition.use_field(SHARD_FIELD)
     }
 
-    pub fn use_foreign_filter(&self) -> Option<&Token<'_>> {
+    pub fn use_foreign_filter(&self) -> Option<&Token> {
         self.condition.use_foreign_operator()
     }
 }

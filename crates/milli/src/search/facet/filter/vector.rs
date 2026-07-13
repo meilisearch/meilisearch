@@ -18,7 +18,7 @@ pub enum VectorFilterError<'a> {
             format!("Available embedders are: {}.{did_you_mean}", available.iter().map(|e| format!("`{e}`")).collect::<Vec<_>>().join(", "))
         }
     })]
-    EmbedderDoesNotExist { embedder: &'a Token<'a>, available: Vec<String> },
+    EmbedderDoesNotExist { embedder: &'a Token, available: Vec<String> },
 
     #[error("The fragment `{}` does not exist on embedder `{}`. {}", fragment.fragment(), embedder.fragment(), {
         if available.is_empty() {
@@ -30,11 +30,7 @@ pub enum VectorFilterError<'a> {
             format!("Available fragments on this embedder are: {}.{did_you_mean}", available.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "))
         }
     })]
-    FragmentDoesNotExist {
-        embedder: &'a Token<'a>,
-        fragment: &'a Token<'a>,
-        available: Vec<String>,
-    },
+    FragmentDoesNotExist { embedder: &'a Token, fragment: &'a Token, available: Vec<String> },
 }
 
 use VectorFilterError::*;
@@ -54,8 +50,8 @@ pub(super) fn evaluate(
     rtxn: &heed::RoTxn<'_>,
     index: &Index,
     universe: Option<&RoaringBitmap>,
-    embedder: Option<Token<'_>>,
-    filter: &VectorFilter<'_>,
+    embedder: Option<Token>,
+    filter: &VectorFilter,
 ) -> crate::Result<RoaringBitmap> {
     let index_embedding_configs = index.embedding_configs();
     let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
@@ -80,9 +76,9 @@ pub(super) fn evaluate(
 fn evaluate_inner(
     rtxn: &heed::RoTxn<'_>,
     index: &Index,
-    embedder: &Token<'_>,
+    embedder: &Token,
     embedding_configs: &[IndexEmbeddingConfig],
-    filter: &VectorFilter<'_>,
+    filter: &VectorFilter,
 ) -> crate::Result<RoaringBitmap> {
     let backend = index.get_vector_store(rtxn)?.unwrap_or_default();
     let embedder_name = embedder.fragment();

@@ -14,8 +14,8 @@ use crate::{Filter, FilterableAttributesRule};
 
 /// Convert a Filter to an IndexFilter
 /// this is only available for tests, in production we must ensure that the foreign filters have been preprocessed.
-impl<'a> From<Filter<'a>> for IndexFilter<'a> {
-    fn from(filter: Filter<'a>) -> Self {
+impl From<Filter> for IndexFilter {
+    fn from(filter: Filter) -> Self {
         IndexFilter { condition: condition_to_index_condition(filter.condition) }
     }
 }

@@ -103,7 +103,7 @@ pub fn filter_into_index_filter(
 /// Convert a vector of filters into a vector of index filters by evaluating the foreign filters
 ///
 /// This function will open each foreign index once and process the filters.
-pub fn filters_into_index_filters<'a>(
+pub fn filters_into_index_filters(
     filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     index_scheduler: &IndexScheduler,
@@ -242,7 +242,7 @@ pub fn filters_into_index_filters<'a>(
 /// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
 ///
 /// This function will not open any foreign index but will panic if a foreign filter is encountered.
-pub fn filters_into_index_filters_unchecked<'a>(
+pub fn filters_into_index_filters_unchecked(
     filters: Vec<Option<Filter>>,
 ) -> Result<Vec<Option<IndexFilter>>> {
     filters
@@ -324,8 +324,8 @@ pub fn retrieve_foreign_keys_settings<'a>(
     Ok(foreign_keys_settings)
 }
 
-pub fn parse_filter<'a>(
-    facets: &'a Value,
+pub fn parse_filter(
+    facets: &Value,
     filter_parsing_error_code: Code,
     features: RoFeatures,
     index_uid: Option<&str>,
@@ -347,7 +347,7 @@ pub fn parse_filter<'a>(
     check_filter_experimental_features(filter, features, index_uid)
 }
 
-fn check_filter_experimental_features<'a>(
+fn check_filter_experimental_features(
     filter: Option<Filter>,
     features: RoFeatures,
     index_uid: Option<&str>,
@@ -402,8 +402,8 @@ fn check_filter_experimental_features<'a>(
     Ok(filter)
 }
 
-fn parse_filter_array<'a>(
-    arr: &'a [Value],
+fn parse_filter_array(
+    arr: &[Value],
     code: Code,
     index_uid: Option<&str>,
 ) -> Result<Option<Filter>> {
@@ -481,8 +481,8 @@ fn unsupported_foreign_filter_error(
 /// - Check the experimental features
 /// - Parse the filter
 /// - if a foreign filter is encountered, return an error "Unsupported foreign filter"
-pub fn parse_local_index_filter<'a>(
-    filter: &'a Value,
+pub fn parse_local_index_filter(
+    filter: &Value,
     index_uid: Option<&str>,
     features: RoFeatures,
     code: Code,

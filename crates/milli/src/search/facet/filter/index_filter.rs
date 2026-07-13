@@ -28,23 +28,17 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IndexFilter<'a> {
-    pub condition: IndexFilterCondition<'a>,
+pub struct IndexFilter {
+    pub condition: IndexFilterCondition,
 }
 
-impl<'a> From<IndexFilterCondition<'a>> for IndexFilter<'a> {
-    fn from(condition: IndexFilterCondition<'a>) -> Self {
+impl From<IndexFilterCondition> for IndexFilter {
+    fn from(condition: IndexFilterCondition) -> Self {
         IndexFilter { condition }
     }
 }
 
-impl IndexFilter<'_> {
-    pub fn into_owned(self) -> IndexFilter<'static> {
-        IndexFilter { condition: self.condition.into_owned() }
-    }
-}
-
-impl<'a> IndexFilter<'a> {
+impl IndexFilter {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
         let fields_ids_map = index.fields_ids_map(rtxn)?;
@@ -78,7 +72,7 @@ impl<'a> IndexFilter<'a> {
         index: &Index,
         field_id: FieldId,
         universe_hint: Option<&RoaringBitmap>,
-        operator: &Condition<'a>,
+        operator: &Condition,
         features: &FilterableAttributesFeatures,
         rule_index: usize,
     ) -> Result<RoaringBitmap> {
@@ -330,7 +324,7 @@ impl<'a> IndexFilter<'a> {
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
         universe_hint: Option<&RoaringBitmap>,
-        operator: &Condition<'a>,
+        operator: &Condition,
     ) -> Result<RoaringBitmap> {
         Ok(match operator {
             Condition::Equal(token) => {
@@ -810,7 +804,7 @@ fn generate_filter_error(
     rtxn: &heed::RoTxn<'_>,
     index: &Index,
     field_id: FieldId,
-    operator: &Condition<'_>,
+    operator: &Condition,
     features: &FilterableAttributesFeatures,
     rule_index: usize,
 ) -> Error {
@@ -828,7 +822,7 @@ fn generate_filter_error(
     }
 }
 
-pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter<'_>) -> Result<String> {
+pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter) -> Result<String> {
     let mut s = String::new();
     serialize_index_filter_condition(&mut s, &filter.condition)
         .map_err(|_| SerializationError::FailedToSerializeFilter)?;
@@ -837,7 +831,7 @@ pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter<'_>) -> Resu
 
 fn serialize_index_filter_condition(
     f: &mut impl FmtWrite,
-    condition: &IndexFilterCondition<'_>,
+    condition: &IndexFilterCondition,
 ) -> std::fmt::Result {
     match condition {
         IndexFilterCondition::Not(filter) => {
@@ -942,7 +936,7 @@ fn serialize_index_filter_condition(
     Ok(())
 }
 
-fn serialize_condition(f: &mut impl FmtWrite, condition: &Condition<'_>) -> std::fmt::Result {
+fn serialize_condition(f: &mut impl FmtWrite, condition: &Condition) -> std::fmt::Result {
     match condition {
         Condition::GreaterThan(token) => write!(f, "> {}", token.escaped_fragment()),
         Condition::GreaterThanOrEqual(token) => write!(f, ">= {}", token.escaped_fragment()),
