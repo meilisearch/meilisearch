@@ -3,7 +3,7 @@ use std::fmt::Display;
 use nom::error::{self, ParseError};
 use nom::Parser;
 
-use crate::{CowSpan, IResult, Span};
+use crate::{IResult, OwnedSpan, Span};
 
 pub trait NomErrorExt<E> {
     fn is_failure(&self) -> bool;
@@ -33,22 +33,22 @@ impl<E> NomErrorExt<E> for nom::Err<E> {
 
 /// cut a parser and map the error
 pub fn cut_with_err<'a, O>(
-    mut parser: impl FnMut(Span<'a>) -> IResult<'a, O>,
-    mut with: impl FnMut(Error<'a>) -> Error<'a>,
-) -> impl FnMut(Span<'a>) -> IResult<'a, O> {
+    mut parser: impl FnMut(Span<'a>) -> IResult<O>,
+    mut with: impl FnMut(Error) -> Error,
+) -> impl FnMut(Span<'a>) -> IResult<O> {
     move |input| match parser.parse(input) {
         Err(nom::Err::Error(e)) => Err(nom::Err::Failure(with(e))),
         rest => rest,
     }
 }
 
-pub trait IResultExt<'a> {
-    fn map_cut(self, kind: ErrorKind<'a>) -> Self;
+pub trait IResultExt {
+    fn map_cut(self, kind: ErrorKind) -> Self;
 }
 
-impl<'a, T> IResultExt<'a> for IResult<'a, T> {
-    fn map_cut(self, kind: ErrorKind<'a>) -> Self {
-        self.map_err(move |e: nom::Err<Error<'a>>| {
+impl<'a, T> IResultExt for IResult<'a, T> {
+    fn map_cut(self, kind: ErrorKind) -> Self {
+        self.map_err(move |e: nom::Err<Error>| {
             let input = match e {
                 nom::Err::Incomplete(_) => return e,
                 nom::Err::Error(e) => e.context().clone(),
@@ -60,9 +60,9 @@ impl<'a, T> IResultExt<'a> for IResult<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct Error<'a> {
-    context: CowSpan<'a>,
-    kind: ErrorKind<'a>,
+pub struct Error {
+    context: OwnedSpan,
+    kind: ErrorKind,
 }
 
 #[derive(Debug)]
@@ -72,9 +72,9 @@ pub enum ExpectedValueKind {
 }
 
 #[derive(Debug)]
-pub enum ErrorKind<'a> {
+pub enum ErrorKind {
     Foreign,
-    ReservedGeo(&'a str),
+    ReservedGeo(&'static str),
     GeoRadius,
     GeoRadiusArgumentCount(usize),
     GeoBoundingBox,
@@ -109,24 +109,24 @@ pub enum ErrorKind<'a> {
     External(String),
 }
 
-impl<'a> Error<'a> {
-    pub fn kind(&self) -> &ErrorKind<'a> {
+impl Error {
+    pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
 
-    pub fn context(&self) -> &CowSpan<'a> {
+    pub fn context(&self) -> &OwnedSpan {
         &self.context
     }
 
-    pub fn new_from_kind(context: CowSpan<'a>, kind: ErrorKind<'a>) -> Self {
+    pub fn new_from_kind(context: OwnedSpan, kind: ErrorKind) -> Self {
         Self { context, kind }
     }
 
-    pub fn failure_from_kind(context: CowSpan<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
+    pub fn failure_from_kind(context: OwnedSpan, kind: ErrorKind) -> nom::Err<Self> {
         nom::Err::Failure(Self::new_from_kind(context, kind))
     }
 
-    pub fn new_from_external(context: CowSpan<'a>, error: impl std::error::Error) -> Self {
+    pub fn new_from_external(context: OwnedSpan, error: impl std::error::Error) -> Self {
         Self::new_from_kind(context, ErrorKind::External(error.to_string()))
     }
 
@@ -138,8 +138,8 @@ impl<'a> Error<'a> {
     }
 }
 
-impl<'a> ParseError<Span<'a>> for Error<'a> {
-    fn from_error_kind(input: Span<'a>, kind: error::ErrorKind) -> Self {
+impl ParseError<Span<'_>> for Error {
+    fn from_error_kind(input: Span, kind: error::ErrorKind) -> Self {
         let kind = match kind {
             error::ErrorKind::Eof => ErrorKind::ExpectedEof,
             kind => ErrorKind::InternalError(kind),
@@ -147,17 +147,17 @@ impl<'a> ParseError<Span<'a>> for Error<'a> {
         Self { context: input.into(), kind }
     }
 
-    fn append(_input: Span<'a>, _kind: error::ErrorKind, other: Self) -> Self {
+    fn append(_input: Span, _kind: error::ErrorKind, other: Self) -> Self {
         other
     }
 
-    fn from_char(input: Span<'a>, c: char) -> Self {
+    fn from_char(input: Span, c: char) -> Self {
         Self { context: input.into(), kind: ErrorKind::Char(c) }
     }
 }
 
-impl Display for Error<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let input = self.context.fragment();
         // When printing our error message we want to escape all `\n` to be sure we keep our format with the
         // first line being the diagnostic and the second line being the incriminated filter.
@@ -303,11 +303,8 @@ impl Display for Error<'_> {
             ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
             ErrorKind::Foreign => writeln!(f, "Was expecting a field name and an condition inside `_foreign(..)` filter but instead found `{escaped_input}`.")?,
         }
-        if let Some(base_column) = self.context.get_utf8_column() {
-            let size = self.context.fragment().chars().count();
-            write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra())
-        } else {
-            write!(f, "{}", self.context.extra())
-        }
+        let base_column = self.context.get_utf8_column();
+        let size = self.context.fragment().chars().count();
+        write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra())
     }
 }

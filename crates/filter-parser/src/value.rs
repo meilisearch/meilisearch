@@ -58,8 +58,8 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
 }
 
 // word           = (alphanumeric | _ | - | .)+    except for reserved keywords
-pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<'a, Token<'a>> {
-    let (input, word): (_, Token<'a>) =
+pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<'a, Token> {
+    let (input, word): (_, Token) =
         take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
     if is_keyword(word.fragment()) {
         return Err(nom::Err::Error(Error::new_from_kind(
@@ -71,9 +71,9 @@ pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<'a, Token<'a>> {
 }
 
 // word           = {tag}
-pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, Token<'a>> {
+pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, Token> {
     move |input| {
-        let (input, word): (_, Token<'a>) =
+        let (input, word): (_, Token) =
             take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
         if word.fragment() == tag {
             Ok((input, word))
@@ -117,7 +117,7 @@ pub fn parse_vector_value(input: Span) -> IResult<Token> {
     }
 }
 
-pub fn parse_vector_value_cut<'a>(input: Span<'a>, kind: ErrorKind<'a>) -> IResult<'a, Token<'a>> {
+pub fn parse_vector_value_cut<'a>(input: Span<'a>, kind: ErrorKind) -> IResult<'a, Token> {
     parse_vector_value(input).map_err(|e| match e {
         nom::Err::Failure(e) => match e.kind() {
             ErrorKind::Char(c) if *c == '"' || *c == '\'' => {

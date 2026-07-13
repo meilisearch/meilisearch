@@ -17,22 +17,22 @@ use crate::value::{parse_vector_value, parse_vector_value_cut};
 use crate::{parse_value, Error, ErrorKind, FilterCondition, IResult, Span, Token, VectorFilter};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Condition<'a> {
-    GreaterThan(Token<'a>),
-    GreaterThanOrEqual(Token<'a>),
-    Equal(Token<'a>),
-    NotEqual(Token<'a>),
+pub enum Condition {
+    GreaterThan(Token),
+    GreaterThanOrEqual(Token),
+    Equal(Token),
+    NotEqual(Token),
     Null,
     Empty,
     Exists,
-    LowerThan(Token<'a>),
-    LowerThanOrEqual(Token<'a>),
-    Between { from: Token<'a>, to: Token<'a> },
-    Contains { keyword: Token<'a>, word: Token<'a> },
-    StartsWith { keyword: Token<'a>, word: Token<'a> },
+    LowerThan(Token),
+    LowerThanOrEqual(Token),
+    Between { from: Token, to: Token },
+    Contains { keyword: Token, word: Token },
+    StartsWith { keyword: Token, word: Token },
 }
 
-impl Condition<'_> {
+impl Condition {
     pub fn operator(&self) -> &str {
         match self {
             Condition::GreaterThan(_) => ">",
@@ -47,31 +47,6 @@ impl Condition<'_> {
             Condition::Between { .. } => "TO",
             Condition::Contains { .. } => "CONTAINS",
             Condition::StartsWith { .. } => "STARTS WITH",
-        }
-    }
-
-    pub fn into_owned(self) -> Condition<'static> {
-        match self {
-            Condition::GreaterThan(token) => Condition::GreaterThan(token.into_owned()),
-            Condition::GreaterThanOrEqual(token) => {
-                Condition::GreaterThanOrEqual(token.into_owned())
-            }
-            Condition::Equal(token) => Condition::Equal(token.into_owned()),
-            Condition::NotEqual(token) => Condition::NotEqual(token.into_owned()),
-            Condition::Null => Condition::Null,
-            Condition::Empty => Condition::Empty,
-            Condition::Exists => Condition::Exists,
-            Condition::LowerThan(token) => Condition::LowerThan(token.into_owned()),
-            Condition::LowerThanOrEqual(token) => Condition::LowerThanOrEqual(token.into_owned()),
-            Condition::Between { from, to } => {
-                Condition::Between { from: from.into_owned(), to: to.into_owned() }
-            }
-            Condition::Contains { keyword, word } => {
-                Condition::Contains { keyword: keyword.into_owned(), word: word.into_owned() }
-            }
-            Condition::StartsWith { keyword, word } => {
-                Condition::StartsWith { keyword: keyword.into_owned(), word: word.into_owned() }
-            }
         }
     }
 }

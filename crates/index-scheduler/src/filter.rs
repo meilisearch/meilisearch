@@ -63,14 +63,14 @@ pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, Sou
 /// Convert a filter into an index filter by evaluating the foreign filters
 ///
 /// this function is a wrapper around the `filters_into_index_filters`.
-pub fn filter_into_index_filter<'a>(
-    filter: Filter<'a>,
+pub fn filter_into_index_filter(
+    filter: Filter,
     index: &Index,
     rtxn: &RoTxn,
     index_scheduler: &IndexScheduler,
     progress: &Progress,
     index_uid: &str,
-) -> Result<IndexFilter<'a>> {
+) -> Result<IndexFilter> {
     let foreign_keys = index
         .foreign_keys(rtxn)
         .map_err(|err| Error::from_milli(milli::Error::from(err), Some(index_uid.to_string())))?;
@@ -104,11 +104,11 @@ pub fn filter_into_index_filter<'a>(
 ///
 /// This function will open each foreign index once and process the filters.
 pub fn filters_into_index_filters<'a>(
-    filters: Vec<(SourceIndexUid, Option<Filter<'a>>)>,
+    filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     index_scheduler: &IndexScheduler,
     progress: &Progress,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+) -> Result<Vec<Option<IndexFilter>>> {
     // list all the foreign filters and check their validity
     let mut foreign_filters = Vec::new();
     for (index_uid, filter) in filters.iter() {
@@ -243,8 +243,8 @@ pub fn filters_into_index_filters<'a>(
 ///
 /// This function will not open any foreign index but will panic if a foreign filter is encountered.
 pub fn filters_into_index_filters_unchecked<'a>(
-    filters: Vec<Option<Filter<'a>>>,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+    filters: Vec<Option<Filter>>,
+) -> Result<Vec<Option<IndexFilter>>> {
     filters
         .into_iter()
         .map(|filter| {
@@ -255,12 +255,12 @@ pub fn filters_into_index_filters_unchecked<'a>(
         .collect::<Result<_>>()
 }
 
-fn condition_to_index_condition<'a, F>(
-    filter: FilterCondition<'a>,
+fn condition_to_index_condition<F>(
+    filter: FilterCondition,
     foreign_filter: &mut F,
-) -> Result<IndexFilterCondition<'a>>
+) -> Result<IndexFilterCondition>
 where
-    F: FnMut(FilterCondition<'a>) -> Result<IndexFilterCondition<'a>>,
+    F: FnMut(FilterCondition) -> Result<IndexFilterCondition>,
 {
     match filter {
         FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
@@ -329,7 +329,7 @@ pub fn parse_filter<'a>(
     filter_parsing_error_code: Code,
     features: RoFeatures,
     index_uid: Option<&str>,
-) -> Result<Option<Filter<'a>>> {
+) -> Result<Option<Filter>> {
     let filter = match facets {
         Value::String(expr) => Filter::from_str(expr).map_err(|e| {
             Error::Milli { error: e, index_uid: index_uid.map(String::from) }
@@ -348,10 +348,10 @@ pub fn parse_filter<'a>(
 }
 
 fn check_filter_experimental_features<'a>(
-    filter: Option<Filter<'a>>,
+    filter: Option<Filter>,
     features: RoFeatures,
     index_uid: Option<&str>,
-) -> Result<Option<Filter<'a>>> {
+) -> Result<Option<Filter>> {
     if let Some(ref filter) = filter {
         // If the contains operator is used while the contains filter feature is not enabled, errors out
         if let Some((token, error)) =
@@ -406,7 +406,7 @@ fn parse_filter_array<'a>(
     arr: &'a [Value],
     code: Code,
     index_uid: Option<&str>,
-) -> Result<Option<Filter<'a>>> {
+) -> Result<Option<Filter>> {
     let mut ands = Vec::new();
     for value in arr {
         match value {
@@ -459,7 +459,7 @@ fn invalid_filter_syntax_error(
 }
 
 fn unsupported_foreign_filter_error(
-    filter: FilterCondition<'_>,
+    filter: FilterCondition,
     code: Code,
     index_uid: Option<&str>,
 ) -> Error {
@@ -486,7 +486,7 @@ pub fn parse_local_index_filter<'a>(
     index_uid: Option<&str>,
     features: RoFeatures,
     code: Code,
-) -> Result<Option<IndexFilter<'a>>> {
+) -> Result<Option<IndexFilter>> {
     let Some(Filter { condition }) = parse_filter(filter, code, features, index_uid)? else {
         return Ok(None);
     };
