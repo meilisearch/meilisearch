@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::{Debug, Write as FmtWrite};
+use std::ops::BitAnd;
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 pub use filter_parser::Condition;
@@ -35,6 +36,14 @@ pub struct IndexFilter {
 impl From<IndexFilterCondition> for IndexFilter {
     fn from(condition: IndexFilterCondition) -> Self {
         IndexFilter { condition }
+    }
+}
+
+impl BitAnd for IndexFilter {
+    type Output = IndexFilter;
+
+    fn bitand(self, other: Self) -> Self::Output {
+        IndexFilter { condition: IndexFilterCondition::And(vec![self.condition, other.condition]) }
     }
 }
 

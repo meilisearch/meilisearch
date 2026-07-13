@@ -6,12 +6,12 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::milli::SHARD_FIELD;
+use meilisearch_types::milli::{Condition, IndexFilter, IndexFilterCondition, Token, SHARD_FIELD};
 use meilisearch_types::network::{Network, RemoteAvailability};
 use rand::seq::IteratorRandom as _;
 
 use crate::search::federated::network::ProxyQuery;
-use crate::search::fuse_filters;
+use crate::search::fuse_index_filters;
 
 /// Partition over all shards such that each shard appears exactly once.
 ///
@@ -23,12 +23,14 @@ pub fn partition_shards<Q: ProxyQuery>(
     Ok(remote_for_shard.map(move |(shard, remote)| {
         let mut query = query.proxy_with_remote(remote);
 
-        let shard_filter =
-            Some(serde_json::Value::String(format!("{SHARD_FIELD} = \"{}\"", shard.as_ref())));
+        let shard_filter = Some(IndexFilter::from(IndexFilterCondition::Condition {
+            fid: Token::from(SHARD_FIELD),
+            op: Condition::Equal(Token::from(shard.as_ref())),
+        }));
 
         let filter = Q::filter_field(&mut query);
 
-        *filter = fuse_filters(filter.take(), shard_filter);
+        *filter = fuse_index_filters(filter.take(), shard_filter);
         query
     }))
 }

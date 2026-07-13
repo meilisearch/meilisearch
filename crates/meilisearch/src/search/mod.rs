@@ -1095,6 +1095,12 @@ impl SearchQueryWithIndex {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreprocessedQuery<Q> {
+    pub query: Q,
+    pub filter: Option<IndexFilter>,
+}
+
 /// Request body for similar document search
 #[routes::request]
 #[derive(Debug, Clone, PartialEq)]
@@ -1615,6 +1621,17 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
 
             Some(Value::Array([left, right].concat()))
         }
+    }
+}
+
+pub fn fuse_index_filters(
+    left: Option<IndexFilter>,
+    right: Option<IndexFilter>,
+) -> Option<IndexFilter> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => Some(left & right),
     }
 }
 

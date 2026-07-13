@@ -606,7 +606,7 @@ impl ProxyQuery for &BrowseQuery {
         (remote, query)
     }
 
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.1.filter
     }
 }

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::IndexFilter;
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use serde_json::Value;
 
@@ -36,7 +37,7 @@ pub trait ProxyQuery {
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery;
 
     /// Provide an exclusive reference to the `filter` field of a proxied query
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value>;
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter>;
 }
 
 impl ProxyQuery for SearchQueryWithIndex {
@@ -49,20 +50,20 @@ impl ProxyQuery for SearchQueryWithIndex {
         query
     }
 
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.filter
     }
 }
 
 impl ProxyQuery for &FacetSearchQuery {
     /// The only things that can change are the filter on shard and the remote, so recover this
-    type ProxiedQuery = (String, Option<serde_json::Value>);
+    type ProxiedQuery = (String, Option<IndexFilter>);
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         (remote, None)
     }
 
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.1
     }
 }
