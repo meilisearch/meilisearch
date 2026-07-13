@@ -56,7 +56,7 @@ pub use federated::{
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
-mod hydration;
+pub mod hydration;
 use hydration::hydrate_documents;
 mod ranking_rules;
 

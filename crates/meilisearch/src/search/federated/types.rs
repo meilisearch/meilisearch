@@ -17,6 +17,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::{AttributePatterns, OrderBy};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -482,4 +483,21 @@ impl FederatedFacets {
 pub enum ShowFederationInfo {
     OnNetworkOnly,
     Always,
+}
+
+/// A trait for queries that can be preprocessed
+pub trait PreprocessableQuery {
+    fn index_uid(&self) -> &IndexUid;
+
+    fn filter_field(&mut self) -> &mut Option<Value>;
+}
+
+impl PreprocessableQuery for SearchQueryWithIndex {
+    fn index_uid(&self) -> &IndexUid {
+        &self.index_uid
+    }
+
+    fn filter_field(&mut self) -> &mut Option<Value> {
+        &mut self.filter
+    }
 }

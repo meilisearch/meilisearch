@@ -11,8 +11,8 @@ use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::filter::{filter_into_index_filter, parse_filter, parse_local_index_filter};
-use index_scheduler::{IndexScheduler, TaskId};
+use index_scheduler::filter::parse_local_index_filter;
+use index_scheduler::{IndexScheduler, RoFeatures, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -23,6 +23,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::constants::{
     RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
 };
+
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::Progress;
@@ -47,6 +48,7 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
+use crate::documents_retrieval::preprocess_filters;
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -70,7 +72,7 @@ use crate::{aggregate_methods, Opt};
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
-use crate::search::federated::types::{FEDERATION_HIT, WEIGHTED_SCORE_VALUES};
+use crate::search::federated::types::{PreprocessableQuery, FEDERATION_HIT, WEIGHTED_SCORE_VALUES};
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -275,6 +277,8 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
+    // TODO: maybe use the progress result?
+    let progress = Progress::default();
     let features = index_scheduler.features();
     let network = index_scheduler.network();
     let mut query = params.into_inner();
@@ -321,9 +325,16 @@ pub async fn get_document(
             sort: None,
             use_network: Some(true),
         };
-        let mut ret =
-            retrieve_documents_federated(index_scheduler.clone(), index_uid, query, network)
-                .await?;
+
+        let mut ret = retrieve_documents_federated(
+            index_scheduler.clone(),
+            features,
+            index_uid,
+            query,
+            network,
+            &progress,
+        )
+        .await?;
         ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
     } else {
         local_result?
@@ -608,6 +619,16 @@ impl ProxyQuery for &BrowseQuery {
 
     fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.1.filter
+    }
+}
+
+impl PreprocessableQuery for (&IndexUid, &mut BrowseQuery) {
+    fn index_uid(&self) -> &IndexUid {
+        &self.0
+    }
+
+    fn filter_field(&mut self) -> &mut Option<Value> {
+        &mut self.1.filter
     }
 }
 
@@ -914,13 +935,34 @@ async fn documents_by_query(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let features = index_scheduler.features();
+    // TODO: maybe use the progress result?
+    let progress = Progress::default();
     let network = index_scheduler.network();
+    let features = index_scheduler.features();
+
+    let _ = preprocess_filters(
+        index_scheduler.clone(),
+        &mut [(&index_uid, &mut query)],
+        features,
+        false,
+        &progress,
+    )
+    .await
+    .map_err(|(err, _)| err)?;
 
     let ret = if query.must_use_network(&network, &features)? {
-        retrieve_documents_federated(index_scheduler, index_uid, query, network).await
+        retrieve_documents_federated(
+            index_scheduler,
+            features,
+            index_uid,
+            query,
+            network,
+            &progress,
+        )
+        .await
     } else {
-        retrieve_documents_local(index_scheduler, index_uid, query, is_proxy).await
+        retrieve_documents_local(index_scheduler, features, index_uid, query, is_proxy, &progress)
+            .await
     };
 
     Ok(HttpResponse::Ok().json(ret?))
@@ -928,9 +970,11 @@ async fn documents_by_query(
 
 async fn retrieve_documents_federated(
     index_scheduler: Data<IndexScheduler>,
+    features: RoFeatures,
     index_uid: IndexUid,
     query: BrowseQuery,
     network: Network,
+    progress: &Progress,
 ) -> Result<DocumentsResult, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -1007,9 +1051,15 @@ async fn retrieve_documents_federated(
 
     // Perform local search
     for (query_id, (_, query)) in local_queries {
-        let result =
-            retrieve_documents_local(index_scheduler.clone(), index_uid.clone(), query, true)
-                .await?;
+        let result = retrieve_documents_local(
+            index_scheduler.clone(),
+            features,
+            index_uid.clone(),
+            query,
+            true,
+            progress,
+        )
+        .await?;
         results.push((result, query_id));
     }
 
@@ -1094,10 +1144,14 @@ fn merge_metadata(
 
 async fn retrieve_documents_local(
     index_scheduler: Data<IndexScheduler>,
+    features: RoFeatures,
     index_uid: IndexUid,
     query: BrowseQuery,
     is_proxy: bool,
+    progress: &Progress,
 ) -> Result<DocumentsResult, ResponseError> {
+    let features = index_scheduler.features();
+
     let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort, use_network: _ } =
         query;
     tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
@@ -1130,28 +1184,15 @@ async fn retrieve_documents_local(
 
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
-        let progress = Progress::default();
 
         let filter = &filter;
         let filter = if let Some(filter) = filter {
-            let filter = parse_filter(
+            parse_local_index_filter(
                 filter,
+                Some(index_uid.as_str()),
+                features,
                 Code::InvalidDocumentFilter,
-                index_scheduler.features(),
-                None,
-            )?;
-            filter
-                .map(|f| {
-                    filter_into_index_filter(
-                        f,
-                        &index,
-                        &rtxn,
-                        &index_scheduler,
-                        &progress,
-                        &index_uid,
-                    )
-                })
-                .transpose()?
+            )?
         } else {
             None
         };

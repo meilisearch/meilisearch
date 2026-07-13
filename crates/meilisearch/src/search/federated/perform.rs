@@ -51,14 +51,14 @@ use crate::search::federated::types::{
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
-    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues,
-    DEFAULT_SEARCH_LIMIT,
+    NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues, DEFAULT_SEARCH_LIMIT,
 };
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
     index_scheduler: Data<IndexScheduler>,
-    mut queries: Vec<SearchQueryWithIndex>,
+    queries: Vec<SearchQueryWithIndex>,
+    mut hydration_cache: Option<HydrationContext>,
     federation: Federation,
     features: RoFeatures,
     is_proxy: bool,
@@ -107,58 +107,6 @@ pub async fn perform_federated_search(
             .collect()
     };
 
-    // Document join: list of indexes in the order of the queries
-    // only create the hydration cache if the foreign keys feature is enabled
-    let filter_values = queries.iter_mut().map(|q| q.filter.take()).collect::<Vec<_>>();
-    let (mut hydration_cache, precomputed_filters) = if features.runtime_features().foreign_keys
-        && !is_proxy
-    {
-        let index_uids: Vec<_> =
-            queries.iter().map(|q| SourceIndexUid(Rc::from(q.index_uid.as_str()))).collect();
-        let foreign_keys_settings =
-            retrieve_foreign_keys_settings(&index_scheduler, &index_uids).without_index()?;
-
-        // parse each query filter and bind them to their respective index
-        let filters = index_uids
-            .iter()
-            .zip(filter_values.iter())
-            .enumerate()
-            .map(|(query_index, (index_uid, filter))| match filter {
-                Some(filter) => {
-                    let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)
-                        .with_index(query_index)?;
-
-                    Ok((index_uid.clone(), filter))
-                }
-                None => Ok((index_uid.clone(), None)),
-            })
-            .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
-
-        // convert the filters to index filters by evaluating the foreign filters
-        let filters: Vec<_> =
-            filters_into_index_filters(filters, &foreign_keys_settings, &index_scheduler, progress)
-                .without_index()?;
-
-        let hydration_cache = HydrationContext::new(index_uids, foreign_keys_settings);
-        (Some(hydration_cache), filters)
-    } else {
-        let filters = filter_values
-            .iter()
-            .enumerate()
-            .map(|(query_index, f)| {
-                f.as_ref()
-                    .and_then(|f| {
-                        parse_local_index_filter(f, None, features, Code::InvalidSearchFilter)
-                            .with_index(query_index)
-                            .transpose()
-                    })
-                    .transpose()
-            })
-            .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
-
-        (None, filters)
-    };
-
     // this implementation partition the queries by index to guarantee an important property:
     // - all the queries to a particular index use the same read transaction.
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
@@ -169,13 +117,7 @@ pub async fn perform_federated_search(
 
     let mut federation = federation;
     let mut partition = None;
-    for (query_index, (mut federated_query, filter)) in
-        queries.into_iter().zip(precomputed_filters.into_iter()).enumerate()
-    {
-        // Insert back the filter into the query as a string before sending it to the remote
-        federated_query.filter = filter.as_ref().map(|f| {
-            serde_json::Value::String(serialize_index_filter_to_filter_string(f).unwrap())
-        });
+    for (query_index, federated_query) in queries.into_iter().enumerate() {
         partitioned_queries
             .partition(
                 &mut federation,

@@ -17,6 +17,7 @@ make_enum_progress! {
 
 make_enum_progress! {
     pub enum FederatingResultsStep {
+        PreprocessFilters,
         PartitionQueries,
         StartRemoteSearch,
         ExecuteLocalSearch,

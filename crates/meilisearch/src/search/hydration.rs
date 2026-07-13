@@ -135,6 +135,7 @@ impl<'a> IndexDocumentMaker<'a> {
 }
 
 pub type ForeignExternalDocumentId = ExternalDocumentId;
+#[derive(Clone)]
 pub struct HydrationContext {
     // list of indexes in the order of the queries
     index_by_query_index: Vec<SourceIndexUid>,
