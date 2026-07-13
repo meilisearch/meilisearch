@@ -1071,18 +1071,11 @@ impl PartitionedQueries {
             return Err(MeilisearchHttpError::DistinctInFederatedQueryAndFederation.into());
         }
 
-        let (index_uid, query, federation_options);
         let queries = if federated_query.must_use_network(network, &features)? {
             let partition = partition
                 .get_or_insert_with(|| super::Partition::new(network.clone(), remote_availability));
-            (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
-            either::Left(partition.to_query_partition(
-                federation,
-                &query,
-                federation_options,
-                &index_uid,
-            )?)
+            either::Left(partition.to_partition(federated_query)?)
         } else {
             either::Right(std::iter::once(federated_query))
         };
