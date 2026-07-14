@@ -1,0 +1,10 @@
+{
+  "name": "meilisearch-sourcey-docs",
+  "private": true,
+  "scripts": {
+    "build": "npx sourcey build"
+  },
+  "dependencies": {
+    "sourcey": "^3.6.0"
+  }
+}

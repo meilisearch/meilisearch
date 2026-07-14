@@ -1,0 +1,2519 @@
+# Meilisearch
+
+This is a Sourcey-generated docs site for Meilisearch, an ultra-fast, open-source search engine written in Rust.
+
+## Getting Started
+
+### Introduction
+
+Path: `/getting-started/introduction.html`
+
+This is a Sourcey-generated docs site for Meilisearch, an ultra-fast, open-source search engine written in Rust.
+
+This is a Sourcey-generated docs site for Meilisearch , an ultra-fast, open-source search engine written in Rust. This site is being published as a candidate deliverable for Frantic bounty #46 (Publish Sourcey docs for a second ecosystem). It demonstrates Sourcey rendering the official meilisearch-openapi.json OpenAPI 3.1.0 specification into a multi-page HTML site with source-mapped API navigation, generated search, and Markdown guides. The Meilisearch project is the target for this second-ecosystem proof. It is a maintained, third-party, MIT-licensed Rust HTTP search server. The OpenAPI spec used here is pinned to the official v1.49.0 release artifact ( meilisearch-openapi.json , commit SHA 17758dce3fcc21d8e2415176c29d1106e905de00 ) and includes 69 distinct paths with 139 operations.
+
+### Quickstart
+
+Path: `/getting-started/quickstart.html`
+
+This site was built with Sourcey 3.6.5 using the `openapi` and `markdown` adapters.
+
+This site was built with Sourcey 3.6.5 using the openapi and markdown adapters. Build locally Copy npm install npx sourcey build The output is a static dist/ directory that you can serve from any web host. Pages Getting Started — overview, quickstart, concepts, adapter notes API Reference — every operation from the Meilisearch OpenAPI 3.1.0 spec, with request/response schemas and code samples
+
+### Concepts
+
+Path: `/getting-started/concepts.html`
+
+Sourcey renders the OpenAPI spec into:
+
+Sourcey renders the OpenAPI spec into: One HTML page per top-level tag (group) in the spec, plus a single index page A landing page with the full operation index Code samples in cURL, JavaScript, TypeScript, Python, Go, Ruby, Rust, Java, PHP, and C# llms.txt and llms-full.txt exports for LLM consumption A search index over all rendered pages For a multi-page site, the openapi adapter is paired with at least one markdown adapter (or another openapi adapter) via the navigation.tabs configuration.
+
+### Adapter notes
+
+Path: `/getting-started/adapter-notes.html`
+
+The Sourcey `openapi` adapter reads the spec and produces:
+
+The Sourcey openapi adapter reads the spec and produces: An index page at api.html listing every operation One page per OpenAPI tag (group) where supported A search-index.json covering all operations and their parameters, responses, and code samples llms.txt and llms-full.txt exports The markdown adapter reads *.md files referenced by groups[].pages[] and renders them as multi-page documentation with TOC, navigation, and dark-mode support. Both adapters use the same theme and code-sample language configuration, so the rendered site is internally consistent.
+
+## API Reference
+
+### meilisearch
+
+Path: `/api.html`
+Version: 1.49.0
+
+Meilisearch HTTP server
+
+#### Operations
+
+##### GET /batches
+
+Summary: List batches
+
+Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
+
+For example, multiple document additions to the same index may be batched together. List batches to monitor their progress and performance.
+
+Batches are always returned in descending order of uid. This means that by default, the most recently created batch objects appear first. Batch results are paginated and can be filtered with query parameters.
+
+Parameters:
+- `limit` (query, integer, optional) - Maximum number of batches to return.
+- `from` (query, integer, optional) - `uid` of the first batch returned.
+- `reverse` (query, boolean, optional) - If `true`, returns results in the reverse order, from oldest to most recent.
+- `batchUids` (query, array, optional) - Permits to filter tasks by their batch uid. By default, when the
+- `uids` (query, array, optional) - Permits to filter tasks by their uid. By default, when the uids query
+- `canceledBy` (query, array, optional) - Permits to filter tasks using the uid of the task that canceled them.
+- `types` (query, array, optional) - Permits to filter tasks by their related type. By default, when `types`
+- `statuses` (query, array, optional) - Permits to filter tasks by their status. By default, when `statuses`
+- `indexUids` (query, array, optional) - Permits to filter tasks by their related index. By default, when
+- `afterEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `beforeEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `afterStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `beforeStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `afterFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+- `beforeFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+
+Responses:
+- 200: Returns the batches.
+- 401: The authorization header is missing.
+
+##### GET /batches/{batch_id}
+
+Summary: Get batch
+
+Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
+
+For example, multiple document additions to the same index may be batched together. Retrieve a single batch by its unique identifier to monitor its progress and performance.
+
+Parameters:
+- `batch_id` (path, string, required) - The unique batch identifier.
+
+Responses:
+- 200: Returns the batch.
+- 401: The authorization header is missing.
+- 404: Batch not found.
+
+##### GET /chats
+
+Summary: List chat workspaces
+
+Responses:
+- 200: Chat workspaces retrieved.
+- 401: The authorization header is missing.
+
+##### GET /chats/{workspace_uid}
+
+Summary: Get a chat workspace
+
+Parameters:
+- `workspace_uid` (path, string, required) - The unique identifier of the chat workspace.
+
+Responses:
+- 200: Chat workspace retrieved.
+- 401: The authorization header is missing.
+- 404: Chat not found.
+
+##### DELETE /chats/{workspace_uid}
+
+Summary: Delete a chat workspace
+
+Parameters:
+- `workspace_uid` (path, string, required) - The unique identifier of the chat workspace.
+
+Responses:
+- 204: Chat workspace deleted.
+- 401: The authorization header is missing.
+- 404: Chat not found.
+
+##### POST /chats/{workspace_uid}/chat/completions
+
+Summary: Request a chat completion
+
+Parameters:
+- `workspace_uid` (path, string, required) - The unique identifier of the chat workspace.
+
+Request body: application/json
+
+Responses:
+- 200: Start a conversation.
+- 401: The authorization header is missing.
+- 404: Chat not found.
+
+##### GET /chats/{workspace_uid}/settings
+
+Summary: Get settings of a chat workspace
+
+Parameters:
+- `workspace_uid` (path, string, required) - The unique identifier of the chat workspace.
+
+Responses:
+- 200: Chat settings retrieved.
+- 401: The authorization header is missing.
+- 404: Chat not found.
+
+##### DELETE /chats/{workspace_uid}/settings
+
+Summary: Reset the settings of a chat workspace
+
+Parameters:
+- `workspace_uid` (path, string, required) - The unique identifier of the chat workspace.
+
+Responses:
+- 200: Chat settings retrieved.
+- 401: The authorization header is missing.
+- 404: Chat not found.
+
+##### PATCH /chats/{workspace_uid}/settings
+
+Summary: Update settings of a chat workspace
+
+Parameters:
+- `workspace_uid` (path, string, required) - The unique identifier of the chat workspace.
+
+Request body: application/json
+
+Responses:
+- 200: Chat settings retrieved.
+- 401: The authorization header is missing.
+- 404: Chat not found.
+
+##### POST /dumps
+
+Summary: Create dump
+
+Trigger a dump creation process. When complete, a dump file is written to the [dump directory](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#dump-directory). The directory is created if it does not exist.
+
+Responses:
+- 202: Dump is being created.
+- 401: The authorization header is missing.
+
+##### POST /dynamic-search-rules
+
+Summary: List search rules
+
+Return all search rules configured on the instance.
+
+Request body: application/json
+
+Responses:
+- 200: Dynamic search rules are returned.
+- 401: The authorization header is missing.
+
+##### GET /dynamic-search-rules/{uid}
+
+Summary: Get a search rule
+
+Retrieve a single search rule by its unique identifier.
+
+Parameters:
+- `uid` (path, string, required) - Unique identifier of the search rule.
+
+Responses:
+- 200: Dynamic search rule returned.
+- 401: The authorization header is missing.
+- 404: Dynamic search rule not found.
+
+##### DELETE /dynamic-search-rules/{uid}
+
+Summary: Delete a search rule
+
+Delete a search rule by its unique identifier.
+
+Parameters:
+- `uid` (path, string, required) - Unique identifier of the search rule.
+
+Responses:
+- 204: Dynamic search rule deleted.
+- 401: The authorization header is missing.
+- 404: Dynamic search rule not found.
+
+##### PATCH /dynamic-search-rules/{uid}
+
+Summary: Create or update a search rule
+
+Partially update a search rule by replacing the provided fields. If the rule doesn't exist, it will be created.
+
+Parameters:
+- `uid` (path, string, required) - Unique identifier of the search rule.
+
+Request body: application/json
+
+Responses:
+- 200: Dynamic search rule updated.
+- 401: The authorization header is missing.
+- 404: Dynamic search rule not found.
+
+##### GET /experimental-features
+
+Summary: List experimental features
+
+Return all experimental features that can be toggled via this API, and whether each one is currently enabled or disabled.
+
+Responses:
+- 200: Experimental features are returned.
+- 401: The authorization header is missing.
+
+##### PATCH /experimental-features
+
+Summary: Configure experimental features
+
+Enable or disable experimental features at runtime.
+
+Request body: application/json
+
+Responses:
+- 200: Experimental features are returned.
+- 401: The authorization header is missing.
+
+##### POST /export
+
+Summary: Export to a remote Meilisearch
+
+Trigger an export that sends documents and settings from this instance to a remote Meilisearch server. Configure the remote URL and optional API key in the request body.
+
+Request body: application/json
+
+Responses:
+- 202: Export successfully enqueued.
+- 401: The authorization header is missing.
+
+##### GET /health
+
+Summary: Get health
+
+The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
+
+The engine will return `available` status with a `200` status code when the instance is healthy.
+It will return `mustRestart` status with a `500` status code if the instance requires a restart.
+This restart is required after a compaction of the task queue for example.
+
+Responses:
+- 200: Instance is healthy.
+
+##### GET /indexes
+
+Summary: List all indexes
+
+Returns a paginated list of indexes. Use the `offset` and `limit` query parameters to page through results.
+
+Parameters:
+- `offset` (query, integer, optional) - The number of indexes to skip before starting to retrieve anything.
+- `limit` (query, integer, optional) - The number of indexes to retrieve.
+
+Responses:
+- 200: Returns the list of indexes with pagination metadata.
+- 401: The authorization header is missing.
+
+##### POST /indexes
+
+Summary: Create index
+
+Create a new index with an optional [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
+
+If no primary key is provided, Meilisearch will [infer one](https://www.meilisearch.com/docs/learn/getting_started/primary_key#meilisearch-guesses-your-primary-key) from the first batch of documents.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+
+##### GET /indexes/{index_uid}
+
+Summary: Get index
+
+Retrieve the metadata of a single index: its uid, [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key), and creation/update timestamps.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: The index is returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}
+
+Summary: Delete index
+
+Permanently delete an index and all its documents, settings, and task history.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}
+
+Summary: Update index
+
+Update the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) or uid of an index.
+
+Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/compact
+
+Summary: Compact index
+
+Trigger a compaction process on the specified index.
+
+Compaction reorganizes the index database to reclaim space and improve read performance.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/documents
+
+Summary: List documents with GET
+
+Retrieve documents in batches using query parameters for offset, limit, and optional filtering.
+
+**Deprecated:** This endpoint will be deprecated in a future release. Use `POST /indexes/{index_uid}/documents/fetch` instead, which supports more parameters and array-based filter expressions.
+
+**Note:** Documents are not returned following the order of their primary keys.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `offset` (query, integer, optional) - Number of documents to skip in the response. Use this parameter
+- `limit` (query, integer, optional) - Maximum number of documents to return in a single response. Use
+- `fields` (query, array, optional) - Comma-separated list of document attributes to include in the
+- `retrieveVectors` (query, boolean, optional) - When `true`, includes vector embeddings in the response for documents
+- `ids` (query, array, optional) - Comma-separated list of document IDs to retrieve. Only documents with
+- `filter` (query, string, optional) - Filter expression to select which documents to return. Attributes must be added to the
+- `sort` (query, string, optional) - Attribute(s) to sort the documents by. Format: `attribute:asc` or
+
+Responses:
+- 200: The documents are returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/documents
+
+Summary: Add or replace documents
+
+Add a list of documents or replace them if they already exist.
+
+If you send an already existing document (same id) the whole existing document will be
+overwritten by the new document. Fields previously in the document not present in the new
+document are removed.
+
+If the provided index does not exist, it will be created.
+
+**Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
+
+**Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+
+For a partial update see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `primaryKey` (query, string, optional) - The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) field for uniquely identifying each document.
+- `csvDelimiter` (query, string, optional) - Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+- `skipCreation` (query, boolean, optional) - When set to `true`, only updates existing documents and skips creating
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/documents
+
+Summary: Add or update documents
+
+Add a list of documents or update them if they already exist.
+
+If you send an already existing document (same id) the old document will
+be only partially updated according to the fields of the new document.
+Thus, any fields not present in the new document are kept and remained
+unchanged.
+
+**Important:** Partial updates apply only to top-level fields. Updating an object attribute
+replaces the entire object, removing any subfields not present in the update. Dot notation
+in an update request creates a new flat attribute rather than updating an existing nested field.
+
+If the provided index does not exist, it will be created.
+
+**Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
+
+**Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+
+To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `primaryKey` (query, string, optional) - The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) field for uniquely identifying each document.
+- `csvDelimiter` (query, string, optional) - Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+- `skipCreation` (query, boolean, optional) - When set to `true`, only updates existing documents and skips creating
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/documents
+
+Summary: Delete all documents
+
+Permanently delete all documents in the specified index. Settings and index metadata are preserved.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/documents/delete
+
+Summary: Delete documents by filter
+
+Delete all documents in the index that match the given filter expression.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/documents/delete-batch
+
+Summary: Delete documents by batch
+
+Delete multiple documents in one request by providing an array of [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/documents/edit
+
+Summary: Edit documents by function
+
+Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch. The function receives each document and returns the modified document.
+
+This feature is experimental and must be enabled through the experimental route.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/documents/fetch
+
+Summary: List documents with POST
+
+Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
+body to specify filters, sort order, and which fields to return.
+
+**Note:** Sending an empty payload (`{}`) returns all documents in the index.
+
+**Note:** Documents are not returned following the order of their primary keys.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 200: Documents returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/documents/{document_id}
+
+Summary: Get document
+
+Retrieve a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `document_id` (path, string, required) - The document identifier.
+- `fields` (query, array, optional) - Comma-separated list of document attributes to include in the
+- `retrieveVectors` (query, boolean, optional) - When `true`, includes the vector embeddings in the response for this
+
+Responses:
+- 200: The document is returned.
+- 401: The authorization header is missing.
+- 404: Document not found.
+
+##### DELETE /indexes/{index_uid}/documents/{document_id}
+
+Summary: Delete document
+
+Delete a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `document_id` (path, string, required) - Document identifier.
+- `customMetadata` (query, string, optional) - A string that can be used to identify and filter tasks. This metadata
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/facet-search
+
+Summary: Search for facet values
+
+Search for facet values matching a query within a given facet attribute. Use this to build
+autocomplete or dropdown UIs for facet filters.
+
+**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list.
+Facet search will not work without this configuration.
+
+**Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
+returns `Jane Austen`, but searching for `Austen` does not.
+
+**Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
+to search them as facets.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 200: Facet values matching the query are returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/fields
+
+Summary: List index fields
+
+Returns a paginated list of fields in the index with their metadata: whether they are displayed, searchable, sortable, filterable, distinct, have a custom ranking rule (asc/desc), and for filterable fields the sort order for facet values.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index whose fields to list.
+
+Request body: application/json
+
+Responses:
+- 200
+- 401: Missing or invalid authorization header.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/search
+
+Summary: Search with GET
+
+Search for documents matching a query in the given index.
+
+> Equivalent to the [search with POST route](/docs/reference/api/search/search-with-post) in the Meilisearch API.
+
+**Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+
+**Note:** The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `q` (query, string, optional) - Sets the search terms.
+- `offset` (query, integer, optional) - Number of documents to skip at the start of the results.
+- `limit` (query, integer, optional) - Maximum number of documents to return in the response.
+- `page` (query, integer, optional) - Request a specific results page (1-indexed).
+- `hitsPerPage` (query, integer, optional) - Maximum number of documents per page for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
+- `attributesToRetrieve` (query, array, optional) - List of attributes to include in each returned document.
+- `attributesToCrop` (query, array, optional) - Attributes whose values should be cropped to a short excerpt.
+- `cropLength` (query, integer, optional) - Maximum number of words to include in cropped values.
+- `cropMarker` (query, string, optional) - String used to mark crop boundaries in cropped text.
+- `attributesToHighlight` (query, array, optional) - Attributes in which matching query terms should be highlighted.
+- `highlightPreTag` (query, string, optional) - String to insert before each highlighted term.
+- `highlightPostTag` (query, string, optional) - String to insert after each highlighted term.
+- `showMatchesPosition` (query, boolean, optional) - When true, each hit includes a `_matchesPosition` object with the byte offset (`start` and `length`) of each matched term.
+- `filter` (query, string, optional) - A [filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results.
+- `sort` (query, string, optional) - Sort results by one or more attributes and their order.
+- `distinct` (query, string, optional) - Return only one document per distinct value of the given attribute (e.g. deduplicate by product_id).
+- `facets` (query, array, optional) - Return the count of matches per facet value for the listed attributes.
+- `matchingStrategy` (query, string, optional) - How to match query terms when there are not enough results to satisfy `limit`.
+- `attributesToSearchOn` (query, array, optional) - Restrict the search to the listed attributes only.
+- `rankingScoreThreshold` (query, number, optional) - Exclude from the results any document whose [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) is below this value (between 0.0 and 1.0).
+- `locales` (query, array, optional) - Explicitly specify the language(s) of the query.
+- `hybridEmbedder` (query, string, optional) - Name of the embedder for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
+- `hybridSemanticRatio` (query, number, optional) - Balance between keyword and semantic search: 0.0 means keyword-only results, 1.0 means semantic-only.
+- `vector` (query, array, optional) - Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
+- `retrieveVectors` (query, boolean, optional) - When true, the response includes document and query embeddings in each hit's `_vectors` field.
+- `personalizeUserContext` (query, string, optional) - For [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries): a string describing the user (e.g. preferences or behavior).
+- `useNetwork` (query, boolean, optional) - When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
+- `showRankingScore` (query, boolean, optional) - When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
+- `showRankingScoreDetails` (query, boolean, optional) - When true, each document includes `_rankingScoreDetails`, which breaks down the score contribution of each [ranking rule](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules).
+- `showPerformanceDetails` (query, boolean, optional) - When true, the response includes a `performanceDetails` object with a timing breakdown of the query processing.
+
+Responses:
+- 200: The documents are returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/search
+
+Summary: Search with POST
+
+Search for documents matching a query in the given index.
+
+> Equivalent to the [search with GET route](/docs/reference/api/search/search-with-get) in the Meilisearch API.
+
+**Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 200: The documents are returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings
+
+Summary: List all settings
+
+Returns all settings of the index. Each setting is returned with its current value or the default if not set.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns all settings with their current or default values. Same structure as the PATCH request body.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings
+
+Summary: Reset all settings
+
+Resets all settings of the index to their default values.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}/settings
+
+Summary: Update all settings
+
+Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.
+
+See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/chat
+
+Summary: Get chat
+
+Returns the current value of the `chat` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `chat` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/chat
+
+Summary: Reset chat
+
+Resets the `chat` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}/settings/chat
+
+Summary: Update chat
+
+Updates the `chat` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/dictionary
+
+Summary: Get dictionary
+
+Returns the current value of the `dictionary` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `dictionary` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/dictionary
+
+Summary: Update dictionary
+
+Updates the `dictionary` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/dictionary
+
+Summary: Reset dictionary
+
+Resets the `dictionary` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/displayed-attributes
+
+Summary: Get displayedAttributes
+
+Returns the current value of the `displayedAttributes` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `displayedAttributes` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/displayed-attributes
+
+Summary: Update displayedAttributes
+
+Updates the `displayedAttributes` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/displayed-attributes
+
+Summary: Reset displayedAttributes
+
+Resets the `displayedAttributes` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/distinct-attribute
+
+Summary: Get distinctAttribute
+
+Returns the current value of the `distinctAttribute` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `distinctAttribute` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/distinct-attribute
+
+Summary: Update distinctAttribute
+
+Updates the `distinctAttribute` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: text/plain
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/distinct-attribute
+
+Summary: Reset distinctAttribute
+
+Resets the `distinctAttribute` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/embedders
+
+Summary: Get embedders
+
+Returns the current value of the `embedders` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `embedders` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/embedders
+
+Summary: Reset embedders
+
+Resets the `embedders` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}/settings/embedders
+
+Summary: Update embedders
+
+Updates the `embedders` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/facet-search
+
+Summary: Get facetSearch
+
+Returns the current value of the `facetSearch` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `facetSearch` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/facet-search
+
+Summary: Update facetSearch
+
+Updates the `facetSearch` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: text/plain
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/facet-search
+
+Summary: Reset facetSearch
+
+Resets the `facetSearch` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/faceting
+
+Summary: Get faceting
+
+Returns the current value of the `faceting` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `faceting` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/faceting
+
+Summary: Reset faceting
+
+Resets the `faceting` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}/settings/faceting
+
+Summary: Update faceting
+
+Updates the `faceting` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/filterable-attributes
+
+Summary: Get filterableAttributes
+
+Returns the current value of the `filterableAttributes` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `filterableAttributes` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/filterable-attributes
+
+Summary: Update filterableAttributes
+
+Updates the `filterableAttributes` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/filterable-attributes
+
+Summary: Reset filterableAttributes
+
+Resets the `filterableAttributes` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/foreign-keys
+
+Summary: Get foreignKeys
+
+Returns the current value of the `foreignKeys` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `foreignKeys` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/foreign-keys
+
+Summary: Update foreignKeys
+
+Updates the `foreignKeys` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/foreign-keys
+
+Summary: Reset foreignKeys
+
+Resets the `foreignKeys` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/localized-attributes
+
+Summary: Get localizedAttributes
+
+Returns the current value of the `localizedAttributes` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `localizedAttributes` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/localized-attributes
+
+Summary: Update localizedAttributes
+
+Updates the `localizedAttributes` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/localized-attributes
+
+Summary: Reset localizedAttributes
+
+Resets the `localizedAttributes` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/non-separator-tokens
+
+Summary: Get nonSeparatorTokens
+
+Returns the current value of the `nonSeparatorTokens` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `nonSeparatorTokens` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/non-separator-tokens
+
+Summary: Update nonSeparatorTokens
+
+Updates the `nonSeparatorTokens` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/non-separator-tokens
+
+Summary: Reset nonSeparatorTokens
+
+Resets the `nonSeparatorTokens` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/pagination
+
+Summary: Get pagination
+
+Returns the current value of the `pagination` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `pagination` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/pagination
+
+Summary: Reset pagination
+
+Resets the `pagination` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}/settings/pagination
+
+Summary: Update pagination
+
+Updates the `pagination` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/prefix-search
+
+Summary: Get prefixSearch
+
+Returns the current value of the `prefixSearch` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `prefixSearch` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/prefix-search
+
+Summary: Update prefixSearch
+
+Updates the `prefixSearch` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/prefix-search
+
+Summary: Reset prefixSearch
+
+Resets the `prefixSearch` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/proximity-precision
+
+Summary: Get proximityPrecision
+
+Returns the current value of the `proximityPrecision` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `proximityPrecision` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/proximity-precision
+
+Summary: Update proximityPrecision
+
+Updates the `proximityPrecision` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/proximity-precision
+
+Summary: Reset proximityPrecision
+
+Resets the `proximityPrecision` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/ranking-rules
+
+Summary: Get rankingRules
+
+Returns the current value of the `rankingRules` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `rankingRules` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/ranking-rules
+
+Summary: Update rankingRules
+
+Updates the `rankingRules` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/ranking-rules
+
+Summary: Reset rankingRules
+
+Resets the `rankingRules` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/search-cutoff-ms
+
+Summary: Get searchCutoffMs
+
+Returns the current value of the `searchCutoffMs` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `searchCutoffMs` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/search-cutoff-ms
+
+Summary: Update searchCutoffMs
+
+Updates the `searchCutoffMs` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: text/plain
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/search-cutoff-ms
+
+Summary: Reset searchCutoffMs
+
+Resets the `searchCutoffMs` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/searchable-attributes
+
+Summary: Get searchableAttributes
+
+Returns the current value of the `searchableAttributes` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `searchableAttributes` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/searchable-attributes
+
+Summary: Update searchableAttributes
+
+Updates the `searchableAttributes` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/searchable-attributes
+
+Summary: Reset searchableAttributes
+
+Resets the `searchableAttributes` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/separator-tokens
+
+Summary: Get separatorTokens
+
+Returns the current value of the `separatorTokens` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `separatorTokens` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/separator-tokens
+
+Summary: Update separatorTokens
+
+Updates the `separatorTokens` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/separator-tokens
+
+Summary: Reset separatorTokens
+
+Resets the `separatorTokens` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/sortable-attributes
+
+Summary: Get sortableAttributes
+
+Returns the current value of the `sortableAttributes` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `sortableAttributes` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/sortable-attributes
+
+Summary: Update sortableAttributes
+
+Updates the `sortableAttributes` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/sortable-attributes
+
+Summary: Reset sortableAttributes
+
+Resets the `sortableAttributes` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/stop-words
+
+Summary: Get stopWords
+
+Returns the current value of the `stopWords` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `stopWords` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/stop-words
+
+Summary: Update stopWords
+
+Updates the `stopWords` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/stop-words
+
+Summary: Reset stopWords
+
+Resets the `stopWords` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/synonyms
+
+Summary: Get synonyms
+
+Returns the current value of the `synonyms` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `synonyms` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PUT /indexes/{index_uid}/settings/synonyms
+
+Summary: Update synonyms
+
+Updates the `synonyms` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/synonyms
+
+Summary: Reset synonyms
+
+Resets the `synonyms` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/settings/typo-tolerance
+
+Summary: Get typoTolerance
+
+Returns the current value of the `typoTolerance` setting for the index.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 200: Returns the current value of the `typoTolerance` setting.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### DELETE /indexes/{index_uid}/settings/typo-tolerance
+
+Summary: Reset typoTolerance
+
+Resets the `typoTolerance` setting to its default value.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### PATCH /indexes/{index_uid}/settings/typo-tolerance
+
+Summary: Update typoTolerance
+
+Updates the `typoTolerance` setting for the index. Send the new value in the request body; send null to reset to default.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/similar
+
+Summary: Get similar documents with GET
+
+Retrieve documents similar to a reference document identified by its id.
+
+> Useful for “more like this” or recommendations.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `id` (query, string, required) - The unique identifier ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value) of the target document.
+- `embedder` (query, string, required) - The name of the embedder to use for finding similar documents. This
+- `offset` (query, integer, optional) - Number of similar documents to skip in the response. Use together with
+- `limit` (query, integer, optional) - Maximum number of similar documents to return in a single response. Use
+- `attributes_to_retrieve` (query, array, optional) - Comma-separated list of document attributes to include in the response.
+- `retrieve_vectors` (query, boolean, optional) - When `true`, includes the vector embeddings for each returned document.
+- `filter` (query, string, optional) - Filter expression to narrow down which documents can be returned as
+- `show_ranking_score` (query, boolean, optional) - When `true`, includes a global `_rankingScore` field in each document
+- `show_ranking_score_details` (query, boolean, optional) - When `true`, includes a detailed `_rankingScoreDetails` object in each
+- `show_performance_details` (query, boolean, optional) - When `true`, includes a `_performanceDetails` object showing the
+- `ranking_score_threshold` (query, number, optional) - Minimum ranking score threshold (between 0.0 and 1.0) that documents
+
+Responses:
+- 200: The documents are returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### POST /indexes/{index_uid}/similar
+
+Summary: Get similar documents with POST
+
+Retrieve documents similar to a reference document identified by its id.
+
+> Useful for “more like this” or recommendations.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+
+Request body: application/json
+
+Responses:
+- 200: The documents are returned.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /indexes/{index_uid}/stats
+
+Summary: Get stats of index
+
+Return statistics for a single index: document count, database size, indexing status, and field distribution.
+
+Parameters:
+- `index_uid` (path, string, required) - Unique identifier of the index.
+- `showInternalDatabaseSizes` (query, boolean, optional) - If `true`, adds `internalDatabaseSizes` to the response.
+- `sizeFormat` (query, string, optional) - Specify how to format the sizes:
+
+Responses:
+- 200: The stats of the index.
+- 401: The authorization header is missing.
+- 404: Index not found.
+
+##### GET /keys
+
+Summary: List API keys
+
+Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
+
+**Note:** Expired keys are included in the response but deleted keys are not.
+Keys are returned in descending order of creation date.
+
+Parameters:
+- `offset` (query, integer, optional) - Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
+- `limit` (query, integer, optional) - Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
+
+Responses:
+- 200: List of keys.
+- 401: The authorization header is missing.
+
+##### POST /keys
+
+Summary: Create API key
+
+Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
+
+**Required fields:** `actions`, `indexes`, `expiresAt`.
+**Optional fields:** `name`, `description`, `uid`.
+
+Set `expiresAt` to `null` to create a key that never expires.
+Use `"*"` in the `actions` array to grant all permissions (not recommended for production).
+Use `["*"]` in the `indexes` array to grant access to all indexes.
+
+Request body: application/json
+
+Responses:
+- 201: Key has been created.
+- 401: The authorization header is missing.
+
+##### GET /keys/{key}
+
+Summary: Get API key
+
+Retrieve a single API key by its `uid` or by its `key` value.
+
+Parameters:
+- `key` (path, string, required) - The `uid` or `key` field of an existing API key.
+
+Responses:
+- 200: The key is returned.
+- 401: The authorization header is missing.
+- 404: API key not found.
+
+##### DELETE /keys/{key}
+
+Summary: Delete API key
+
+Permanently delete the specified API key. The key will no longer be valid for authentication.
+
+Parameters:
+- `key` (path, string, required) - The `uid` or `key` field of an existing API key.
+
+Responses:
+- 204: The key has been removed.
+- 401: The authorization header is missing.
+- 404: API key not found.
+
+##### PATCH /keys/{key}
+
+Summary: Update API key
+
+Update the name and description of an API key.
+
+Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
+
+**Note:** Only `name` and `description` can be updated. The fields `actions`, `indexes`,
+`expiresAt`, and `uid` cannot be modified after key creation.
+
+Parameters:
+- `key` (path, string, required) - The `uid` or `key` field of an existing API key.
+
+Request body: application/json
+
+Responses:
+- 200: The key has been updated.
+- 401: The authorization header is missing.
+- 404: API key not found.
+
+##### POST /logs/stderr
+
+Summary: Update target of the console logs
+
+Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
+
+Request body: application/json
+
+Responses:
+- 204: The console logs have been updated.
+- 401: The authorization header is missing.
+
+##### POST /logs/stream
+
+Summary: Retrieve logs
+
+Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload. The logs are sent as multi-part, and the stream never stops, so ensure your client can handle a long-lived connection. To stop receiving logs, call the `DELETE /logs/stream` route.
+
+Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
+
+Request body: application/json
+
+Responses:
+- 200: Logs are being returned.
+- 400: The route is already being used.
+- 401: The authorization header is missing.
+
+##### DELETE /logs/stream
+
+Summary: Stop retrieving logs
+
+Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
+
+Responses:
+- 204: Logs are being returned.
+- 401: The authorization header is missing.
+
+##### GET /metrics
+
+Summary: Get Prometheus metrics
+
+Return metrics for the engine in Prometheus format. This is an [experimental feature](https://www.meilisearch.com/docs/learn/experimental/overview) and must be enabled before use.
+
+Responses:
+- 200: The metrics of the instance.
+- 401: The authorization header is missing.
+
+##### POST /multi-search
+
+Summary: Perform a multi-search
+
+Run multiple search queries in a single API request.
+
+Each query can target a different index, so you can search across several indexes at once and get one combined response.
+
+**Warning:** If Meilisearch encounters an error processing any query in the request, it immediately
+stops and returns an error message for the first error encountered. Partial results are not returned.
+
+Request body: application/json
+
+Responses:
+- 200: Federated multi-search.
+- 401: The authorization header is missing.
+
+##### GET /network
+
+Summary: Get network topology
+
+Return the list of Meilisearch instances currently known to this node (self and remotes).
+
+Responses:
+- 200: Known nodes are returned.
+- 401: The authorization header is missing.
+
+##### PATCH /network
+
+Summary: Configure network topology
+
+Add or remove remote nodes from the network. Changes apply to the current instance’s view of the cluster.
+
+Request body: application/json
+
+Responses:
+- 200: New network state is returned.
+- 401: The authorization header is missing.
+
+##### POST /network/control
+
+Summary: Network control
+
+Send messages to control the progress of a network topology change task.
+
+The route is mostly used internally when sending a PATCH to the network, but is accessible for manual control as well.
+
+Request body: application/json
+
+Responses:
+- 200: Empty response.
+- 401: The authorization header is missing.
+
+##### POST /render-template
+
+Summary: Render documents with POST
+
+Request body: application/json
+
+Responses:
+- 200: The rendered result is returned along with the template
+- 400: Parameters are incorrect
+- 401: The authorization header is missing.
+- 404: Template or document not found
+
+##### POST /snapshots
+
+Summary: Create snapshot
+
+Trigger a snapshot creation process. When complete, a snapshot file is written to the snapshot directory. The directory is created if it does not exist.
+
+Responses:
+- 202: Snapshot is being created.
+- 401: The authorization header is missing.
+
+##### GET /stats
+
+Summary: Get stats of all indexes
+
+Return statistics for the Meilisearch instance and for each index. Includes database size, last update time, document counts, and indexing status per index.
+
+Parameters:
+- `showInternalDatabaseSizes` (query, boolean, optional) - If `true`, adds `internalDatabaseSizes` to the response.
+- `sizeFormat` (query, string, optional) - Specify how to format the sizes:
+
+Responses:
+- 200: The stats of the instance.
+- 401: The authorization header is missing.
+
+##### POST /swap-indexes
+
+Summary: Swap indexes
+
+Swap the documents, primary key, settings, and task history of two or more indexes.
+
+Indexes are swapped in pairs; a single request can include multiple pairs.
+The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
+Enqueued tasks are left unmodified.
+
+Request body: application/json
+
+Responses:
+- 202: Task successfully enqueued.
+- 401: The authorization header is missing.
+
+##### GET /tasks
+
+Summary: List tasks
+
+The `/tasks` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
+
+Tasks are returned in descending order of uid by default, so the most recently created or updated tasks appear first. Results are paginated and can be filtered using query parameters such as `indexUids`, `statuses`, `types`, and date ranges.
+
+Parameters:
+- `limit` (query, integer, optional) - Maximum number of batches to return.
+- `from` (query, integer, optional) - `uid` of the first batch returned.
+- `reverse` (query, boolean, optional) - If `true`, returns results in the reverse order, from oldest to most recent.
+- `batchUids` (query, array, optional) - Permits to filter tasks by their batch uid. By default, when the
+- `uids` (query, array, optional) - Permits to filter tasks by their uid. By default, when the uids query
+- `canceledBy` (query, array, optional) - Permits to filter tasks using the uid of the task that canceled them.
+- `types` (query, array, optional) - Permits to filter tasks by their related type. By default, when `types`
+- `statuses` (query, array, optional) - Permits to filter tasks by their status. By default, when `statuses`
+- `indexUids` (query, array, optional) - Permits to filter tasks by their related index. By default, when
+- `afterEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `beforeEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `afterStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `beforeStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `afterFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+- `beforeFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+
+Responses:
+- 200: The list of tasks is returned.
+- 401: The authorization header is missing.
+
+##### DELETE /tasks
+
+Summary: Delete tasks
+
+Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
+
+**Note:** Only finished tasks (`succeeded`, `failed`, or `canceled`) can be deleted.
+You cannot delete `enqueued` or `processing` tasks.
+
+**Note:** Task deletion is atomic — either all matched tasks are deleted or none are.
+
+**Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
+
+Parameters:
+- `uids` (query, array, optional) - Permits to select tasks by their uid. When the `uids` query
+- `batchUids` (query, array, optional) - Lets you filter tasks by their `batchUid`.
+- `canceledBy` (query, array, optional) - Permits to filter tasks using the uid of the task that canceled them.
+- `types` (query, array, optional) - Permits to filter tasks by their related type. By default, when `types`
+- `statuses` (query, array, optional) - Permits to filter tasks by their status. By default, when `statuses`
+- `indexUids` (query, array, optional) - Permits to filter tasks by their related index. By default, when
+- `afterEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `beforeEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `afterStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `beforeStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `afterFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+- `beforeFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+
+Responses:
+- 200: Task successfully enqueued.
+- 400: A filter is missing.
+- 401: The authorization header is missing.
+- 404: The task uid does not exist.
+
+##### POST /tasks/cancel
+
+Summary: Cancel tasks
+
+Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
+
+**Note:** Task cancellation is atomic — either all matched tasks are canceled or none are.
+
+**Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
+
+**Tip:** You can cancel `taskCancelation` type tasks as long as they are `enqueued` or `processing`,
+because cancellation tasks are processed in reverse order of enqueueing.
+
+Parameters:
+- `uids` (query, array, optional) - Permits to select tasks by their uid. When the `uids` query
+- `batchUids` (query, array, optional) - Lets you filter tasks by their `batchUid`.
+- `canceledBy` (query, array, optional) - Permits to filter tasks using the uid of the task that canceled them.
+- `types` (query, array, optional) - Permits to filter tasks by their related type. By default, when `types`
+- `statuses` (query, array, optional) - Permits to filter tasks by their status. By default, when `statuses`
+- `indexUids` (query, array, optional) - Permits to filter tasks by their related index. By default, when
+- `afterEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `beforeEnqueuedAt` (query, string, optional) - Permits to filter tasks based on their enqueuedAt time. Matches tasks
+- `afterStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `beforeStartedAt` (query, string, optional) - Permits to filter tasks based on their startedAt time. Matches tasks
+- `afterFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+- `beforeFinishedAt` (query, string, optional) - Permits to filter tasks based on their finishedAt time. Matches tasks
+
+Responses:
+- 200: Task successfully enqueued.
+- 400: A filter is missing.
+- 401: The authorization header is missing.
+
+##### POST /tasks/compact
+
+Summary: Compact task queue
+
+Trigger a compaction process on the task queue database and return its size before and
+after compaction. A successful compaction requires restarting the instance before it can
+safely resume normal writes.
+
+Responses:
+- 200: Task queue compaction successfully completed.
+- 401: The authorization header is missing.
+- 500: Task queue compaction failed
+
+##### GET /tasks/{task_id}
+
+Summary: Get task
+
+Retrieve a single [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations) by its uid.
+
+Parameters:
+- `task_id` (path, integer, required) - The task identifier.
+
+Responses:
+- 200: Task successfully retrieved.
+- 401: The authorization header is missing.
+- 404: The task uid does not exist.
+
+##### GET /tasks/{task_id}/documents
+
+Summary: Get task's document payload
+
+Retrieve the document payload that was sent with this [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+Only available for document-related tasks that are enqueued or processing.
+
+Parameters:
+- `task_id` (path, integer, required) - The task identifier.
+
+Responses:
+- 200: The content of the task update.
+- 401: The authorization header is missing.
+- 404: The task uid does not exist.
+
+##### GET /version
+
+Summary: Get version
+
+Return the current Meilisearch version, including the commit SHA and build date.
+
+Responses:
+- 200: Instance is healthy.
+- 401: The authorization header is missing.
+
+##### GET /webhooks
+
+Summary: List webhooks
+
+Return all webhooks registered on the instance. Each webhook is returned with its URL, optional headers, and UUID (the key value is never returned).
+
+Responses:
+- 200: Webhooks are returned.
+- 401: The authorization header is missing.
+
+##### POST /webhooks
+
+Summary: Create webhook
+
+Register a new webhook to receive task completion notifications. You can optionally set custom headers (e.g. for authentication) and configure the callback URL.
+
+Request body: application/json
+
+Responses:
+- 201: Webhook created successfully.
+- 400: Bad request.
+- 401: The authorization header is missing.
+
+##### GET /webhooks/{uuid}
+
+Summary: Get webhook
+
+Retrieve a single webhook by its UUID.
+
+Parameters:
+- `uuid` (path, string, required) - Universally unique identifier of the webhook.
+
+Responses:
+- 200: Webhook found.
+- 401: The authorization header is missing.
+- 404: Webhook not found.
+
+##### DELETE /webhooks/{uuid}
+
+Summary: Delete webhook
+
+Permanently remove a webhook by its UUID. The webhook will no longer receive task notifications.
+
+Parameters:
+- `uuid` (path, string, required) - Universally unique identifier of the webhook.
+
+Responses:
+- 204: Webhook deleted successfully.
+- 401: The authorization header is missing.
+- 404: Webhook not found.
+
+##### PATCH /webhooks/{uuid}
+
+Summary: Update webhook
+
+Update the URL or headers of an existing webhook identified by its UUID.
+
+Parameters:
+- `uuid` (path, string, required) - Universally unique identifier of the webhook.
+
+Request body: application/json
+
+Responses:
+- 200: Webhook updated successfully. Returns the webhook with metadata and redacted authorization headers.
+- 400: Bad request.
+- 401: The authorization header is missing.
+- 404: Webhook not found.
+
+#### Models
+
+- Action
+- AllBatches: Response containing a paginated list of batches
+- AllTasks: Response containing a paginated list of tasks
+- AttributePatterns: A collection of patterns used to match attribute names. Patterns can
+include wildcards (`*`) for flexible matching. For example, `title`
+matches exactly, `overview_*` matches any attribute starting with
+`overview_`, and `*_date` matches any attribute ending with `_date`.
+- BatchStats: Statistics for a batch of tasks
+- BatchStatsView: Provides comprehensive statistics about a batch's execution.
+
+Includes task counts, status breakdowns, and AI embedder usage. This
+information is useful for monitoring system performance and understanding
+batch composition.
+- BatchView: Represents a batch of tasks that were processed together.
+- BrowseQuery: Request body for browsing and retrieving documents from an index. Use
+this to fetch documents with optional filtering, sorting, and pagination.
+This is useful for displaying document lists, exporting data, or
+inspecting index contents.
+- ChatChoice: A chat completion choice generated by the model.
+- ChatChoiceLogprobs: Log probability information for a chat completion choice.
+- ChatCompletionAudio: Parameters for audio output. Required when audio output is requested with `modalities: ["audio"]`.
+- ChatCompletionAudioFormat: Specifies the output audio format. Must be one of `wav`, `mp3`, `flac`, `opus`, or `pcm16`.
+- ChatCompletionAudioVoice: The voice the model uses to respond in audio output.
+- ChatCompletionFunctionCall: Deprecated in favor of `tool_choice`. Controls which (if any) function is called by the model.
+- ChatCompletionFunctions: Deprecated: A function the model may generate JSON inputs for. Use `ChatCompletionTool` instead.
+- ChatCompletionMessageToolCall: A tool call generated by the model.
+- ChatCompletionModalities: Output types that you would like the model to generate for this request.
+
+Most models are capable of generating text, which is the default: `["text"]`
+
+The `gpt-4o-audio-preview` model can also be used to [generate
+audio](https://platform.openai.com/docs/guides/audio). To request that this model generate both text and audio responses, you can use: `["text", "audio"]`
+- ChatCompletionNamedToolChoice: Specifies a tool the model should use. Use to force the model to call a specific function.
+- ChatCompletionRequestAssistantMessage: An assistant message in the conversation, possibly including tool calls.
+- ChatCompletionRequestAssistantMessageAudio: Data about a previous audio response from the model, used in multi-turn conversations.
+- ChatCompletionRequestAssistantMessageContent: The contents of an assistant message: either a text string or an array of content parts (text or refusal).
+- ChatCompletionRequestAssistantMessageContentPart: A content part in an assistant message (text or refusal).
+- ChatCompletionRequestDeveloperMessage: A developer message in the conversation.
+- ChatCompletionRequestDeveloperMessageContent: The contents of a developer message: either a text string or an array of text content parts.
+- ChatCompletionRequestFunctionMessage: Deprecated: A function response message. Use tool messages instead.
+- ChatCompletionRequestMessage: A message in the chat completion conversation. Tagged by `role` (system, user, assistant, tool, developer, or function).
+- ChatCompletionRequestMessageContentPartAudio: Learn about [audio inputs](https://platform.openai.com/docs/guides/audio).
+- ChatCompletionRequestMessageContentPartImage: An image content part of a message.
+- ChatCompletionRequestMessageContentPartRefusal: A refusal content part of a message.
+- ChatCompletionRequestMessageContentPartText: A text content part of a message.
+- ChatCompletionRequestSystemMessage: A system message setting the behavior of the assistant.
+- ChatCompletionRequestSystemMessageContent: The contents of a system message: either a text string or an array of text content parts.
+- ChatCompletionRequestSystemMessageContentPart: A content part in a system message (text only).
+- ChatCompletionRequestToolMessage: Tool message
+- ChatCompletionRequestToolMessageContent: The contents of a tool message: either a text string or an array of text content parts.
+- ChatCompletionRequestToolMessageContentPart: A content part in a tool message (text only).
+- ChatCompletionRequestUserMessage: A user message in the conversation.
+- ChatCompletionRequestUserMessageContent: The contents of a user message: either a text string or an array of content parts (text, image, or audio).
+- ChatCompletionRequestUserMessageContentPart: A content part in a user message (text, image, or audio).
+- ChatCompletionResponseMessage: A chat completion message generated by the model.
+- ChatCompletionResponseMessageAudio: Audio data in a chat completion response message.
+- ChatCompletionSource: LLM provider for chat completions
+- ChatCompletionStreamOptions: Options for streaming response. Only set this when you set `stream: true`.
+- ChatCompletionTokenLogprob: Log probability information for an output token.
+- ChatCompletionTool: A tool the model may call. Currently, only functions are supported as a tool.
+- ChatCompletionToolChoiceOption: Controls which (if any) tool is called by the model.
+`none` means the model will not call any tool and instead generates a message.
+`auto` means the model can pick between generating a message or calling one or more tools.
+`required` means the model must call one or more tools.
+Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
+
+`none` is the default when no tools are present. `auto` is the default if tools are present.present.
+- ChatCompletionToolType: The type of a tool. Currently, only `function` is supported.
+- ChatSearchParams: Search parameters applied when the LLM queries this index.
+- ChatSettings: [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: how the index is described to the LLM and how it is queried.
+- ChatWorkspaceSettings: Settings for a chat workspace
+- Code
+- CompletionTokensDetails: Breakdown of tokens used in a completion.
+- CompletionUsage: Usage statistics for the completion request.
+- ComputedFacets: Computed facet data from a search
+- Condition
+- CreateApiKey
+- CreateChatCompletionRequest: A chat completion request compatible with the OpenAI API.
+- CreateChatCompletionResponse: Represents a chat completion response returned by model, based on the provided input.
+- DbTaskNetwork
+- DetailsExportIndexSettings
+- DetailsView: Contains type-specific details about a task's execution.
+
+The fields present depend on the task type. For example, document addition
+tasks will have `receivedDocuments` and `indexedDocuments`, while settings
+update tasks will have the applied settings.
+- DistributionShift: Describes the mean and sigma of distribution of embedding similarity in the embedding space.
+
+The intended use is to make the similarity score more comparable to the regular ranking score.
+This allows to correct effects where results are too "packed" around a certain value.
+- DocumentDeletionByFilter: Request body for deleting documents by filter
+- DocumentEditionByFunction: Request body for editing documents using a RHAI function
+- DynamicSearchRule
+- EmbedderSource
+- EmbedderStatsView: Statistics for embedder requests
+- EmbeddingSettings: Embedder configuration for [AI-powered / hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
+- ErrorType
+- Export: Request body for exporting data to a remote Meilisearch instance
+- ExportIndexSettings: Export settings for a specific index
+- FacetSearchQuery: Request body for searching facet values
+- FacetSearchResult: Result of a facet search operation.
+- FacetStats: Minimum and maximum numeric values for a facet.
+
+Present when the facet attribute has numeric values among matching documents.
+- FacetValueHitSchema: Schema representation of a facet value hit (for OpenAPI documentation only).
+- FacetValuesSort
+- FacetingSettings: Faceting: maximum number of facet values and how they are sorted.
+- FederatedFacets
+- FederatedSearch: Request body for federated multi-search across multiple indexes. This
+allows you to execute multiple search queries in a single request and
+optionally combine their results into a unified response. Use this for
+cross-index search scenarios or to reduce network round-trips.
+- FederatedSearchResult: Response from a federated multi-search query
+- Federation: Configuration for federated multi-search
+- FederationOptions: Options for federated multi-search queries
+- Field
+- FieldDisplayConfig
+- FieldDistinctConfig
+- FieldFilterableConfig
+- FieldLocalizedConfig
+- FieldRankingRuleConfig
+- FieldSearchConfig
+- FieldSortableConfig
+- FilterFeatures: Controls which filter operators are allowed for an attribute. This
+provides fine-grained control over filtering capabilities.
+- FilterableAttributesFeatures: Controls which filtering and faceting operations are enabled for matching
+attributes. This allows restricting certain operations on specific fields
+for security or performance reasons.
+- FilterableAttributesPatterns: Defines a set of attribute patterns with specific filtering and faceting
+features. This allows fine-grained control over which operations are
+allowed on matched attributes.
+- FilterableAttributesRule
+- FinishReason: The reason the model stopped generating tokens.
+- ForeignKey
+- FunctionCall: The name and arguments of a function that should be called, as generated by the model.
+- FunctionName: A wrapper for a function name reference.
+- FunctionObject: A function definition for tool use, described as a JSON Schema object.
+- GetLogs: Request body for streaming logs
+- HealthResponse
+- HealthStatus
+- HitsInfo: Pagination information for search results.
+- HybridQuery: Hybrid search: balance between keyword and semantic search.
+- ImageDetail: Specifies the detail level of the image.
+- ImageUrl: An image URL with optional detail level.
+- ImportData: Import data stored in a task
+- IndexCreateRequest: Request body for creating a new index
+- IndexStats: Stats of an `Index`, as known to the `stats` route.
+- IndexSwap: Index swap operation
+- IndexUid
+- IndexView: An index containing searchable documents
+- InputAudio: Input audio data for an audio content part.
+- InputAudioFormat: The format of the encoded audio data.
+- KeyView: Represents an API key used for authenticating requests to Meilisearch.
+Each key has specific permissions defined by its actions and can be scoped
+to particular indexes. Keys provide fine-grained access control for your
+Meilisearch instance.
+- Kind: The type of the task.
+- ListFields
+- ListFieldsFilter: Filter fields by attribute name patterns or by capability (displayed, searchable, sortable, etc.). All criteria are ANDed.
+- ListRules
+- ListRulesFilter
+- Locale
+- LocalizedAttributesRuleView: Defines a rule for associating specific locales (languages) with
+attributes. This allows Meilisearch to use language-specific tokenization
+and processing for matched attributes, improving search quality for
+multilingual content.
+- LogMode: Format for log output
+- MatchBounds: Represents the position of a matching term in a document field. Used to
+indicate where query terms were found within attribute values, enabling
+features like highlighting and match position display.
+- MatchingStrategy: Strategy used to match query terms within documents
+- MergeFacets: Options for merging facets from multiple indexes in federated search.
+When multiple indexes are queried, this controls how their facet values
+are combined into a single facet distribution.
+- Message
+- MinWordSizeTyposSetting: Minimum word length required before typos are allowed.
+
+This helps prevent matching very short words with typos, which can lead to irrelevant results.
+- Network: Network topology configuration for distributed Meilisearch
+- NetworkChange
+- Origin: Information about the origin of a task in a distributed Meilisearch
+deployment. This tracks where a task was originally created before being
+replicated to other nodes.
+- OverridePooling
+- PaginationSettings: Pagination: cap on how many results a search can return.
+- PaginationView_DynamicSearchRule
+- PaginationView_Field
+- PaginationView_IndexView
+- PaginationView_KeyView
+- PaginationView_Value
+- PatchApiKey: Request body for updating an existing API key. Only the name and
+description can be modified - other properties like actions, indexes,
+and expiration are immutable after creation.
+- Personalize: Configuration for [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries) results.
+
+When enabled, results are tailored to the user profile described in `userContext`.
+- PredictionContent: Static predicted output content, such as the content of a text file that is being regenerated.
+- PredictionContentContent: The content that should be matched when generating a model response. If generated tokens would match this content, the entire model response can be returned much more quickly.
+- PrefixSearchSettings
+- ProgressStepView: Information about a single processing step within a batch or task. Each
+step has a name, current progress, and total items to process.
+- ProgressView: Real-time progress information for a batch or task that is currently
+being processed. Use this to display progress bars or status updates to
+users.
+- PromptTokensDetails: Breakdown of tokens used in a completion.
+- ProximityPrecisionView
+- RankingRuleView
+- RankingScoreThreshold
+- ReasoningEffort: Constrains effort on reasoning for reasoning models. Supported values are `low`, `medium`, and `high`.
+- Remote: Configuration for a remote Meilisearch instance
+- RemoteTask: Represents a task that was replicated to a remote Meilisearch instance.
+Contains either the remote task UID on success, or an error if
+replication failed.
+- RenderQuery
+- RenderQueryInput
+- RenderQueryInputKind
+- RenderQueryTemplate
+- RenderQueryTemplateKind
+- RenderResult
+- ResponseError
+- ResponseFormat: An object specifying the format that the model must output (text, JSON object, or JSON schema).
+- ResponseFormatJsonSchema: A JSON Schema-based response format specification for Structured Outputs.
+- Role: The role of the author of a message.
+- RuleAction
+- RuntimeTogglableFeatures: Experimental features that can be toggled at runtime
+- SearchHit: A single search result hit.
+- SearchMetadata: Metadata about a search query (included when requested via header).
+- SearchQuery
+- SearchQueryWithIndex: A `SearchQuery` + an index UID and optional FederationOptions.
+- SearchResult: Search response containing matching documents and metadata.
+- SearchResultWithIndex: Search result with index identifier for multi-search responses
+- SearchResults: Response containing results from multiple search queries
+- Selector
+- ServiceTier: Specifies the latency tier to use for processing the request.
+- ServiceTierResponse: The service tier used for processing the request, as returned in the response.
+- SettingEmbeddingSettings: Configuration for one [embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search) used for semantic and hybrid search.
+
+Set `source` (`openAi`, `huggingFace`, `ollama`, `rest`, `userProvided`), then the options that apply: `model`, `apiKey`, `documentTemplate`, `dimensions`, `url`, etc.
+- Settings_Checked: Index settings: every option you can configure for search and index behavior.
+
+Used as the request body for PATCH settings. Only the fields you send are updated; pass `null` to reset a setting to its default.
+
+See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
+- Settings_Unchecked: Index settings: every option you can configure for search and index behavior.
+
+Used as the request body for PATCH settings. Only the fields you send are updated; pass `null` to reset a setting to its default.
+
+See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
+- Shard: Configuration for a named shard of the network
+
+Documents are distributed among the various declared shards.
+Remotes own shards, meaning they own the documents that belong to these shards.
+- SimilarQuery: Request body for similar document search
+- SimilarResult: Response containing similar documents
+- Size
+- SizeFormat
+- Stats: Global statistics for the Meilisearch instance
+- Status: The status of a task.
+- Stop: Up to 4 sequences where the API will stop generating further tokens.
+- SubEmbeddingSettings: Sub-embedder config for composite embedders. Used by `indexingEmbedder` (vectorize documents at index time) and `searchEmbedder` (vectorize queries at search time). Same fields as a top-level embedder, except no `binaryQuantized`, `distribution`, `documentTemplate`/`documentTemplateMaxBytes` for searchEmbedder.
+- SummarizedTaskView: A summarized view of a task, returned when a task is enqueued
+- SwapIndexesPayload: Request body for swapping two indexes
+- TaskCompactionSummary
+- TaskView: Represents the current state and details of an asynchronous task.
+
+Tasks are created when you perform operations like adding documents,
+updating settings, or creating indexes. Use this view to monitor task
+progress and check for errors.
+- TopLogprobs: A most likely token and its log probability at a given position.
+- TypoSettings: Typo tolerance: how spelling mistakes in queries are handled.
+- Unchecked
+- UpdateIndexRequest: Request body for updating an existing index
+- UpdateOrCreateDynamicSearchRuleRequest
+- UpdateStderrLogs: Request body for updating stderr log configuration
+- Vec
+- VersionResponse
+- WebhookResults: Response containing a list of all registered webhooks.
+- WebhookSettings: Configuration for a webhook endpoint
+- WebhookWithMetadataRedactedAuthorization: Webhook object with metadata and redacted authorization headers.
+- u32
