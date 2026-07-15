@@ -1095,12 +1095,6 @@ impl SearchQueryWithIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct PreprocessedQuery<Q> {
-    pub query: Q,
-    pub filter: Option<IndexFilter>,
-}
-
 /// Request body for similar document search
 #[routes::request]
 #[derive(Debug, Clone, PartialEq)]

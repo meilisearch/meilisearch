@@ -501,3 +501,21 @@ impl PreprocessableQuery for SearchQueryWithIndex {
         &mut self.filter
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreprocessedQuery<Q: PreprocessableQuery> {
+    pub query: Q,
+    pub filter: Option<IndexFilter>,
+}
+
+impl<Q: PreprocessableQuery> PreprocessedQuery<Q> {
+    pub fn into_inner_preprocessed(self) -> Q {
+        let Self { mut query, filter } = self;
+
+        *query.filter_field() = filter.map(|f| {
+            serde_json::Value::String(serialize_index_filter_to_filter_string(&f).unwrap())
+        });
+
+        query
+    }
+}

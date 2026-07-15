@@ -65,7 +65,8 @@ use crate::search::proxy::{
     json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search::{
-    ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
+    ExternalDocumentId, NetworkableQuery, Partition, PreprocessedQuery, ProxyQuery,
+    RetrieveVectors, VisitFacetValues,
 };
 use crate::{aggregate_methods, Opt};
 
@@ -605,15 +606,15 @@ impl NetworkableQuery for BrowseQuery {
     }
 }
 
-impl ProxyQuery for &BrowseQuery {
-    type ProxiedQuery = (String, BrowseQuery);
+impl ProxyQuery for &PreprocessedQuery<BrowseQuery> {
+    type ProxiedQuery = (String, PreprocessedQuery<BrowseQuery>);
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         let mut query = (*self).clone();
         // because we merge the results from multiple sources,
         // we must always start from the first document and retrieve offset+limit documents
-        query.limit += self.offset;
-        query.offset = 0;
+        query.query.limit += self.query.offset;
+        query.query.offset = 0;
         (remote, query)
     }
 
@@ -972,7 +973,7 @@ async fn retrieve_documents_federated(
     index_scheduler: Data<IndexScheduler>,
     features: RoFeatures,
     index_uid: IndexUid,
-    query: BrowseQuery,
+    query: PreprocessedQuery<BrowseQuery>,
     network: Network,
     progress: &Progress,
 ) -> Result<DocumentsResult, ResponseError> {
@@ -1146,14 +1147,26 @@ async fn retrieve_documents_local(
     index_scheduler: Data<IndexScheduler>,
     features: RoFeatures,
     index_uid: IndexUid,
-    query: BrowseQuery,
+    query: PreprocessedQuery<BrowseQuery>,
     is_proxy: bool,
     progress: &Progress,
 ) -> Result<DocumentsResult, ResponseError> {
     let features = index_scheduler.features();
 
-    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort, use_network: _ } =
-        query;
+    let PreprocessedQuery {
+        query:
+            BrowseQuery {
+                offset,
+                limit,
+                fields,
+                retrieve_vectors,
+                filter: _,
+                ids,
+                sort,
+                use_network: _,
+            },
+        filter,
+    } = query;
     tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
         let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
         let ids = if let Some(ids) = ids {
@@ -1184,18 +1197,6 @@ async fn retrieve_documents_local(
 
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
-
-        let filter = &filter;
-        let filter = if let Some(filter) = filter {
-            parse_local_index_filter(
-                filter,
-                Some(index_uid.as_str()),
-                features,
-                Code::InvalidDocumentFilter,
-            )?
-        } else {
-            None
-        };
 
         let (total, documents) = retrieve_documents(
             &index,
