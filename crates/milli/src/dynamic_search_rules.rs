@@ -359,20 +359,36 @@ impl<'a> DynamicSearchRulesView<'a> {
 
     fn rule_ids_sorted_by_precedence(
         self,
-        active_rules: RoaringBitmap,
+        mut active_rules: RoaringBitmap,
     ) -> Result<impl Iterator<Item = Result<RuleId>> + 'a> {
         let db = self.index.facet_id_f64_docids.remap_types();
 
         if let Some(precedence_field_id) = self.db_fields_ids_map.id("precedence") {
+            // faceted = active rules with a non-null field
+            let mut faceted = self
+                .index
+                .facet_id_exists_docids
+                .get(self.rtxn, &precedence_field_id)?
+                .unwrap_or_default();
+
+            faceted &= &active_rules;
+            faceted -= self
+                .index
+                .facet_id_is_null_docids
+                .get(self.rtxn, &precedence_field_id)?
+                .unwrap_or_default();
+
+            // partition the active rules depending on whether they are faceted
+            active_rules -= &faceted;
             Ok(either::Left(
-                ascending_facet_sort(self.rtxn, db, precedence_field_id, active_rules)?.flat_map(
-                    |res| match res {
+                ascending_facet_sort(self.rtxn, db, precedence_field_id, faceted)?
+                    .flat_map(|res| match res {
                         Ok((bucket, _precedence)) => {
                             either::Either::Left(bucket.into_iter().map(Ok))
                         }
                         Err(err) => either::Either::Right(std::iter::once(Err(err.into()))),
-                    },
-                ),
+                    })
+                    .chain(active_rules.into_iter().map(Ok)),
             ))
         } else {
             Ok(either::Right(active_rules.into_iter().map(Ok)))

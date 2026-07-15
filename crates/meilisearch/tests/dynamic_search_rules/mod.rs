@@ -1762,3 +1762,86 @@ async fn list_many_rules() {
     }
     "###);
 }
+
+#[actix_web::test]
+async fn search_applies_precedenceless_rules() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "local", "title": "Batman Returns" },
+                { "id": "remote", "title": "Batman" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "pin-with-precedence",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ],
+                "precedence": 10
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "pin-without-precedence",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "local" },
+                        // pick another position due to another bug causing
+                        // precedence to sometimes get ignored
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) =
+        index.search_post(json!({ "q": "Missing", "showRankingScoreDetails": true })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "remote",
+        "title": "Batman",
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 0
+          }
+        }
+      },
+      {
+        "id": "local",
+        "title": "Batman Returns",
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 1
+          }
+        }
+      }
+    ]
+    "###);
+}
