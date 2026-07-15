@@ -51,7 +51,7 @@ async fn version_too_old() {
     let current_version = format!("{major}.{minor}.{patch}");
     let err = err.replace(&current_version, "[current version]");
 
-    snapshot!(err, @"Database version 1.11.9999 is too old to be upgraded automatically. Please generate a dump using the v1.11.9999 and import it in the v[current version]");
+    snapshot!(err, @"Database version 1.11.9999 is too old to be upgraded via `--upgrade-db`. Please generate a dump using the v1.11.9999 and import it in the v[current version]");
 }
 
 #[actix_rt::test]
