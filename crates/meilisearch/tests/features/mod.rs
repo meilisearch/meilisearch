@@ -31,7 +31,6 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
-      "legacySearch": false,
       "renderRoute": false
     }
     "###);
@@ -54,7 +53,6 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
-      "legacySearch": false,
       "renderRoute": false
     }
     "###);
@@ -77,7 +75,6 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
-      "legacySearch": false,
       "renderRoute": false
     }
     "###);
@@ -101,7 +98,6 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
-      "legacySearch": false,
       "renderRoute": false
     }
     "###);
@@ -125,7 +121,6 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
-      "legacySearch": false,
       "renderRoute": false
     }
     "###);
@@ -156,7 +151,6 @@ async fn experimental_feature_metrics() {
       "multimodal": false,
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
-      "legacySearch": false,
       "renderRoute": false
     }
     "###);
@@ -204,7 +198,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `disableDocumentsFetchQueue`, `legacySearch`, `renderRoute`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `disableDocumentsFetchQueue`, `renderRoute`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
