@@ -82,7 +82,7 @@ pub enum VersionFileError {
     #[error(
         "Your database version ({major}.{minor}.{patch}) is incompatible with your current engine version ({}).\n\
         To migrate data between Meilisearch versions, please follow our guide on https://www.meilisearch.com/docs/learn/update_and_migration/updating.\n\
-        Alternatively, you can set the `--upgrade-db` flag (or the `MEILI_UPGRADE_DB` environment variable) to upgrade the database automatically on startup.",
+        Alternatively, you can set the `--upgrade-db` flag (or the `MEILI_UPGRADE_DB` environment variable) to upgrade the database on startup.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
     VersionMismatch { major: u32, minor: u32, patch: u32 },
