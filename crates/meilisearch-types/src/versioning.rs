@@ -88,7 +88,7 @@ pub enum VersionFileError {
     VersionMismatch { major: u32, minor: u32, patch: u32 },
     #[error("Database version {major}.{minor}.{patch} is higher than the Meilisearch version {VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}. Downgrade is not supported")]
     DowngradeNotSupported { major: u32, minor: u32, patch: u32 },
-    #[error("Database version {major}.{minor}.{patch} is too old to be upgraded automatically. Please generate a dump using the v{major}.{minor}.{patch} and import it in the v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}")]
+    #[error("Database version {major}.{minor}.{patch} is too old to be upgraded via `--db-upgrade`. Please generate a dump using the v{major}.{minor}.{patch} and import it in the v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}")]
     TooOldForAutomaticUpgrade { major: u32, minor: u32, patch: u32 },
     #[error("Error while modifying the database: {0}")]
     ErrorWhileModifyingTheDatabase(#[from] heed::Error),
