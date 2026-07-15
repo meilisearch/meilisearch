@@ -8464,7 +8464,6 @@ async fn remote_auto_sharding_auto_documents_fetch() {
     println!("platforms:asc");
     let (response, code) =
         index0.fetch_documents(json!({"offset": 0, "limit": 5, "sort": ["platforms:asc"]})).await;
-    snapshot!(code, @"200 OK");
 
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
@@ -8565,6 +8564,8 @@ async fn remote_auto_sharding_auto_documents_fetch() {
       "total": 6
     }
     "###);
+    snapshot!(code, @"200 OK");
+
     println!("platforms:asc, useNetwork: false");
     let (response, code) = index0
         .fetch_documents(
