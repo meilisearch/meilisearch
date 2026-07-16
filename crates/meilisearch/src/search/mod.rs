@@ -22,16 +22,15 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::filtered_matching_patterns;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    filtered_universe, make_document, AttributePatterns, AttributeState, Deadline, Error,
-    FacetValueHit, Filter, IndexFilter, InternalError, OrderBy, PatternMatch, SearchForFacetValues,
-    SearchStep, UserError,
+    filtered_matching_patterns, filtered_universe, make_document, AttributePatterns,
+    AttributeState, Deadline, Error, FacetValueHit, Filter, IndexFilter, InternalError,
+    MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -2089,15 +2088,22 @@ fn compute_facet_distribution_stats(
         .into());
     }
 
-    let fidmap = index.fields_ids_map_with_metadata(rtxn)?;
-    let fields = fidmap.iter().filter_map(|(_fid, fname, meta)| {
-        if meta.filterable_attributes_features(&filter_rules).is_filterable()
-            && facet_patterns.match_str(fname) == PatternMatch::Match
-        {
-            Some((fname, sort_facet_values_by.get(fname)))
-        } else {
-            None
+    let fidmap = index.fields_ids_map(rtxn)?;
+    let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
+    let fields = fidmap.iter().filter_map(|(_fid, fname)| {
+        if facet_patterns.match_str(fname) != PatternMatch::Match {
+            return None;
         }
+
+        let (_, Some((_, rule))) = metadata_builder.filterable_rule_with_index(fname) else {
+            return None;
+        };
+
+        if !rule.features().is_filterable() {
+            return None;
+        }
+
+        Some((fname, sort_facet_values_by.get(fname)))
     });
 
     facet_distribution.facets(fields);
