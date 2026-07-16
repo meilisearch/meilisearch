@@ -1,4 +1,4 @@
-use filter_parser::{Token, VectorFilter};
+use filter_parser::{Token, TokenLike, VectorFilter};
 use roaring::{MultiOps, RoaringBitmap};
 
 use crate::error::{DidYouMean, Error};

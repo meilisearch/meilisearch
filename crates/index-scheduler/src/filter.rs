@@ -6,7 +6,7 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    self, filtered_universe, Filter, FilterCondition, IndexFilter, IndexFilterCondition,
+    self, filtered_universe, Filter, FilterCondition, IndexFilter, IndexFilterCondition, TokenLike,
 };
 use meilisearch_types::Index;
 use serde_json::Value;
@@ -217,7 +217,7 @@ pub fn filters_into_index_filters(
             let mut inner = Vec::new();
             for internal in docids.iter() {
                 if let Some(external) = internal_to_external_docids.get(&internal) {
-                    inner.push(external.to_string().into());
+                    inner.push(external.as_str().into());
                 }
             }
 

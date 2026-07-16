@@ -3,7 +3,7 @@ use std::fmt::{Debug, Write as FmtWrite};
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 pub use filter_parser::Condition;
-use filter_parser::{IndexFilterCondition, VectorFilter};
+use filter_parser::{IndexFilterCondition, TokenLike, VectorFilter};
 use heed::types::LazyDecode;
 use heed::BytesEncode;
 use memchr::memmem::Finder;
@@ -430,7 +430,7 @@ impl IndexFilter {
             }
             IndexFilterCondition::In { fid, els } if fid.fragment() == SHARD_FIELD => els
                 .iter()
-                .map(|el| Condition::Equal(el.clone()))
+                .map(|el| Condition::Equal(el.clone().into()))
                 .map(|op| Self::evaluate_shard_operator(rtxn, index, universe_hint, &op))
                 .union(),
             IndexFilterCondition::In { fid, els } => {
@@ -444,7 +444,7 @@ impl IndexFilter {
                 };
 
                 els.iter()
-                    .map(|el| Condition::Equal(el.clone()))
+                    .map(|el| Condition::Equal(el.clone().into()))
                     .map(|op| {
                         Self::evaluate_operator(
                             rtxn,

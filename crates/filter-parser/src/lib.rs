@@ -80,6 +80,74 @@ pub struct OwnedSpan {
     utf8_column: usize,
 }
 
+pub trait TokenLike {
+    /// The fragment of the token.
+    fn fragment(&self) -> &str;
+    /// Returns a new token with the modified fragment.
+    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self;
+    /// Modifies the fragment of the token.
+    fn modify_fragment(&mut self, new: String);
+    /// Returns the span of the token.
+    fn span(&self) -> OwnedSpan;
+
+    /// The fragment with escaped double quotes.
+    fn escaped_fragment(&self) -> String {
+        serde_json::to_string(self.fragment()).unwrap()
+    }
+}
+
+/// Light version of a token.
+/// This kind of token doesn't keep the context of the original input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LightToken {
+    fragment: String,
+    utf8_column: usize,
+    /// If you need to modify the original input you can use the `modified_fragment` field
+    /// to store your modified input.
+    modified_fragment: Option<String>,
+}
+
+impl From<LightToken> for Token {
+    fn from(light_token: LightToken) -> Self {
+        Token { span: light_token.span(), modified_fragment: light_token.modified_fragment }
+    }
+}
+
+impl From<&str> for LightToken {
+    fn from(fragment: &str) -> Self {
+        LightToken { fragment: fragment.to_string(), utf8_column: 0, modified_fragment: None }
+    }
+}
+
+impl TokenLike for LightToken {
+    fn fragment(&self) -> &str {
+        self.modified_fragment.as_ref().unwrap_or(&self.fragment)
+    }
+
+    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
+        Self { fragment: self.fragment, utf8_column: self.utf8_column, modified_fragment }
+    }
+
+    fn modify_fragment(&mut self, new: String) {
+        self.modified_fragment = Some(new);
+    }
+
+    fn span(&self) -> OwnedSpan {
+        let span = LocatedSpan::new_extra(self.fragment.to_string(), String::new());
+        OwnedSpan { span, utf8_column: self.utf8_column }
+    }
+}
+
+impl From<Span<'_>> for LightToken {
+    fn from(span: Span) -> Self {
+        LightToken {
+            fragment: span.fragment().to_string(),
+            utf8_column: span.get_utf8_column(),
+            modified_fragment: None,
+        }
+    }
+}
+
 impl OwnedSpan {
     pub fn fragment(&self) -> &str {
         self.span.fragment()
@@ -133,21 +201,30 @@ impl PartialEq for Token {
 
 impl Eq for Token {}
 
+impl TokenLike for Token {
+    /// Return the fragment of the token.
+    /// If the token has been modified, the modified value is returned.
+    fn fragment(&self) -> &str {
+        self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
+    }
+
+    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
+        Self { span: self.span, modified_fragment }
+    }
+
+    fn modify_fragment(&mut self, new: String) {
+        self.modified_fragment = Some(new);
+    }
+
+    fn span(&self) -> OwnedSpan {
+        self.span.clone()
+    }
+}
+
 impl Token {
     /// Returns the original fragment of the token.
     pub fn original_fragment(&self) -> &str {
         self.span.fragment()
-    }
-
-    /// Return the fragment of the token.
-    /// If the token has been modified, the modified value is returned.
-    pub fn fragment(&self) -> &str {
-        self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
-    }
-
-    /// The fragment with escaped double quotes.
-    pub fn escaped_fragment(&self) -> String {
-        serde_json::to_string(self.fragment()).unwrap()
     }
 
     /// Returns the extra fragment of the token.
@@ -161,14 +238,6 @@ impl Token {
     #[cfg(test)]
     pub fn modified_fragment(&self) -> Option<&str> {
         self.modified_fragment.as_deref()
-    }
-
-    pub fn modify_fragment(&mut self, new: String) {
-        self.modified_fragment = Some(new);
-    }
-
-    pub fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
-        Self { span: self.span, modified_fragment }
     }
 
     pub fn to_external_error(&self, error: impl std::error::Error) -> Error {
@@ -220,7 +289,7 @@ impl VectorFilter {
 pub enum IndexFilterCondition {
     Not(Box<Self>),
     Condition { fid: Token, op: Condition },
-    In { fid: Token, els: Vec<Token> },
+    In { fid: Token, els: Vec<LightToken> },
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
@@ -239,7 +308,7 @@ impl IndexFilterCondition {
 pub enum FilterCondition {
     Not(Box<Self>),
     Condition { fid: Token, op: Condition },
-    In { fid: Token, els: Vec<Token> },
+    In { fid: Token, els: Vec<LightToken> },
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
@@ -473,7 +542,10 @@ fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) 
 }
 
 /// value_list = (value ("," value)* ","?)?
-fn parse_value_list(input: Span) -> IResult<Vec<Token>> {
+fn parse_value_list<'a, T>(input: Span<'a>) -> IResult<'a, Vec<T>>
+where
+    T: From<Span<'a>> + TokenLike,
+{
     let (input, first_value) = opt(parse_value)(input)?;
     if let Some(first_value) = first_value {
         let value_list_el_parser = preceded(ws(tag(",")), parse_value);
@@ -489,7 +561,7 @@ fn parse_value_list(input: Span) -> IResult<Vec<Token>> {
 }
 
 /// "IN" WS* "[" value_list "]"
-fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
+fn parse_in_body(input: Span) -> IResult<Vec<LightToken>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
@@ -502,7 +574,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
         if eof::<_, ()>(input).is_ok() {
             Error::new_from_kind(input.into(), ErrorKind::InClosingBracket)
         } else {
-            let expected_value_kind = match parse_value(input) {
+            let expected_value_kind = match parse_value::<LightToken>(input) {
                 Err(nom::Err::Error(e)) => match e.kind() {
                     ErrorKind::ReservedKeyword(_) => ExpectedValueKind::ReservedKeyword,
                     _ => ExpectedValueKind::Other,
@@ -1017,6 +1089,12 @@ impl std::fmt::Display for Condition {
 }
 
 impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{{}}}", self.fragment())
+    }
+}
+
+impl std::fmt::Display for LightToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{{}}}", self.fragment())
     }

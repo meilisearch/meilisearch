@@ -8,7 +8,7 @@ use nom::{InputIter, InputLength, InputTake, Slice};
 use crate::error::{ExpectedValueKind, NomErrorExt};
 use crate::{
     parse_geo, parse_geo_bounding_box, parse_geo_distance, parse_geo_point, parse_geo_radius,
-    Error, ErrorKind, IResult, Span, Token,
+    Error, ErrorKind, IResult, Span, Token, TokenLike,
 };
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
@@ -19,7 +19,10 @@ fn unescape(buf: Span, char_to_escape: char) -> String {
 }
 
 /// Parse a value in quote. If it encounter an escaped quote it'll unescape it.
-fn quoted_by(quote: char, input: Span) -> IResult<Token> {
+fn quoted_by<'a, T>(quote: char, input: Span<'a>) -> IResult<'a, T>
+where
+    T: From<Span<'a>> + crate::TokenLike,
+{
     // empty fields / values are valid in json
     if input.is_empty() {
         return Ok((input.slice(input.input_len()..), input.into()));
@@ -31,7 +34,7 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
     while let Some((idx, c)) = i.next() {
         if c == quote {
             let (rem, output) = input.take_split(idx);
-            let mut token = Token::from(output);
+            let mut token = T::from(output);
             if let Some(value) = escaped.then(|| unescape(output, quote)) {
                 token.modify_fragment(value);
             }
@@ -49,7 +52,7 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
         // if it was preceded by a `\` or if it was anything else we can continue to advance
     }
 
-    let mut token = Token::from(input);
+    let mut token = T::from(input);
     if let Some(value) = escaped.then(|| unescape(input, quote)) {
         token.modify_fragment(value);
     }
@@ -58,13 +61,16 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
 }
 
 // word           = (alphanumeric | _ | - | .)+    except for reserved keywords
-pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<'a, Token> {
-    let (input, word): (_, Token) =
-        take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
+pub fn word_not_keyword<'a, T>(input: Span<'a>) -> IResult<'a, T>
+where
+    T: From<Span<'a>> + crate::TokenLike,
+{
+    let (input, word): (_, _) = take_while1(is_value_component)(input)?;
+    let word = T::from(word);
     if is_keyword(word.fragment()) {
         return Err(nom::Err::Error(Error::new_from_kind(
             input.into(),
-            ErrorKind::ReservedKeyword(word.fragment().to_owned()),
+            ErrorKind::ReservedKeyword(word.fragment().to_string()),
         )));
     }
     Ok((input, word))
@@ -87,13 +93,19 @@ pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, 
 }
 
 /// vector_value          = ( non_dot_word | singleQuoted | doubleQuoted)
-pub fn parse_vector_value(input: Span) -> IResult<Token> {
-    pub fn non_dot_word(input: Span) -> IResult<Token> {
+pub fn parse_vector_value<'a, T>(input: Span<'a>) -> IResult<'a, T>
+where
+    T: From<Span<'a>> + crate::TokenLike,
+{
+    pub fn non_dot_word<'a, T>(input: Span<'a>) -> IResult<'a, T>
+    where
+        T: From<Span<'a>> + crate::TokenLike,
+    {
         let (input, word) = take_while1(|c| is_value_component(c) && c != '.')(input)?;
         Ok((input, word.into()))
     }
 
-    let (input, value) = alt((
+    let (input, value): (_, T) = alt((
         delimited(char('\''), cut(|input| quoted_by('\'', input)), cut(char('\''))),
         delimited(char('"'), cut(|input| quoted_by('"', input)), cut(char('"'))),
         non_dot_word,
@@ -108,11 +120,12 @@ pub fn parse_vector_value(input: Span) -> IResult<Token> {
             }
         }
         Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
-        Err(unescaper::Error::ParseIntError { .. }) => {
-            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::InvalidEscapedNumber)))
-        }
+        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::InvalidEscapedNumber,
+        ))),
         Err(unescaper::Error::InvalidChar { .. }) => {
-            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::MalformedValue)))
+            Err(nom::Err::Error(Error::new_from_kind(input.into(), ErrorKind::MalformedValue)))
         }
     }
 }
@@ -130,7 +143,10 @@ pub fn parse_vector_value_cut<'a>(input: Span<'a>, kind: ErrorKind) -> IResult<'
 }
 
 /// value          = WS* ( word | singleQuoted | doubleQuoted) WS+
-pub fn parse_value(input: Span) -> IResult<Token> {
+pub fn parse_value<'a, T>(input: Span<'a>) -> IResult<'a, T>
+where
+    T: From<Span<'a>> + crate::TokenLike,
+{
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now
     let (input, _) = take_while(char::is_whitespace)(input)?;
 
@@ -178,7 +194,7 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     // when we create the errors from the output of the alt we have spaces everywhere
     let error_word = take_till::<_, _, Error>(is_syntax_component);
 
-    let (input, value) = terminated(
+    let (input, value): (_, T) = terminated(
         alt((
             delimited(char('\''), cut(|input| quoted_by('\'', input)), cut(char('\''))),
             delimited(char('"'), cut(|input| quoted_by('"', input)), cut(char('"'))),
@@ -224,11 +240,12 @@ pub fn parse_value(input: Span) -> IResult<Token> {
             }
         }
         Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
-        Err(unescaper::Error::ParseIntError { .. }) => {
-            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::InvalidEscapedNumber)))
-        }
+        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.span(),
+            ErrorKind::InvalidEscapedNumber,
+        ))),
         Err(unescaper::Error::InvalidChar { .. }) => {
-            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::MalformedValue)))
+            Err(nom::Err::Error(Error::new_from_kind(value.span(), ErrorKind::MalformedValue)))
         }
     }
 }
@@ -295,7 +312,7 @@ pub mod test {
 
         for (input, expected) in test_case {
             let input = Span::new_extra(input, input);
-            let result = parse_value(input);
+            let result = parse_value::<Token>(input);
 
             assert!(
                 result.is_ok(),
@@ -323,7 +340,7 @@ pub mod test {
 
         for (input, remaining, expected_tok, expected_val) in test_case {
             let span = Span::new_extra(input, "");
-            let result = quoted_by('"', span);
+            let result = quoted_by::<Token>('"', span);
             assert!(result.is_ok());
 
             let (rem, output) = result.unwrap();
@@ -397,7 +414,7 @@ pub mod test {
 
         for (input, expected, escaped) in test_case {
             let input = Span::new_extra(input, input);
-            let result = parse_value(input);
+            let result = parse_value::<Token>(input);
 
             assert!(
                 result.is_ok(),
@@ -435,7 +452,7 @@ pub mod test {
 
         for (input, expected) in test_case {
             let input = Span::new_extra(input, input);
-            let result = parse_value(input);
+            let result = parse_value::<Token>(input);
 
             assert!(
                 result.is_err(),

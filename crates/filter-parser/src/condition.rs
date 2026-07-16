@@ -14,7 +14,9 @@ use Condition::*;
 
 use crate::error::IResultExt;
 use crate::value::{parse_vector_value, parse_vector_value_cut};
-use crate::{parse_value, Error, ErrorKind, FilterCondition, IResult, Span, Token, VectorFilter};
+use crate::{
+    parse_value, Error, ErrorKind, FilterCondition, IResult, Span, Token, TokenLike, VectorFilter,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition {
@@ -153,7 +155,7 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
     ))(input)?;
 
     if let Ok((input, point)) = tag::<_, _, ()>(".")(input) {
-        let opt_value = parse_vector_value(input).ok().map(|(_, v)| v);
+        let opt_value: Option<Token> = parse_vector_value(input).ok().map(|(_, v)| v);
         let value = opt_value
             .as_ref()
             .map(|v| v.fragment().to_owned())
