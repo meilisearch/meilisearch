@@ -28,8 +28,9 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    filtered_universe, make_document, AttributeState, Deadline, FacetValueHit, Filter, IndexFilter,
-    InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
+    filtered_matching_patterns, filtered_universe, make_document, AttributePatterns,
+    AttributeState, Deadline, Error, FacetValueHit, Filter, IndexFilter, InternalError,
+    MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
 };
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -232,13 +233,13 @@ pub struct SearchQuery {
     ///
     /// The response includes `facetDistribution` and, for numeric facets, `facetStats` (min/max).
     ///
-    /// Use `["*"]` to request counts for all [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
+    /// This route also supports patterns, i.e., "title", "dogs.*", "*", which can match over the [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
     ///
     /// The number of values returned per facet is limited by the index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-faceting#body-max-values-per-facet-one-of-0) setting; attributes not in filterableAttributes are ignored.
     ///
     /// More info: [faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters).
     #[request(default, error = DeserrJsonError<InvalidSearchFacets>)]
-    pub facets: Option<Vec<String>>,
+    pub facets: Option<AttributePatterns>,
     /// How to match query terms when there are not enough results to satisfy `limit`.
     ///
     /// **`last`**: Returns documents containing all query terms first. If there are not enough such results, Meilisearch removes one query term at a time, starting from the end of the query (e.g. for "big fat cat", then "big fat", then "big").
@@ -849,7 +850,7 @@ pub struct SearchQueryWithIndex {
     pub distinct: Option<String>,
     /// Display the count of matches per facet
     #[request(default, error = DeserrJsonError<InvalidSearchFacets>)]
-    pub facets: Option<Vec<String>>,
+    pub facets: Option<AttributePatterns>,
     /// Strategy used to match query terms within documents
     #[request(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
@@ -924,8 +925,8 @@ impl SearchQueryWithIndex {
         }
     }
 
-    pub fn has_facets(&self) -> Option<&[String]> {
-        self.facets.as_deref().filter(|v| !v.is_empty())
+    pub fn has_facets(&self) -> Option<&AttributePatterns> {
+        self.facets.as_ref().filter(|v| !v.is_empty())
     }
 
     pub fn has_personalize(&self) -> bool {
@@ -2032,8 +2033,8 @@ pub enum Route {
     Similar,
 }
 
-fn compute_facet_distribution_stats<S: AsRef<str>>(
-    facets: &[S],
+fn compute_facet_distribution_stats(
+    facet_patterns: &AttributePatterns,
     index: &Index,
     rtxn: &RoTxn,
     candidates: roaring::RoaringBitmap,
@@ -2049,13 +2050,63 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     facet_distribution.max_values_per_facet(max_values_by_facet);
 
     let sort_facet_values_by = index.sort_facet_values_by(rtxn).map_err(milli::Error::from)?;
+    let filter_rules = index.filterable_attributes_rules(rtxn)?;
 
-    // add specific facet if there is no placeholder
-    if facets.iter().all(|f| f.as_ref() != "*") {
-        let fields: Vec<_> =
-            facets.iter().map(|n| (n, sort_facet_values_by.get(n.as_ref()))).collect();
-        facet_distribution.facets(fields);
+    let fetch_valid_patterns = || {
+        filtered_matching_patterns(&filter_rules, &|features| features.is_filterable())
+            .into_iter()
+            .map(String::from)
+            .collect()
+    };
+
+    'facet: for facet_pattern in &facet_patterns.patterns {
+        for (rule_id, rule) in filter_rules.iter().enumerate() {
+            if rule.features().is_filterable() {
+                // field is superset or subset of any filterable
+                if rule.intersect_patterns(facet_pattern) {
+                    // valid facet, check the next one
+                    continue 'facet;
+                }
+            // field is subset of any filterable but current setting doesn't allow filterable
+            } else if rule.match_str(facet_pattern) == PatternMatch::Match {
+                return Err(Error::UserError(UserError::InvalidFacetsDistribution {
+                    invalid_facet_pattern: facet_pattern.clone(),
+                    valid_patterns: fetch_valid_patterns(),
+                    // We found the rule matching our facet pattern but it's not filterable
+                    matching_rule_index: Some(rule_id),
+                })
+                .into());
+            }
+        }
+
+        return Err(Error::UserError(UserError::InvalidFacetsDistribution {
+            invalid_facet_pattern: facet_pattern.clone(),
+            valid_patterns: fetch_valid_patterns(),
+            // Not a single pattern matched our facet pattern
+            matching_rule_index: None,
+        })
+        .into());
     }
+
+    let fidmap = index.fields_ids_map(rtxn)?;
+    let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
+    let fields = fidmap.iter().filter_map(|(_fid, fname)| {
+        if facet_patterns.match_str(fname) != PatternMatch::Match {
+            return None;
+        }
+
+        let (_, Some((_, rule))) = metadata_builder.filterable_rule_with_index(fname) else {
+            return None;
+        };
+
+        if !rule.features().is_filterable() {
+            return None;
+        }
+
+        Some((fname, sort_facet_values_by.get(fname)))
+    });
+
+    facet_distribution.facets(fields);
 
     let distribution = facet_distribution
         .candidates(candidates)
@@ -2063,6 +2114,7 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
         .execute()?;
     let stats = facet_distribution.compute_stats()?;
     let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
+
     Ok(ComputedFacets { distribution, stats })
 }
 

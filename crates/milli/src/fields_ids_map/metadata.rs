@@ -152,10 +152,17 @@ impl Metadata {
         &self,
         rules: &'rules [LocalizedAttributesRule],
     ) -> Option<&'rules [Language]> {
+        self.localized_attributes_rule_with_index(rules).map(|(_, rule)| rule.locales())
+    }
+
+    fn localized_attributes_rule_with_index<'rules>(
+        &self,
+        rules: &'rules [LocalizedAttributesRule],
+    ) -> Option<(usize, &'rules LocalizedAttributesRule)> {
         let localized_attributes_rule_id = self.localized_attributes_rule_id?.get();
         // - 1: `localized_attributes_rule_id` is NonZero
         let rule = rules.get((localized_attributes_rule_id - 1) as usize).unwrap();
-        Some(rule.locales())
+        Some((localized_attributes_rule_id.into(), rule))
     }
 
     pub fn filterable_attributes<'rules>(
@@ -289,7 +296,6 @@ pub struct MetadataBuilder {
     distinct_attribute: Option<String>,
     asc_desc_attributes: HashMap<String, FieldSortOrder>,
     displayed_attributes: Option<HashSet<String>>,
-    fields_metadata: BTreeMap<String, Metadata>,
     order_by_map: OrderByMap,
 }
 
@@ -318,7 +324,7 @@ impl MetadataBuilder {
             .displayed_fields(rtxn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
-        let mut this = Self {
+        Ok(Self {
             searchable_attributes,
             exact_searchable_attributes,
             filterable_attributes,
@@ -327,15 +333,8 @@ impl MetadataBuilder {
             distinct_attribute,
             asc_desc_attributes,
             displayed_attributes,
-            fields_metadata: BTreeMap::default(),
             order_by_map: index.sort_facet_values_by(rtxn)?,
-        };
-
-        for field_name in index.fields_ids_map(rtxn)?.names() {
-            this.fields_metadata.insert(field_name.to_owned(), this.metadata_for_field(field_name));
-        }
-
-        Ok(this)
+        })
     }
 
     /// Build a new `MetadataBuilder` from the given parameters.
@@ -365,7 +364,6 @@ impl MetadataBuilder {
             distinct_attribute,
             asc_desc_attributes,
             displayed_attributes: None,
-            fields_metadata: BTreeMap::default(),
             order_by_map: OrderByMap::default(),
         }
     }
@@ -380,15 +378,48 @@ impl MetadataBuilder {
             distinct_attribute: None,
             asc_desc_attributes: Default::default(),
             displayed_attributes: None,
-            fields_metadata: Default::default(),
             order_by_map: OrderByMap::default(),
         }
     }
 
+    /// Computes the full metadata for a field
+    ///
+    /// Use when you need the full metadata, otherwise consider using one of the intermediate functions
     pub fn metadata_for_field(&self, field: &str) -> Metadata {
-        if is_faceted_by(field, RESERVED_VECTORS_FIELD_NAME) {
+        if let Some(metadata) = self.has_reserved_field_metadata(field) {
+            return metadata;
+        }
+
+        let localized_attributes_rule_id =
+            self.localized_rule_with_index_not_reserved(field).map(|(id, _)| {
+                NonZeroU16::new(id.saturating_add(1).try_into().unwrap())
+                    // saturating_add(1): make `id` `NonZero`
+                    .unwrap()
+            });
+
+        Metadata {
+            searchable: self.is_searchable_not_reserved(field),
+            exact: self.is_exact_not_reserved(field),
+            sortable: self.is_sortable_not_reserved(field),
+            distinct: self.is_distinct_not_reserved(field),
+            asc_desc: self.is_asc_desc_not_reserved(field),
+            geo: PatternMatch::NoMatch,
+            geo_json: PatternMatch::NoMatch,
+            localized_attributes_rule_id,
+            filterable_attributes_rule_id: self.filterable_attribute_rules_not_reserved(field),
+            displayed: self.is_displayed(field),
+            sort_by: self.order_by_map.get(field),
+        }
+    }
+
+    // Partial metadata
+
+    /// `Some` if the field is faceted by the reserved vector field name, otherwise `None`
+    pub fn has_vector_metadata(&self, field: &str) -> Option<Metadata> {
+        // Vectors fields are not searchable, filterable, distinct or asc_desc
+        is_faceted_by(field, RESERVED_VECTORS_FIELD_NAME).then_some(
             // Vectors fields are not searchable, filterable, distinct or asc_desc
-            return Metadata {
+            Metadata {
                 searchable: (PatternMatch::NoMatch, None),
                 exact: PatternMatch::NoMatch,
                 sortable: PatternMatch::NoMatch,
@@ -398,67 +429,147 @@ impl MetadataBuilder {
                 geo_json: PatternMatch::NoMatch,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id: (PatternMatch::NoMatch, None),
-                displayed: self.is_field_displayed(field),
+                displayed: self.is_displayed(field),
                 sort_by: OrderBy::default(),
-            };
-        }
+            },
+        )
+    }
 
-        // A field is sortable if it is faceted by a sortable attribute
-        let sortable = field_match_any_patterns_legacy(&self.sortable_attributes, field);
-
-        let mut matching_filterable = PatternMatch::NoMatch;
-        let filterable_attributes_rule_id = self
-            .filterable_attributes
-            .iter()
-            .position(|attribute| match attribute.match_str(field) {
-                PatternMatch::Match => {
-                    matching_filterable = PatternMatch::Match;
-                    true
-                }
-                PatternMatch::Parent => {
-                    matching_filterable = PatternMatch::Parent;
-                    false
-                }
-                PatternMatch::NoMatch => false,
-            })
-            // saturating_add(1): make `id` `NonZero`
-            .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
-        let filterable_attributes_rule_id = (matching_filterable, filterable_attributes_rule_id);
-
-        if match_field_legacy(RESERVED_GEO_FIELD_NAME, field) == PatternMatch::Match {
+    /// `Some` if the field is matching legacy the reserved geo field name, otherwise `None`
+    pub fn has_geo_metadata(&self, field: &str) -> Option<Metadata> {
+        (match_field_legacy(RESERVED_GEO_FIELD_NAME, field) == PatternMatch::Match).then_some(
             // Geo fields are not searchable, distinct or asc_desc
-            return Metadata {
+            Metadata {
                 searchable: (PatternMatch::NoMatch, None),
                 exact: PatternMatch::NoMatch,
-                sortable,
+                sortable: self.is_sortable_not_reserved(field),
                 distinct: PatternMatch::NoMatch,
                 asc_desc: (PatternMatch::NoMatch, None),
                 geo: PatternMatch::Match,
                 geo_json: PatternMatch::NoMatch,
                 localized_attributes_rule_id: None,
-                filterable_attributes_rule_id,
-                displayed: self.is_field_displayed(field),
+                filterable_attributes_rule_id: self.filterable_attribute_rules_not_reserved(field),
+                displayed: self.is_displayed(field),
                 sort_by: self.order_by_map.get(field),
-            };
-        }
-        if match_field_legacy(RESERVED_GEOJSON_FIELD_NAME, field) == PatternMatch::Match {
-            debug_assert!(sortable != PatternMatch::Match, "geojson fields should not be sortable");
-            return Metadata {
+            },
+        )
+    }
+
+    /// `Some` if the field is matching legacy the reserved geojson field name, otherwise `None`
+    pub fn has_geo_json_metadata(&self, field: &str) -> Option<Metadata> {
+        (match_field_legacy(RESERVED_GEOJSON_FIELD_NAME, field) == PatternMatch::Match).then_some(
+            Metadata {
                 searchable: (PatternMatch::NoMatch, None),
                 exact: PatternMatch::NoMatch,
-                sortable,
+                // geojson field should not be sortable
+                sortable: PatternMatch::NoMatch,
                 distinct: PatternMatch::NoMatch,
                 asc_desc: (PatternMatch::NoMatch, None),
                 geo: PatternMatch::NoMatch,
                 geo_json: PatternMatch::Match,
                 localized_attributes_rule_id: None,
-                filterable_attributes_rule_id,
-                displayed: self.is_field_displayed(field),
+                filterable_attributes_rule_id: self.filterable_attribute_rules_not_reserved(field),
+                displayed: self.is_displayed(field),
                 sort_by: self.order_by_map.get(field),
-            };
-        }
+            },
+        )
+    }
 
-        let searchable = match &self.searchable_attributes {
+    /// `Some` if the field is any of the reserved fields with special metadata, `None` otherwise.
+    pub fn has_reserved_field_metadata(&self, field: &str) -> Option<Metadata> {
+        self.has_vector_metadata(field)
+            .or_else(|| self.has_geo_metadata(field))
+            .or_else(|| self.has_geo_json_metadata(field))
+    }
+
+    /// Whether the field is a displayable attribute.
+    pub fn is_displayed(&self, field: &str) -> PatternMatch {
+        match self.displayed_attributes.as_ref() {
+            Some(attrs) => field_match_any_patterns_legacy(attrs, field),
+            None => PatternMatch::Match,
+        }
+    }
+
+    /// Whether the field is a searchable attribute.
+    pub fn is_searchable(&self, field: &str) -> (PatternMatch, Option<Weight>) {
+        if let Some(Metadata { searchable, .. }) = self.has_reserved_field_metadata(field) {
+            searchable
+        } else {
+            self.is_searchable_not_reserved(field)
+        }
+    }
+
+    /// Whether the field is an exact attribute.
+    pub fn is_exact(&self, field: &str) -> PatternMatch {
+        if let Some(Metadata { exact, .. }) = self.has_reserved_field_metadata(field) {
+            exact
+        } else {
+            self.is_exact_not_reserved(field)
+        }
+    }
+
+    /// Whether the field is a sortable attribute.
+    pub fn is_sortable(&self, field: &str) -> PatternMatch {
+        if let Some(Metadata { sortable, .. }) = self.has_reserved_field_metadata(field) {
+            sortable
+        } else {
+            self.is_sortable_not_reserved(field)
+        }
+    }
+
+    /// Whether the field is the distinct field.
+    pub fn is_distinct(&self, field: &str) -> PatternMatch {
+        if let Some(Metadata { distinct, .. }) = self.has_reserved_field_metadata(field) {
+            distinct
+        } else {
+            self.is_distinct_not_reserved(field)
+        }
+    }
+
+    /// Whether the field matches any filterable rule, and if so the matching rule and its index.
+    pub fn filterable_rule_with_index<'rules>(
+        &'rules self,
+        field: &str,
+    ) -> (PatternMatch, Option<(usize, &'rules FilterableAttributesRule)>) {
+        if let Some(metadata) = self.has_reserved_field_metadata(field) {
+            (
+                metadata.filterable_attributes_rule_id.0,
+                metadata
+                    .filterable_attributes_with_rule_index(self.filterable_attributes.as_slice()),
+            )
+        } else {
+            self.filterable_rule_with_index_not_reserved(field)
+        }
+    }
+
+    /// Whether the field matches any localized rule, and if so the matching rule and its index.
+    pub fn localized_rule_with_index<'rules>(
+        &'rules self,
+        field: &str,
+    ) -> Option<(usize, &'rules LocalizedAttributesRule)> {
+        let localized_attributes_rules = self.localized_attributes.as_deref()?;
+
+        if let Some(metadata) = self.has_reserved_field_metadata(field) {
+            metadata.localized_attributes_rule_with_index(localized_attributes_rules)
+        } else {
+            self.localized_rule_with_index_not_reserved(field)
+        }
+    }
+
+    /// Whether the field matches any asc desc custom rule, and if so the field sort order.
+    pub fn is_asc_desc(&self, field: &str) -> (PatternMatch, Option<FieldSortOrder>) {
+        if let Some(Metadata { asc_desc, .. }) = self.has_reserved_field_metadata(field) {
+            asc_desc
+        } else {
+            self.is_asc_desc_not_reserved(field)
+        }
+    }
+
+    // partial metadata implementation
+    // the following functions assume that callers already checked whether the field is a reserved field with a special metadata
+
+    fn is_searchable_not_reserved(&self, field: &str) -> (PatternMatch, Option<Weight>) {
+        match &self.searchable_attributes {
             // A field is searchable if it is faceted by a searchable attribute
             Some(attributes) => {
                 let mut matching_searchable = PatternMatch::NoMatch;
@@ -479,13 +590,71 @@ impl MetadataBuilder {
                 (matching_searchable, weight)
             }
             None => (PatternMatch::Match, Some(0)),
-        };
+        }
+    }
 
-        let exact = field_match_any_patterns_legacy(&self.exact_searchable_attributes, field);
+    fn is_exact_not_reserved(&self, field: &str) -> PatternMatch {
+        field_match_any_patterns_legacy(&self.exact_searchable_attributes, field)
+    }
 
-        let distinct = match_distinct_field(self.distinct_attribute.as_deref(), field);
-        let asc_desc = match field_match_any_patterns_legacy(self.asc_desc_attributes.keys(), field)
-        {
+    fn is_sortable_not_reserved(&self, field: &str) -> PatternMatch {
+        // A field is sortable if it is faceted by a sortable attribute
+        field_match_any_patterns_legacy(&self.sortable_attributes, field)
+    }
+
+    fn is_distinct_not_reserved(&self, field: &str) -> PatternMatch {
+        match_distinct_field(self.distinct_attribute.as_deref(), field)
+    }
+
+    fn filterable_rule_with_index_not_reserved<'rules>(
+        &'rules self,
+        field: &str,
+    ) -> (PatternMatch, Option<(usize, &'rules FilterableAttributesRule)>) {
+        let mut matching_filterable = PatternMatch::NoMatch;
+        let filterable_attributes_rule_id =
+            self.filterable_attributes.iter().enumerate().find(|(_rule_id, attribute)| {
+                match attribute.match_str(field) {
+                    PatternMatch::Match => {
+                        matching_filterable = PatternMatch::Match;
+                        true
+                    }
+                    PatternMatch::Parent => {
+                        matching_filterable = PatternMatch::Parent;
+                        false
+                    }
+                    PatternMatch::NoMatch => false,
+                }
+            });
+        (matching_filterable, filterable_attributes_rule_id)
+    }
+
+    fn filterable_attribute_rules_not_reserved(
+        &self,
+        field: &str,
+    ) -> (PatternMatch, Option<NonZeroU16>) {
+        let (matching_filterable, filterable_attributes_rule) =
+            self.filterable_rule_with_index_not_reserved(field);
+        let filterable_attributes_rule_id = filterable_attributes_rule.map(|(rule_id, _)| {
+            NonZeroU16::new(rule_id.saturating_add(1).try_into().unwrap())
+                // saturating_add(1): make `id` `NonZero`
+                .unwrap()
+        });
+        (matching_filterable, filterable_attributes_rule_id)
+    }
+
+    fn localized_rule_with_index_not_reserved<'rules>(
+        &'rules self,
+        field: &str,
+    ) -> Option<(usize, &'rules LocalizedAttributesRule)> {
+        self.localized_attributes
+            .iter()
+            .flat_map(|v| v.iter())
+            .enumerate()
+            .find(|(_rule_id, rule)| rule.match_str(field) == PatternMatch::Match)
+    }
+
+    fn is_asc_desc_not_reserved(&self, field: &str) -> (PatternMatch, Option<FieldSortOrder>) {
+        match field_match_any_patterns_legacy(self.asc_desc_attributes.keys(), field) {
             PatternMatch::Match => {
                 // If the field matches an asc_desc attribute, return the order
                 match self.asc_desc_attributes.get(field) {
@@ -495,37 +664,10 @@ impl MetadataBuilder {
             }
             PatternMatch::Parent => (PatternMatch::Parent, None),
             PatternMatch::NoMatch => (PatternMatch::NoMatch, None),
-        };
-
-        let localized_attributes_rule_id = self
-            .localized_attributes
-            .iter()
-            .flat_map(|v| v.iter())
-            .position(|rule| rule.match_str(field) == PatternMatch::Match)
-            // saturating_add(1): make `id` `NonZero`
-            .map(|id| NonZeroU16::new(id.saturating_add(1).try_into().unwrap()).unwrap());
-
-        Metadata {
-            searchable,
-            exact,
-            sortable,
-            distinct,
-            asc_desc,
-            geo: PatternMatch::NoMatch,
-            geo_json: PatternMatch::NoMatch,
-            localized_attributes_rule_id,
-            filterable_attributes_rule_id,
-            displayed: self.is_field_displayed(field),
-            sort_by: self.order_by_map.get(field),
         }
     }
 
-    fn is_field_displayed(&self, field: &str) -> PatternMatch {
-        match self.displayed_attributes.as_ref() {
-            Some(attrs) => field_match_any_patterns_legacy(attrs, field),
-            None => PatternMatch::Match,
-        }
-    }
+    // Accessors
 
     pub fn searchable_attributes(&self) -> Option<&[String]> {
         self.searchable_attributes.as_deref()
@@ -541,9 +683,5 @@ impl MetadataBuilder {
 
     pub fn localized_attributes_rules(&self) -> Option<&[LocalizedAttributesRule]> {
         self.localized_attributes.as_deref()
-    }
-
-    pub fn fields_metadata(&self) -> &BTreeMap<String, Metadata> {
-        &self.fields_metadata
     }
 }

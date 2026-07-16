@@ -425,6 +425,407 @@ async fn remote_sharding() {
     "###);
 }
 
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_sharding_federated_pattern_facets() {
+    use crate::common::NESTED_DOCUMENTS;
+
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // set self
+
+    let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+    let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+    let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!({
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+            "ms0": {
+                "url": rms0.url()
+            },
+            "ms1": {
+                "url": rms1.url()
+            },
+            "ms2": {
+                "url": rms2.url()
+            }
+        },
+        "shards": {
+            // Full replication
+            "shard1": { "remotes": ["ms0", "ms1", "ms2"] }
+        }
+    });
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    // list indexes
+    let index0 = ms0.index("test");
+
+    // update settings
+    let (task, code) = index0
+        .update_settings_filterable_attributes(json!([{
+            "attributePatterns": ["doggos.*"],
+            "features": {
+                "facetSearch": true,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // add documents
+    let documents = NESTED_DOCUMENTS.clone();
+    let documents = documents.as_array().unwrap();
+    let (task, code) = index0.add_documents(json!(documents), None).await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // Wait for all the tasks
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    // perform multi-search
+    let request = json!({
+        "q": null,
+        "facets": ["doggos.name", "doggos.age"],
+        "useNetwork": true
+    });
+
+    let (response, code) = index0.search_post(request).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 852,
+          "father": "jean",
+          "mother": "michelle",
+          "doggos": [
+            {
+              "name": "bobby",
+              "age": 2
+            },
+            {
+              "name": "buddy",
+              "age": 4
+            }
+          ],
+          "cattos": "pésti",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 654,
+          "father": "pierre",
+          "mother": "sabine",
+          "doggos": [
+            {
+              "name": "gros bill",
+              "age": 8
+            }
+          ],
+          "cattos": [
+            "simba",
+            "pestiféré"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 750,
+          "father": "romain",
+          "mother": "michelle",
+          "cattos": [
+            "enigma"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 951,
+          "father": "jean-baptiste",
+          "mother": "sophie",
+          "doggos": [
+            {
+              "name": "turbo",
+              "age": 5
+            },
+            {
+              "name": "fast",
+              "age": 6
+            }
+          ],
+          "cattos": [
+            "moumoute",
+            "gomez"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "facetDistribution": {
+        "doggos.age": {
+          "2": 1,
+          "4": 1,
+          "5": 1,
+          "6": 1,
+          "8": 1
+        },
+        "doggos.name": {
+          "bobby": 1,
+          "buddy": 1,
+          "fast": 1,
+          "gros bill": 1,
+          "turbo": 1
+        }
+      },
+      "facetStats": {
+        "doggos.age": {
+          "min": 2.0,
+          "max": 8.0
+        }
+      },
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+
+    // update settings
+    let (task, code) = index0
+        .update_settings_filterable_attributes(json!([{
+            "attributePatterns": ["doggos.name", "doggos.age"],
+            "features": {
+                "facetSearch": true,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    // perform multi-search
+    let request = json!({
+        "q": null,
+        "facets": ["doggos.*"],
+        "useNetwork": true
+    });
+
+    let (response, code) = index0.search_post(request).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 852,
+          "father": "jean",
+          "mother": "michelle",
+          "doggos": [
+            {
+              "name": "bobby",
+              "age": 2
+            },
+            {
+              "name": "buddy",
+              "age": 4
+            }
+          ],
+          "cattos": "pésti",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 654,
+          "father": "pierre",
+          "mother": "sabine",
+          "doggos": [
+            {
+              "name": "gros bill",
+              "age": 8
+            }
+          ],
+          "cattos": [
+            "simba",
+            "pestiféré"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 750,
+          "father": "romain",
+          "mother": "michelle",
+          "cattos": [
+            "enigma"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        },
+        {
+          "id": 951,
+          "father": "jean-baptiste",
+          "mother": "sophie",
+          "doggos": [
+            {
+              "name": "turbo",
+              "age": 5
+            },
+            {
+              "name": "fast",
+              "age": 6
+            }
+          ],
+          "cattos": [
+            "moumoute",
+            "gomez"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "facetDistribution": {
+        "doggos.age": {
+          "2": 1,
+          "4": 1,
+          "5": 1,
+          "6": 1,
+          "8": 1
+        },
+        "doggos.name": {
+          "bobby": 1,
+          "buddy": 1,
+          "fast": 1,
+          "gros bill": 1,
+          "turbo": 1
+        }
+      },
+      "facetStats": {
+        "doggos.age": {
+          "min": 2.0,
+          "max": 8.0
+        }
+      },
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+}
+
 #[actix_rt::test]
 async fn remote_sharding_auto_search() {
     let ms0 = Server::new().await;
@@ -3555,7 +3956,7 @@ async fn error_bad_request_facets_by_index_facet() {
       "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
-          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\",\"code\":\"invalid_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
+          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Pattern `id` is not filterable. This index does not have configured filterable attributes.\",\"code\":\"invalid_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
           "code": "remote_bad_request",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#remote_bad_request"

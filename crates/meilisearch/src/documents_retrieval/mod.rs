@@ -2,17 +2,17 @@ use std::sync::Arc;
 
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::{error::ResponseError, milli::progress::Progress};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::milli::progress::Progress;
 use uuid::Uuid;
 
-use crate::{
-    error::MeilisearchHttpError,
-    extractors::authentication::{policies::ActionPolicy, AuthenticationError, GuardedData},
-    personalization::PersonalizationService,
-    search::{
-        add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
-        SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
-    },
+use crate::error::MeilisearchHttpError;
+use crate::extractors::authentication::policies::ActionPolicy;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::personalization::PersonalizationService;
+use crate::search::{
+    add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
+    SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
 
 pub struct DocumentSearch {

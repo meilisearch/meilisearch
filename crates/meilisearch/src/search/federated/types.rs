@@ -15,7 +15,7 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::order_by_map::OrderByMap;
-use meilisearch_types::milli::OrderBy;
+use meilisearch_types::milli::{AttributePatterns, OrderBy};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -102,8 +102,9 @@ pub struct Federation {
     #[request(default, error = DeserrJsonError<InvalidSearchHitsPerPage>, skip_serializing_if = "Option::is_none")]
     pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
-    #[request(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
-    pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
+    // We hide the fact that it's possible to define facets as null because utoipa::Schema doesn't support BTreeMap<_, Option<_>>.
+    #[request(default, schema_type = BTreeMap<IndexUid, AttributePatterns>, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
+    pub facets_by_index: BTreeMap<IndexUid, Option<AttributePatterns>>,
     /// Options for merging facets from multiple indexes
     #[request(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>, skip_serializing_if = "Option::is_none")]
     pub merge_facets: Option<MergeFacets>,

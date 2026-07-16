@@ -19,8 +19,9 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, Deadline,
-    DocumentId, FederatingResultsStep, OrderBy, DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
+    AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
+    OrderBy, PatternMatch, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1369,13 +1370,23 @@ impl SearchByIndex {
 
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
 
+        let fidmap = index.fields_ids_map(&rtxn).without_index()?;
+
         let mut degraded = false;
         let mut used_negative_operator = false;
         let mut candidates = RoaringBitmap::new();
-        let facets_by_index = self.federation.facets_by_index.remove(&index_uid).flatten();
-        if let Err(mut error) =
-            self.facet_order.check_facet_order(&index_uid, &facets_by_index, &index, &rtxn)
-        {
+
+        let metadata_builder = MetadataBuilder::from_index(&index, &rtxn).without_index()?;
+
+        let facet_patterns_by_index = self.federation.facets_by_index.remove(&index_uid).flatten();
+        if let Err(mut error) = self.facet_order.check_facet_order(
+            &index_uid,
+            &facet_patterns_by_index,
+            &index,
+            &rtxn,
+            &fidmap,
+            &metadata_builder,
+        ) {
             if self.show_federation_info == ShowFederationInfo::Always {
                 error.message = format!("Inside `.federation.facetsByIndex.{index_uid}`: {error}");
             }
@@ -1386,14 +1397,27 @@ impl SearchByIndex {
         // all queries for an index share the same deadline
         let deadline = index.search_deadline(&rtxn).without_index()?;
 
-        let extra_attributes_to_retrieve: BTreeSet<_> =
-            if let Some(distinct) = self.federation.distinct.as_deref() {
-                std::iter::once(distinct.to_string())
-                    .chain(facets_by_index.iter().flatten().cloned())
-                    .collect()
-            } else {
-                Default::default()
-            };
+        let mut extra_attributes_to_retrieve = BTreeSet::new();
+        if let Some(distinct) = self.federation.distinct.as_ref().cloned() {
+            extra_attributes_to_retrieve.insert(distinct);
+            if let Some(facet_patterns) = facet_patterns_by_index.as_ref() {
+                for (_fid, fname) in fidmap.iter() {
+                    if facet_patterns.match_str(fname) != PatternMatch::Match {
+                        continue;
+                    }
+
+                    let (_, Some((_, rule))) = metadata_builder.filterable_rule_with_index(fname)
+                    else {
+                        continue;
+                    };
+
+                    if !rule.features().is_filterable() {
+                        continue;
+                    }
+                    extra_attributes_to_retrieve.insert(fname.to_owned());
+                }
+            }
+        }
 
         for QueryByIndex { query, weight, query_index } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
@@ -1675,7 +1699,7 @@ impl SearchByIndex {
                 .map(|(_, hit)| hit)
                 .collect();
         let estimated_total_hits = candidates.len() as usize;
-        let facets = facets_by_index
+        let facets = facet_patterns_by_index
             .map(|facets_by_index| {
                 compute_facet_distribution_stats(&facets_by_index, &index, &rtxn, candidates)
             })
@@ -1726,10 +1750,17 @@ impl SearchByIndex {
 
             // Important: this is the only transaction we'll use for this index during this federated search
             let rtxn = index.read_txn()?;
+            let fidmap = index.fields_ids_map(&rtxn)?;
+            let metadata_builder = MetadataBuilder::from_index(&index, &rtxn)?;
 
-            if let Err(mut error) =
-                self.facet_order.check_facet_order(&index_uid, &facets, &index, &rtxn)
-            {
+            if let Err(mut error) = self.facet_order.check_facet_order(
+                &index_uid,
+                &facets,
+                &index,
+                &rtxn,
+                &fidmap,
+                &metadata_builder,
+            ) {
                 if self.show_federation_info == ShowFederationInfo::Always {
                     error.message = format!(
                         "Inside `.federation.facetsByIndex.{index_uid}`: {error}\n - Note: index `{index_uid}` is not used in queries",
@@ -1790,22 +1821,40 @@ impl FacetOrder {
     fn check_facet_order(
         &mut self,
         current_index: &str,
-        facets_by_index: &Option<Vec<String>>,
+        facets_by_index: &Option<AttributePatterns>,
         index: &milli::Index,
         rtxn: &milli::heed::RoTxn<'_>,
+        fidmap: &FieldsIdsMap,
+        metadata_builder: &MetadataBuilder,
     ) -> Result<(), ResponseError> {
         match self {
             FacetOrder::ByFacet(facet_order) => {
-                if let Some(facets_by_index) = facets_by_index {
+                if let Some(facet_patterns_by_index) = facets_by_index {
                     let index_facet_order = index.sort_facet_values_by(rtxn)?;
-                    for facet in facets_by_index {
-                        let index_facet_order = index_facet_order.get(facet);
+
+                    for (_fid, fname) in fidmap.iter() {
+                        if facet_patterns_by_index.match_str(fname) != PatternMatch::Match {
+                            continue;
+                        }
+
+                        let (_, Some((_, rule))) =
+                            metadata_builder.filterable_rule_with_index(fname)
+                        else {
+                            continue;
+                        };
+
+                        if !rule.features().is_filterable() {
+                            continue;
+                        }
+
+                        let index_facet_order = index_facet_order.get(fname);
+
                         let (previous_index, previous_facet_order) = facet_order
-                            .entry(facet.to_owned())
+                            .entry(fname.to_owned())
                             .or_insert_with(|| (current_index.to_owned(), index_facet_order));
                         if previous_facet_order != &index_facet_order {
                             return Err(MeilisearchHttpError::InconsistentFacetOrder {
-                                facet: facet.clone(),
+                                facet: fname.to_owned(),
                                 previous_facet_order: *previous_facet_order,
                                 previous_uid: previous_index.clone(),
                                 current_uid: current_index.to_owned(),

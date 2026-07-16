@@ -78,8 +78,8 @@ pub use self::fields_ids_map::{
     FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
 };
 pub use self::filterable_attributes_rules::{
-    FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
-    FilterableAttributesRule,
+    filtered_matching_patterns, FilterFeatures, FilterableAttributesFeatures,
+    FilterableAttributesPatterns, FilterableAttributesRule,
 };
 pub use self::foreign_key::ForeignKey;
 pub use self::heed_codec::{

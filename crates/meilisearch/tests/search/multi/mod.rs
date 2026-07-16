@@ -917,7 +917,7 @@ async fn search_one_query_error() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Invalid facet distribution: Attribute `color` is not filterable. Available filterable attributes patterns are: `id, title`.",
+      "message": "Inside `.queries[0]`: Invalid facet distribution: Pattern `color` is not filterable. Available filterable attributes patterns are: `id, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -987,7 +987,7 @@ async fn search_multiple_query_errors() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Invalid facet distribution: Attribute `color` is not filterable. Available filterable attributes patterns are: `id, title`.",
+      "message": "Inside `.queries[0]`: Invalid facet distribution: Pattern `color` is not filterable. Available filterable attributes patterns are: `id, title`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -3820,7 +3820,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.",
+      "message": "Inside `.queries[1]`: Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Pattern `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -3842,7 +3842,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.\n - Note: index `fruits-no-name-[uuid]` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Pattern `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.\n - Note: index `fruits-no-name-[uuid]` is not used in queries",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
@@ -3865,7 +3865,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-facets-[uuid]`: Invalid facet distribution: Attributes `BOOST, id` are not filterable. This index does not have configured filterable attributes.\n - Note: index `fruits-no-facets-[uuid]` is not used in queries",
+      "message": "Inside `.federation.facetsByIndex.fruits-no-facets-[uuid]`: Invalid facet distribution: Pattern `BOOST` is not filterable. This index does not have configured filterable attributes.\n - Note: index `fruits-no-facets-[uuid]` is not used in queries",
       "code": "invalid_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
