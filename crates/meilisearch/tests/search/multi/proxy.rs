@@ -8447,7 +8447,7 @@ async fn remote_auto_sharding_auto_documents_fetch() {
     let (_task, _status_code) = index0
         .update_settings_sortable_attributes(json!(["genres", "color", "platforms", "_geo"]))
         .await;
-    let (_task, _status_code) = index0
+    let (task, _status_code) = index0
         .update_settings_filterable_attributes(json!(["genres", "color", "platforms", "_geo"]))
         .await;
 
