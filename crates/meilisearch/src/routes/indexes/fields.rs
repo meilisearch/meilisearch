@@ -16,7 +16,7 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::tokenizer::Language;
 use meilisearch_types::milli::{
     AttributePatterns, FieldSortOrder, FilterFeatures, FilterableAttributesFeatures,
-    FilterableAttributesRule, LocalizedAttributesRule, Metadata, MetadataBuilder, PatternMatch,
+    FilterableAttributesRule, LocalizedAttributesRule, Metadata, PatternMatch,
 };
 use serde::{Serialize, Serializer};
 use utoipa::ToSchema;
@@ -306,16 +306,17 @@ pub async fn post_index_fields(
 ) -> Result<HttpResponse, ResponseError> {
     let index = index_scheduler.user_index(index_uid.as_str())?;
     let rtxn = index.read_txn()?;
-    let builder = MetadataBuilder::from_index(&index, &rtxn)?;
-    let fields = builder
-        .fields_metadata()
+
+    let fidmap = index.fields_ids_map_with_metadata(&rtxn)?;
+
+    let fields = fidmap
         .iter()
-        .filter_map(|(name, metadata)| {
+        .filter_map(|(_, name, meta)| {
             let field = Field::new(
                 name,
-                metadata,
-                builder.filterable_attributes(),
-                builder.localized_attributes_rules(),
+                &meta,
+                fidmap.metadata_builder().filterable_attributes(),
+                fidmap.metadata_builder().localized_attributes_rules(),
             );
 
             if !body.0.apply_filter(&field) {
