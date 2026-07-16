@@ -641,7 +641,7 @@ impl Index {
 
     /// Returns the fields ids map with metadata.
     ///
-    /// This structure is not yet stored in the index, and is generated on the fly.
+    /// This structure is not yet stored in the index, and is generated on the fly, which can be costly.
     pub fn fields_ids_map_with_metadata(&self, rtxn: &RoTxn<'_>) -> Result<FieldIdMapWithMetadata> {
         Ok(FieldIdMapWithMetadata::new(
             self.fields_ids_map(rtxn)?,
