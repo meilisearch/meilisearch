@@ -296,7 +296,6 @@ pub struct MetadataBuilder {
     distinct_attribute: Option<String>,
     asc_desc_attributes: HashMap<String, FieldSortOrder>,
     displayed_attributes: Option<HashSet<String>>,
-    fields_metadata: BTreeMap<String, Metadata>,
     order_by_map: OrderByMap,
 }
 
@@ -325,7 +324,7 @@ impl MetadataBuilder {
             .displayed_fields(rtxn)?
             .map(|fields| fields.into_iter().map(String::from).collect());
 
-        let mut this = Self {
+        Ok(Self {
             searchable_attributes,
             exact_searchable_attributes,
             filterable_attributes,
@@ -334,15 +333,8 @@ impl MetadataBuilder {
             distinct_attribute,
             asc_desc_attributes,
             displayed_attributes,
-            fields_metadata: BTreeMap::default(),
             order_by_map: index.sort_facet_values_by(rtxn)?,
-        };
-
-        for field_name in index.fields_ids_map(rtxn)?.names() {
-            this.fields_metadata.insert(field_name.to_owned(), this.metadata_for_field(field_name));
-        }
-
-        Ok(this)
+        })
     }
 
     /// Build a new `MetadataBuilder` from the given parameters.
@@ -372,7 +364,6 @@ impl MetadataBuilder {
             distinct_attribute,
             asc_desc_attributes,
             displayed_attributes: None,
-            fields_metadata: BTreeMap::default(),
             order_by_map: OrderByMap::default(),
         }
     }
@@ -387,7 +378,6 @@ impl MetadataBuilder {
             distinct_attribute: None,
             asc_desc_attributes: Default::default(),
             displayed_attributes: None,
-            fields_metadata: Default::default(),
             order_by_map: OrderByMap::default(),
         }
     }
@@ -693,9 +683,5 @@ impl MetadataBuilder {
 
     pub fn localized_attributes_rules(&self) -> Option<&[LocalizedAttributesRule]> {
         self.localized_attributes.as_deref()
-    }
-
-    pub fn fields_metadata(&self) -> &BTreeMap<String, Metadata> {
-        &self.fields_metadata
     }
 }
