@@ -827,7 +827,8 @@ fn test_meilisearch_1714() {
     let count = index.word_docids.get(&rtxn, "bāo").unwrap().unwrap().len();
     assert_eq!(count, 2);
 
-    let mut search = crate::Search::new(&rtxn, &index, &progress);
+    let mut search =
+        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
     search.query("化妆包");
     search.terms_matching_strategy(TermsMatchingStrategy::default());
 

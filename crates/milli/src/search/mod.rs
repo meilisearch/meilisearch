@@ -617,7 +617,7 @@ mod test {
             .unwrap();
 
         let txn = index.write_txn().unwrap();
-        let mut search = Search::new(&txn, &index, &progress);
+        let mut search = Search::new(&txn, &index, "test", OffsetDateTime::now_utc(), &progress);
 
         search.query("東京");
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -642,7 +642,7 @@ mod test {
             .unwrap();
 
         let txn = index.write_txn().unwrap();
-        let mut search = Search::new(&txn, &index, &progress);
+        let mut search = Search::new(&txn, &index, "test", OffsetDateTime::now_utc(), &progress);
 
         search.query("김밥");
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
