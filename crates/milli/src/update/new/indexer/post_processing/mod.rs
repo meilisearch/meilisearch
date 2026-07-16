@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::iter;
@@ -14,6 +15,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
+use crate::index::PrefixSearch;
 use crate::progress::Progress;
 use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
@@ -52,9 +54,36 @@ pub(super) fn post_process(
     )?;
     compute_facet_search_database(index, wtxn, global_fields_ids_map, indexing_context.progress)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
+
+    // Early-exit: if no word was globally added to or deleted from the index, the words FST
+    // and the prefixes FST are already up-to-date, and rebuilding them would stream the whole
+    // vocabulary only to produce byte-identical outputs. We skip both rebuilds and only
+    // refresh the prefix docids databases, as the bitmaps of modified words may have changed.
+    if word_delta.added_or_deleted_words().next().is_none() {
+        let prefix_settings = index.prefix_settings(wtxn)?;
+        if prefix_settings.compute_prefixes == PrefixSearch::IndexingTime {
+            let prefixes_fst = index.words_prefixes_fst(wtxn)?.map_data(Cow::into_owned)?;
+            compute_prefix_database(
+                index,
+                wtxn,
+                word_delta,
+                &prefixes_fst,
+                indexing_context.progress,
+            )?;
+        }
+        return Ok(());
+    }
+
     if let Some(prefix_data) = compute_word_fst(index, wtxn, word_delta, indexing_context.progress)?
     {
-        compute_prefix_database(index, wtxn, word_delta, &prefix_data, indexing_context.progress)?;
+        let prefixes_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
+        compute_prefix_database(
+            index,
+            wtxn,
+            word_delta,
+            &prefixes_fst,
+            indexing_context.progress,
+        )?;
     }
 
     Ok(())
@@ -66,17 +95,16 @@ pub(super) fn post_process(
     target = "indexing::post_processing",
     name = "prefix"
 )]
-fn compute_prefix_database(
+fn compute_prefix_database<D: AsRef<[u8]>>(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
-    prefix_data: &PrefixData,
+    prefixes_fst: &fst::Set<D>,
     progress: &Progress,
 ) -> Result<()> {
     progress.update_progress(PostProcessingWords::ComputePrefixes);
-    let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
-    let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
-    let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
+    let modified = compute_prefixes(prefixes_fst, word_delta.added_or_modified_words())?;
+    let deleted = compute_prefixes(prefixes_fst, word_delta.deleted_words())?;
 
     compute_prefix_database_from_sources(index, wtxn, &modified, &deleted, progress)
 }
@@ -110,9 +138,10 @@ pub(crate) fn compute_prefix_database_from_sources(
 }
 
 /// The words must be sorted.
-fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<MiniString>>
+fn compute_prefixes<'a, I, D>(prefix_fst: &fst::Set<D>, words: I) -> Result<BTreeSet<MiniString>>
 where
     I: IntoIterator<Item = &'a str>,
+    D: AsRef<[u8]>,
 {
     let mut iter = words.into_iter();
     let mut prefix_stream = prefix_fst.stream();
