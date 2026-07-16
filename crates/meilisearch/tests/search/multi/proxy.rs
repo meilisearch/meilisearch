@@ -1464,7 +1464,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pump-remote-pins",
             json!({
@@ -8447,7 +8447,7 @@ async fn remote_auto_sharding_auto_documents_fetch() {
     let (_task, _status_code) = index0
         .update_settings_sortable_attributes(json!(["genres", "color", "platforms", "_geo"]))
         .await;
-    let (_task, _status_code) = index0
+    let (task, _status_code) = index0
         .update_settings_filterable_attributes(json!(["genres", "color", "platforms", "_geo"]))
         .await;
 
@@ -8464,7 +8464,6 @@ async fn remote_auto_sharding_auto_documents_fetch() {
     println!("platforms:asc");
     let (response, code) =
         index0.fetch_documents(json!({"offset": 0, "limit": 5, "sort": ["platforms:asc"]})).await;
-    snapshot!(code, @"200 OK");
 
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
@@ -8565,6 +8564,8 @@ async fn remote_auto_sharding_auto_documents_fetch() {
       "total": 6
     }
     "###);
+    snapshot!(code, @"200 OK");
+
     println!("platforms:asc, useNetwork: false");
     let (response, code) = index0
         .fetch_documents(
