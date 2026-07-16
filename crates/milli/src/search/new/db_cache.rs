@@ -11,6 +11,7 @@ use roaring::RoaringBitmap;
 use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
+use crate::index::WordsFstSegments;
 use crate::proximity::ProximityPrecision;
 use crate::update::MergeCboRoaringBitmaps;
 use crate::{
@@ -36,6 +37,7 @@ pub struct DatabaseCache<'ctx> {
     pub exact_word_prefix_docids: FxHashMap<Interned<String>, Option<Cow<'ctx, [u8]>>>,
 
     pub words_fst: Option<fst::Set<Cow<'ctx, [u8]>>>,
+    pub words_fst_segments: Option<WordsFstSegments<'ctx>>,
     pub word_position_docids: FxHashMap<(Interned<String>, u16), Option<Cow<'ctx, [u8]>>>,
     pub word_prefix_position_docids: FxHashMap<(Interned<String>, u16), Option<Cow<'ctx, [u8]>>>,
     pub word_positions: FxHashMap<Interned<String>, Vec<u16>>,
@@ -170,6 +172,19 @@ impl<'ctx> DatabaseCache<'ctx> {
 }
 
 impl<'ctx> SearchContext<'ctx> {
+    /// Returns the segmented view of the words dictionary (base + pending
+    /// delta and tombstones FSTs). Prefer this over [`Self::get_words_fst`]
+    /// as the base FST alone may lag behind the dictionary.
+    pub fn get_words_fst_segments(&mut self) -> Result<WordsFstSegments<'ctx>> {
+        if let Some(segments) = self.db_cache.words_fst_segments.clone() {
+            Ok(segments)
+        } else {
+            let segments = self.index.words_fst_segments(self.txn)?;
+            self.db_cache.words_fst_segments = Some(segments.clone());
+            Ok(segments)
+        }
+    }
+
     pub fn get_words_fst(&mut self) -> Result<fst::Set<Cow<'ctx, [u8]>>> {
         if let Some(fst) = self.db_cache.words_fst.clone() {
             Ok(fst)

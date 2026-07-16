@@ -676,14 +676,19 @@ pub fn extract_numbers_from_words_fst(
     disabled_typos_terms: &DisabledTyposTerms,
 ) -> Result<BTreeSet<String>> {
     let mut removed_numbers = BTreeSet::new();
-    let fst = index.words_fst(rtxn)?;
-    let mut stream = fst.stream();
+    let segments = index.words_fst_segments(rtxn)?;
     // TODO use an automaton to only iterate over strings that are numbers
     //      (and thus starts with a digit)
-    while let Some(bytes) = stream.next() {
-        let word = std::str::from_utf8(bytes)?;
-        if disabled_typos_terms.is_exact(word) {
-            removed_numbers.insert(word.to_string());
+    for fst in segments.segments() {
+        let mut stream = fst.stream();
+        while let Some(bytes) = stream.next() {
+            if segments.is_deleted(bytes) {
+                continue;
+            }
+            let word = std::str::from_utf8(bytes)?;
+            if disabled_typos_terms.is_exact(word) {
+                removed_numbers.insert(word.to_string());
+            }
         }
     }
 
