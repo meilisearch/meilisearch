@@ -309,7 +309,7 @@ pub async fn post_index_fields(
 
     let fidmap = index.fields_ids_map_with_metadata(&rtxn)?;
 
-    let fields = fidmap
+    let mut fields = fidmap
         .iter()
         .filter_map(|(_, name, meta)| {
             let field = Field::new(
@@ -327,6 +327,9 @@ pub async fn post_index_fields(
         })
         // collect into a vector to get the total length for pagination
         .collect::<Vec<_>>();
+
+    // keep existing alphabetical behavior
+    fields.sort_unstable_by_key(|field| field.name);
 
     let pagination = Pagination { offset: body.0.offset, limit: body.0.limit };
     let pagination_view = pagination.auto_paginate_sized(fields.into_iter());
