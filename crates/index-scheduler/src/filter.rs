@@ -6,7 +6,7 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    self, filtered_universe, Filter, FilterCondition, IndexFilter, IndexFilterCondition,
+    self, filtered_universe, Filter, FilterCondition, IndexFilter, IndexFilterCondition, TokenLike,
 };
 use meilisearch_types::Index;
 use serde_json::Value;
@@ -63,14 +63,14 @@ pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, Sou
 /// Convert a filter into an index filter by evaluating the foreign filters
 ///
 /// this function is a wrapper around the `filters_into_index_filters`.
-pub fn filter_into_index_filter<'a>(
-    filter: Filter<'a>,
+pub fn filter_into_index_filter(
+    filter: Filter,
     index: &Index,
     rtxn: &RoTxn,
     index_scheduler: &IndexScheduler,
     progress: &Progress,
     index_uid: &str,
-) -> Result<IndexFilter<'a>> {
+) -> Result<IndexFilter> {
     let foreign_keys = index
         .foreign_keys(rtxn)
         .map_err(|err| Error::from_milli(milli::Error::from(err), Some(index_uid.to_string())))?;
@@ -103,12 +103,12 @@ pub fn filter_into_index_filter<'a>(
 /// Convert a vector of filters into a vector of index filters by evaluating the foreign filters
 ///
 /// This function will open each foreign index once and process the filters.
-pub fn filters_into_index_filters<'a>(
-    filters: Vec<(SourceIndexUid, Option<Filter<'a>>)>,
+pub fn filters_into_index_filters(
+    filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     index_scheduler: &IndexScheduler,
     progress: &Progress,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+) -> Result<Vec<Option<IndexFilter>>> {
     // list all the foreign filters and check their validity
     let mut foreign_filters = Vec::new();
     for (index_uid, filter) in filters.iter() {
@@ -217,7 +217,7 @@ pub fn filters_into_index_filters<'a>(
             let mut inner = Vec::new();
             for internal in docids.iter() {
                 if let Some(external) = internal_to_external_docids.get(&internal) {
-                    inner.push(external.to_string().into());
+                    inner.push(external.as_str().into());
                 }
             }
 
@@ -242,9 +242,9 @@ pub fn filters_into_index_filters<'a>(
 /// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
 ///
 /// This function will not open any foreign index but will panic if a foreign filter is encountered.
-pub fn filters_into_index_filters_unchecked<'a>(
-    filters: Vec<Option<Filter<'a>>>,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+pub fn filters_into_index_filters_unchecked(
+    filters: Vec<Option<Filter>>,
+) -> Result<Vec<Option<IndexFilter>>> {
     filters
         .into_iter()
         .map(|filter| {
@@ -255,12 +255,12 @@ pub fn filters_into_index_filters_unchecked<'a>(
         .collect::<Result<_>>()
 }
 
-fn condition_to_index_condition<'a, F>(
-    filter: FilterCondition<'a>,
+fn condition_to_index_condition<F>(
+    filter: FilterCondition,
     foreign_filter: &mut F,
-) -> Result<IndexFilterCondition<'a>>
+) -> Result<IndexFilterCondition>
 where
-    F: FnMut(FilterCondition<'a>) -> Result<IndexFilterCondition<'a>>,
+    F: FnMut(FilterCondition) -> Result<IndexFilterCondition>,
 {
     match filter {
         FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
@@ -324,12 +324,12 @@ pub fn retrieve_foreign_keys_settings<'a>(
     Ok(foreign_keys_settings)
 }
 
-pub fn parse_filter<'a>(
-    facets: &'a Value,
+pub fn parse_filter(
+    facets: &Value,
     filter_parsing_error_code: Code,
     features: RoFeatures,
     index_uid: Option<&str>,
-) -> Result<Option<Filter<'a>>> {
+) -> Result<Option<Filter>> {
     let filter = match facets {
         Value::String(expr) => Filter::from_str(expr).map_err(|e| {
             Error::Milli { error: e, index_uid: index_uid.map(String::from) }
@@ -347,11 +347,11 @@ pub fn parse_filter<'a>(
     check_filter_experimental_features(filter, features, index_uid)
 }
 
-fn check_filter_experimental_features<'a>(
-    filter: Option<Filter<'a>>,
+fn check_filter_experimental_features(
+    filter: Option<Filter>,
     features: RoFeatures,
     index_uid: Option<&str>,
-) -> Result<Option<Filter<'a>>> {
+) -> Result<Option<Filter>> {
     if let Some(ref filter) = filter {
         // If the contains operator is used while the contains filter feature is not enabled, errors out
         if let Some((token, error)) =
@@ -402,11 +402,11 @@ fn check_filter_experimental_features<'a>(
     Ok(filter)
 }
 
-fn parse_filter_array<'a>(
-    arr: &'a [Value],
+fn parse_filter_array(
+    arr: &[Value],
     code: Code,
     index_uid: Option<&str>,
-) -> Result<Option<Filter<'a>>> {
+) -> Result<Option<Filter>> {
     let mut ands = Vec::new();
     for value in arr {
         match value {
@@ -459,7 +459,7 @@ fn invalid_filter_syntax_error(
 }
 
 fn unsupported_foreign_filter_error(
-    filter: FilterCondition<'_>,
+    filter: FilterCondition,
     code: Code,
     index_uid: Option<&str>,
 ) -> Error {
@@ -481,12 +481,12 @@ fn unsupported_foreign_filter_error(
 /// - Check the experimental features
 /// - Parse the filter
 /// - if a foreign filter is encountered, return an error "Unsupported foreign filter"
-pub fn parse_local_index_filter<'a>(
-    filter: &'a Value,
+pub fn parse_local_index_filter(
+    filter: &Value,
     index_uid: Option<&str>,
     features: RoFeatures,
     code: Code,
-) -> Result<Option<IndexFilter<'a>>> {
+) -> Result<Option<IndexFilter>> {
     let Some(Filter { condition }) = parse_filter(filter, code, features, index_uid)? else {
         return Ok(None);
     };

@@ -58,7 +58,7 @@ pub struct PinDoc {
 pub struct Search<'a> {
     query: Option<String>,
     // this should be linked to the String in the query
-    filter: Option<IndexFilter<'a>>,
+    filter: Option<IndexFilter>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
@@ -178,7 +178,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn filter(&mut self, condition: Option<IndexFilter<'a>>) -> &mut Search<'a> {
+    pub fn filter(&mut self, condition: Option<IndexFilter>) -> &mut Search<'a> {
         self.filter = condition;
         self
     }

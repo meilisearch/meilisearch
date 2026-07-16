@@ -20,8 +20,8 @@ const MAX_FILTER_DEPTH: usize = 2000;
 pub const SHARD_FIELD: &str = "_shard";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Filter<'a> {
-    pub condition: FilterCondition<'a>,
+pub struct Filter {
+    pub condition: FilterCondition,
 }
 
 #[derive(Debug)]
@@ -106,20 +106,20 @@ impl Display for FilterError<'_> {
     }
 }
 
-impl<'a> From<FPError<'a>> for Error {
-    fn from(error: FPError<'a>) -> Self {
+impl From<FPError> for Error {
+    fn from(error: FPError) -> Self {
         Self::UserError(UserError::InvalidFilter(error.to_string()))
     }
 }
 
-impl<'a> From<Filter<'a>> for FilterCondition<'a> {
-    fn from(f: Filter<'a>) -> Self {
+impl From<Filter> for FilterCondition {
+    fn from(f: Filter) -> Self {
         f.condition
     }
 }
 
-impl<'a> From<FilterCondition<'a>> for Filter<'a> {
-    fn from(fc: FilterCondition<'a>) -> Self {
+impl From<FilterCondition> for Filter {
+    fn from(fc: FilterCondition) -> Self {
         Self { condition: fc }
     }
 }

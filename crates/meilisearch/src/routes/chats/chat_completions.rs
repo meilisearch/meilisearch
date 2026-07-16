@@ -415,8 +415,6 @@ async fn process_search_request(
                     }
                 })
                 .transpose()?
-                // we need to own the filter because it's sent to spawn_blocking
-                .map(|f| f.into_owned())
         }
         None => None,
     };

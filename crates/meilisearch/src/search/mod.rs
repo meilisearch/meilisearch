@@ -1624,7 +1624,7 @@ pub fn prepare_search<'t>(
     index_uid: &'t str,
     before_search: time::OffsetDateTime,
     query: &'t SearchQuery,
-    filter: Option<IndexFilter<'t>>,
+    filter: Option<IndexFilter>,
     search_kind: &SearchKind,
     deadline: Deadline,
     features: RoFeatures,
@@ -2679,13 +2679,13 @@ pub fn perform_similar(
     Ok(result)
 }
 
-fn extract_filters<'a>(
+fn extract_filters(
     index_scheduler: &IndexScheduler,
     index_uid: IndexUid,
     progress: &Progress,
-    docid_filter: Option<Filter<'a>>,
-    candidates_filter: Option<Filter<'a>>,
-) -> Result<(Option<IndexFilter<'a>>, Option<IndexFilter<'a>>), ResponseError> {
+    docid_filter: Option<Filter>,
+    candidates_filter: Option<Filter>,
+) -> Result<(Option<IndexFilter>, Option<IndexFilter>), ResponseError> {
     let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
     let foreign_keys_settings =
         retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;

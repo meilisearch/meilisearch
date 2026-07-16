@@ -666,7 +666,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
-    filters: &Option<IndexFilter<'_>>,
+    filters: &Option<IndexFilter>,
     candidates: Option<&RoaringBitmap>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {

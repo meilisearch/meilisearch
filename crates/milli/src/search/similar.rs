@@ -11,7 +11,7 @@ use crate::{filtered_universe, DocumentId, Index, Result, SearchResult};
 pub struct Similar<'a> {
     id: DocumentId,
     // this should be linked to the String in the query
-    filter: Option<IndexFilter<'a>>,
+    filter: Option<IndexFilter>,
     offset: usize,
     limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
@@ -51,7 +51,7 @@ impl<'a> Similar<'a> {
         }
     }
 
-    pub fn filter(&mut self, filter: IndexFilter<'a>) -> &mut Self {
+    pub fn filter(&mut self, filter: IndexFilter) -> &mut Self {
         self.filter = Some(filter);
         self
     }
