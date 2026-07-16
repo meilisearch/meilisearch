@@ -1464,7 +1464,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
     snapshot!(code, @"202 Accepted");
     ms1.wait_task(task.uid()).await.succeeded();
 
-    let (_response, code) = ms1
+    let (task, code) = ms1
         .create_dynamic_search_rule(
             "pump-remote-pins",
             json!({
