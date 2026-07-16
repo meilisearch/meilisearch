@@ -5,7 +5,7 @@ use meili_snap::{json_string, snapshot};
 use wiremock::matchers::{method, path, AnyMatcher};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{Server, Value, NESTED_DOCUMENTS, SCORE_DOCUMENTS};
+use crate::common::{Server, Value, SCORE_DOCUMENTS};
 use crate::json;
 
 #[actix_rt::test]
@@ -428,6 +428,8 @@ async fn remote_sharding() {
 #[cfg(feature = "enterprise")]
 #[actix_rt::test]
 async fn remote_sharding_federated_pattern_facets() {
+    use crate::common::NESTED_DOCUMENTS;
+
     let ms0 = Server::new().await;
     let ms1 = Server::new().await;
     let ms2 = Server::new().await;
