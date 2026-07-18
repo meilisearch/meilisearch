@@ -193,16 +193,20 @@ async fn download_asset(
     dest_filename: String,
 ) -> anyhow::Result<()> {
     let context = || format!("failure downloading asset {name} from {src}");
-
     let response = client.get(&src).send().await.with_context(context)?;
 
+    let canonical_path = std::path::Path::new(&dest_filename);
+    let tmp_path = canonical_path.with_extension(format!(
+        "{}.tmp",
+        canonical_path.extension().and_then(|s| s.to_str()).unwrap_or("")
+    ));
     let file = std::fs::File::options()
         .create(true)
         .truncate(true)
         .write(true)
         .read(true)
-        .open(&dest_filename)
-        .with_context(|| format!("creating destination file {dest_filename}"))
+        .open(&tmp_path)
+        .with_context(|| format!("creating temporary file {dest_filename}"))
         .with_context(context)?;
 
     let mut dest = std::io::BufWriter::new(
@@ -257,6 +261,8 @@ async fn download_asset(
     if !check_sha256(&name, &asset, file)? {
         bail!("asset '{name}': sha256 mismatch for file {dest_filename} downloaded from {src}")
     }
+    std::fs::rename(&tmp_path, canonical_path)
+        .with_context(|| format!("failed to atomically publish asset to {dest_filename}"))?;
 
     Ok(())
 }
