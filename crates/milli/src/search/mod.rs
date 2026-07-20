@@ -397,26 +397,27 @@ impl<'a> Search<'a> {
 
         let mut ignored = RoaringBitmap::new();
 
-        let query_graph_terms = if let Some(query) = self.query.as_deref() {
-            let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
+        let query_graph_terms =
+            if let Some(query) = self.query.as_deref().filter(|q| !q.trim().is_empty()) {
+                let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
 
-            let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
-                extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
+                let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
+                    extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
 
-            used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+                used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
-            ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
-            ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
+                ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
+                ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
 
-            if query_terms.is_empty() {
-                // Do a placeholder search instead
-                None
+                if query_terms.is_empty() {
+                    // Do a placeholder search instead
+                    None
+                } else {
+                    Some((graph, query_terms))
+                }
             } else {
-                Some((graph, query_terms))
-            }
-        } else {
-            None
-        };
+                None
+            };
 
         let pins = self
             .dynamic_search_rules
