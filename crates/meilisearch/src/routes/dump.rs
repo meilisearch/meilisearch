@@ -9,8 +9,7 @@ use tracing::debug;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::Opt;
+use crate::routes::SummarizedTaskView;
 
 #[routes::routes(
     routes(
@@ -52,7 +51,6 @@ pub async fn create_dump(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::DUMPS_CREATE }>, Data<AuthController>>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish(DumpAnalytics::default(), &req);
@@ -61,12 +59,8 @@ pub async fn create_dump(
         keys: auth_controller.list_keys()?,
         instance_uid: analytics.instance_uid().cloned(),
     };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!(returns = ?task, "Create dump");
     Ok(HttpResponse::Accepted().json(task))

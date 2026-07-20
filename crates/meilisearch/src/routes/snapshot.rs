@@ -8,8 +8,7 @@ use tracing::debug;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::Opt;
+use crate::routes::SummarizedTaskView;
 
 #[routes::routes(
     routes(
@@ -50,18 +49,13 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 pub async fn create_snapshot(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SNAPSHOTS_CREATE }>, Data<IndexScheduler>>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     analytics.publish(SnapshotAnalytics::default(), &req);
 
     let task = KindWithContent::SnapshotCreation;
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!(returns = ?task, "Create snapshot");
     Ok(HttpResponse::Accepted().json(task))

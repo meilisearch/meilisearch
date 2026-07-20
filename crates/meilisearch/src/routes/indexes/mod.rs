@@ -18,15 +18,11 @@ use time::OffsetDateTime;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use super::{
-    get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
-};
+use super::{Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::routes::is_dry_run;
-use crate::Opt;
 
 pub mod compact;
 pub mod documents;
@@ -236,7 +232,6 @@ pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: AwebJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Create index");
@@ -257,11 +252,9 @@ pub async fn create_index(
             index_uid: uid.to_string(),
             primary_key: primary_key.clone(),
         };
-        let tuid = get_task_id(&req, &opt)?;
-        let dry_run = is_dry_run(&req, &opt)?;
         let scheduler = index_scheduler.clone();
         let mut task = tokio::task::spawn_blocking(move || {
-            scheduler.register_with_custom_metadata(task, tuid, None, dry_run, task_network)
+            scheduler.register_with_custom_metadata(task, None, task_network)
         })
         .await??;
 
@@ -423,7 +416,6 @@ pub async fn update_index(
     index_uid: web::Path<String>,
     body: AwebJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Update index");
@@ -450,11 +442,9 @@ pub async fn update_index(
         new_index_uid: body.uid.clone(),
     };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let scheduler = index_scheduler.clone();
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 
@@ -515,19 +505,16 @@ pub async fn delete_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
 ) -> Result<HttpResponse, ResponseError> {
     let network = index_scheduler.network();
     let task_network = task_network_and_check_leader_and_version(&req, &network)?;
 
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.clone().into_inner() };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let scheduler = index_scheduler.clone();
 
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 

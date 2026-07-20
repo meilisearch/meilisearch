@@ -777,31 +777,17 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(
-        &self,
-        kind: KindWithContent,
-        task_id: Option<TaskId>,
-        dry_run: bool,
-    ) -> Result<Task> {
-        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(kind, None, None, None)
     }
 
     pub fn register_with_custom_metadata(
         &self,
         kind: KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         task_network: Option<TaskNetwork>,
     ) -> Result<Task> {
-        self.register_with_custom_metadata_and_network(
-            kind,
-            task_id,
-            custom_metadata,
-            dry_run,
-            task_network,
-            None,
-        )
+        self.register_with_custom_metadata_and_network(kind, custom_metadata, task_network, None)
     }
 
     /// Register a new task in the scheduler, with metadata.
@@ -821,9 +807,7 @@ impl IndexScheduler {
     pub fn register_with_custom_metadata_and_network(
         &self,
         kind: KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         task_network: Option<TaskNetwork>,
         new_network: Option<Network>,
     ) -> Result<Task> {
@@ -853,9 +837,7 @@ impl IndexScheduler {
         let task = self.queue.register(
             &mut wtxn,
             &kind,
-            task_id,
             custom_metadata,
-            dry_run,
             task_network.map(DbTaskNetwork::from),
         )?;
 

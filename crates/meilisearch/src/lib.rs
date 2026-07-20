@@ -387,9 +387,7 @@ pub fn setup_meilisearch(
             .name(String::from("register-snapshot-tasks"))
             .spawn(move || loop {
                 thread::sleep(snapshot_delay);
-                if let Err(e) =
-                    index_scheduler.register(KindWithContent::SnapshotCreation, None, false)
-                {
+                if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation) {
                     error!("Error while registering snapshot: {}", e);
                 }
             })

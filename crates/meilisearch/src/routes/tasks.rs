@@ -24,11 +24,11 @@ use tokio::io::AsyncReadExt;
 use tokio::task;
 use utoipa::{IntoParams, ToSchema};
 
-use super::{get_task_id, is_dry_run, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use super::{SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::{aggregate_methods, Opt};
 
 #[routes::routes(
     routes(
@@ -378,7 +378,6 @@ async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -413,11 +412,7 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task =
-        task::spawn_blocking(move || index_scheduler.register(task_cancelation, uid, dry_run))
-            .await??;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_cancelation)).await??;
     let task: SummarizedTaskView = task.into();
 
     // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
@@ -477,7 +472,6 @@ async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -512,10 +506,7 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion, uid, dry_run))
-        .await??;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
     let task: SummarizedTaskView = task.into();
 
     // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0

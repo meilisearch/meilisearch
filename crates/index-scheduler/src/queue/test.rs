@@ -29,7 +29,7 @@ fn register() {
 
     for (idx, kind) in kinds.into_iter().enumerate() {
         let k = kind.as_kind();
-        let task = index_scheduler.register(kind, None, false).unwrap();
+        let task = index_scheduler.register(kind).unwrap();
         index_scheduler.assert_internally_consistent();
 
         assert_eq!(task.uid, idx as u32);
@@ -41,126 +41,6 @@ fn register() {
 }
 
 #[test]
-fn dry_run() {
-    let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
-
-    let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-    let task = index_scheduler.register(kind, None, true).unwrap();
-    snapshot!(task.uid, @"0");
-    snapshot!(snapshot_index_scheduler(&index_scheduler), @r"
-        ### Autobatching Enabled = true
-        ### Processing batch None:
-        []
-        ----------------------------------------------------------------------
-        ### All Tasks:
-        ----------------------------------------------------------------------
-        ### Status:
-        ----------------------------------------------------------------------
-        ### Kind:
-        ----------------------------------------------------------------------
-        ### Index Tasks:
-        ----------------------------------------------------------------------
-        ### Index Mapper:
-
-        ----------------------------------------------------------------------
-        ### Canceled By:
-
-        ----------------------------------------------------------------------
-        ### Enqueued At:
-        ----------------------------------------------------------------------
-        ### Started At:
-        ----------------------------------------------------------------------
-        ### Finished At:
-        ----------------------------------------------------------------------
-        ### All Batches:
-        ----------------------------------------------------------------------
-        ### Batch to tasks mapping:
-        ----------------------------------------------------------------------
-        ### Batches Status:
-        ----------------------------------------------------------------------
-        ### Batches Kind:
-        ----------------------------------------------------------------------
-        ### Batches Index Tasks:
-        ----------------------------------------------------------------------
-        ### Batches Enqueued At:
-        ----------------------------------------------------------------------
-        ### Batches Started At:
-        ----------------------------------------------------------------------
-        ### Batches Finished At:
-        ----------------------------------------------------------------------
-        ### File Store:
-
-        ----------------------------------------------------------------------
-        ");
-
-    let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-    let task = index_scheduler.register(kind, Some(12), true).unwrap();
-    snapshot!(task.uid, @"12");
-    snapshot!(snapshot_index_scheduler(&index_scheduler), @r"
-        ### Autobatching Enabled = true
-        ### Processing batch None:
-        []
-        ----------------------------------------------------------------------
-        ### All Tasks:
-        ----------------------------------------------------------------------
-        ### Status:
-        ----------------------------------------------------------------------
-        ### Kind:
-        ----------------------------------------------------------------------
-        ### Index Tasks:
-        ----------------------------------------------------------------------
-        ### Index Mapper:
-
-        ----------------------------------------------------------------------
-        ### Canceled By:
-
-        ----------------------------------------------------------------------
-        ### Enqueued At:
-        ----------------------------------------------------------------------
-        ### Started At:
-        ----------------------------------------------------------------------
-        ### Finished At:
-        ----------------------------------------------------------------------
-        ### All Batches:
-        ----------------------------------------------------------------------
-        ### Batch to tasks mapping:
-        ----------------------------------------------------------------------
-        ### Batches Status:
-        ----------------------------------------------------------------------
-        ### Batches Kind:
-        ----------------------------------------------------------------------
-        ### Batches Index Tasks:
-        ----------------------------------------------------------------------
-        ### Batches Enqueued At:
-        ----------------------------------------------------------------------
-        ### Batches Started At:
-        ----------------------------------------------------------------------
-        ### Batches Finished At:
-        ----------------------------------------------------------------------
-        ### File Store:
-
-        ----------------------------------------------------------------------
-        ");
-}
-
-#[test]
-fn basic_set_taskid() {
-    let (index_scheduler, _handle) = IndexScheduler::test(true, vec![]);
-
-    let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-    let task = index_scheduler.register(kind, None, false).unwrap();
-    snapshot!(task.uid, @"0");
-
-    let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-    let task = index_scheduler.register(kind, Some(12), false).unwrap();
-    snapshot!(task.uid, @"12");
-
-    let kind = KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None };
-    let error = index_scheduler.register(kind, Some(5), false).unwrap_err();
-    snapshot!(error, @"Received bad task id: 5 should be >= to 13.");
-}
-
-#[test]
 fn test_disable_auto_deletion_of_tasks() {
     let (index_scheduler, mut handle) = IndexScheduler::test_with_custom_config(vec![], |config| {
         config.cleanup_enabled = false;
@@ -169,38 +49,22 @@ fn test_disable_auto_deletion_of_tasks() {
     });
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     handle.advance_one_successful_batch();
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     handle.advance_one_failed_batch();
 
     // at this point the max number of tasks is reached
     // we can still enqueue multiple tasks
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
 
     {
@@ -237,38 +101,22 @@ fn test_auto_deletion_of_tasks() {
     });
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     handle.advance_one_successful_batch();
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     handle.advance_one_failed_batch();
 
     // at this point the max number of tasks is reached
     // we can still enqueue multiple tasks
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
 
     {
@@ -345,20 +193,13 @@ fn test_task_queue_is_full() {
     });
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     handle.advance_one_successful_batch();
     // on average this task takes ~600 bytes
     loop {
-        let result = index_scheduler.register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        );
+        let result = index_scheduler
+            .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None });
         if result.is_err() {
             break;
         }
@@ -368,11 +209,7 @@ fn test_task_queue_is_full() {
 
     // at this point the task DB shoud have reached its limit and we should not be able to register new tasks
     let result = index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap_err();
     snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
     // we won't be able to test this error in an integration test thus as a best effort test I still ensure the error return the expected error code
@@ -380,19 +217,14 @@ fn test_task_queue_is_full() {
 
     // Even the task deletion and cancelation that don't delete anything should be refused
     let result = index_scheduler
-        .register(
-            KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion { query: S("test"), tasks: RoaringBitmap::new() })
         .unwrap_err();
     snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
     let result = index_scheduler
-        .register(
-            KindWithContent::TaskCancelation { query: S("test"), tasks: RoaringBitmap::new() },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskCancelation {
+            query: S("test"),
+            tasks: RoaringBitmap::new(),
+        })
         .unwrap_err();
     snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
 
@@ -401,41 +233,25 @@ fn test_task_queue_is_full() {
 
     // But a task cancelation that cancel something should work
     index_scheduler
-        .register(
-            KindWithContent::TaskCancelation { query: S("test"), tasks: (0..100).collect() },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskCancelation { query: S("test"), tasks: (0..100).collect() })
         .unwrap();
     handle.advance_one_successful_batch();
 
     // But we should still be forbidden from enqueuing new tasks
     let result = index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap_err();
     snapshot!(result, @"Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.");
 
     // And a task deletion that delete something should works
     index_scheduler
-        .register(
-            KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion { query: S("test"), tasks: (0..100).collect() })
         .unwrap();
     handle.advance_one_successful_batch();
 
     // Now we should be able to enqueue a few tasks again
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap();
     handle.advance_one_failed_batch();
 }

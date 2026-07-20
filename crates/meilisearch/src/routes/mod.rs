@@ -56,7 +56,6 @@ use crate::search::{
     INCLUDE_METADATA_HEADER,
 };
 use crate::search_queue::SearchQueue;
-use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
@@ -126,14 +125,6 @@ mod webhooks;
     components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, ListFields, ListFieldsFilter, SizeFormat))
 )]
 pub struct MeilisearchApi;
-
-pub fn get_task_id(_req: &HttpRequest, _opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
-    Ok(None)
-}
-
-pub fn is_dry_run(_req: &HttpRequest, _opt: &Opt) -> Result<bool, ResponseError> {
-    Ok(false)
-}
 
 /// Parse the `Meili-Include-Metadata` header from an HTTP request.
 ///

@@ -240,8 +240,6 @@ async fn patch_network_without_origin(
                 index_scheduler.register_with_custom_metadata_and_network(
                     task,
                     None,
-                    None,
-                    false,
                     Some(TaskNetwork::Remotes {
                         remote_tasks: Default::default(),
                         network_version: merged_network.version,
@@ -392,8 +390,6 @@ async fn patch_network_with_origin(
             index_scheduler.register_with_custom_metadata_and_network(
                 task,
                 None,
-                None,
-                false,
                 Some(TaskNetwork::Origin { origin }),
                 Some(new_network),
             )
