@@ -1429,7 +1429,9 @@ impl SearchByIndex {
                     (SearchKind::SemanticOnly { .. }, _) => {
                         ranking_rules::CanonicalizationKind::Vector
                     }
-                    (_, Some(q)) if !q.is_empty() => ranking_rules::CanonicalizationKind::Keyword,
+                    (_, Some(q)) if !q.trim().is_empty() => {
+                        ranking_rules::CanonicalizationKind::Keyword
+                    }
                     _ => ranking_rules::CanonicalizationKind::Placeholder,
                 };
 
