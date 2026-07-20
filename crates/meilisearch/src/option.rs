@@ -75,7 +75,7 @@ const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
 const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
     "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
-
+const MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES: &str = "MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES";
 const MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: &str = "MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS";
 
 // Related to S3 snapshots
@@ -404,6 +404,10 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_legacy_search_default: bool,
 
+    #[clap(long, env = MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES)]
+    #[serde(default)]
+    pub experimental_max_open_indexes: Option<usize>,
+
     /// Experimental search queue size. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/729>
     ///
@@ -617,6 +621,7 @@ impl Opt {
             ignore_dump_if_db_exists: _,
             config_file_path: _,
             no_analytics,
+            experimental_max_open_indexes,
             experimental_contains_filter,
             experimental_enable_metrics,
             experimental_legacy_search_default: experimental_legacy_search,
@@ -651,7 +656,12 @@ impl Opt {
                 task_webhook_authorization_header,
             );
         }
-
+        if let Some(max_open_indexes) = experimental_max_open_indexes {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES,
+                max_open_indexes.to_string(),
+            )
+        }
         export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,

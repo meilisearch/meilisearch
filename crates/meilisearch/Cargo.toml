@@ -123,6 +123,8 @@ meili-snap = { path = "../meili-snap" }
 temp-env = "0.3.6"
 wiremock = "0.6.5"
 yaup = "0.3.1"
+[target.'cfg(unix)'.dependencies]
+rlimit = "0.10"
 
 [build-dependencies]
 anyhow = { version = "1.0.100", optional = true }

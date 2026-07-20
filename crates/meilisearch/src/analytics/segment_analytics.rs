@@ -270,6 +270,7 @@ impl Infos {
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
             experimental_allowed_ip_networks,
+            experimental_max_open_indexes: _,
             http_addr,
             master_key: _,
             env,
