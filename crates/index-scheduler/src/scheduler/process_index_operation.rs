@@ -583,6 +583,8 @@ impl IndexScheduler {
         must_stop_processing: &MustStopProcessing,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>> {
+        use milli::dynamic_search_rules::fields as dsr_fields;
+
         progress.update_progress(SettingsProgress::RetrievingAndMergingTheSettings);
         let indexer_config = self.index_mapper.indexer_config();
         let mut builder = milli::update::Settings::new(index_wtxn, index, indexer_config);
@@ -591,29 +593,29 @@ impl IndexScheduler {
             displayed_attributes: Setting::Set(vec!["*".to_string()]).into(),
             searchable_attributes: Setting::Set(vec![
                 // used to find query word constraints
-                "conditions.query.words".to_string(),
+                dsr_fields::CONDITIONS_QUERY_WORDS.to_string(),
                 // used in list rules
-                "description".to_string(),
+                dsr_fields::DESCRIPTION.to_string(),
             ])
             .into(),
             filterable_attributes: Setting::Set(vec![
                 // filter by active or inactive rules
-                eq_attr_pattern("active".into()),
+                eq_attr_pattern(dsr_fields::ACTIVE.into()),
                 // used to find time constraints
-                cmp_attr_pattern("conditions.time.start".into()),
+                cmp_attr_pattern(dsr_fields::CONDITIONS_TIME_START.into()),
                 // used to find time constraints
-                cmp_attr_pattern("conditions.time.end".into()),
+                cmp_attr_pattern(dsr_fields::CONDITIONS_TIME_END.into()),
                 // used to find query isEmpty constraints
-                eq_attr_pattern("conditions.query.isEmpty".into()),
+                eq_attr_pattern(dsr_fields::CONDITIONS_QUERY_IS_EMPTY.into()),
                 // used to find filter constraints
-                cmp_attr_pattern("conditions.filter.values.*".into()),
+                cmp_attr_pattern(dsr_fields::CONDITIONS_FILTER_VALUES.into()),
                 // use to count filter constraints
-                cmp_attr_pattern("conditions.filter.nbConstraints".into()),
+                cmp_attr_pattern(dsr_fields::CONDITIONS_FILTER_NB_CONSTRAINTS.into()),
             ]),
             sortable_attributes: {
                 let mut sortable_attributes: BTreeSet<_> = Default::default();
                 // used to sort rules by precedence in responses
-                sortable_attributes.insert("precedence".to_string());
+                sortable_attributes.insert(dsr_fields::PRECEDENCE.to_string());
                 Setting::Set(sortable_attributes)
             },
             foreign_keys: Setting::NotSet,
@@ -664,6 +666,8 @@ impl IndexScheduler {
         mut tasks: Vec<Task>,
         progress: &Progress,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
+        use milli::dynamic_search_rules::fields as dsr_fields;
+
         let indexer_alloc = Bump::new();
         let from_milli = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_owned()));
         let started_processing_at = std::time::Instant::now();
@@ -727,16 +731,16 @@ impl IndexScheduler {
                     let mut rule = serde_json::to_value(rule).unwrap();
 
                     'inject_nb_constraints: {
-                        let Some(conditions) = rule.get_mut("conditions") else {
+                        let Some(conditions) = rule.get_mut(dsr_fields::CONDITIONS) else {
                             break 'inject_nb_constraints;
                         };
-                        let Some(filter) = conditions.get_mut("filter") else {
+                        let Some(filter) = conditions.get_mut(dsr_fields::FILTER) else {
                             break 'inject_nb_constraints;
                         };
                         filter
                             .as_object_mut()
                             .unwrap()
-                            .insert("nbConstraints".into(), nb_constraints.into());
+                            .insert(dsr_fields::NB_CONSTRAINTS.into(), nb_constraints.into());
                     }
 
                     let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
@@ -768,7 +772,7 @@ impl IndexScheduler {
                 &indexer_alloc,
                 index,
                 &rtxn,
-                Some("uid"),
+                Some(dsr_fields::UID),
                 &mut new_fields_ids_map,
                 &must_stop_processing,
                 progress.clone(),

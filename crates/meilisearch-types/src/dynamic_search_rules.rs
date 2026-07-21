@@ -63,6 +63,8 @@ impl DynamicSearchRule {
         doc: impl Document<'a>,
         fault_source: FaultSource,
     ) -> Result<Self, milli::Error> {
+        use milli::dynamic_search_rules::fields as dsr_fields;
+
         let to_milli_error = |err| match fault_source {
             FaultSource::User => milli::Error::UserError(milli::UserError::SerdeJson(err)),
             FaultSource::Runtime | FaultSource::Bug | FaultSource::Undecided => {
@@ -71,11 +73,11 @@ impl DynamicSearchRule {
         };
 
         let uid = serde_json::from_str(
-            doc.top_level_field("uid")?
+            doc.top_level_field(dsr_fields::UID)?
                 .ok_or_else(|| match fault_source {
                     FaultSource::User => {
                         milli::Error::UserError(milli::UserError::MissingDocumentId {
-                            primary_key: "uid".to_string(),
+                            primary_key: dsr_fields::UID.to_string(),
                             document: Default::default(),
                         })
                     }
@@ -89,30 +91,30 @@ impl DynamicSearchRule {
                 .get(),
         )
         .map_err(to_milli_error)?;
-        let description = match doc.top_level_field("description")? {
+        let description = match doc.top_level_field(dsr_fields::DESCRIPTION)? {
             // we deserialize the description as an Option rather than hardcoding Some here,
             // because the description could be an explicit `null`
             Some(description) => serde_json::from_str(description.get()).map_err(to_milli_error)?,
             None => None,
         };
 
-        let precedence = match doc.top_level_field("precedence")? {
+        let precedence = match doc.top_level_field(dsr_fields::PRECEDENCE)? {
             Some(precedence) => serde_json::from_str(precedence.get()).map_err(to_milli_error)?,
             None => None,
         };
 
-        let active = match doc.top_level_field("active")? {
+        let active = match doc.top_level_field(dsr_fields::ACTIVE)? {
             Some(active) => serde_json::from_str(active.get()).map_err(to_milli_error)?,
             // `active` defaults to true!
             None => true,
         };
 
-        let conditions = match doc.top_level_field("conditions")? {
+        let conditions = match doc.top_level_field(dsr_fields::CONDITIONS)? {
             Some(conditions) => serde_json::from_str(conditions.get()).map_err(to_milli_error)?,
             None => Default::default(),
         };
 
-        let actions = match doc.top_level_field("actions")? {
+        let actions = match doc.top_level_field(dsr_fields::ACTIONS)? {
             Some(actions) => serde_json::from_str(actions.get()).map_err(to_milli_error)?,
             None => Default::default(),
         };

@@ -115,7 +115,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     /// If no rule contains the "active" field, then all declared rules are considered active.
     pub fn active_rule_ids(&self, is_active: bool) -> Result<RoaringBitmap> {
         let left_bound = if is_active { "true" } else { "false" };
-        let active_rules = if let Some(active_fid) = self.db_fields_ids_map.id("active") {
+        let active_rules = if let Some(active_fid) = self.db_fields_ids_map.id(fields::ACTIVE) {
             let active_key = FacetGroupKey { field_id: active_fid, level: 0, left_bound };
             let Some(FacetGroupValue { size: _, bitmap: active_rules }) =
                 self.index.facet_id_string_docids.get(self.rtxn, &active_key)?
@@ -154,7 +154,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         search.exhaustive_number_hits(true);
         search.limit(limit);
         search.offset(offset);
-        let searchable_attrs = ["description".into(), "conditions.query.words".into()];
+        let searchable_attrs = [fields::DESCRIPTION.into(), fields::CONDITIONS_QUERY_WORDS.into()];
         search.searchable_attributes(&searchable_attrs);
 
         search.execute()
@@ -180,7 +180,7 @@ impl<'a> DynamicSearchRulesView<'a> {
                     return Ok(None);
                 };
 
-                let Some(actions) = rule.field("actions")? else {
+                let Some(actions) = rule.field(fields::ACTIONS)? else {
                     return Ok(None);
                 };
                 let actions: Result<Vec<RuleAction>, serde_json::Error> =
@@ -235,7 +235,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         target_time: &str,
     ) -> Result<(), crate::Error> {
         let db = self.index.facet_id_string_docids;
-        if let Some(time_start_fid) = self.db_fields_ids_map.id("conditions.time.start") {
+        if let Some(time_start_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_TIME_START) {
             let mut time_start_after_now = RoaringBitmap::new();
 
             // looking for all rules whose time.start is AFTER target_time
@@ -253,7 +253,7 @@ impl<'a> DynamicSearchRulesView<'a> {
             )?;
             *active_rules -= time_start_after_now;
         }
-        if let Some(time_end_fid) = self.db_fields_ids_map.id("conditions.time.end") {
+        if let Some(time_end_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_TIME_END) {
             let mut time_end_before_now = RoaringBitmap::new();
 
             // looking for all rules whose time.end is BEFORE target_time
@@ -283,7 +283,9 @@ impl<'a> DynamicSearchRulesView<'a> {
     ) -> Result<(), crate::Error> {
         // 1. exclude rules that have the a different query emptiness condition
         let is_query_empty = query_terms.is_empty();
-        if let Some(is_query_empty_fid) = self.db_fields_ids_map.id("conditions.query.isEmpty") {
+        if let Some(is_query_empty_fid) =
+            self.db_fields_ids_map.id(fields::CONDITIONS_QUERY_IS_EMPTY)
+        {
             let left_bound = if is_query_empty { "false" } else { "true" };
             let is_not_query_empty_key =
                 FacetGroupKey { field_id: is_query_empty_fid, level: 0, left_bound };
@@ -306,7 +308,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         query_terms.dedup();
         let words_count =
             query_terms.len().min(MAX_COUNTED_WORDS).min(fuel.max_counted_words()) as u8;
-        if let Some(query_words_fid) = self.db_fields_ids_map.id("conditions.query.words") {
+        if let Some(query_words_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_QUERY_WORDS) {
             let word_count_db = &self.index.field_id_word_count_docids;
 
             // 2. exclude words with more word constraints than present in the query
@@ -396,7 +398,8 @@ impl<'a> DynamicSearchRulesView<'a> {
             })
             .unwrap_or_default();
 
-        let Some(nb_constraints_fid) = self.db_fields_ids_map.id("conditions.filter.nbConstraints")
+        let Some(nb_constraints_fid) =
+            self.db_fields_ids_map.id(fields::CONDITIONS_FILTER_NB_CONSTRAINTS)
         else {
             return Ok(());
         };
@@ -431,8 +434,11 @@ impl<'a> DynamicSearchRulesView<'a> {
             for (target, constraints) in constraints {
                 let matching = match target {
                     ConstraintTarget::Fid(fid) => {
-                        let facet_value_name =
-                            format!("conditions.filter.values.{}", fid.original_fragment());
+                        let facet_value_name = format!(
+                            "{}.{}",
+                            fields::CONDITIONS_FILTER_VALUES,
+                            fid.original_fragment()
+                        );
                         match self.db_fields_ids_map.id(&facet_value_name) {
                             Some(fid) => {
                                 self.resolve_constraints(fid, constraints, active_rules)?
@@ -498,7 +504,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     ) -> Result<impl Iterator<Item = Result<RuleId>> + 'a> {
         let db = self.index.facet_id_f64_docids.remap_types();
 
-        if let Some(precedence_field_id) = self.db_fields_ids_map.id("precedence") {
+        if let Some(precedence_field_id) = self.db_fields_ids_map.id(fields::PRECEDENCE) {
             // faceted = active rules with a non-null field
             let mut faceted = self
                 .index
@@ -800,4 +806,24 @@ impl DsrFuel {
     pub fn max_pin_actions(&self) -> usize {
         self.max_pin_actions as usize
     }
+}
+
+/// Fields used in DSR documents
+pub mod fields {
+    pub const UID: &str = "uid";
+    pub const ACTIVE: &str = "active";
+    pub const PRECEDENCE: &str = "precedence";
+    pub const DESCRIPTION: &str = "description";
+    pub const ACTIONS: &str = "actions";
+
+    pub const CONDITIONS: &str = "conditions";
+    pub const FILTER: &str = "filter";
+    pub const NB_CONSTRAINTS: &str = "nbConstraints";
+
+    pub const CONDITIONS_TIME_START: &str = "conditions.time.start";
+    pub const CONDITIONS_TIME_END: &str = "conditions.time.end";
+    pub const CONDITIONS_QUERY_IS_EMPTY: &str = "conditions.query.isEmpty";
+    pub const CONDITIONS_QUERY_WORDS: &str = "conditions.query.words";
+    pub const CONDITIONS_FILTER_NB_CONSTRAINTS: &str = "conditions.filter.nbConstraints";
+    pub const CONDITIONS_FILTER_VALUES: &str = "conditions.filter.values";
 }
