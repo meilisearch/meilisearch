@@ -1622,6 +1622,7 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
 pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
+    fields_ids_map: &'t FieldsIdsMap,
     index_uid: &'t str,
     before_search: time::OffsetDateTime,
     query: &'t SearchQuery,
@@ -1634,7 +1635,7 @@ pub fn prepare_search<'t>(
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }
-    let mut search = index.search(rtxn, index_uid, before_search, progress);
+    let mut search = index.search(rtxn, index_uid, fields_ids_map, before_search, progress);
     search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
@@ -1791,6 +1792,8 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+
     let filter = match &query.filter {
         Some(filter) => {
             let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
@@ -1806,6 +1809,7 @@ pub fn perform_search(
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,
         &rtxn,
+        &fields_ids_map,
         &index_uid,
         before_search,
         &query,
@@ -1907,6 +1911,7 @@ pub fn perform_search(
     let mut documents = make_hits(
         index,
         &rtxn,
+        &fields_ids_map,
         format,
         matching_words,
         documents_ids.iter().copied().zip(document_scores.iter()),
@@ -2201,7 +2206,7 @@ impl RetrieveVectors {
 struct HitMaker<'a> {
     index: &'a Index,
     rtxn: &'a RoTxn<'a>,
-    fields_ids_map: FieldsIdsMap,
+    fields_ids_map: &'a FieldsIdsMap,
     displayed_ids: BTreeSet<FieldId>,
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
@@ -2248,6 +2253,7 @@ impl<'a> HitMaker<'a> {
     pub fn new(
         index: &'a Index,
         rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
         format: AttributesFormat,
         mut formatter_builder: MatcherBuilder<'a>,
     ) -> milli::Result<Self> {
@@ -2255,7 +2261,6 @@ impl<'a> HitMaker<'a> {
         formatter_builder.highlight_prefix(format.highlight_pre_tag);
         formatter_builder.highlight_suffix(format.highlight_post_tag);
 
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let displayed_ids = index
             .displayed_fields_ids(rtxn)?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
@@ -2478,6 +2483,7 @@ impl<'a> HitMaker<'a> {
 fn make_hits<'a>(
     index: &Index,
     rtxn: &RoTxn<'_>,
+    fields_ids_map: &FieldsIdsMap,
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
@@ -2496,7 +2502,7 @@ fn make_hits<'a>(
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
-    let hit_maker = HitMaker::new(index, rtxn, format, formatter_builder)?;
+    let hit_maker = HitMaker::new(index, rtxn, fields_ids_map, format, formatter_builder)?;
 
     for (id, score) in documents_ids_scores {
         documents.push(hit_maker.make_hit(id, score, progress)?);
@@ -2507,6 +2513,7 @@ fn make_hits<'a>(
 pub fn perform_facet_search<'a>(
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     search: milli::Search<'a>,
     facet_query: Option<String>,
     facet_name: String,
@@ -2540,7 +2547,7 @@ pub fn perform_facet_search<'a>(
     let candidates =
         search.execute_for_candidates(matches!(search_kind, SearchKind::Hybrid { .. }))?;
 
-    let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn);
+    let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn, &fields_ids_map);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
@@ -2577,6 +2584,7 @@ pub fn perform_similar(
     let features = index_scheduler.features();
     let index = index_scheduler.user_index(&index_uid)?;
     let rtxn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
     let SimilarQuery {
         id,
@@ -2704,6 +2712,7 @@ pub fn perform_similar(
     let hits = make_hits(
         &index,
         &rtxn,
+        &fields_ids_map,
         format,
         Default::default(),
         documents_ids.iter().copied().zip(document_scores.iter()),

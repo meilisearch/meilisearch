@@ -311,7 +311,8 @@ pub fn snap_fields_ids_map(index: &Index) -> String {
 }
 pub fn snap_fieldids_weights_map(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
-    let weights_map = index.fieldids_weights_map(&rtxn).unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let weights_map = index.fieldids_weights_map(&rtxn, &fields_ids_map).unwrap();
 
     let mut snap = String::new();
     writeln!(&mut snap, "fid weight").unwrap();
@@ -325,7 +326,8 @@ pub fn snap_fieldids_weights_map(index: &Index) -> String {
 }
 pub fn snap_searchable_fields(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
-    let searchable_fields = index.searchable_fields(&rtxn).unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let searchable_fields = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
     format!("{searchable_fields:?}")
 }
 pub fn snap_geo_faceted_documents_ids(index: &Index) -> String {
@@ -375,6 +377,7 @@ pub fn snap_words_prefixes_fst(index: &Index) -> String {
 pub fn snap_settings(index: &Index) -> String {
     let mut snap = String::new();
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     let mut builder = TokenizerBuilder::new();
     let stop_words = index.stop_words(&rtxn).unwrap();
@@ -425,7 +428,11 @@ pub fn snap_settings(index: &Index) -> String {
     write_setting_to_snap!(exact_attributes);
     write_setting_to_snap!(max_values_per_facet);
     write_setting_to_snap!(pagination_max_total_hits);
-    write_setting_to_snap!(searchable_fields);
+
+    // searchable_fields
+    let searchable_fields = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
+    writeln!(&mut snap, "{}: {:?}", stringify!(searchable_fields), searchable_fields).unwrap();
+
     write_setting_to_snap!(user_defined_searchable_fields);
 
     snap
