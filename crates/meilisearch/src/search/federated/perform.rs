@@ -1370,7 +1370,9 @@ impl SearchByIndex {
 
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
 
+        let instant = std::time::Instant::now();
         let fidmap = index.fields_ids_map(&rtxn).without_index()?;
+        dbg!(instant.elapsed());
 
         let mut degraded = false;
         let mut used_negative_operator = false;
