@@ -227,6 +227,7 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
     }
 }
 
+#[derive(Debug)]
 pub enum DocumentSearchResult {
     Federated(Box<FederatedSearchResult>),
     Multi(Vec<SearchResultWithIndex>),
