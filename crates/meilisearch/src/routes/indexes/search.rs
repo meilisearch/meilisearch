@@ -604,9 +604,9 @@ pub async fn search_with_url_query(
         }
         analytics.publish(aggregate, &req);
 
-        let search_result = search_result?;
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search get");
 
-        debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
+        let search_result = search_result?;
 
         Ok(HttpResponse::Ok().json(search_result))
     } else {
@@ -904,9 +904,9 @@ pub async fn search_with_post(
         }
         analytics.publish(aggregate, &req);
 
-        let search_result = search_result?;
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search post");
 
-        debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
+        let search_result = search_result?;
 
         Ok(HttpResponse::Ok().json(search_result))
     } else {

@@ -41,7 +41,7 @@ use crate::search_queue::SearchQueue;
 pub struct MultiSearchApi;
 
 /// Response containing results from multiple search queries
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, Debug)]
 pub struct SearchResults {
     /// Array of search results for each query
     results: Vec<SearchResultWithIndex>,
@@ -165,6 +165,11 @@ pub async fn multi_search_with_post(
         let request_uid = Uuid::now_v7();
 
         let federated_search = params.into_inner();
+        debug!(
+            request_uid = ?request_uid,
+            parameters = ?federated_search,
+            "Multi-search"
+        );
 
         let mut multi_aggregate = MultiSearchAggregator::from_federated_search(&federated_search);
 
@@ -194,6 +199,12 @@ pub async fn multi_search_with_post(
 
         permit.drop().await;
         analytics.publish(multi_aggregate, &req);
+        debug!(
+            request_uid = ?request_uid,
+            returns = ?&search_results,
+            progress = ?progress.accumulated_durations(),
+            "Multi-search"
+        );
 
         let search_results = search_results.map_err(|(mut err, query_index)| {
             // Add the query index that failed as context for the error message.
