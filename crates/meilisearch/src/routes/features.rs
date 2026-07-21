@@ -46,7 +46,6 @@ pub struct ExperimentalFeaturesApi;
             multimodal: Some(false),
             foreign_keys: Some(false),
             disable_documents_fetch_queue: Some(false),
-            legacy_search: Some(false),
             render_route: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -116,9 +115,6 @@ pub struct RuntimeTogglableFeatures {
     /// Disable documents fetch queue
     #[request(default)]
     pub disable_documents_fetch_queue: Option<bool>,
-    /// Enable legacy search pipeline
-    #[request(default)]
-    pub legacy_search: Option<bool>,
     /// Enable the `POST /render-template` route
     #[request(default)]
     pub render_route: Option<bool>,
@@ -140,7 +136,6 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             multimodal,
             foreign_keys,
             disable_documents_fetch_queue,
-            legacy_search,
             render_route,
         } = value;
 
@@ -158,7 +153,6 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             multimodal: Some(multimodal),
             foreign_keys: Some(foreign_keys),
             disable_documents_fetch_queue: Some(disable_documents_fetch_queue),
-            legacy_search,
             render_route: Some(render_route),
         }
     }
@@ -179,7 +173,6 @@ pub struct PatchExperimentalFeatureAnalytics {
     multimodal: bool,
     foreign_keys: bool,
     disable_documents_fetch_queue: bool,
-    legacy_search: bool,
     render_route: bool,
 }
 
@@ -203,7 +196,6 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             multimodal: new.multimodal,
             foreign_keys: new.foreign_keys,
             disable_documents_fetch_queue: new.disable_documents_fetch_queue,
-            legacy_search: new.legacy_search,
             render_route: new.render_route,
         })
     }
@@ -234,7 +226,6 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             multimodal: Some(false),
             foreign_keys: Some(false),
             disable_documents_fetch_queue: Some(false),
-            legacy_search: Some(false),
             render_route: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -292,7 +283,6 @@ async fn patch_features(
             .0
             .disable_documents_fetch_queue
             .unwrap_or(old_features.disable_documents_fetch_queue),
-        legacy_search: new_features.0.legacy_search.or(old_features.legacy_search),
         render_route: new_features.0.render_route.unwrap_or(old_features.render_route),
     };
 
@@ -313,7 +303,6 @@ async fn patch_features(
         multimodal,
         foreign_keys,
         disable_documents_fetch_queue,
-        legacy_search,
         render_route,
     } = new_features;
 
@@ -332,7 +321,6 @@ async fn patch_features(
             multimodal,
             foreign_keys,
             disable_documents_fetch_queue,
-            legacy_search: legacy_search.unwrap_or(false),
             render_route,
         },
         &req,
