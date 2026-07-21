@@ -10,14 +10,15 @@ use time::OffsetDateTime;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::facet::ascending_facet_sort;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
+use crate::search::facet::value_bounds::{evaluate_equal, to_str_bounds, ValueBounds};
 use crate::search::new::LocatedQueryTerm;
 use crate::update::new::document::DocumentFromDb;
 use crate::{
-    DocumentId, FieldsIdsMap, Index, PinDoc, Result, SearchContext, SearchResult, UserError,
-    MAX_COUNTED_WORDS,
+    DocumentId, FieldId, FieldsIdsMap, Index, IndexFilter, PinDoc, Result, SearchContext,
+    SearchResult, UserError, MAX_COUNTED_WORDS,
 };
 
-type RuleId = u32;
+pub type RuleId = u32;
 
 /// Wrapper around the DSR index, allowing to search for active rules
 pub struct DynamicSearchRules {
@@ -212,19 +213,29 @@ impl<'a> DynamicSearchRulesView<'a> {
         query_terms: &[LocatedQueryTerm],
         filter: Option<&IndexFilter>,
         search_context: &SearchContext,
-        mut fuel: DsrFuel,
+        fuel: DsrFuel,
     ) -> Result<RoaringBitmap> {
-        // 1. include rules that are active
         let mut active_rules = self.active_rule_ids(true)?;
-        // 2. exclude rules that have a time condition that is not met
         let target_time = search_context.before_search.format(&Rfc3339).unwrap();
+        self.apply_time_conditions(&mut active_rules, target_time.as_str())?;
+        self.apply_query_conditions(&mut active_rules, query_terms, search_context, fuel)?;
+        self.apply_filter_conditions(&mut active_rules, filter, fuel)?;
+
+        Ok(active_rules)
+    }
+
+    fn apply_time_conditions(
+        &self,
+        active_rules: &mut RoaringBitmap,
+        target_time: &str,
+    ) -> Result<(), crate::Error> {
         let db = self.index.facet_id_string_docids;
         if let Some(time_start_fid) = self.db_fields_ids_map.id("conditions.time.start") {
             let mut time_start_after_now = RoaringBitmap::new();
 
             // looking for all rules whose time.start is AFTER target_time
             // so ]target_time, ..]
-            let left = Bound::Excluded(target_time.as_str());
+            let left = Bound::Excluded(target_time);
             let right = Bound::Unbounded;
             find_docids_of_facet_within_bounds(
                 self.rtxn,
@@ -232,10 +243,10 @@ impl<'a> DynamicSearchRulesView<'a> {
                 time_start_fid,
                 &left,
                 &right,
-                Some(&active_rules),
+                Some(&*active_rules),
                 &mut time_start_after_now,
             )?;
-            active_rules -= time_start_after_now;
+            *active_rules -= time_start_after_now;
         }
         if let Some(time_end_fid) = self.db_fields_ids_map.id("conditions.time.end") {
             let mut time_end_before_now = RoaringBitmap::new();
@@ -243,20 +254,29 @@ impl<'a> DynamicSearchRulesView<'a> {
             // looking for all rules whose time.end is BEFORE target_time
             // so ].., target_time]
             let left = Bound::Unbounded;
-            let right = Bound::Excluded(target_time.as_str());
+            let right = Bound::Excluded(target_time);
             find_docids_of_facet_within_bounds(
                 self.rtxn,
                 db,
                 time_end_fid,
                 &left,
                 &right,
-                Some(&active_rules),
+                Some(&*active_rules),
                 &mut time_end_before_now,
             )?;
-            active_rules -= time_end_before_now;
+            *active_rules -= time_end_before_now;
         }
+        Ok(())
+    }
 
-        // 3. exclude rules that have the a different query emptiness condition
+    fn apply_query_conditions(
+        &self,
+        active_rules: &mut RoaringBitmap,
+        query_terms: &[LocatedQueryTerm],
+        search_context: &SearchContext<'_>,
+        mut fuel: DsrFuel,
+    ) -> Result<(), crate::Error> {
+        // 1. exclude rules that have the a different query emptiness condition
         let is_query_empty = query_terms.is_empty();
         if let Some(is_query_empty_fid) = self.db_fields_ids_map.id("conditions.query.isEmpty") {
             let left_bound = if is_query_empty { "false" } else { "true" };
@@ -266,10 +286,9 @@ impl<'a> DynamicSearchRulesView<'a> {
             if let Some(FacetGroupValue { size: _, bitmap: is_not_query_empty_rules }) =
                 self.index.facet_id_string_docids.get(self.rtxn, &is_not_query_empty_key)?
             {
-                active_rules -= is_not_query_empty_rules;
+                *active_rules -= is_not_query_empty_rules;
             }
         };
-
         let mut query_terms: Vec<&str> = query_terms
             .iter()
             .filter_map(|word| {
@@ -278,23 +297,21 @@ impl<'a> DynamicSearchRulesView<'a> {
                     .map(|word| search_context.word_interner.get(word).as_str())
             })
             .collect();
-
         query_terms.sort_unstable();
         query_terms.dedup();
-
         let words_count =
             query_terms.len().min(MAX_COUNTED_WORDS).min(fuel.max_counted_words()) as u8;
         if let Some(query_words_fid) = self.db_fields_ids_map.id("conditions.query.words") {
             let word_count_db = &self.index.field_id_word_count_docids;
 
-            // 4. exclude words with more word constraints than present in the query
+            // 2. exclude words with more word constraints than present in the query
             if let Some(words_count_plus_one) = words_count.checked_add(1) {
                 for res in word_count_db.range(
                     self.rtxn,
                     &((query_words_fid, words_count_plus_one)..=(query_words_fid, u8::MAX)),
                 )? {
                     let ((_, _constraint_count), more_constraints_than_query_rules) = res?;
-                    active_rules -= more_constraints_than_query_rules;
+                    *active_rules -= more_constraints_than_query_rules;
                 }
             }
 
@@ -306,7 +323,7 @@ impl<'a> DynamicSearchRulesView<'a> {
                     continue;
                 };
 
-                word_rules &= &active_rules;
+                word_rules &= &*active_rules;
 
                 if word_rules.is_empty() {
                     continue;
@@ -315,7 +332,6 @@ impl<'a> DynamicSearchRulesView<'a> {
                 words_rules.push(word_rules);
             }
 
-            // 5. check that the correct constraints are present
             for constraint_count in 0..=words_count {
                 let Some(constraint_count_rules) =
                     word_count_db.get(self.rtxn, &(query_words_fid, constraint_count))?
@@ -346,18 +362,17 @@ impl<'a> DynamicSearchRulesView<'a> {
                         }
                     }
                 }
-                // remove all rules that have that number of words but don't verify the constraints
+                // 3. exclude rules that have that number of word constraints but don't verify the constraints
                 match fuel.consume_word_combination() {
                     ControlFlow::Continue(()) => {
-                        active_rules -= constraint_count_rules - verifying_constraints_rules
+                        *active_rules -= constraint_count_rules - verifying_constraints_rules
                     }
                     // no more fuel, we have to remove all rules because we couldn't complete `verifying_constraints_rules`
-                    ControlFlow::Break(()) => active_rules -= constraint_count_rules,
+                    ControlFlow::Break(()) => *active_rules -= constraint_count_rules,
                 }
             }
         }
-
-        Ok(active_rules)
+        Ok(())
     }
 
     fn rule_ids_sorted_by_precedence(
