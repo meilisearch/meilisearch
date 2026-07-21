@@ -51,7 +51,7 @@ const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
-const MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE: &str = "MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE";
+const MEILI_UPGRADE_DB: &str = "MEILI_UPGRADE_DB";
 const MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS: &str = "MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
@@ -444,12 +444,14 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_logs_mode: LogMode,
 
-    /// Experimental dumpless upgrade. For more information, see: <https://github.com/orgs/meilisearch/discussions/804>
+    /// Upgrade the database from a previous Meilisearch version without a dump. For more
+    /// information, see: <https://github.com/orgs/meilisearch/discussions/804>
     ///
-    /// When set, Meilisearch will auto-update its database without using a dump.
-    #[clap(long, env = MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE, default_value_t)]
+    /// When set, Meilisearch will upgrade its database on startup if it was created by a
+    /// previous version.
+    #[clap(long, env = MEILI_UPGRADE_DB, default_value_t)]
     #[serde(default)]
-    pub experimental_dumpless_upgrade: bool,
+    pub upgrade_db: bool,
 
     /// Experimental logs route feature. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/721>
@@ -624,7 +626,7 @@ impl Opt {
             experimental_drop_search_after,
             experimental_nb_searches_per_core,
             experimental_logs_mode,
-            experimental_dumpless_upgrade,
+            upgrade_db,
             experimental_enable_logs_route,
             experimental_replication_parameters,
             experimental_reduce_indexing_memory_usage,
@@ -707,10 +709,7 @@ impl Opt {
             MEILI_EXPERIMENTAL_LOGS_MODE,
             experimental_logs_mode.to_string(),
         );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE,
-            experimental_dumpless_upgrade.to_string(),
-        );
+        export_to_env_if_not_present(MEILI_UPGRADE_DB, upgrade_db.to_string());
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS,
             experimental_replication_parameters.to_string(),

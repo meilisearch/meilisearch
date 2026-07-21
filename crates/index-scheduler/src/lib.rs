@@ -160,8 +160,6 @@ pub struct IndexSchedulerOptions {
     pub export_default_payload_size_bytes: Byte,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
-    /// Whether the index scheduler is able to auto upgrade or not.
-    pub auto_upgrade: bool,
     /// The maximal number of entries in the search query cache of an embedder.
     ///
     /// 0 disables the cache.
