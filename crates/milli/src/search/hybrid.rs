@@ -278,7 +278,7 @@ impl Search<'_> {
             max_total_hits: self.max_total_hits,
             rtxn: self.rtxn,
             index: self.index,
-            fields_ids_map: self.fields_ids_map,
+            fields_ids_map: self.fields_ids_map.clone(),
             index_uid: self.index_uid,
             before_search: self.before_search,
             semantic: self.semantic.clone(),

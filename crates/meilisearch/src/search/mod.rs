@@ -1,4 +1,5 @@
 use core::fmt;
+use std::borrow::Cow;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Not as _;
@@ -1635,7 +1636,8 @@ pub fn prepare_search<'t>(
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }
-    let mut search = index.search(rtxn, index_uid, fields_ids_map, before_search, progress);
+    let mut search =
+        index.search(rtxn, index_uid, Cow::Borrowed(fields_ids_map), before_search, progress);
     search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);

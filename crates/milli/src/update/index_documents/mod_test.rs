@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use big_s::S;
@@ -608,7 +609,7 @@ fn index_documents_with_nested_primary_key() {
     let mut search = crate::Search::new(
         &rtxn,
         &index,
-        &fields_ids_map,
+        Cow::Borrowed(&fields_ids_map),
         "test",
         OffsetDateTime::now_utc(),
         &progress,
@@ -726,7 +727,7 @@ fn test_facets_generation() {
         let mut search = crate::Search::new(
             &rtxn,
             &index,
-            &fields_ids_map,
+            Cow::Borrowed(&fields_ids_map),
             "test",
             OffsetDateTime::now_utc(),
             &progress,
@@ -772,7 +773,7 @@ fn test_facets_generation() {
     let mut search = crate::Search::new(
         &rtxn,
         &index,
-        &fields_ids_map,
+        Cow::Borrowed(&fields_ids_map),
         "test",
         OffsetDateTime::now_utc(),
         &progress,
@@ -2901,7 +2902,7 @@ fn delete_words_exact_attributes() {
     let mut s = crate::Search::new(
         &txn,
         &index,
-        &fields_ids_map,
+        Cow::Borrowed(&fields_ids_map),
         "test",
         OffsetDateTime::now_utc(),
         &progress,

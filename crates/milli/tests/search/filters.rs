@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use either::{Either, Left, Right};
 use filter_parser::{FilterCondition, IndexFilterCondition};
 use milli::progress::Progress;
@@ -55,7 +57,7 @@ macro_rules! test_filter {
             let mut search = Search::new(
                 &rtxn,
                 &index,
-                &fields_ids_map,
+                Cow::Borrowed(&fields_ids_map),
                 "test",
                 time::OffsetDateTime::now_utc(),
                 &progress,

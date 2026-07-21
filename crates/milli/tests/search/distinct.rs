@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 use big_s::S;
@@ -38,7 +39,7 @@ macro_rules! test_distinct {
             let mut search = Search::new(
                 &rtxn,
                 &index,
-                &fields_ids_map,
+                Cow::Borrowed(&fields_ids_map),
                 "test",
                 time::OffsetDateTime::now_utc(),
                 &progress,

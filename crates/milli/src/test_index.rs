@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Deref;
 
@@ -23,13 +24,12 @@ use crate::update::{
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
 use crate::{
-    db_snap, obkv_to_json, CreateOrOpen, FieldsIdsMap, Filter, FilterableAttributesRule, Index,
+    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index,
     MustStopProcessing, Search, SearchResult,
 };
 
 pub(crate) struct TempIndex {
     pub inner: Index,
-    pub fields_ids_map: FieldsIdsMap,
     pub indexer_config: IndexerConfig,
     pub index_documents_config: IndexDocumentsConfig,
     pub progress: Progress,
@@ -57,12 +57,7 @@ impl TempIndex {
         let index_documents_config = IndexDocumentsConfig::default();
         let progress = Progress::default();
 
-        let fields_ids_map = {
-            let rtxn = inner.read_txn().unwrap();
-            inner.fields_ids_map(&rtxn).unwrap()
-        };
-
-        Self { inner, fields_ids_map, indexer_config, index_documents_config, progress, _tempdir }
+        Self { inner, indexer_config, index_documents_config, progress, _tempdir }
     }
     /// Creates a temporary index, with a default `4096 * 2000` size. This should be enough for
     /// most tests.
@@ -251,10 +246,11 @@ impl TempIndex {
     }
 
     pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
+        let fields_ids_map = self.inner.fields_ids_map(rtxn).unwrap();
         self.inner.search(
             rtxn,
             "test",
-            &self.fields_ids_map,
+            Cow::Owned(fields_ids_map),
             time::OffsetDateTime::now_utc(),
             &self.progress,
         )

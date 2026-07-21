@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Reverse;
 
 use big_s::S;
@@ -36,7 +37,7 @@ macro_rules! test_criterion {
             let mut search = Search::new(
                 &rtxn,
                 &index,
-                &fields_ids_map,
+                Cow::Borrowed(&fields_ids_map),
                 "test",
                 time::OffsetDateTime::now_utc(),
                 &progress,
@@ -267,7 +268,7 @@ fn criteria_mixup() {
         let mut search = Search::new(
             &rtxn,
             &index,
-            &fields_ids_map,
+            Cow::Borrowed(&fields_ids_map),
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -418,7 +419,7 @@ fn criteria_ascdesc() {
         let mut search = Search::new(
             &rtxn,
             &index,
-            &fields_ids_map,
+            Cow::Borrowed(&fields_ids_map),
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,

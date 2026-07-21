@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::{Bound, ControlFlow};
 
 use heed::{RoTxn, WithoutTls};
@@ -138,7 +139,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         let mut search = self.index.search(
             self.rtxn,
             "",
-            self.db_fields_ids_map,
+            Cow::Borrowed(self.db_fields_ids_map),
             OffsetDateTime::now_utc(),
             &progress,
         );

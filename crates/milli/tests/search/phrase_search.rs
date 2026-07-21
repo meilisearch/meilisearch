@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use http_client::policy::IpPolicy;
 use milli::progress::Progress;
 use milli::update::{IndexerConfig, Settings};
@@ -38,7 +40,7 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let mut search = Search::new(
         &txn,
         &index,
-        &fields_ids_map,
+        Cow::Borrowed(&fields_ids_map),
         "test",
         time::OffsetDateTime::now_utc(),
         &progress,

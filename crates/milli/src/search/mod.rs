@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 
@@ -73,7 +74,7 @@ pub struct Search<'a> {
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
-    fields_ids_map: &'a FieldsIdsMap,
+    fields_ids_map: Cow<'a, FieldsIdsMap>,
     index_uid: &'a str,
     before_search: OffsetDateTime,
     semantic: Option<SemanticSearch>,
@@ -89,7 +90,7 @@ impl<'a> Search<'a> {
     pub fn new(
         rtxn: &'a heed::RoTxn<'a>,
         index: &'a Index,
-        fields_ids_map: &'a FieldsIdsMap,
+        fields_ids_map: Cow<'a, FieldsIdsMap>,
         index_uid: &'a str,
         before_search: OffsetDateTime,
         progress: &'a Progress,
@@ -260,7 +261,7 @@ impl<'a> Search<'a> {
             let ctx = SearchContext::new(
                 self.index,
                 self.rtxn,
-                self.fields_ids_map,
+                self.fields_ids_map.as_ref(),
                 self.index_uid,
                 self.before_search,
             )?;
@@ -274,7 +275,7 @@ impl<'a> Search<'a> {
         let mut ctx = SearchContext::new(
             self.index,
             self.rtxn,
-            self.fields_ids_map,
+            self.fields_ids_map.as_ref(),
             self.index_uid,
             self.before_search,
         )?;
