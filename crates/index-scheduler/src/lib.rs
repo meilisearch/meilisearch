@@ -144,9 +144,6 @@ pub struct IndexSchedulerOptions {
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
-    /// Set to `true` iff the index scheduler is allowed to automatically
-    /// delete the finished tasks when there are too many tasks.
-    pub cleanup_enabled: bool,
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
@@ -193,9 +190,6 @@ pub struct IndexScheduler {
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
-
-    /// Whether we should automatically cleanup the task queue or not.
-    pub(crate) cleanup_enabled: bool,
 
     /// A database to store single-keyed data that is persisted across restarts.
     persisted: Database<Str, Str>,
@@ -250,7 +244,6 @@ impl IndexScheduler {
             scheduler: self.scheduler.private_clone(),
 
             index_mapper: self.index_mapper.clone(),
-            cleanup_enabled: self.cleanup_enabled,
             persisted: self.persisted,
             export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
@@ -365,7 +358,6 @@ impl IndexScheduler {
             scheduler,
             index_mapper,
             env,
-            cleanup_enabled: options.cleanup_enabled,
             persisted,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),

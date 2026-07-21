@@ -286,7 +286,6 @@ pub fn setup_meilisearch(
             IndexerConfig { s3_snapshot_options, ..(&opt.indexer_options).try_into()? }
         }),
         autobatching_enabled: true,
-        cleanup_enabled: true,
         max_number_of_tasks: 1_000_000,
         export_default_payload_size_bytes: almost_as_big_as(opt.http_payload_size_limit),
         max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,

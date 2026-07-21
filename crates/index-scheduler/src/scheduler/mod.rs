@@ -117,7 +117,6 @@ impl Scheduler {
             index_count: _,
             indexer_config,
             autobatching_enabled,
-            cleanup_enabled: _,
             max_number_of_tasks: _,
             max_number_of_batched_tasks,
             batched_tasks_size_limit,
@@ -169,11 +168,9 @@ impl IndexScheduler {
 
         let previous_processing_batch = self.processing_tasks.write().unwrap().stop_processing();
 
-        if self.cleanup_enabled {
-            let mut wtxn = self.env.write_txn()?;
-            self.queue.cleanup_task_queue(&mut wtxn)?;
-            wtxn.commit()?;
-        }
+        let mut wtxn = self.env.write_txn()?;
+        self.queue.cleanup_task_queue(&mut wtxn)?;
+        wtxn.commit()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let (batch, mut processing_batch) = match self

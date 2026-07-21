@@ -19,7 +19,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     scheduler.assert_internally_consistent();
 
     let IndexScheduler {
-        cleanup_enabled: _,
         processing_tasks,
         env,
         version,
