@@ -303,7 +303,6 @@ pub fn setup_meilisearch(
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features: opt.to_instance_features(),
-        auto_upgrade: opt.upgrade_db,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         ip_policy,
         dsr_fuel,
