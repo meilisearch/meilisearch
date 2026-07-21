@@ -42,7 +42,7 @@ impl FileStore {
         let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::new_v4();
         let path = self.path.join(uuid.to_string());
-        let update_file = File { file: Some(file), path };
+        let update_file = File { file, path };
 
         Ok((uuid, update_file))
     }
@@ -53,7 +53,7 @@ impl FileStore {
         let file = NamedTempFile::new_in(&self.path)?;
         let uuid = Uuid::from_u128(uuid);
         let path = self.path.join(uuid.to_string());
-        let update_file = File { file: Some(file), path };
+        let update_file = File { file, path };
 
         Ok((uuid, update_file))
     }
@@ -132,44 +132,30 @@ impl FileStore {
 
 pub struct File {
     path: PathBuf,
-    file: Option<NamedTempFile>,
+    file: NamedTempFile,
 }
 
 impl File {
-    pub fn from_parts(path: PathBuf, file: Option<NamedTempFile>) -> Self {
+    pub fn from_parts(path: PathBuf, file: NamedTempFile) -> Self {
         Self { path, file }
     }
 
-    pub fn into_parts(self) -> (PathBuf, Option<NamedTempFile>) {
+    pub fn into_parts(self) -> (PathBuf, NamedTempFile) {
         (self.path, self.file)
     }
 
-    pub fn dry_file() -> Result<Self> {
-        Ok(Self { path: PathBuf::new(), file: None })
-    }
-
-    pub fn persist(self) -> Result<Option<StdFile>> {
-        let Some(file) = self.file else { return Ok(None) };
-
-        Ok(Some(file.persist(&self.path)?))
+    pub fn persist(self) -> Result<StdFile> {
+        Ok(self.file.persist(&self.path)?)
     }
 }
 
 impl Write for File {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        if let Some(file) = self.file.as_mut() {
-            file.write(buf)
-        } else {
-            Ok(buf.len())
-        }
+        self.file.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        if let Some(file) = self.file.as_mut() {
-            file.flush()
-        } else {
-            Ok(())
-        }
+        self.file.flush()
     }
 }
 

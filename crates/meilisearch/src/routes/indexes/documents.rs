@@ -12,7 +12,7 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::filter::{filter_into_index_filter, parse_filter, parse_local_index_filter};
-use index_scheduler::{IndexScheduler, TaskId};
+use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -46,6 +46,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
+use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
@@ -55,8 +56,7 @@ use crate::extractors::payload::Payload;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
-    get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
-    PAGINATION_DEFAULT_LIMIT_FN,
+    PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN,
 };
 use crate::search::federated::weighted_scores;
 use crate::search::proxy::{
@@ -65,7 +65,6 @@ use crate::search::proxy::{
 use crate::search::{
     ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
 };
-use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
@@ -403,7 +402,6 @@ pub async fn delete_document(
     path: web::Path<DocumentParam>,
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
@@ -426,18 +424,10 @@ pub async fn delete_document(
         index_uid: index_uid.to_string(),
         documents_ids: vec![document_id],
     };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -1349,7 +1339,6 @@ pub async fn replace_documents(
     params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -1380,8 +1369,6 @@ pub async fn replace_documents(
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task = document_addition(
         index_scheduler,
         index_uid,
@@ -1389,9 +1376,7 @@ pub async fn replace_documents(
         params.csv_delimiter,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
-        uid,
         params.custom_metadata,
-        dry_run,
         allow_index_creation,
         params.skip_creation,
         &req,
@@ -1466,7 +1451,6 @@ pub async fn update_documents(
     params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -1497,8 +1481,6 @@ pub async fn update_documents(
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task = document_addition(
         index_scheduler,
         index_uid,
@@ -1506,9 +1488,7 @@ pub async fn update_documents(
         params.csv_delimiter,
         body,
         IndexDocumentsMethod::UpdateDocuments,
-        uid,
         params.custom_metadata,
-        dry_run,
         allow_index_creation,
         params.skip_creation,
         &req,
@@ -1527,9 +1507,7 @@ async fn document_addition(
     csv_delimiter: Option<u8>,
     body: Payload,
     method: IndexDocumentsMethod,
-    task_id: Option<TaskId>,
     custom_metadata: Option<String>,
-    dry_run: bool,
     allow_index_creation: bool,
     skip_creation: Option<bool>,
     req: &HttpRequest,
@@ -1568,26 +1546,22 @@ async fn document_addition(
         }
     };
 
-    let (uuid, mut update_file) = index_scheduler.queue.create_update_file(dry_run)?;
+    let (uuid, mut update_file) = index_scheduler.queue.create_update_file()?;
     let res = match format {
         PayloadType::Ndjson => {
             let (path, file) = update_file.into_parts();
-            let file = match file {
-                Some(file) => {
-                    let (file, path) = file.into_parts();
-                    let mut file = copy_body_to_file(file, body, format).await?;
-                    file.rewind().map_err(|e| {
-                        index_scheduler::Error::FileStore(file_store::Error::IoError(e))
-                    })?;
-                    Some(tempfile::NamedTempFile::from_parts(file, path))
-                }
-                None => None,
+            let file = {
+                let (file, temp_path) = file.into_parts();
+                let mut file = copy_body_to_file(file, body, format).await?;
+                file.rewind().map_err(|e| {
+                    index_scheduler::Error::FileStore(file_store::Error::IoError(e))
+                })?;
+                tempfile::NamedTempFile::from_parts(file, temp_path)
             };
 
             let res = tokio::task::spawn_blocking(move || {
-                let documents_count = file.as_ref().map_or(Ok(0), |ntf| {
-                    read_ndjson(ntf.as_file()).map_err(MeilisearchHttpError::DocumentFormat)
-                })?;
+                let documents_count =
+                    read_ndjson(file.as_file()).map_err(MeilisearchHttpError::DocumentFormat)?;
 
                 let update_file = file_store::File::from_parts(path, file);
                 let update_file = update_file.persist()?;
@@ -1663,13 +1637,7 @@ async fn document_addition(
     // FIXME: not new to #6000, but _any_ error here will cause the payload to unduly persist
     let scheduler = index_scheduler.clone();
     let mut task = match tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(
-            task,
-            task_id,
-            custom_metadata,
-            dry_run,
-            task_network,
-        )
+        scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
     })
     .await?
     {
@@ -1681,18 +1649,16 @@ async fn document_addition(
     };
 
     if let Some(task_network) = task.network.take() {
-        if let Some(file) = file {
-            proxy(
-                &index_scheduler,
-                Some(&index_uid),
-                req,
-                task_network,
-                network,
-                Body::with_ndjson_payload(file),
-                &task,
-            )
-            .await?;
-        }
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            req,
+            task_network,
+            network,
+            Body::with_ndjson_payload(file),
+            &task,
+        )
+        .await?;
     }
 
     Ok(task.into())
@@ -1775,7 +1741,6 @@ pub async fn delete_documents_batch(
     body: web::Json<Vec<Value>>,
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by batch");
@@ -1802,18 +1767,10 @@ pub async fn delete_documents_batch(
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -1892,7 +1849,6 @@ pub async fn delete_documents_by_filter(
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by filter");
@@ -1928,18 +1884,10 @@ pub async fn delete_documents_by_filter(
         filter_expr: filter.filter.clone(),
     };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -2057,7 +2005,6 @@ pub async fn edit_documents_by_function(
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     body: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Edit documents by function");
@@ -2114,18 +2061,10 @@ pub async fn edit_documents_by_function(
         function: body.function.clone(),
     };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -2191,7 +2130,6 @@ pub async fn clear_all_documents(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -2210,20 +2148,12 @@ pub async fn clear_all_documents(
     );
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
 
     let mut task = {
         let index_scheduler = index_scheduler.clone();
 
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };

@@ -56,7 +56,6 @@ use crate::search::{
     INCLUDE_METADATA_HEADER,
 };
 use crate::search_queue::SearchQueue;
-use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
@@ -126,56 +125,6 @@ mod webhooks;
     components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, ListFields, ListFieldsFilter, SizeFormat))
 )]
 pub struct MeilisearchApi;
-
-pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
-    if !opt.experimental_replication_parameters {
-        return Ok(None);
-    }
-    let task_id = req
-        .headers()
-        .get("TaskId")
-        .map(|header| {
-            header.to_str().map_err(|e| {
-                ResponseError::from_msg(
-                    format!("TaskId is not a valid utf-8 string: {e}"),
-                    Code::BadRequest,
-                )
-            })
-        })
-        .transpose()?
-        .map(|s| {
-            s.parse::<TaskId>().map_err(|e| {
-                ResponseError::from_msg(
-                    format!(
-                        "Could not parse the TaskId as a {}: {e}",
-                        std::any::type_name::<TaskId>(),
-                    ),
-                    Code::BadRequest,
-                )
-            })
-        })
-        .transpose()?;
-    Ok(task_id)
-}
-
-pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
-    if !opt.experimental_replication_parameters {
-        return Ok(false);
-    }
-    Ok(req
-        .headers()
-        .get("DryRun")
-        .map(|header| {
-            header.to_str().map_err(|e| {
-                ResponseError::from_msg(
-                    format!("DryRun is not a valid utf-8 string: {e}"),
-                    Code::BadRequest,
-                )
-            })
-        })
-        .transpose()?
-        .is_some_and(|s| s.to_lowercase() == "true"))
-}
 
 /// Parse the `Meili-Include-Metadata` header from an HTTP request.
 ///

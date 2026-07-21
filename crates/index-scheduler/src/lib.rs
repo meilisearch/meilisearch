@@ -144,9 +144,6 @@ pub struct IndexSchedulerOptions {
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
-    /// Set to `true` iff the index scheduler is allowed to automatically
-    /// delete the finished tasks when there are too many tasks.
-    pub cleanup_enabled: bool,
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
@@ -166,8 +163,6 @@ pub struct IndexSchedulerOptions {
     pub embedding_cache_cap: usize,
     /// IP policy for requests performed by the index scheduler.
     pub ip_policy: http_client::policy::IpPolicy,
-    /// Snapshot compaction status.
-    pub experimental_no_snapshot_compaction: bool,
     /// Fuel for Dynamic Search Rules
     pub dsr_fuel: DsrFuel,
 }
@@ -195,12 +190,6 @@ pub struct IndexScheduler {
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
-
-    /// Whether we should automatically cleanup the task queue or not.
-    pub(crate) cleanup_enabled: bool,
-
-    /// Whether we should use the old document indexer or the new one.
-    pub(crate) experimental_no_edition_2024_for_dumps: bool,
 
     /// A database to store single-keyed data that is persisted across restarts.
     persisted: Database<Str, Str>,
@@ -255,8 +244,6 @@ impl IndexScheduler {
             scheduler: self.scheduler.private_clone(),
 
             index_mapper: self.index_mapper.clone(),
-            cleanup_enabled: self.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             persisted: self.persisted,
             export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
@@ -371,10 +358,6 @@ impl IndexScheduler {
             scheduler,
             index_mapper,
             env,
-            cleanup_enabled: options.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: options
-                .indexer_config
-                .experimental_no_edition_2024_for_dumps,
             persisted,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
@@ -697,11 +680,6 @@ impl IndexScheduler {
         Ok(nbr_index_processing_tasks > 0)
     }
 
-    /// Whether the index should use the old document indexer.
-    pub fn no_edition_2024_for_dumps(&self) -> bool {
-        self.experimental_no_edition_2024_for_dumps
-    }
-
     /// Return the tasks matching the query from the user's point of view along
     /// with the total number of tasks matching the query, ignoring from and limit.
     ///
@@ -791,31 +769,17 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(
-        &self,
-        kind: KindWithContent,
-        task_id: Option<TaskId>,
-        dry_run: bool,
-    ) -> Result<Task> {
-        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(kind, None, None, None)
     }
 
     pub fn register_with_custom_metadata(
         &self,
         kind: KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         task_network: Option<TaskNetwork>,
     ) -> Result<Task> {
-        self.register_with_custom_metadata_and_network(
-            kind,
-            task_id,
-            custom_metadata,
-            dry_run,
-            task_network,
-            None,
-        )
+        self.register_with_custom_metadata_and_network(kind, custom_metadata, task_network, None)
     }
 
     /// Register a new task in the scheduler, with metadata.
@@ -835,9 +799,7 @@ impl IndexScheduler {
     pub fn register_with_custom_metadata_and_network(
         &self,
         kind: KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         task_network: Option<TaskNetwork>,
         new_network: Option<Network>,
     ) -> Result<Task> {
@@ -867,9 +829,7 @@ impl IndexScheduler {
         let task = self.queue.register(
             &mut wtxn,
             &kind,
-            task_id,
             custom_metadata,
-            dry_run,
             task_network.map(DbTaskNetwork::from),
         )?;
 

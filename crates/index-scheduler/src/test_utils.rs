@@ -109,7 +109,6 @@ impl IndexScheduler {
             index_count: 5,
             indexer_config: Arc::new(indexer_config),
             autobatching_enabled: true,
-            cleanup_enabled: true,
             max_number_of_tasks: 1_000_000,
             max_number_of_batched_tasks: usize::MAX,
             batched_tasks_size_limit: u64::MAX,
@@ -118,7 +117,6 @@ impl IndexScheduler {
             embedding_cache_cap: 10,
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
-            experimental_no_snapshot_compaction: false,
             dsr_fuel: DsrFuel::new(3, 10, 3, 10),
         };
         let version = configuration(&mut options).unwrap_or({

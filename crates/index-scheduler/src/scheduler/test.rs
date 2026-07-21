@@ -23,19 +23,17 @@ use crate::{IndexScheduler, Query};
 fn insert_task_while_another_task_is_processing() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
-    index_scheduler.register(index_creation_task("index_a", "id"), None, false).unwrap();
+    index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
     handle.advance_till([Start, BatchCreated]);
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_batch_creation");
 
     // while the task is processing can we register another task?
-    index_scheduler.register(index_creation_task("index_b", "id"), None, false).unwrap();
+    index_scheduler.register(index_creation_task("index_b", "id")).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
-    index_scheduler
-        .register(KindWithContent::IndexDeletion { index_uid: S("index_a") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::IndexDeletion { index_uid: S("index_a") }).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 }
 
@@ -43,7 +41,7 @@ fn insert_task_while_another_task_is_processing() {
 fn test_task_is_processing() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
-    index_scheduler.register(index_creation_task("index_a", "id"), None, false).unwrap();
+    index_scheduler.register(index_creation_task("index_a", "id")).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task");
 
     handle.advance_till([Start, BatchCreated]);
@@ -57,26 +55,16 @@ fn process_tasks_inserted_without_new_signal() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("cattos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
-    index_scheduler
-        .register(KindWithContent::IndexDeletion { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::IndexDeletion { index_uid: S("doggos") }).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
     handle.advance_one_successful_batch();
@@ -94,27 +82,17 @@ fn process_tasks_without_autobatching() {
     let (index_scheduler, mut handle) = IndexScheduler::test(false, vec![]);
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
-    index_scheduler
-        .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::DocumentClear { index_uid: S("doggos") }).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
-    index_scheduler
-        .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::DocumentClear { index_uid: S("doggos") }).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
-    index_scheduler
-        .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::DocumentClear { index_uid: S("doggos") }).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_fourth_task");
 
     handle.advance_one_successful_batch();
@@ -146,7 +124,7 @@ fn task_deletion_undeleteable() {
     ];
 
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
 
@@ -155,14 +133,10 @@ fn task_deletion_undeleteable() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
 
     index_scheduler
-        .register(
-            KindWithContent::TaskDeletion {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0, 1]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion {
+            query: "test_query".to_owned(),
+            tasks: RoaringBitmap::from_iter([0, 1]),
+        })
         .unwrap();
     // again, no progress made at all, but one more task is registered
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_enqueued");
@@ -196,7 +170,7 @@ fn task_deletion_deleteable() {
     ];
 
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
@@ -207,14 +181,10 @@ fn task_deletion_deleteable() {
 
     // Now we delete the first task
     index_scheduler
-        .register(
-            KindWithContent::TaskDeletion {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion {
+            query: "test_query".to_owned(),
+            tasks: RoaringBitmap::from_iter([0]),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_the_task_deletion");
 
@@ -237,7 +207,7 @@ fn task_deletion_delete_same_task_twice() {
     ];
 
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_tasks_enqueued");
@@ -249,14 +219,10 @@ fn task_deletion_delete_same_task_twice() {
     // Now we delete the first task multiple times in a row
     for _ in 0..2 {
         index_scheduler
-            .register(
-                KindWithContent::TaskDeletion {
-                    query: "test_query".to_owned(),
-                    tasks: RoaringBitmap::from_iter([0]),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::TaskDeletion {
+                query: "test_query".to_owned(),
+                tasks: RoaringBitmap::from_iter([0]),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -276,11 +242,7 @@ fn document_addition_and_index_deletion() {
         }"#;
 
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -288,25 +250,19 @@ fn document_addition_and_index_deletion() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
-    index_scheduler
-        .register(KindWithContent::IndexDeletion { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::IndexDeletion { index_uid: S("doggos") }).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
     handle.advance_one_successful_batch(); // The index creation.
@@ -322,18 +278,17 @@ fn do_not_batch_task_of_different_indexes() {
 
     for name in index_names {
         index_scheduler
-            .register(
-                KindWithContent::IndexCreation { index_uid: name.to_string(), primary_key: None },
-                None,
-                false,
-            )
+            .register(KindWithContent::IndexCreation {
+                index_uid: name.to_string(),
+                primary_key: None,
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
 
     for name in index_names {
         index_scheduler
-            .register(KindWithContent::DocumentClear { index_uid: name.to_string() }, None, false)
+            .register(KindWithContent::DocumentClear { index_uid: name.to_string() })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -358,7 +313,7 @@ fn swap_indexes() {
     ];
 
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
 
@@ -372,26 +327,18 @@ fn swap_indexes() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "create_d");
 
     index_scheduler
-        .register(
-            KindWithContent::IndexSwap {
-                swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
-                    IndexSwap { indexes: ("c".to_owned(), "d".to_owned()), rename: false },
-                ],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexSwap {
+            swaps: vec![
+                IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
+                IndexSwap { indexes: ("c".to_owned(), "d".to_owned()), rename: false },
+            ],
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_swap_registered");
     index_scheduler
-        .register(
-            KindWithContent::IndexSwap {
-                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()), rename: false }],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()), rename: false }],
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "two_swaps_registered");
 
@@ -401,7 +348,7 @@ fn swap_indexes() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_swap_processed");
 
-    index_scheduler.register(KindWithContent::IndexSwap { swaps: vec![] }, None, false).unwrap();
+    index_scheduler.register(KindWithContent::IndexSwap { swaps: vec![] }).unwrap();
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_empty_swap_processed");
 }
@@ -413,7 +360,7 @@ fn swap_indexes_with_correct_task_allocations() {
     let to_enqueue = [index_creation_task("a", "id"), index_creation_task("b", "id")];
 
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
 
@@ -429,21 +376,13 @@ fn swap_indexes_with_correct_task_allocations() {
     file2.persist().unwrap();
     file3.persist().unwrap();
 
-    index_scheduler
-        .register(replace_document_import_task("a", Some("id"), 1, count0), None, false)
-        .unwrap();
+    index_scheduler.register(replace_document_import_task("a", Some("id"), 1, count0)).unwrap();
 
-    index_scheduler
-        .register(replace_document_import_task("a", Some("id"), 2, count1), None, false)
-        .unwrap();
+    index_scheduler.register(replace_document_import_task("a", Some("id"), 2, count1)).unwrap();
 
-    index_scheduler
-        .register(replace_document_import_task("b", Some("id"), 3, count2), None, false)
-        .unwrap();
+    index_scheduler.register(replace_document_import_task("b", Some("id"), 3, count2)).unwrap();
 
-    index_scheduler
-        .register(replace_document_import_task("b", Some("id"), 4, count3), None, false)
-        .unwrap();
+    index_scheduler.register(replace_document_import_task("b", Some("id"), 4, count3)).unwrap();
 
     handle.advance_n_successful_batches(2);
 
@@ -466,13 +405,9 @@ fn swap_indexes_with_correct_task_allocations() {
     assert_eq!(b_tasks.len(), 3);
 
     index_scheduler
-        .register(
-            KindWithContent::IndexSwap {
-                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false }],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexSwap {
+            swaps: vec![IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false }],
+        })
         .unwrap();
 
     handle.advance_one_successful_batch();
@@ -515,7 +450,7 @@ fn swap_indexes_errors() {
     ];
 
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
     handle.advance_n_successful_batches(4);
@@ -525,16 +460,12 @@ fn swap_indexes_errors() {
     snapshot!(first_snap, name: "initial_tasks_processed");
 
     let err = index_scheduler
-        .register(
-            KindWithContent::IndexSwap {
-                swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
-                    IndexSwap { indexes: ("b".to_owned(), "a".to_owned()), rename: false },
-                ],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexSwap {
+            swaps: vec![
+                IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
+                IndexSwap { indexes: ("b".to_owned(), "a".to_owned()), rename: false },
+            ],
+        })
         .unwrap_err();
     snapshot!(format!("{err}"), @"Indexes must be declared only once during a swap. `a`, `b` were specified several times.");
 
@@ -543,17 +474,13 @@ fn swap_indexes_errors() {
 
     // Index `e` does not exist, but we don't check its existence yet
     index_scheduler
-        .register(
-            KindWithContent::IndexSwap {
-                swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
-                    IndexSwap { indexes: ("c".to_owned(), "e".to_owned()), rename: false },
-                    IndexSwap { indexes: ("d".to_owned(), "f".to_owned()), rename: false },
-                ],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexSwap {
+            swaps: vec![
+                IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
+                IndexSwap { indexes: ("c".to_owned(), "e".to_owned()), rename: false },
+                IndexSwap { indexes: ("d".to_owned(), "f".to_owned()), rename: false },
+            ],
+        })
         .unwrap();
     handle.advance_one_failed_batch();
     // Now the first swap should have an error message saying `e` and `f` do not exist
@@ -574,23 +501,17 @@ fn document_addition_and_index_deletion_on_unexisting_index() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
-    index_scheduler
-        .register(KindWithContent::IndexDeletion { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::IndexDeletion { index_uid: S("doggos") }).unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
@@ -614,7 +535,7 @@ fn cancel_enqueued_task() {
         },
     ];
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
 
@@ -631,7 +552,7 @@ fn cancel_succeeded_task() {
     file0.persist().unwrap();
 
     let _ = index_scheduler
-        .register(replace_document_import_task("catto", None, 0, documents_count0), None, false)
+        .register(replace_document_import_task("catto", None, 0, documents_count0))
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -639,14 +560,10 @@ fn cancel_succeeded_task() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processed");
 
     index_scheduler
-        .register(
-            KindWithContent::TaskCancelation {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskCancelation {
+            query: "test_query".to_owned(),
+            tasks: RoaringBitmap::from_iter([0]),
+        })
         .unwrap();
 
     handle.advance_one_successful_batch();
@@ -661,7 +578,7 @@ fn cancel_processing_task() {
     file0.persist().unwrap();
 
     let _ = index_scheduler
-        .register(replace_document_import_task("catto", None, 0, documents_count0), None, false)
+        .register(replace_document_import_task("catto", None, 0, documents_count0))
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -669,14 +586,10 @@ fn cancel_processing_task() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "initial_task_processing");
 
     index_scheduler
-        .register(
-            KindWithContent::TaskCancelation {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskCancelation {
+            query: "test_query".to_owned(),
+            tasks: RoaringBitmap::from_iter([0]),
+        })
         .unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_task_registered");
@@ -706,7 +619,7 @@ fn cancel_mix_of_tasks() {
         replace_document_import_task("wolfo", None, 2, documents_count2),
     ];
     for task in to_enqueue {
-        let _ = index_scheduler.register(task, None, false).unwrap();
+        let _ = index_scheduler.register(task).unwrap();
         index_scheduler.assert_internally_consistent();
     }
     handle.advance_one_successful_batch();
@@ -714,14 +627,10 @@ fn cancel_mix_of_tasks() {
 
     handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
     index_scheduler
-        .register(
-            KindWithContent::TaskCancelation {
-                query: "test_query".to_owned(),
-                tasks: RoaringBitmap::from_iter([0, 1, 2]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskCancelation {
+            query: "test_query".to_owned(),
+            tasks: RoaringBitmap::from_iter([0, 1, 2]),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processing_second_task_cancel_enqueued");
 
@@ -755,16 +664,12 @@ fn test_settings_update() {
     new_settings.embedders = Setting::Set(embedders);
 
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: S("doggos"),
-                new_settings,
-                is_deletion: false,
-                allow_index_creation: true,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: S("doggos"),
+            new_settings,
+            is_deletion: false,
+            allow_index_creation: true,
+        })
         .unwrap();
     index_scheduler.assert_internally_consistent();
 
@@ -817,11 +722,11 @@ fn basic_get_stats() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("whalo", "fish");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
@@ -999,11 +904,11 @@ fn cancel_processing_dump() {
         query: "cancel dump".to_owned(),
         tasks: RoaringBitmap::from_iter([0]),
     };
-    let _ = index_scheduler.register(dump_creation, None, false).unwrap();
+    let _ = index_scheduler.register(dump_creation).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_dump_register");
     handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
 
-    let _ = index_scheduler.register(dump_cancellation, None, false).unwrap();
+    let _ = index_scheduler.register(dump_cancellation).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "cancel_registered");
 
     snapshot!(format!("{:?}", handle.advance()), @"AbortedIndexation");
@@ -1018,7 +923,7 @@ fn create_and_list_index() {
 
     let index_creation =
         KindWithContent::IndexCreation { index_uid: S("kefir"), primary_key: None };
-    let _ = index_scheduler.register(index_creation, None, false).unwrap();
+    let _ = index_scheduler.register(index_creation).unwrap();
     handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
     // The index creation has not been started, the index should not exists
 
@@ -1073,11 +978,7 @@ fn test_scheduler_doesnt_run_with_zero_batched_tasks() {
 
     // Register a task
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_task");
 

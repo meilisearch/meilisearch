@@ -77,9 +77,6 @@ pub struct Scheduler {
     /// IP policy for requests performed by the index scheduler.
     pub(crate) ip_policy: http_client::policy::IpPolicy,
 
-    /// Snapshot compaction status.
-    pub(crate) experimental_no_snapshot_compaction: bool,
-
     /// S3 Snapshot options.
     pub(crate) s3_snapshot_options: Option<S3SnapshotOptions>,
 }
@@ -97,7 +94,6 @@ impl Scheduler {
             auth_env: self.auth_env.clone(),
             version_file_path: self.version_file_path.clone(),
             embedding_cache_cap: self.embedding_cache_cap,
-            experimental_no_snapshot_compaction: self.experimental_no_snapshot_compaction,
             s3_snapshot_options: self.s3_snapshot_options.clone(),
             ip_policy: self.ip_policy.clone(),
         }
@@ -121,7 +117,6 @@ impl Scheduler {
             index_count: _,
             indexer_config,
             autobatching_enabled,
-            cleanup_enabled: _,
             max_number_of_tasks: _,
             max_number_of_batched_tasks,
             batched_tasks_size_limit,
@@ -129,7 +124,6 @@ impl Scheduler {
             instance_features: _,
             embedding_cache_cap,
             ip_policy,
-            experimental_no_snapshot_compaction,
             dsr_fuel: _,
         } = options;
 
@@ -146,7 +140,6 @@ impl Scheduler {
             version_file_path: version_file_path.clone(),
             embedding_cache_cap: *embedding_cache_cap,
             ip_policy: ip_policy.clone(),
-            experimental_no_snapshot_compaction: *experimental_no_snapshot_compaction,
             s3_snapshot_options: indexer_config.s3_snapshot_options.clone(),
         }
     }
@@ -175,11 +168,9 @@ impl IndexScheduler {
 
         let previous_processing_batch = self.processing_tasks.write().unwrap().stop_processing();
 
-        if self.cleanup_enabled {
-            let mut wtxn = self.env.write_txn()?;
-            self.queue.cleanup_task_queue(&mut wtxn)?;
-            wtxn.commit()?;
-        }
+        let mut wtxn = self.env.write_txn()?;
+        self.queue.cleanup_task_queue(&mut wtxn)?;
+        wtxn.commit()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let (batch, mut processing_batch) = match self
