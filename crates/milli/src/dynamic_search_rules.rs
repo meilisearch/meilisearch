@@ -1,7 +1,9 @@
+use std::num::Saturating;
 use std::ops::{Bound, ControlFlow};
 
 use filter_parser::{
-    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraints,
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraintFuel,
+    FilterConstraints,
 };
 use heed::{RoTxn, WithoutTls};
 use itertools::Itertools as _;
@@ -342,6 +344,10 @@ impl<'a> DynamicSearchRulesView<'a> {
                     continue;
                 };
 
+                if constraint_count_rules.is_empty() {
+                    continue;
+                }
+
                 let mut verifying_constraints_rules = RoaringBitmap::new();
 
                 match constraint_count {
@@ -384,8 +390,11 @@ impl<'a> DynamicSearchRulesView<'a> {
         filter: Option<&IndexFilter>,
         mut fuel: DsrFuel,
     ) -> Result<(), crate::Error> {
-        let constraints =
-            filter.map(|filter| FilterConstraints::new(&filter.condition)).unwrap_or_default();
+        let constraints = filter
+            .map(|filter| {
+                FilterConstraints::new(&filter.condition, &mut fuel.filter_constraint_fuel)
+            })
+            .unwrap_or_default();
 
         let Some(nb_constraints_fid) = self.db_fields_ids_map.id("conditions.filter.nbConstraints")
         else {
@@ -457,14 +466,27 @@ impl<'a> DynamicSearchRulesView<'a> {
             };
             let mut verifying_constraints_rules = RoaringBitmap::new();
 
+            if constraint_count_rules.is_empty() {
+                continue;
+            }
+
             for solved_constraint in &solved_constraints {
                 for combination in solved_constraint.iter().combinations(constraint_count) {
+                    if fuel.consume_filter_combination().is_break() {
+                        break;
+                    }
                     verifying_constraints_rules |= roaring::MultiOps::intersection(
                         std::iter::once(&constraint_count_rules).chain(combination.into_iter()),
                     );
                 }
             }
-            *active_rules -= constraint_count_rules - verifying_constraints_rules;
+            match fuel.consume_filter_combination() {
+                ControlFlow::Continue(()) => {
+                    *active_rules -= constraint_count_rules - verifying_constraints_rules;
+                }
+                // no more fuel, we have to remove all rules because the computation might be incomplete
+                ControlFlow::Break(()) => *active_rules -= constraint_count_rules,
+            }
         }
 
         Ok(())
@@ -725,20 +747,27 @@ pub struct DsrFuel {
     max_counted_words: u8,
     max_active_rules: u32,
     max_pin_actions: u32,
-    remaining_word_fuel: std::num::Saturating<u32>,
+    remaining_word_fuel: Saturating<u32>,
+    remaining_filter_fuel: Saturating<u32>,
+    filter_constraint_fuel: FilterConstraintFuel,
 }
+
 impl DsrFuel {
     pub fn new(
         max_counted_words: u8,
         max_active_rules: u32,
         max_pin_actions: u32,
         word_fuel: u32,
+        filter_fuel: u32,
+        filter_constraint_fuel: FilterConstraintFuel,
     ) -> Self {
         Self {
             max_counted_words,
             max_active_rules,
             max_pin_actions,
-            remaining_word_fuel: std::num::Saturating(word_fuel),
+            remaining_word_fuel: Saturating(word_fuel),
+            remaining_filter_fuel: Saturating(filter_fuel),
+            filter_constraint_fuel,
         }
     }
 
@@ -749,6 +778,15 @@ impl DsrFuel {
     pub fn consume_word_combination(&mut self) -> ControlFlow<(), ()> {
         self.remaining_word_fuel -= 1;
         if self.remaining_word_fuel.0 == 0 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+
+    pub fn consume_filter_combination(&mut self) -> ControlFlow<(), ()> {
+        self.remaining_filter_fuel -= 1;
+        if self.remaining_filter_fuel.0 == 0 {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())

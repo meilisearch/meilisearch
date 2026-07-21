@@ -50,7 +50,9 @@ use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 pub use documents::GeoSortStrategy;
-pub use filter_parser::{Condition, FilterCondition, IndexFilterCondition, Span, Token, TokenLike};
+pub use filter_parser::{
+    Condition, FilterCondition, FilterConstraintFuel, IndexFilterCondition, Span, Token, TokenLike,
+};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use must_stop_processing::MustStopProcessing;

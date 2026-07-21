@@ -54,7 +54,8 @@ use condition::{
     parse_is_null, parse_not_contains, parse_not_exists, parse_not_starts_with, parse_starts_with,
 };
 pub use constraint::{
-    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraints,
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraintFuel,
+    FilterConstraints,
 };
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};

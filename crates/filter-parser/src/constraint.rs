@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::num::Saturating;
+use std::ops::ControlFlow;
 
 use itertools::Itertools as _;
 
@@ -25,10 +27,10 @@ pub struct ConstraintCondition {
 }
 
 impl FilterConstraints {
-    pub fn new(filter: &IndexFilterCondition) -> Self {
+    pub fn new(filter: &IndexFilterCondition, fuel: &mut FilterConstraintFuel) -> Self {
         let mut constraints = Default::default();
 
-        Self::evaluate_filter(&mut constraints, filter, true);
+        Self::evaluate_filter(&mut constraints, filter, true, fuel);
 
         Self { constraints }
     }
@@ -37,10 +39,14 @@ impl FilterConstraints {
         constraints: &mut FilterConstraintSet,
         filter: &IndexFilterCondition,
         polarity: bool,
+        fuel: &mut FilterConstraintFuel,
     ) {
+        if fuel.consume_depth_fuel().is_break() {
+            return;
+        }
         match filter {
             IndexFilterCondition::Not(index_filter_condition) => {
-                Self::evaluate_filter(constraints, index_filter_condition, !polarity)
+                Self::evaluate_filter(constraints, index_filter_condition, !polarity, fuel)
             }
             IndexFilterCondition::Condition { fid, op } => {
                 let constraint = ConstraintCondition {
@@ -61,27 +67,33 @@ impl FilterConstraints {
                         })
                         .collect(),
                 );
-                Self::evaluate_filter(constraints, &filter, polarity);
+                Self::evaluate_filter(constraints, &filter, polarity, fuel);
             }
             IndexFilterCondition::Or(index_filter_conditions) => {
                 if polarity {
                     // OR means a new list of constraints
                     for cond in index_filter_conditions {
-                        Self::evaluate_filter(constraints, cond, true);
+                        if fuel.consume_or_fuel().is_break() {
+                            break;
+                        }
+                        Self::evaluate_filter(constraints, cond, true, fuel);
                     }
                 } else {
-                    let mut conjunction = Self::evaluate_and(index_filter_conditions, false);
+                    let mut conjunction = Self::evaluate_and(index_filter_conditions, false, fuel);
                     constraints.append(&mut conjunction);
                 }
             }
             IndexFilterCondition::And(index_filter_conditions) => {
                 if polarity {
-                    let mut conjunction = Self::evaluate_and(index_filter_conditions, true);
+                    let mut conjunction = Self::evaluate_and(index_filter_conditions, true, fuel);
                     constraints.append(&mut conjunction);
                 } else {
                     // OR means a new list of constraints
                     for cond in index_filter_conditions {
-                        Self::evaluate_filter(constraints, cond, false);
+                        if fuel.consume_or_fuel().is_break() {
+                            break;
+                        }
+                        Self::evaluate_filter(constraints, cond, false, fuel);
                     }
                 }
             }
@@ -132,17 +144,19 @@ impl FilterConstraints {
                 constraints.push(these_constraints);
             }
         }
+        fuel.restore_depth_fuel();
     }
 
     fn evaluate_and(
         filter_conditions: &Vec<IndexFilterCondition>,
         polarity: bool,
+        fuel: &mut FilterConstraintFuel,
     ) -> FilterConstraintSet {
         // AND means we fuse all lists of constraints
         let mut conjunction: FilterConstraintSet = Default::default();
         let mut local_constraints: FilterConstraintSet = Default::default();
         for cond in filter_conditions {
-            Self::evaluate_filter(&mut local_constraints, cond, polarity);
+            Self::evaluate_filter(&mut local_constraints, cond, polarity, fuel);
             if conjunction.is_empty() {
                 conjunction.append(&mut local_constraints);
                 continue;
@@ -150,6 +164,7 @@ impl FilterConstraints {
             conjunction = conjunction
                 .drain(..)
                 .cartesian_product(std::mem::take(&mut local_constraints))
+                .take_while(|_| fuel.consume_and_fuel().is_continue())
                 .map(|(left, right)| {
                     left.into_iter()
                         .merge_join_by(right, |(left, _), (right, _)| left.cmp(right))
@@ -182,4 +197,58 @@ pub enum ConstraintConditionKind {
     GeoLowerThan { point: [Token; 2], radius: Token, resolution: Option<Token> },
     GeoBoundingBox { top_right_point: [Token; 2], bottom_left_point: [Token; 2] },
     GeoPolygon { points: Vec<[Token; 2]> },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FilterConstraintFuel {
+    remaining_or: Saturating<u16>,
+    remaining_and: Saturating<u16>,
+    remaining_depth: Saturating<u8>,
+}
+
+impl FilterConstraintFuel {
+    pub fn new(or_fuel: u16, and_fuel: u16, depth_fuel: u8) -> Self {
+        Self {
+            remaining_or: Saturating(or_fuel),
+            remaining_and: Saturating(and_fuel),
+            remaining_depth: Saturating(depth_fuel),
+        }
+    }
+
+    fn consume_or_fuel(&mut self) -> ControlFlow<(), ()> {
+        self.remaining_or -= 1;
+        if self.remaining_or.0 == 0 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+
+    fn consume_and_fuel(&mut self) -> ControlFlow<(), ()> {
+        self.remaining_and -= 1;
+        if self.remaining_and.0 == 0 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+
+    fn consume_depth_fuel(&mut self) -> ControlFlow<(), ()> {
+        self.remaining_depth -= 1;
+        if self.remaining_depth.0 == 0 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+
+    fn restore_depth_fuel(&mut self) {
+        if !self.is_exhausted() {
+            self.remaining_depth += 1;
+        }
+    }
+
+    pub fn is_exhausted(&self) -> bool {
+        self.remaining_or.0 == 0 || self.remaining_and.0 == 0 || self.remaining_depth.0 == 0
+    }
 }

@@ -11,6 +11,7 @@ use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use meilisearch_types::milli::update::{IndexerConfig, MissingDocumentPolicy};
+use meilisearch_types::milli::FilterConstraintFuel;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{versioning, VERSION_FILE_NAME};
 use tempfile::{NamedTempFile, TempDir};
@@ -117,7 +118,7 @@ impl IndexScheduler {
             embedding_cache_cap: 10,
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
-            dsr_fuel: DsrFuel::new(3, 10, 3, 10),
+            dsr_fuel: DsrFuel::new(3, 10, 3, 128, 128, FilterConstraintFuel::new(100, 100, 25)),
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)
