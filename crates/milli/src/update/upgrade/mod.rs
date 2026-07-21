@@ -96,3 +96,8 @@ pub fn upgrade(
 
     Ok(regenerate_stats)
 }
+
+/// Indicates the range of version where the DSR index must be upgraded
+pub fn must_upgrade_dsr(initial_version: (u32, u32, u32)) -> Result<bool> {
+    Ok(((1, 50, 0)..(1, 51, 0)).contains(&initial_version))
+}

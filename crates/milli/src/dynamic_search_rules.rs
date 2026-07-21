@@ -543,7 +543,6 @@ impl<'a> DynamicSearchRulesView<'a> {
         active_rules: &RoaringBitmap,
     ) -> Result<RoaringBitmap> {
         let mut matching = active_rules.clone();
-        wip::fixme!("DSR index update");
 
         for constraint in constraints {
             let mut polarity = constraint.polarity;
