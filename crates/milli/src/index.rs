@@ -667,15 +667,17 @@ impl Index {
     }
 
     /// Get the fieldids weights map which associates the field ids to their weights
-    pub fn fieldids_weights_map(&self, rtxn: &RoTxn<'_>) -> heed::Result<FieldidsWeightsMap> {
+    pub fn fieldids_weights_map(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> heed::Result<FieldidsWeightsMap> {
         self.main
             .remap_types::<Str, SerdeJson<_>>()
             .get(rtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)?
             .map(Ok)
             .unwrap_or_else(|| {
-                Ok(FieldidsWeightsMap::from_field_id_map_without_searchable(
-                    &self.fields_ids_map(rtxn)?,
-                ))
+                Ok(FieldidsWeightsMap::from_field_id_map_without_searchable(fields_ids_map))
             })
     }
 
@@ -698,18 +700,19 @@ impl Index {
     pub fn searchable_fields_and_weights<'a>(
         &self,
         rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &FieldsIdsMap,
     ) -> Result<Vec<(Cow<'a, str>, FieldId, Weight)>> {
-        let fid_map = self.fields_ids_map(rtxn)?;
-        let weight_map = self.fieldids_weights_map(rtxn)?;
-        let searchable = self.searchable_fields(rtxn)?;
+        let weight_map = self.fieldids_weights_map(rtxn, fields_ids_map)?;
+        let searchable = self.searchable_fields(rtxn, fields_ids_map)?;
 
         searchable
             .into_iter()
             .map(|field| -> Result<_> {
-                let fid = fid_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                    field_name: field.to_string(),
-                    process: "searchable_fields_and_weights",
-                })?;
+                let fid =
+                    fields_ids_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                        field_name: field.to_string(),
+                        process: "searchable_fields_and_weights",
+                    })?;
                 let weight = weight_map
                     .weight(fid)
                     .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
@@ -929,14 +932,17 @@ impl Index {
     }
 
     /// Returns the searchable fields, those are the fields that are indexed,
-    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn<'_>) -> heed::Result<Vec<Cow<'t, str>>> {
+    pub fn searchable_fields<'t>(
+        &self,
+        rtxn: &'t RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> heed::Result<Vec<Cow<'t, str>>> {
         self.main
             .remap_types::<Str, SerdeBincode<Vec<&'t str>>>()
             .get(rtxn, main_key::SEARCHABLE_FIELDS_KEY)?
             .map(|fields| Ok(fields.into_iter().map(Cow::Borrowed).collect()))
             .unwrap_or_else(|| {
-                Ok(self
-                    .fields_ids_map(rtxn)?
+                Ok(fields_ids_map
                     .names()
                     .filter(|name| !crate::is_faceted_by(name, RESERVED_VECTORS_FIELD_NAME))
                     .map(|field| Cow::Owned(field.to_string()))
@@ -945,9 +951,12 @@ impl Index {
     }
 
     /// Identical to `searchable_fields`, but returns the ids instead.
-    pub fn searchable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<Vec<FieldId>> {
-        let fields = self.searchable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
+    pub fn searchable_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<Vec<FieldId>> {
+        let fields = self.searchable_fields(rtxn, fields_ids_map)?;
         let mut fields_ids = Vec::new();
         for name in fields {
             if let Some(field_id) = fields_ids_map.id(&name) {
@@ -1487,10 +1496,11 @@ impl Index {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         index_uid: &'a str,
+        fields_ids_map: &'a FieldsIdsMap,
         before_search: time::OffsetDateTime,
         progress: &'a Progress,
     ) -> Search<'a> {
-        Search::new(rtxn, self, index_uid, before_search, progress)
+        Search::new(rtxn, self, fields_ids_map, index_uid, before_search, progress)
     }
 
     /// Returns the index creation time.
@@ -1627,10 +1637,13 @@ impl Index {
     }
 
     /// Returns the list of exact attributes field ids.
-    pub fn exact_attributes_ids(&self, txn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    pub fn exact_attributes_ids(
+        &self,
+        txn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<HashSet<FieldId>> {
         let attrs = self.exact_attributes(txn)?;
-        let fid_map = self.fields_ids_map(txn)?;
-        Ok(attrs.iter().filter_map(|attr| fid_map.id(attr)).collect())
+        Ok(attrs.iter().filter_map(|attr| fields_ids_map.id(attr)).collect())
     }
 
     /// Writes the exact attributes to the database.

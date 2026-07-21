@@ -23,12 +23,13 @@ use crate::update::{
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
 use crate::{
-    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index,
+    db_snap, obkv_to_json, CreateOrOpen, FieldsIdsMap, Filter, FilterableAttributesRule, Index,
     MustStopProcessing, Search, SearchResult,
 };
 
 pub(crate) struct TempIndex {
     pub inner: Index,
+    pub fields_ids_map: FieldsIdsMap,
     pub indexer_config: IndexerConfig,
     pub index_documents_config: IndexDocumentsConfig,
     pub progress: Progress,
@@ -56,7 +57,12 @@ impl TempIndex {
         let index_documents_config = IndexDocumentsConfig::default();
         let progress = Progress::default();
 
-        Self { inner, indexer_config, index_documents_config, progress, _tempdir }
+        let fields_ids_map = {
+            let rtxn = inner.read_txn().unwrap();
+            inner.fields_ids_map(&rtxn).unwrap()
+        };
+
+        Self { inner, fields_ids_map, indexer_config, index_documents_config, progress, _tempdir }
     }
     /// Creates a temporary index, with a default `4096 * 2000` size. This should be enough for
     /// most tests.
@@ -245,7 +251,13 @@ impl TempIndex {
     }
 
     pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
-        self.inner.search(rtxn, "test", time::OffsetDateTime::now_utc(), &self.progress)
+        self.inner.search(
+            rtxn,
+            "test",
+            &self.fields_ids_map,
+            time::OffsetDateTime::now_utc(),
+            &self.progress,
+        )
     }
 }
 
@@ -424,8 +436,9 @@ fn add_documents_and_set_searchable_fields() {
 
     // ensure we get the right real searchable fields + user defined searchable fields
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let real = index.searchable_fields(&rtxn).unwrap();
+    let real = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
     assert_eq!(real, &["doggo", "name", "doggo.name", "doggo.age"]);
 
     let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
@@ -444,8 +457,9 @@ fn set_searchable_fields_and_add_documents() {
 
     // ensure we get the right real searchable fields + user defined searchable fields
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let real = index.searchable_fields(&rtxn).unwrap();
+    let real = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
     assert!(real.is_empty());
     let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();
     assert_eq!(user_defined, &["doggo", "name"]);
@@ -460,8 +474,9 @@ fn set_searchable_fields_and_add_documents() {
 
     // ensure we get the right real searchable fields + user defined searchable fields
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let real = index.searchable_fields(&rtxn).unwrap();
+    let real = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
     assert_eq!(real, &["doggo", "name", "doggo.name", "doggo.age"]);
 
     let user_defined = index.user_defined_searchable_fields(&rtxn).unwrap().unwrap();

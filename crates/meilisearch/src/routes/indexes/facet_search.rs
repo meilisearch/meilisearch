@@ -507,6 +507,7 @@ async fn search_multi_local(
     let search_result = tokio::task::spawn_blocking(move || {
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let deadline = index.search_deadline(&rtxn)?;
         let search_kind =
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
@@ -539,6 +540,7 @@ async fn search_multi_local(
         let (search, _, _, _) = prepare_search(
             &index,
             &rtxn,
+            &fields_ids_map,
             index_uid.as_str(),
             before_search,
             &search_query,
@@ -549,7 +551,16 @@ async fn search_multi_local(
             &progress_clone,
         )?;
 
-        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
+        perform_facet_search(
+            &index,
+            &rtxn,
+            &fields_ids_map,
+            search,
+            facet_query,
+            facet_name,
+            search_kind,
+            locales,
+        )
     })
     .await;
     search_result?
@@ -573,6 +584,7 @@ async fn search_local(
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?; // remove me again
         let search_kind =
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
         let filter = match &search_query.filter {
@@ -597,6 +609,7 @@ async fn search_local(
         let (search, _, _, _) = prepare_search(
             &index,
             &rtxn,
+            &fields_ids_map,
             index_uid.as_str(),
             before_search,
             &search_query,
@@ -607,8 +620,17 @@ async fn search_local(
             &progress_clone,
         )?;
 
-        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
-            .map(|(results, _)| results)
+        perform_facet_search(
+            &index,
+            &rtxn,
+            &fields_ids_map,
+            search,
+            facet_query,
+            facet_name,
+            search_kind,
+            locales,
+        )
+        .map(|(results, _)| results)
     })
     .await;
     search_result?
