@@ -25,7 +25,7 @@ use crate::search::new::{
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Position, Result, SearchContext, SearchStep, UserError,
+    FieldsIdsMap, Index, Position, Result, SearchContext, SearchStep, UserError,
 };
 
 // Building these factories is not free.
@@ -73,6 +73,7 @@ pub struct Search<'a> {
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    fields_ids_map: &'a FieldsIdsMap,
     index_uid: &'a str,
     before_search: OffsetDateTime,
     semantic: Option<SemanticSearch>,
@@ -88,6 +89,7 @@ impl<'a> Search<'a> {
     pub fn new(
         rtxn: &'a heed::RoTxn<'a>,
         index: &'a Index,
+        fields_ids_map: &'a FieldsIdsMap,
         index_uid: &'a str,
         before_search: OffsetDateTime,
         progress: &'a Progress,
@@ -109,6 +111,7 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            fields_ids_map,
             index_uid,
             before_search,
             semantic: None,
@@ -254,8 +257,13 @@ impl<'a> Search<'a> {
         };
 
         if has_vector {
-            let ctx =
-                SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
+            let ctx = SearchContext::new(
+                self.index,
+                self.rtxn,
+                self.fields_ids_map,
+                self.index_uid,
+                self.before_search,
+            )?;
             filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)
         } else {
             Ok(self.execute()?.candidates)
@@ -263,8 +271,13 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx =
-            SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
+        let mut ctx = SearchContext::new(
+            self.index,
+            self.rtxn,
+            self.fields_ids_map,
+            self.index_uid,
+            self.before_search,
+        )?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.attributes_to_search_on(searchable_attributes)?;
@@ -457,6 +470,7 @@ impl fmt::Debug for Search<'_> {
             max_total_hits,
             rtxn: _,
             index: _,
+            fields_ids_map: _,
             index_uid: _,
             before_search: _,
             semantic,

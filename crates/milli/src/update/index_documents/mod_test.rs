@@ -602,10 +602,17 @@ fn index_documents_with_nested_primary_key() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // testing the simple query search
-    let mut search =
-        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut search = crate::Search::new(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.query("document");
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     // all documents should be returned
@@ -713,10 +720,17 @@ fn test_facets_generation() {
     "###);
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
-        let mut search =
-            crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+        let mut search = crate::Search::new(
+            &rtxn,
+            &index,
+            &fields_ids_map,
+            "test",
+            OffsetDateTime::now_utc(),
+            &progress,
+        );
         let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
         let filter = crate::Filter::from_str(&filter).unwrap().unwrap();
         search.filter(Some(IndexFilter::from(filter)));
@@ -755,8 +769,14 @@ fn test_facets_generation() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut search =
-        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut search = crate::Search::new(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
         "dog.race.bernese mountain",
     )))]);
@@ -2874,10 +2894,18 @@ fn delete_words_exact_attributes() {
 
     insta::assert_snapshot!(format!("{deleted_internal_ids:?}"), @"[1]");
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
     let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
     insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
 
-    let mut s = crate::Search::new(&txn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut s = crate::Search::new(
+        &txn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     s.query("hello");
     let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");

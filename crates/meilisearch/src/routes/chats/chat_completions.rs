@@ -424,9 +424,11 @@ async fn process_search_request(
             .search_deadline(&rtxn)
             .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?;
 
+        let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?;
         let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
             &index_cloned,
             &rtxn,
+            &fields_ids_map,
             &index_uid,
             start_time,
             &query,

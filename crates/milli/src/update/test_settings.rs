@@ -83,7 +83,7 @@ fn set_and_reset_searchable_fields() {
     let user_defined_searchable_fields = index.user_defined_searchable_fields(&rtxn).unwrap();
     snapshot!(format!("{user_defined_searchable_fields:?}"), @"None");
     // the searchable fields should contain all the fields
-    let searchable_fields = index.searchable_fields(&rtxn).unwrap();
+    let searchable_fields = index.searchable_fields(&rtxn, &fid_map).unwrap();
     snapshot!(format!("{searchable_fields:?}"), @r###"["id", "name", "age"]"###);
     let result = index.search(&rtxn).query("23").execute().unwrap();
     assert_eq!(result.documents_ids.len(), 1);

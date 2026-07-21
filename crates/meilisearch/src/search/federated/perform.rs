@@ -1503,6 +1503,7 @@ impl SearchByIndex {
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
+                    &fidmap,
                     &index_uid,
                     before_search,
                     &query,
@@ -1583,8 +1584,8 @@ impl SearchByIndex {
 
                 let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
-                let hit_maker =
-                    HitMaker::new(&index, &rtxn, format, formatter_builder).map_err(|e| {
+                let hit_maker = HitMaker::new(&index, &rtxn, &fidmap, format, formatter_builder)
+                    .map_err(|e| {
                         MeilisearchHttpError::from_milli(e, Some(index_uid.to_string()))
                     })?;
 
