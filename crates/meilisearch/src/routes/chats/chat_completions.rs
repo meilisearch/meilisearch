@@ -35,7 +35,8 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    all_obkv_to_json, obkv_to_json, Filter, OrderBy, PatternMatch, TotalProcessingTimeStep,
+    all_obkv_to_json, obkv_to_json, FieldsIdsMap, Filter, OrderBy, PatternMatch,
+    TotalProcessingTimeStep,
 };
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
@@ -254,6 +255,7 @@ fn setup_search_tool(
         let search_rules = filters.get_index_search_rules(name.uid());
 
         let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let chat_config = index.chat_config(&rtxn)?;
         let index_description = chat_config.description;
         let _ = writeln!(
@@ -266,6 +268,7 @@ fn setup_search_tool(
             index_scheduler,
             index,
             &rtxn,
+            &fields_ids_map,
             10,
             search_rules,
             name.uid(),
@@ -359,6 +362,7 @@ async fn process_search_request(
     let index = index_scheduler.user_index(&index_uid)?;
     let progress = Progress::default();
     let rtxn = index.static_read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
     let mut query = SearchQuery {
         q,
@@ -424,9 +428,11 @@ async fn process_search_request(
             .search_deadline(&rtxn)
             .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?;
 
+        let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?;
         let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
             &index_cloned,
             &rtxn,
+            &fields_ids_map,
             &index_uid,
             start_time,
             &query,
@@ -462,7 +468,7 @@ async fn process_search_request(
         }
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let displayed_fields = index.displayed_fields_ids(rtxn)?;
+        let displayed_fields = index.displayed_fields_ids(rtxn, &fields_ids_map)?;
         for &document_id in &search_result.documents_ids {
             let obkv = index.document(rtxn, document_id)?;
             let document = match displayed_fields {
@@ -475,7 +481,13 @@ async fn process_search_request(
 
     let (rtxn, search_result) = output?;
     let render_alloc = Bump::new();
-    let formatted = format_documents(&rtxn, &index, &render_alloc, search_result.documents_ids)?;
+    let formatted = format_documents(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        &render_alloc,
+        search_result.documents_ids,
+    )?;
     let text = formatted.join("\n");
     drop(rtxn);
 
@@ -989,10 +1001,12 @@ struct SearchInIndexParameters {
     filter: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn format_facet_distributions(
     index_scheduler: &IndexScheduler,
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     max_values_per_facet: usize,
     search_rules: Option<IndexSearchRules>,
     index_uid: &str,
@@ -1009,16 +1023,15 @@ fn format_facet_distributions(
         };
         let filter =
             filter_into_index_filter(filter, index, rtxn, index_scheduler, progress, index_uid)?;
-        filter.evaluate(rtxn, index).map_err(from_milli)?
+        filter.evaluate(rtxn, index, fields_ids_map).map_err(from_milli)?
     };
     let rules = index.filterable_attributes_rules(rtxn)?;
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
     let filterable_attributes = fields_ids_map
         .names()
         .filter(|name| rules.iter().any(|rule| matches!(rule.match_str(name), PatternMatch::Match)))
         .map(|name| (name, OrderBy::Count));
     let facets_distribution = index
-        .facets_distribution(rtxn)
+        .facets_distribution(rtxn, fields_ids_map)
         .max_values_per_facet(max_values_per_facet)
         .candidates(universe)
         .facets(filterable_attributes)

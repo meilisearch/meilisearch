@@ -595,7 +595,11 @@ fn export_documents(
                                 meilisearch_types::milli::UserError::InvalidVectorsMapType {
                                     document_id: {
                                         if let Ok(Some(Ok(index))) = index
-                                            .external_id_of(&rtxn, std::iter::once(id))
+                                            .external_id_of(
+                                                &rtxn,
+                                                &fields_ids_map,
+                                                std::iter::once(id),
+                                            )
                                             .map(|it| it.into_iter().next())
                                         {
                                             index

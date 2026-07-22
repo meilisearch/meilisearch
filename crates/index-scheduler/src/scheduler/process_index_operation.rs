@@ -138,8 +138,9 @@ impl IndexScheduler {
                                 Code::InvalidDocumentFilter,
                             )?;
                             if let Some(filter) = filter {
-                                let candidates =
-                                    filter.evaluate(index_wtxn, index).map_err(|err| {
+                                let candidates = filter
+                                    .evaluate(index_wtxn, index, &db_fields_ids_map)
+                                    .map_err(|err| {
                                         Error::from_milli(err, Some(index_uid.clone()))
                                     })?;
                                 indexer.delete_documents_by_internal_ids(candidates);
@@ -266,9 +267,12 @@ impl IndexScheduler {
                     })
                     .transpose()?
                 {
-                    Some(filter) => filter
-                        .evaluate(index_wtxn, index)
-                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    Some(filter) => {
+                        let db_fields_ids_map = index.fields_ids_map(index_wtxn)?;
+                        filter
+                            .evaluate(index_wtxn, index, &db_fields_ids_map)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?
+                    }
                     None => index.documents_ids(index_wtxn)?,
                 };
 
@@ -427,8 +431,9 @@ impl IndexScheduler {
                                 }
                             };
                             if let Some(filter) = filter {
+                                let db_fields_ids_map = index.fields_ids_map(index_wtxn)?;
                                 let candidates = filter
-                                    .evaluate(index_wtxn, index)
+                                    .evaluate(index_wtxn, index, &db_fields_ids_map)
                                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())));
                                 match candidates {
                                     Ok(candidates) => to_delete |= candidates,

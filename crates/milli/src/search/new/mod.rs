@@ -63,8 +63,8 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
-    UserError, Weight,
+    AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, PinDoc, Result,
+    TermsMatchingStrategy, UserError, Weight,
 };
 
 /// Cache for synonyms to avoid repeated database access
@@ -77,6 +77,7 @@ pub struct SynonymCache {
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
     pub txn: &'ctx RoTxn<'ctx>,
+    pub fields_ids_map: &'ctx FieldsIdsMap,
     pub index_uid: &'ctx str,
     pub before_search: OffsetDateTime,
     pub db_cache: DatabaseCache<'ctx>,
@@ -94,11 +95,12 @@ impl<'ctx> SearchContext<'ctx> {
     pub fn new(
         index: &'ctx Index,
         txn: &'ctx RoTxn<'ctx>,
+        fields_ids_map: &'ctx FieldsIdsMap,
         index_uid: &'ctx str,
         before_search: OffsetDateTime,
     ) -> Result<Self> {
-        let searchable_fids = index.searchable_fields_and_weights(txn)?;
-        let exact_attributes_ids = index.exact_attributes_ids(txn)?;
+        let searchable_fids = index.searchable_fields_and_weights(txn, fields_ids_map)?;
+        let exact_attributes_ids = index.exact_attributes_ids(txn, fields_ids_map)?;
 
         let mut exact = Vec::new();
         let mut tolerant = Vec::new();
@@ -115,6 +117,7 @@ impl<'ctx> SearchContext<'ctx> {
         Ok(Self {
             index,
             txn,
+            fields_ids_map,
             index_uid,
             before_search,
             db_cache: <_>::default(),
@@ -138,8 +141,10 @@ impl<'ctx> SearchContext<'ctx> {
         attributes_to_search_on: &'ctx [String],
     ) -> Result<()> {
         let user_defined_searchable = self.index.user_defined_searchable_fields(self.txn)?;
-        let searchable_fields_weights = self.index.searchable_fields_and_weights(self.txn)?;
-        let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
+        let searchable_fields_weights =
+            self.index.searchable_fields_and_weights(self.txn, self.fields_ids_map)?;
+        let exact_attributes_ids =
+            self.index.exact_attributes_ids(self.txn, self.fields_ids_map)?;
 
         let mut universal_wildcard = false;
 
@@ -384,14 +389,26 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -462,14 +479,26 @@ fn get_ranking_rules_for_vector<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -593,14 +622,26 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -624,14 +665,26 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             AscDesc::Desc(Member::Field(field_name)) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
             AscDesc::Asc(Member::Geo(point)) => {
                 if *geo_sorted {
@@ -666,6 +719,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
+    fields_ids_map: &FieldsIdsMap,
     filters: &Option<IndexFilter>,
     candidates: Option<&RoaringBitmap>,
     progress: &Progress,
@@ -675,11 +729,11 @@ pub fn filtered_universe(
         (None, Some(candidates)) => candidates.clone(),
         (Some(filters), None) => {
             let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
-            filters.evaluate(txn, index)?
+            filters.evaluate(txn, index, fields_ids_map)?
         }
         (Some(filters), Some(candidates)) => {
             let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
-            let mut filtered = filters.evaluate(txn, index)?;
+            let mut filtered = filters.evaluate(txn, index, fields_ids_map)?;
             filtered &= candidates;
             filtered
         }
@@ -836,7 +890,6 @@ pub fn execute_search(
     };
 
     let BucketSortOutput { docids, scores, mut all_candidates, degraded } = bucket_sort_output;
-    let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
@@ -847,7 +900,7 @@ pub fn execute_search(
         };
 
         if let Some(f) = distinct_field {
-            if let Some(distinct_fid) = fields_ids_map.id(f) {
+            if let Some(distinct_fid) = ctx.fields_ids_map.id(f) {
                 all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
             }
         }
@@ -903,8 +956,7 @@ pub fn extract_tokens(
         None => {
             // If no locales are specified, we use the locales specified in the localized attributes rules
             let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
-            let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
-            let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn)?;
+            let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn, ctx.fields_ids_map)?;
 
             let localized_fields = match &ctx.restricted_fids {
                 // if AttributeToSearchOn is set, use the restricted list of ids
@@ -915,12 +967,12 @@ pub fn extract_tokens(
                         .chain(restricted_fids.tolerant.iter())
                         .map(|(fid, _)| *fid);
 
-                    LocalizedFieldIds::new(&localized_attributes_rules, &fields_ids_map, iter)
+                    LocalizedFieldIds::new(&localized_attributes_rules, ctx.fields_ids_map, iter)
                 }
                 // Otherwise use the full list of ids coming from the index searchable fields
                 None => LocalizedFieldIds::new(
                     &localized_attributes_rules,
-                    &fields_ids_map,
+                    ctx.fields_ids_map,
                     searchable_fields.into_iter(),
                 ),
             };

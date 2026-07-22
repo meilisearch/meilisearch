@@ -135,7 +135,13 @@ impl<'a> DynamicSearchRulesView<'a> {
         offset: usize,
     ) -> Result<SearchResult> {
         let progress = Default::default();
-        let mut search = self.index.search(self.rtxn, "", OffsetDateTime::now_utc(), &progress);
+        let mut search = self.index.search(
+            self.rtxn,
+            "",
+            self.db_fields_ids_map,
+            OffsetDateTime::now_utc(),
+            &progress,
+        );
 
         if let Some(query) = query {
             search.query(query);

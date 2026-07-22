@@ -81,8 +81,9 @@ fn test_geo_sort() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut s = index.search(&rtxn);
+    let mut s = index.search(&rtxn, &fields_ids_map);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
 
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
@@ -117,8 +118,9 @@ fn test_geo_sort_with_following_ranking_rules() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut s = index.search(&rtxn);
+    let mut s = index.search(&rtxn, &fields_ids_map);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![
         AscDesc::Asc(Member::Geo([0., 0.])),
@@ -158,8 +160,9 @@ fn test_geo_sort_reached_max_bucket_size() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut s = index.search(&rtxn);
+    let mut s = index.search(&rtxn, &fields_ids_map);
     s.geo_max_bucket_size(2);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![
@@ -218,8 +221,9 @@ fn test_geo_sort_around_the_edge_of_the_flat_earth() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut s = index.search(&rtxn);
+    let mut s = index.search(&rtxn, &fields_ids_map);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
 
     // --- asc
@@ -294,8 +298,9 @@ fn geo_sort_mixed_with_words() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut s = index.search(&rtxn);
+    let mut s = index.search(&rtxn, &fields_ids_map);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
 
@@ -405,8 +410,9 @@ fn geo_sort_without_any_geo_faceted_documents() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut s = index.search(&rtxn);
+    let mut s = index.search(&rtxn, &fields_ids_map);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
 

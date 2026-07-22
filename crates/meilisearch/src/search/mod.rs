@@ -1622,6 +1622,7 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
 pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
+    fields_ids_map: &'t FieldsIdsMap,
     index_uid: &'t str,
     before_search: time::OffsetDateTime,
     query: &'t SearchQuery,
@@ -1634,7 +1635,7 @@ pub fn prepare_search<'t>(
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }
-    let mut search = index.search(rtxn, index_uid, before_search, progress);
+    let mut search = index.search(rtxn, index_uid, fields_ids_map, before_search, progress);
     search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
@@ -1791,6 +1792,8 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+
     let filter = match &query.filter {
         Some(filter) => {
             let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
@@ -1806,6 +1809,7 @@ pub fn perform_search(
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,
         &rtxn,
+        &fields_ids_map,
         &index_uid,
         before_search,
         &query,
@@ -1907,6 +1911,7 @@ pub fn perform_search(
     let mut documents = make_hits(
         index,
         &rtxn,
+        &fields_ids_map,
         format,
         matching_words,
         documents_ids.iter().copied().zip(document_scores.iter()),
@@ -1940,7 +1945,7 @@ pub fn perform_search(
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
             let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates)
+            compute_facet_distribution_stats(&facets, index, &rtxn, &fields_ids_map, candidates)
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -2037,9 +2042,10 @@ fn compute_facet_distribution_stats(
     facet_patterns: &AttributePatterns,
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     candidates: roaring::RoaringBitmap,
 ) -> Result<ComputedFacets, ResponseError> {
-    let mut facet_distribution = index.facets_distribution(rtxn);
+    let mut facet_distribution = index.facets_distribution(rtxn, fields_ids_map);
 
     let max_values_by_facet = index
         .max_values_per_facet(rtxn)
@@ -2088,9 +2094,8 @@ fn compute_facet_distribution_stats(
         .into());
     }
 
-    let fidmap = index.fields_ids_map(rtxn)?;
     let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
-    let fields = fidmap.iter().filter_map(|(_fid, fname)| {
+    let fields = fields_ids_map.iter().filter_map(|(_fid, fname)| {
         if facet_patterns.match_str(fname) != PatternMatch::Match {
             return None;
         }
@@ -2201,7 +2206,7 @@ impl RetrieveVectors {
 struct HitMaker<'a> {
     index: &'a Index,
     rtxn: &'a RoTxn<'a>,
-    fields_ids_map: FieldsIdsMap,
+    fields_ids_map: &'a FieldsIdsMap,
     displayed_ids: BTreeSet<FieldId>,
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
@@ -2248,6 +2253,7 @@ impl<'a> HitMaker<'a> {
     pub fn new(
         index: &'a Index,
         rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
         format: AttributesFormat,
         mut formatter_builder: MatcherBuilder<'a>,
     ) -> milli::Result<Self> {
@@ -2255,9 +2261,8 @@ impl<'a> HitMaker<'a> {
         formatter_builder.highlight_prefix(format.highlight_pre_tag);
         formatter_builder.highlight_suffix(format.highlight_post_tag);
 
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let displayed_ids = index
-            .displayed_fields_ids(rtxn)?
+            .displayed_fields_ids(rtxn, fields_ids_map)?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
 
         let vectors_fid = fields_ids_map.id(milli::constants::RESERVED_VECTORS_FIELD_NAME);
@@ -2334,7 +2339,7 @@ impl<'a> HitMaker<'a> {
             &attr_to_crop,
             format.crop_length,
             &to_retrieve_ids,
-            &fields_ids_map,
+            fields_ids_map,
             &displayed_ids,
         );
 
@@ -2391,13 +2396,13 @@ impl<'a> HitMaker<'a> {
             .collect();
 
         // Generate a document with all the attributes to retrieve
-        let mut document = make_document(obkv, &self.fields_ids_map, &attributes_to_retrieve)?;
+        let mut document = make_document(obkv, self.fields_ids_map, &attributes_to_retrieve)?;
 
         let extra_document = self
             .extra_ids
             .is_empty()
             .not()
-            .then(|| make_document(obkv, &self.fields_ids_map, &self.extra_ids))
+            .then(|| make_document(obkv, self.fields_ids_map, &self.extra_ids))
             .transpose()?
             .unwrap_or_default();
 
@@ -2438,11 +2443,11 @@ impl<'a> HitMaker<'a> {
                 self.formatted_options.keys().map(extract_field).collect()
             };
 
-            let document = make_document(obkv, &self.fields_ids_map, &selectors)?;
+            let document = make_document(obkv, self.fields_ids_map, &selectors)?;
 
             format_fields(
                 document,
-                &self.fields_ids_map,
+                self.fields_ids_map,
                 &self.formatter_builder,
                 &self.formatted_options,
                 self.show_matches_position,
@@ -2478,6 +2483,7 @@ impl<'a> HitMaker<'a> {
 fn make_hits<'a>(
     index: &Index,
     rtxn: &RoTxn<'_>,
+    fields_ids_map: &FieldsIdsMap,
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
@@ -2496,7 +2502,7 @@ fn make_hits<'a>(
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
-    let hit_maker = HitMaker::new(index, rtxn, format, formatter_builder)?;
+    let hit_maker = HitMaker::new(index, rtxn, fields_ids_map, format, formatter_builder)?;
 
     for (id, score) in documents_ids_scores {
         documents.push(hit_maker.make_hit(id, score, progress)?);
@@ -2504,9 +2510,11 @@ fn make_hits<'a>(
     Ok(documents)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn perform_facet_search<'a>(
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     search: milli::Search<'a>,
     facet_query: Option<String>,
     facet_name: String,
@@ -2540,7 +2548,7 @@ pub fn perform_facet_search<'a>(
     let candidates =
         search.execute_for_candidates(matches!(search_kind, SearchKind::Hybrid { .. }))?;
 
-    let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn);
+    let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn, fields_ids_map);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
@@ -2577,6 +2585,7 @@ pub fn perform_similar(
     let features = index_scheduler.features();
     let index = index_scheduler.user_index(&index_uid)?;
     let rtxn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
     let SimilarQuery {
         id,
@@ -2641,7 +2650,8 @@ pub fn perform_similar(
         ));
     };
 
-    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, None, progress)?;
+    let docid_universe =
+        filtered_universe(&index, &rtxn, &fields_ids_map, &docid_filter, None, progress)?;
     if docid_universe.contains(internal_id).not() {
         return Err(ResponseError::from_msg(
             MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
@@ -2655,6 +2665,7 @@ pub fn perform_similar(
         limit,
         &index,
         &rtxn,
+        &fields_ids_map,
         embedder_name,
         embedder,
         quantized,
@@ -2704,6 +2715,7 @@ pub fn perform_similar(
     let hits = make_hits(
         &index,
         &rtxn,
+        &fields_ids_map,
         format,
         Default::default(),
         documents_ids.iter().copied().zip(document_scores.iter()),

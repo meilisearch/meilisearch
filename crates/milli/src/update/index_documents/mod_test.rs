@@ -170,17 +170,18 @@ fn complex_documents() {
 
     // Check that there is 1 documents now.
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // Search for a sub object value
-    let result = index.search(&rtxn).query(r#""value2""#).execute().unwrap();
+    let result = index.search(&rtxn, &fields_ids_map).query(r#""value2""#).execute().unwrap();
     assert_eq!(result.documents_ids, vec![0]);
 
     // Search for a sub array value
-    let result = index.search(&rtxn).query(r#""fine""#).execute().unwrap();
+    let result = index.search(&rtxn, &fields_ids_map).query(r#""fine""#).execute().unwrap();
     assert_eq!(result.documents_ids, vec![1]);
 
     // Search for a sub array sub object key
-    let result = index.search(&rtxn).query(r#""amazing""#).execute().unwrap();
+    let result = index.search(&rtxn, &fields_ids_map).query(r#""amazing""#).execute().unwrap();
     assert_eq!(result.documents_ids, vec![2]);
 
     drop(rtxn);
@@ -490,9 +491,10 @@ fn index_documents_with_nested_fields() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // testing the simple query search
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     search.query("document");
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     // all documents should be returned
@@ -533,7 +535,7 @@ fn index_documents_with_nested_fields() {
     assert!(documents_ids.is_empty()); // nested is not searchable
 
     // testing the filters
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
 
     let filter = crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap();
     search.filter(Some(IndexFilter::from(filter)));
@@ -602,10 +604,17 @@ fn index_documents_with_nested_primary_key() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // testing the simple query search
-    let mut search =
-        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut search = crate::Search::new(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.query("document");
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     // all documents should be returned
@@ -713,10 +722,17 @@ fn test_facets_generation() {
     "###);
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
-        let mut search =
-            crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+        let mut search = crate::Search::new(
+            &rtxn,
+            &index,
+            &fields_ids_map,
+            "test",
+            OffsetDateTime::now_utc(),
+            &progress,
+        );
         let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
         let filter = crate::Filter::from_str(&filter).unwrap().unwrap();
         search.filter(Some(IndexFilter::from(filter)));
@@ -755,8 +771,14 @@ fn test_facets_generation() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut search =
-        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut search = crate::Search::new(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
         "dog.race.bernese mountain",
     )))]);
@@ -2082,6 +2104,7 @@ fn test_multiple_vectors() {
            .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let embedders = index.embedding_configs();
     let mut embedding_configs = embedders.embedding_configs(&rtxn).unwrap();
     let IndexEmbeddingConfig { name: embedder_name, config: embedder, fragments } =
@@ -2107,7 +2130,7 @@ fn test_multiple_vectors() {
         .unwrap(),
     );
     let res = index
-        .search(&rtxn)
+        .search(&rtxn, &fields_ids_map)
         .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()), None)
         .execute()
         .unwrap();
@@ -2330,7 +2353,8 @@ fn reproduce_the_bug() {
 
     // Ensuring all the returned IDs actually exists
     let rtxn = index.read_txn().unwrap();
-    let res = index.search(&rtxn).execute().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let res = index.search(&rtxn, &fields_ids_map).execute().unwrap();
     index.documents(&rtxn, res.documents_ids).unwrap();
 }
 
@@ -2472,9 +2496,14 @@ fn filtered_placeholder_search_should_not_return_deleted_documents() {
     wtxn.commit().unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     // Placeholder search with filter
     let filter = Filter::from_str("label = sign").unwrap().unwrap();
-    let results = index.search(&rtxn).filter(Some(IndexFilter::from(filter))).execute().unwrap();
+    let results = index
+        .search(&rtxn, &fields_ids_map)
+        .filter(Some(IndexFilter::from(filter)))
+        .execute()
+        .unwrap();
     assert!(results.documents_ids.is_empty());
 
     db_snap!(index, word_docids);
@@ -2530,8 +2559,9 @@ fn placeholder_search_should_not_return_deleted_documents() {
 
     // Placeholder search
     let rtxn = index.static_read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let results = index.search(&rtxn).execute().unwrap();
+    let results = index.search(&rtxn, &fields_ids_map).execute().unwrap();
     assert!(!results.documents_ids.is_empty());
     for id in results.documents_ids.iter() {
         assert!(
@@ -2588,7 +2618,8 @@ fn search_should_not_return_deleted_documents() {
 
     // search for abstract
     let rtxn = index.read_txn().unwrap();
-    let results = index.search(&rtxn).query("abstract").execute().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let results = index.search(&rtxn, &fields_ids_map).query("abstract").execute().unwrap();
     assert!(!results.documents_ids.is_empty());
     for id in results.documents_ids.iter() {
         assert!(
@@ -2641,12 +2672,17 @@ fn geo_filtered_placeholder_search_should_not_return_deleted_documents() {
     wtxn.commit().unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&wtxn).unwrap();
     let external_ids_to_delete = ["5", "6", "7", "12", "17", "19"];
     let deleted_internal_ids = delete_documents(&mut wtxn, &index, &external_ids_to_delete);
 
     // Placeholder search with geo filter
     let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
-    let results = index.search(&wtxn).filter(Some(IndexFilter::from(filter))).execute().unwrap();
+    let results = index
+        .search(&wtxn, &fields_ids_map)
+        .filter(Some(IndexFilter::from(filter)))
+        .execute()
+        .unwrap();
     assert!(!results.documents_ids.is_empty());
     for id in results.documents_ids.iter() {
         assert!(
@@ -2874,10 +2910,18 @@ fn delete_words_exact_attributes() {
 
     insta::assert_snapshot!(format!("{deleted_internal_ids:?}"), @"[1]");
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
     let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
     insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
 
-    let mut s = crate::Search::new(&txn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut s = crate::Search::new(
+        &txn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     s.query("hello");
     let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");

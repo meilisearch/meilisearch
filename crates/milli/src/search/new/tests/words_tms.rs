@@ -131,7 +131,8 @@ fn test_words_tms_last_simple() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -166,7 +167,7 @@ fn test_words_tms_last_simple() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("extravagant the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -180,7 +181,8 @@ fn test_words_tms_last_phrase() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox\" jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -205,7 +207,7 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox\" jumps over the \"lazy\" dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -227,7 +229,7 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox jumps over the lazy dog\"");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -243,7 +245,7 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -270,7 +272,8 @@ fn test_words_proximity_tms_last_simple() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -305,7 +308,7 @@ fn test_words_proximity_tms_last_simple() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the brown quick fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -351,7 +354,8 @@ fn test_words_proximity_tms_last_phrase() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the \"quick brown\" fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -382,7 +386,7 @@ fn test_words_proximity_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the \"quick brown\" \"fox jumps\" over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -421,7 +425,8 @@ fn test_words_tms_all() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -447,7 +452,7 @@ fn test_words_tms_all() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("extravagant");
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -472,7 +477,8 @@ fn test_words_tms_attribute_rank_word_position_order_keeps_hits() {
     let hit_count = |criteria: Vec<Criterion>| -> usize {
         index.update_settings(|s| s.set_criteria(criteria.clone())).unwrap();
         let txn = index.read_txn().unwrap();
-        let mut s = index.search(&txn);
+        let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+        let mut s = index.search(&txn, &fields_ids_map);
         s.query("the quick brown fox jumps over the lazy dog");
         s.terms_matching_strategy(TermsMatchingStrategy::Last);
         s.limit(100);

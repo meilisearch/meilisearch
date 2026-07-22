@@ -21,7 +21,7 @@ use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
     AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, DEFAULT_VALUES_PER_FACET,
+    OrderBy, PatternMatch, SearchStep, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1370,7 +1370,10 @@ impl SearchByIndex {
 
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
 
-        let fidmap = index.fields_ids_map(&rtxn).without_index()?;
+        let fidmap = {
+            let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
+            index.fields_ids_map(&rtxn).without_index()?
+        };
 
         let mut degraded = false;
         let mut used_negative_operator = false;
@@ -1429,7 +1432,9 @@ impl SearchByIndex {
                     (SearchKind::SemanticOnly { .. }, _) => {
                         ranking_rules::CanonicalizationKind::Vector
                     }
-                    (_, Some(q)) if !q.is_empty() => ranking_rules::CanonicalizationKind::Keyword,
+                    (_, Some(q)) if !q.trim().is_empty() => {
+                        ranking_rules::CanonicalizationKind::Keyword
+                    }
                     _ => ranking_rules::CanonicalizationKind::Placeholder,
                 };
 
@@ -1501,6 +1506,7 @@ impl SearchByIndex {
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
+                    &fidmap,
                     &index_uid,
                     before_search,
                     &query,
@@ -1581,8 +1587,8 @@ impl SearchByIndex {
 
                 let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
-                let hit_maker =
-                    HitMaker::new(&index, &rtxn, format, formatter_builder).map_err(|e| {
+                let hit_maker = HitMaker::new(&index, &rtxn, &fidmap, format, formatter_builder)
+                    .map_err(|e| {
                         MeilisearchHttpError::from_milli(e, Some(index_uid.to_string()))
                     })?;
 
@@ -1701,7 +1707,13 @@ impl SearchByIndex {
         let estimated_total_hits = candidates.len() as usize;
         let facets = facet_patterns_by_index
             .map(|facets_by_index| {
-                compute_facet_distribution_stats(&facets_by_index, &index, &rtxn, candidates)
+                compute_facet_distribution_stats(
+                    &facets_by_index,
+                    &index,
+                    &rtxn,
+                    &fidmap,
+                    candidates,
+                )
             })
             .transpose()
             .map_err(|mut error| {
@@ -1770,9 +1782,13 @@ impl SearchByIndex {
             }
 
             if let Some(facets) = facets {
-                if let Err(mut error) =
-                    compute_facet_distribution_stats(&facets, &index, &rtxn, Default::default())
-                {
+                if let Err(mut error) = compute_facet_distribution_stats(
+                    &facets,
+                    &index,
+                    &rtxn,
+                    &fidmap,
+                    Default::default(),
+                ) {
                     if self.show_federation_info == ShowFederationInfo::Always {
                         error.message = format!(
                             "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",

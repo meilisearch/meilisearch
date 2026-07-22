@@ -25,7 +25,7 @@ use crate::search::new::{
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Position, Result, SearchContext, SearchStep, UserError,
+    FieldsIdsMap, Index, Position, Result, SearchContext, SearchStep, UserError,
 };
 
 // Building these factories is not free.
@@ -73,6 +73,7 @@ pub struct Search<'a> {
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    fields_ids_map: &'a FieldsIdsMap,
     index_uid: &'a str,
     before_search: OffsetDateTime,
     semantic: Option<SemanticSearch>,
@@ -88,6 +89,7 @@ impl<'a> Search<'a> {
     pub fn new(
         rtxn: &'a heed::RoTxn<'a>,
         index: &'a Index,
+        fields_ids_map: &'a FieldsIdsMap,
         index_uid: &'a str,
         before_search: OffsetDateTime,
         progress: &'a Progress,
@@ -109,6 +111,7 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            fields_ids_map,
             index_uid,
             before_search,
             semantic: None,
@@ -254,17 +257,34 @@ impl<'a> Search<'a> {
         };
 
         if has_vector {
-            let ctx =
-                SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)
+            let ctx = SearchContext::new(
+                self.index,
+                self.rtxn,
+                self.fields_ids_map,
+                self.index_uid,
+                self.before_search,
+            )?;
+            filtered_universe(
+                ctx.index,
+                ctx.txn,
+                self.fields_ids_map,
+                &self.filter,
+                self.candidates,
+                self.progress,
+            )
         } else {
             Ok(self.execute()?.candidates)
         }
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx =
-            SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
+        let mut ctx = SearchContext::new(
+            self.index,
+            self.rtxn,
+            self.fields_ids_map,
+            self.index_uid,
+            self.before_search,
+        )?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.attributes_to_search_on(searchable_attributes)?;
@@ -298,8 +318,14 @@ impl<'a> Search<'a> {
             }
         }
 
-        let mut universe =
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)?;
+        let mut universe = filtered_universe(
+            ctx.index,
+            ctx.txn,
+            self.fields_ids_map,
+            &self.filter,
+            self.candidates,
+            self.progress,
+        )?;
 
         let (query_terms, pins, used_negative_operator) =
             self.build_located_query_terms(&mut ctx, &mut universe)?;
@@ -397,26 +423,27 @@ impl<'a> Search<'a> {
 
         let mut ignored = RoaringBitmap::new();
 
-        let query_graph_terms = if let Some(query) = self.query.as_deref() {
-            let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
+        let query_graph_terms =
+            if let Some(query) = self.query.as_deref().filter(|q| !q.trim().is_empty()) {
+                let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
 
-            let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
-                extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
+                let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
+                    extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
 
-            used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+                used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
-            ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
-            ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
+                ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
+                ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
 
-            if query_terms.is_empty() {
-                // Do a placeholder search instead
-                None
+                if query_terms.is_empty() {
+                    // Do a placeholder search instead
+                    None
+                } else {
+                    Some((graph, query_terms))
+                }
             } else {
-                Some((graph, query_terms))
-            }
-        } else {
-            None
-        };
+                None
+            };
 
         let pins = self
             .dynamic_search_rules
@@ -456,6 +483,7 @@ impl fmt::Debug for Search<'_> {
             max_total_hits,
             rtxn: _,
             index: _,
+            fields_ids_map: _,
             index_uid: _,
             before_search: _,
             semantic,

@@ -6,7 +6,7 @@ use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::IndexFilter;
 use crate::vector::{Embedder, VectorStore};
-use crate::{filtered_universe, DocumentId, Index, Result, SearchResult};
+use crate::{filtered_universe, DocumentId, FieldsIdsMap, Index, Result, SearchResult};
 
 pub struct Similar<'a> {
     id: DocumentId,
@@ -15,6 +15,7 @@ pub struct Similar<'a> {
     offset: usize,
     limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
+    fields_ids_map: &'a FieldsIdsMap,
     index: &'a Index,
     embedder_name: String,
     embedder: Arc<Embedder>,
@@ -31,6 +32,7 @@ impl<'a> Similar<'a> {
         limit: usize,
         index: &'a Index,
         rtxn: &'a heed::RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
         embedder_name: String,
         embedder: Arc<Embedder>,
         quantized: bool,
@@ -41,8 +43,9 @@ impl<'a> Similar<'a> {
             filter: None,
             offset,
             limit,
-            rtxn,
             index,
+            rtxn,
+            fields_ids_map,
             embedder_name,
             embedder,
             ranking_score_threshold: None,
@@ -62,8 +65,14 @@ impl<'a> Similar<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut universe =
-            filtered_universe(self.index, self.rtxn, &self.filter, None, self.progress)?;
+        let mut universe = filtered_universe(
+            self.index,
+            self.rtxn,
+            self.fields_ids_map,
+            &self.filter,
+            None,
+            self.progress,
+        )?;
 
         // we never want to receive the docid
         universe.remove(self.id);
