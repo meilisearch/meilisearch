@@ -13,7 +13,7 @@ use roaring::RoaringBitmap;
 
 use super::helpers::{
     self, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
-    CursorClonableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
+    CursorCloneableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
     MergeIgnoreValues,
 };
 use crate::external_documents_ids::{DocumentOperation, DocumentOperationKind};
@@ -68,9 +68,9 @@ impl ChunkAccumulator {
 }
 
 pub(crate) enum TypedChunk {
-    FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
-    FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
-    Documents(grenad::Reader<CursorClonableMmap>),
+    FieldIdDocidFacetStrings(grenad::Reader<CursorCloneableMmap>),
+    FieldIdDocidFacetNumbers(grenad::Reader<CursorCloneableMmap>),
+    Documents(grenad::Reader<CursorCloneableMmap>),
     FieldIdWordCountDocids(grenad::Reader<BufReader<File>>),
     WordDocids {
         word_docids_reader: grenad::Reader<BufReader<File>>,
@@ -277,12 +277,12 @@ pub(crate) fn write_typed_chunk_into_index(
                 else {
                     unreachable!();
                 };
-                let clonable_word_docids = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
+                let cloneable_word_docids = unsafe { as_cloneable_grenad(&word_docids_reader) }?;
 
                 word_docids_builder.push(word_docids_reader.into_cursor()?);
                 exact_word_docids_builder.push(exact_word_docids_reader.into_cursor()?);
                 word_fid_docids_builder.push(word_fid_docids_reader.into_cursor()?);
-                fst_merger_builder.push(clonable_word_docids.into_cursor()?);
+                fst_merger_builder.push(cloneable_word_docids.into_cursor()?);
             }
 
             let word_docids_merger = word_docids_builder.build();
@@ -806,7 +806,7 @@ pub fn extract_geo_point(value: &[u8], docid: DocumentId) -> GeoPoint {
 }
 
 fn merge_word_docids_reader_into_fst<MF>(
-    merger: Merger<CursorClonableMmap, MF>,
+    merger: Merger<CursorCloneableMmap, MF>,
 ) -> Result<fst::Set<Vec<u8>>>
 where
     MF: MergeFunction,

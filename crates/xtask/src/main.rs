@@ -31,7 +31,7 @@ struct PrototypeArgs {
     generate_new: bool,
 }
 
-/// Utilitary commands
+/// Utility commands
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 #[command(name = "cargo xtask")]

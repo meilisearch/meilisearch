@@ -420,7 +420,7 @@ impl IndexScheduler {
                             ) {
                                 Ok(filter) => filter,
                                 Err(err) => {
-                                    // theorically, this should be caught by deserr before reaching the index-scheduler and cannot happens
+                                    // theoretically, this should be caught by deserr before reaching the index-scheduler and cannot happens
                                     task.status = Status::Failed;
                                     task.error = Some(err.into());
                                     None

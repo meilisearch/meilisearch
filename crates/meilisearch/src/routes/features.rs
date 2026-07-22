@@ -32,7 +32,7 @@ pub struct ExperimentalFeaturesApi;
 #[routes::path(
     security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
     responses(
-        (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+        (status = OK, description = "Experimental features are returned.", body = RuntimeToggleableFeatures, content_type = "application/json", example = json!(RuntimeToggleableFeatures {
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
@@ -68,7 +68,7 @@ async fn get_features(
     let features = index_scheduler.features();
 
     let features = features.runtime_features();
-    let features: RuntimeTogglableFeatures = features.into();
+    let features: RuntimeToggleableFeatures = features.into();
     debug!(returns = ?features, "Get features");
     HttpResponse::Ok().json(features)
 }
@@ -76,7 +76,7 @@ async fn get_features(
 /// Experimental features that can be toggled at runtime
 #[routes::request(response)]
 #[derive(Debug)]
-pub struct RuntimeTogglableFeatures {
+pub struct RuntimeToggleableFeatures {
     /// Enable the /metrics endpoint for Prometheus metrics
     #[request(default)]
     pub metrics: Option<bool>,
@@ -124,9 +124,9 @@ pub struct RuntimeTogglableFeatures {
     pub render_route: Option<bool>,
 }
 
-impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
-    fn from(value: meilisearch_types::features::RuntimeTogglableFeatures) -> Self {
-        let meilisearch_types::features::RuntimeTogglableFeatures {
+impl From<meilisearch_types::features::RuntimeToggleableFeatures> for RuntimeToggleableFeatures {
+    fn from(value: meilisearch_types::features::RuntimeToggleableFeatures) -> Self {
+        let meilisearch_types::features::RuntimeToggleableFeatures {
             metrics,
             logs_route,
             edit_documents_by_function,
@@ -218,9 +218,9 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Enable or disable experimental features at runtime.
 #[routes::path(
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
-    request_body = RuntimeTogglableFeatures,
+    request_body = RuntimeToggleableFeatures,
     responses(
-        (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+        (status = OK, description = "Experimental features are returned.", body = RuntimeToggleableFeatures, content_type = "application/json", example = json!(RuntimeToggleableFeatures {
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
@@ -252,7 +252,7 @@ async fn patch_features(
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_UPDATE }>,
         Data<IndexScheduler>,
     >,
-    new_features: AwebJson<RuntimeTogglableFeatures, DeserrJsonError>,
+    new_features: AwebJson<RuntimeToggleableFeatures, DeserrJsonError>,
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -260,7 +260,7 @@ async fn patch_features(
     debug!(parameters = ?new_features, "Patch features");
 
     let old_features = features.runtime_features();
-    let new_features = meilisearch_types::features::RuntimeTogglableFeatures {
+    let new_features = meilisearch_types::features::RuntimeToggleableFeatures {
         metrics: new_features.0.metrics.unwrap_or(old_features.metrics),
         logs_route: new_features.0.logs_route.unwrap_or(old_features.logs_route),
         edit_documents_by_function: new_features
@@ -299,7 +299,7 @@ async fn patch_features(
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
     // it renames to camelCase, which we don't want for analytics.
     // **Do not** ignore fields with `..` or `_` here, because we want to add them in the future.
-    let meilisearch_types::features::RuntimeTogglableFeatures {
+    let meilisearch_types::features::RuntimeToggleableFeatures {
         metrics,
         logs_route,
         edit_documents_by_function,
@@ -338,7 +338,7 @@ async fn patch_features(
         &req,
     );
     index_scheduler.put_runtime_features(new_features)?;
-    let new_features: RuntimeTogglableFeatures = new_features.into();
+    let new_features: RuntimeToggleableFeatures = new_features.into();
     debug!(returns = ?new_features, "Patch features");
     Ok(HttpResponse::Ok().json(new_features))
 }

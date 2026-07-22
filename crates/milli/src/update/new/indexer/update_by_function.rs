@@ -118,7 +118,7 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
             scope.push_constant_dynamic("context", context.clone());
         }
         scope.push("doc", rhai_document);
-        // We run the user script which edits "doc" scope variable reprensenting
+        // We run the user script which edits "doc" scope variable representing
         // the document and ignore the output and even the type of it, i.e., Dynamic.
         let _ = self
             .engine

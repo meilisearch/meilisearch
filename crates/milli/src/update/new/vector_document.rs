@@ -21,7 +21,7 @@ use crate::{DocumentId, Index, InternalError, Result, UserError};
 #[serde(untagged)]
 pub enum Embeddings<'doc> {
     FromJsonExplicit(&'doc RawValue),
-    FromJsonImplicityUserProvided(&'doc RawValue),
+    FromJsonImplicitlyUserProvided(&'doc RawValue),
     FromDb(Vec<Embedding>),
 }
 impl<'doc> Embeddings<'doc> {
@@ -48,7 +48,7 @@ impl<'doc> Embeddings<'doc> {
                 )?;
                 Ok(v.into_array_of_vectors().unwrap_or_default())
             }
-            Embeddings::FromJsonImplicityUserProvided(value) => {
+            Embeddings::FromJsonImplicitlyUserProvided(value) => {
                 let vectors_ref = deserr::ValuePointerRef::Key {
                     key: RESERVED_VECTORS_FIELD_NAME,
                     prev: &deserr::ValuePointerRef::Origin,
@@ -216,7 +216,7 @@ fn entry_from_raw_value(
             // `None` here means that there are no embeddings
             embeddings: Some(
                 value
-                    .map(Embeddings::FromJsonImplicityUserProvided)
+                    .map(Embeddings::FromJsonImplicitlyUserProvided)
                     .unwrap_or(Embeddings::FromDb(Default::default())),
             ),
             regenerate: false,

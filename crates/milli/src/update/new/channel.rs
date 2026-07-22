@@ -115,7 +115,7 @@ pub struct ExtractorBbqueueSender<'a> {
 
 pub struct WriterBbqueueReceiver<'a> {
     /// Used to wake up when new entries are available either in
-    /// any BBQueue buffer or directly sent throught this channel
+    /// any BBQueue buffer or directly sent through this channel
     /// (still written to disk).
     receiver: flume::Receiver<ReceiverAction>,
     /// Indicates the consumer to observe. This cycling range
@@ -387,7 +387,7 @@ impl EntryHeader {
 
 #[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
 #[repr(C)]
-/// Wether a put of the key/value pair or a delete of the given key.
+/// Whether a put of the key/value pair or a delete of the given key.
 pub struct DbOperation {
     /// The database on which to perform the operation.
     pub database: Database,

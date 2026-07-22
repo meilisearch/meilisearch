@@ -14,7 +14,7 @@ use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
 use crate::update::new::indexer::settings_change_extract;
 use crate::update::new::indexer::settings_changes::{
-    DocumentsIndentifiers, SettingsChangeExtractor,
+    DocumentsIdentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
@@ -72,7 +72,7 @@ impl GeoExtractor {
     }
 
     pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor>(
-        documents: &'indexer DocumentsIndentifiers<'indexer>,
+        documents: &'indexer DocumentsIdentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,

@@ -11,7 +11,7 @@ use byte_unit::Byte;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::features::RuntimeTogglableFeatures;
+use meilisearch_types::features::RuntimeToggleableFeatures;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
 use segment::message::{Identify, Track, User};
@@ -181,7 +181,7 @@ impl SegmentAnalytics {
 }
 
 /// This structure represent the `infos` field we send in the analytics.
-/// It's quite close to the `Opt` structure except all sensitive informations
+/// It's quite close to the `Opt` structure except all sensitive information
 /// have been simplified to a boolean.
 /// It's sent as-is in amplitude thus you should never update a name of the
 /// struct without the approval of the PM.
@@ -245,7 +245,7 @@ struct Infos {
 }
 
 impl Infos {
-    pub fn new(options: Opt, features: RuntimeTogglableFeatures) -> Self {
+    pub fn new(options: Opt, features: RuntimeToggleableFeatures) -> Self {
         // We wants to decompose this whole struct by hand to be sure we don't forget
         // to add analytics when we add a field in the Opt.
         // Thus we must not insert `..` at the end.
@@ -309,7 +309,7 @@ impl Infos {
             experimental_no_edition_2024_for_settings,
         } = indexer_options;
 
-        let RuntimeTogglableFeatures {
+        let RuntimeToggleableFeatures {
             metrics,
             logs_route,
             edit_documents_by_function,
@@ -399,7 +399,7 @@ pub struct Segment {
 }
 
 impl Segment {
-    fn compute_traits(opt: &Opt, stats: Stats, features: RuntimeTogglableFeatures) -> Value {
+    fn compute_traits(opt: &Opt, stats: Stats, features: RuntimeToggleableFeatures) -> Value {
         static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
         static SYSTEM: Lazy<Value> = Lazy::new(|| {
             let disks = Disks::new_with_refreshed_list();

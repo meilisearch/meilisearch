@@ -168,7 +168,7 @@ impl<'a> FacetDistribution<'a> {
         Ok(())
     }
 
-    /// There is too much documents, we use the facet levels to move throught
+    /// There is too much documents, we use the facet levels to move through
     /// the facet values, to find the candidates and values associated.
     fn facet_numbers_distribution_from_facet_levels(
         &self,

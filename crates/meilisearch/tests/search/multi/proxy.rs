@@ -5279,7 +5279,7 @@ pub struct LocalMeiliParams {
     /// delay the response by the specified duration
     pub delay: Option<std::time::Duration>,
     pub fails: FailurePolicy,
-    /// replace the reponse body with the provided String
+    /// replace the response body with the provided String
     pub override_response_body: Option<String>,
     pub gobble_headers: bool,
 }

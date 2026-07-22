@@ -13,7 +13,7 @@ use std::{env, fmt, fs};
 use byte_unit::{Byte, ParseError, UnitType};
 use clap::Parser;
 use itertools::Itertools as _;
-use meilisearch_types::features::InstanceTogglableFeatures;
+use meilisearch_types::features::InstanceToggleableFeatures;
 use meilisearch_types::milli::update::{IndexerConfig, S3SnapshotOptions};
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use rustls::server::{ServerSessionMemoryCache, WebPkiClientVerifier};
@@ -780,8 +780,8 @@ impl Opt {
         }
     }
 
-    pub(crate) fn to_instance_features(&self) -> InstanceTogglableFeatures {
-        InstanceTogglableFeatures {
+    pub(crate) fn to_instance_features(&self) -> InstanceToggleableFeatures {
+        InstanceToggleableFeatures {
             metrics: self.experimental_enable_metrics,
             legacy_search_as_default: self.experimental_legacy_search_default,
             logs_route: self.experimental_enable_logs_route,

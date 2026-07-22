@@ -243,7 +243,7 @@ fn escaped_quote_in_filter_value_2380() {
     let rtxn = index.read_txn().unwrap();
 
     let mut search = index.search(&rtxn);
-    // this filter is copy pasted from #2380 with the exact same espace sequence
+    // this filter is copy pasted from #2380 with the exact same escape sequence
     let filter = Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap();
     search.filter(Some(IndexFilter::from(filter)));
     let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();

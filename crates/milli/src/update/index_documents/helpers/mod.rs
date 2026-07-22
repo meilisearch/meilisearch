@@ -1,11 +1,11 @@
-mod clonable_mmap;
+mod cloneable_mmap;
 mod grenad_helpers;
 mod merge_functions;
 
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 
-pub use clonable_mmap::{ClonableMmap, CursorClonableMmap};
+pub use cloneable_mmap::{CloneableMmap, CursorCloneableMmap};
 use fst::{IntoStreamer, Streamer};
 pub use grenad_helpers::*;
 pub use merge_functions::*;

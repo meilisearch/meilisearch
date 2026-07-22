@@ -473,7 +473,7 @@ impl RequestFieldAttr {
                         return Err(ident.span()
                         .error("redundant `schema_type` attribute.")
                         .span_error(field_type.span(), "type is identical to this field's type")
-                        .error("remove the redudant attribute").into());
+                        .error("remove the redundant attribute").into());
                     }
                     schema_attrs.push(quote!(value_type #eq #typ));
                     ty = Some(typ);

@@ -273,7 +273,7 @@ pub(crate) mod test {
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::RuntimeTogglableFeatures;
+    use meilisearch_types::features::RuntimeToggleableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
@@ -569,8 +569,8 @@ pub(crate) mod test {
         file
     }
 
-    fn create_test_features() -> RuntimeTogglableFeatures {
-        RuntimeTogglableFeatures::default()
+    fn create_test_features() -> RuntimeToggleableFeatures {
+        RuntimeToggleableFeatures::default()
     }
 
     fn create_test_network() -> Network {

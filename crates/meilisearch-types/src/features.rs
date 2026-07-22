@@ -10,7 +10,7 @@ pub const DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT: &str = "The name of the in
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
-pub struct RuntimeTogglableFeatures {
+pub struct RuntimeToggleableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
     pub edit_documents_by_function: bool,
@@ -29,7 +29,7 @@ pub struct RuntimeTogglableFeatures {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-pub struct InstanceTogglableFeatures {
+pub struct InstanceToggleableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
     pub contains_filter: bool,

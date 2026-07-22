@@ -129,7 +129,7 @@ pub fn compute_query_term_subset_docids_within_position(
     Ok(docids)
 }
 
-/// Returns the subset of the input universe that satisfies the contraints of the input query graph.
+/// Returns the subset of the input universe that satisfies the constraints of the input query graph.
 pub fn compute_query_graph_docids(
     ctx: &mut SearchContext<'_>,
     q: &QueryGraph,

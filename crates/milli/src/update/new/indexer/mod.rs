@@ -910,7 +910,7 @@ where
     Ok(())
 }
 
-/// Deletes entries refering the provided
+/// Deletes entries referring the provided
 /// fids from the fid-based databases.
 pub fn delete_old_fid_based_databases<SD>(
     wtxn: &mut RwTxn<'_>,

@@ -220,7 +220,7 @@ fn simple_different_document_operations_autobatch_together() {
     debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_del_fil()]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0] }, true, Some(DocumentOperationWithDeletionByFilter { id: 1 })))");
     debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_del_fil()]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0] }, true, Some(DocumentOperationWithDeletionByFilter { id: 1 })))");
 
-    // only if the deletions by filter are at the begining of the batch
+    // only if the deletions by filter are at the beginning of the batch
     debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false, None))");
     debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false, None))");
 

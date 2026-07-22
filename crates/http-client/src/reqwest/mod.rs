@@ -160,7 +160,7 @@ impl ClientBuilder {
         Ok(Client { inner: builder.build()?, ip_policy })
     }
 
-    /// Returns a `Client` that ues this `ClientBuilder` configuration and **no IP policy**.
+    /// Returns a `Client` that uses this `ClientBuilder` configuration and **no IP policy**.
     ///
     /// # Danger
     ///

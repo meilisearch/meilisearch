@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::features::{ChatCompletionSettings, RuntimeTogglableFeatures};
+use meilisearch_types::features::{ChatCompletionSettings, RuntimeToggleableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::network::Network;
 use meilisearch_types::settings::{Checked, Settings};
@@ -65,7 +65,7 @@ impl DumpWriter {
         BatchWriter::new(self.dir.path().join("batches"))
     }
 
-    pub fn create_experimental_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
+    pub fn create_experimental_features(&self, features: RuntimeToggleableFeatures) -> Result<()> {
         Ok(std::fs::write(
             self.dir.path().join("experimental-features.json"),
             serde_json::to_string(&features)?,

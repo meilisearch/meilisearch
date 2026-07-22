@@ -26,12 +26,12 @@ pub trait SettingsChangeExtractor<'extractor>: Sync {
         context: &'doc DocumentContext<Self::Data>,
     ) -> Result<()>;
 }
-pub struct DocumentsIndentifiers<'indexer> {
+pub struct DocumentsIdentifiers<'indexer> {
     documents: &'indexer [DocumentId],
     primary_key: PrimaryKey<'indexer>,
 }
 
-impl<'indexer> DocumentsIndentifiers<'indexer> {
+impl<'indexer> DocumentsIdentifiers<'indexer> {
     pub fn new(documents: &'indexer [DocumentId], primary_key: PrimaryKey<'indexer>) -> Self {
         Self { documents, primary_key }
     }
@@ -76,7 +76,7 @@ pub fn settings_change_extract<
     'index,     // covariant lifetime of the index
     EX: SettingsChangeExtractor<'extractor>,
 >(
-    documents: &'indexer DocumentsIndentifiers<'indexer>,
+    documents: &'indexer DocumentsIdentifiers<'indexer>,
     extractor: &EX,
     IndexingContext {
         index,

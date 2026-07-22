@@ -94,7 +94,7 @@ pub fn find_best_match_interval(matches: &[Match], crop_size: usize) -> [&Match;
         let next_match_last_word_pos = next_match.get_last_word_pos();
 
         // if the next match would mean that we pass the crop size window,
-        // we take the last valid match, that didn't pass this boundry, which is `index` - 1,
+        // we take the last valid match, that didn't pass this boundary, which is `index` - 1,
         // and calculate a score for it, and check if it's better than our best so far
         if next_match_last_word_pos - interval_first_match_first_word_pos >= crop_size {
             // if index is 0 there is no last viable match

@@ -111,7 +111,7 @@ impl WordPrefixDocids {
     }
 }
 
-/// Represents a prefix and the lenght the bitmap takes on disk.
+/// Represents a prefix and the length the bitmap takes on disk.
 struct PrefixEntry {
     prefix: MiniString,
     // The size of the serialized bitmap in bytes cannot be larger than u32::MAX (4GiB) anyway.

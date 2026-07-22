@@ -19,7 +19,7 @@ use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
-use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
+use crate::update::new::indexer::settings_changes::DocumentsIdentifiers;
 use crate::update::new::indexer::WordDelta;
 use crate::update::new::merger::{
     merge_and_send_rtree, merge_scan_and_send_docids, EntryStatus, Operation,
@@ -381,7 +381,7 @@ where
     let rtxn = index.read_txn()?;
     let all_document_ids = index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
     let primary_key = primary_key_from_db(index, &rtxn, &indexing_context.db_fields_ids_map)?;
-    let documents = DocumentsIndentifiers::new(&all_document_ids, primary_key);
+    let documents = DocumentsIdentifiers::new(&all_document_ids, primary_key);
 
     let span =
         tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");

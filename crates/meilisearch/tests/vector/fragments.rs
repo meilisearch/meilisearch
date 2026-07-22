@@ -881,7 +881,7 @@ async fn swapping_fragments() {
 }
 
 #[actix_rt::test]
-async fn ommitted_fragment_isnt_removed() {
+async fn omitted_fragment_isnt_removed() {
     let (server, uid, mut settings) = init_fragments_index().await;
     let index = server.index(uid);
 
@@ -1692,14 +1692,14 @@ async fn multiple_embedders() {
 }
 
 #[actix_rt::test]
-async fn remove_non_existant_embedder() {
+async fn remove_non_existent_embedder() {
     let (server, uid, mut settings) = init_fragments_index().await;
     let index = server.index(uid);
 
     settings["embedders"]
         .as_object_mut()
         .unwrap()
-        .insert(String::from("non-existant"), serde_json::Value::Null);
+        .insert(String::from("non-existent"), serde_json::Value::Null);
 
     let (response, code) = index.update_settings(settings).await;
     snapshot!(code, @"202 Accepted");
@@ -1714,7 +1714,7 @@ async fn remove_non_existant_embedder() {
       "canceledBy": null,
       "details": {
         "embedders": {
-          "non-existant": null,
+          "non-existent": null,
           "rest": {
             "source": "rest",
             "dimensions": 3,

@@ -183,7 +183,7 @@ fn import_vectors() {
         let index = index_scheduler.user_index("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
 
-        // Ensure the document have been inserted into the relevant bitamp
+        // Ensure the document have been inserted into the relevant bitmap
         let embedders = index.embedding_configs();
         let configs = embedders.embedding_configs(&rtxn).unwrap();
         // for consistency with the below
@@ -271,7 +271,7 @@ fn import_vectors() {
             let rtxn = index.read_txn().unwrap();
 
             let embedders = index.embedding_configs();
-            // Ensure the document have been inserted into the relevant bitamp
+            // Ensure the document have been inserted into the relevant bitmap
             let configs = embedders.embedding_configs(&rtxn).unwrap();
             // for consistency with the below
             #[allow(clippy::get_first)]
@@ -442,7 +442,7 @@ fn import_vectors_first_and_embedder_later() {
     snapshot!(serde_json::to_string(&documents).unwrap(), @r###"[{"id":0,"doggo":"kefir"},{"id":1,"doggo":"intel","_vectors":{"unknown embedder":[1,2,3]}},{"id":2,"doggo":"max","_vectors":{"unknown embedder":[4,5]}},{"id":3,"doggo":"marcel"},{"id":4,"doggo":"sora"}]"###);
     let conf = index.embedding_configs().embedding_configs(&rtxn).unwrap();
     // even though we specified the vector for the ID 3, it shouldn't be marked
-    // as user provided since we explicitely marked it as NOT user provided.
+    // as user provided since we explicitly marked it as NOT user provided.
     snapshot!(format!("{conf:#?}"), @r###"
     [
         IndexEmbeddingConfig {

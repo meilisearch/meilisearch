@@ -60,7 +60,7 @@ pub struct Upload {
     /// The intended number of bytes to be uploaded
     pub bytes: u64,
 
-    /// The intended purpose of the file. [Pelase refer here]([Please refer here](/docs/api-reference/files/object#files/object-purpose) for acceptable values.)
+    /// The intended purpose of the file. [Please refer here](/docs/api-reference/files/object#files/object-purpose) for acceptable values.
     pub purpose: UploadPurpose,
 
     /// The status of the Upload.

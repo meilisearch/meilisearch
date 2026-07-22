@@ -118,7 +118,7 @@ pub struct CreateThreadAndRunRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_completion_tokens: Option<u32>,
 
-    /// Controls for how a thread will be truncated prior to the run. Use this to control the intial context window of the run.
+    /// Controls for how a thread will be truncated prior to the run. Use this to control the initial context window of the run.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncation_strategy: Option<TruncationObject>,
 

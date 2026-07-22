@@ -24,7 +24,7 @@ pub type Task = crate::TaskDump;
 pub type Batch = meilisearch_types::batches::Batch;
 pub type Key = meilisearch_types::keys::Key;
 pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSettings;
-pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
+pub type RuntimeToggleableFeatures = meilisearch_types::features::RuntimeToggleableFeatures;
 pub type Network = meilisearch_types::network::Network;
 pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
 pub type DynamicSearchRule = meilisearch_types::dynamic_search_rules::DynamicSearchRule;
@@ -63,7 +63,7 @@ pub struct V6Reader {
     tasks2: BufReader<File>,
     batches: Option<BufReader<File>>,
     keys: BufReader<File>,
-    features: Option<RuntimeTogglableFeatures>,
+    features: Option<RuntimeToggleableFeatures>,
     network: Option<Network>,
     webhooks: Option<Webhooks>,
 }
@@ -284,7 +284,7 @@ impl V6Reader {
         ))
     }
 
-    pub fn features(&self) -> Option<RuntimeTogglableFeatures> {
+    pub fn features(&self) -> Option<RuntimeToggleableFeatures> {
         self.features
     }
 

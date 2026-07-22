@@ -67,7 +67,7 @@ impl Drop for Permit {
 }
 
 impl SearchQueue {
-    pub fn new(capacity: usize, paralellism: NonZeroUsize) -> Self {
+    pub fn new(capacity: usize, parallelism: NonZeroUsize) -> Self {
         // Search requests are going to wait until we're available anyway,
         // so let's not allocate any RAM and keep a capacity of 1.
         let (sender, receiver) = mpsc::channel(1);
@@ -82,7 +82,7 @@ impl SearchQueue {
 
         tokio::task::spawn(Self::run(
             capacity,
-            paralellism,
+            parallelism,
             receiver,
             Arc::clone(&instance.searches_running),
             Arc::clone(&instance.searches_waiting_to_be_processed),

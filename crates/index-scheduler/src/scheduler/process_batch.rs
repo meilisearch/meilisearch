@@ -38,7 +38,7 @@ pub struct ProcessBatchInfo {
     pub congestion: Option<ChannelCongestion>,
     /// The sizes of the different databases before starting the indexation.
     pub pre_commit_dabases_sizes: indexmap::IndexMap<&'static str, usize>,
-    /// The sizes of the different databases after commiting the indexation.
+    /// The sizes of the different databases after committing the indexation.
     pub post_commit_dabases_sizes: indexmap::IndexMap<&'static str, usize>,
 }
 
@@ -835,7 +835,7 @@ impl IndexScheduler {
         Ok(())
     }
 
-    /// Delete each given task from all the databases (if it is deleteable).
+    /// Delete each given task from all the databases (if it is deletable).
     ///
     /// Return the task IDs that were actually deleted.
     #[allow(clippy::reversed_empty_ranges)]
@@ -1258,7 +1258,7 @@ impl IndexScheduler {
                 }
             } else {
                 tracing::debug!(
-                    "Not rollbacking an upgrade targetting the earlier version v{}.{}.{}",
+                    "Not rollbacking an upgrade targeting the earlier version v{}.{}.{}",
                     bin_major,
                     bin_minor,
                     bin_patch

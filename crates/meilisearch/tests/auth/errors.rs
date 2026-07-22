@@ -558,7 +558,7 @@ async fn invalid_api_key() {
     snapshot!(status_code, @"403 Forbidden");
     snapshot!(response, @r###"
     {
-      "message": "The API key cannot acces the index `doggo`, authorized indexes are [\"dog\"].",
+      "message": "The API key cannot access the index `doggo`, authorized indexes are [\"dog\"].",
       "code": "invalid_api_key",
       "type": "auth",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key"
@@ -677,7 +677,7 @@ async fn invalid_tenant_token() {
     snapshot!(status_code, @"403 Forbidden");
     snapshot!(response, @r###"
     {
-      "message": "The provided tenant token cannot acces the index `dog`, allowed indexes are [\"catto\", \"doggo\"].",
+      "message": "The provided tenant token cannot access the index `dog`, allowed indexes are [\"catto\", \"doggo\"].",
       "code": "invalid_api_key",
       "type": "auth",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key"
@@ -691,7 +691,7 @@ async fn invalid_tenant_token() {
     snapshot!(status_code, @"403 Forbidden");
     snapshot!(response, @r###"
     {
-      "message": "The API key used to generate this tenant token cannot acces the index `doggo`.",
+      "message": "The API key used to generate this tenant token cannot access the index `doggo`.",
       "code": "invalid_api_key",
       "type": "auth",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key"

@@ -165,14 +165,14 @@ pub mod policies {
         ExpiredTenantToken { exp: i64, now: i64 },
         #[error("The provided API key is invalid.")]
         InvalidApiKey,
-        #[error("The provided tenant token cannot acces the index `{index}`, allowed indexes are {allowed:?}.")]
+        #[error("The provided tenant token cannot access the index `{index}`, allowed indexes are {allowed:?}.")]
         TenantTokenAccessingnUnauthorizedIndex { index: String, allowed: Vec<String> },
         #[error(
-            "The API key used to generate this tenant token cannot acces the index `{index}`."
+            "The API key used to generate this tenant token cannot access the index `{index}`."
         )]
         TenantTokenApiKeyAccessingnUnauthorizedIndex { index: String },
         #[error(
-            "The API key cannot acces the index `{index}`, authorized indexes are {allowed:?}."
+            "The API key cannot access the index `{index}`, authorized indexes are {allowed:?}."
         )]
         ApiKeyAccessingnUnauthorizedIndex { index: String, allowed: Vec<String> },
         #[error("The provided tenant token is invalid.")]

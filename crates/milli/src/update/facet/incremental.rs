@@ -54,7 +54,7 @@ enum ModificationResult {
     Nothing,
 }
 
-/// Algorithm to incrementally insert and delete elememts into the
+/// Algorithm to incrementally insert and delete elements into the
 /// `facet_id_(string/f64)_docids` databases.
 pub struct FacetsUpdateIncremental {
     inner: FacetsUpdateIncrementalInner,

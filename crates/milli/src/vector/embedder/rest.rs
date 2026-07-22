@@ -669,7 +669,7 @@ impl RequestFromFragments {
                     REQUEST_FRAGMENT_PLACEHOLDER,
                     REPEAT_PLACEHOLDER,
                 );
-                let message = format!("{message}\n  - Note: this template is using fragments, and so expects to contain the placeholder {REQUEST_FRAGMENT_PLACEHOLDER:?} rathern than {REQUEST_PLACEHOLDER:?}");
+                let message = format!("{message}\n  - Note: this template is using fragments, and so expects to contain the placeholder {REQUEST_FRAGMENT_PLACEHOLDER:?} rather than {REQUEST_PLACEHOLDER:?}");
 
                 return Err(NewEmbedderError::rest_could_not_parse_template(message));
             }

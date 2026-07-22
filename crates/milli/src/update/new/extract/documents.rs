@@ -10,7 +10,7 @@ use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
 use crate::update::new::document::{write_to_obkv, Document, DocumentContext, DocumentIdentifiers};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
 use crate::update::new::indexer::settings_changes::{
-    settings_change_extract, DocumentsIndentifiers, SettingsChangeExtractor,
+    settings_change_extract, DocumentsIdentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
@@ -257,7 +257,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
 /// and then updates the database.
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents::extract")]
 pub fn update_database_documents<'indexer, SD>(
-    documents: &'indexer DocumentsIndentifiers<'indexer>,
+    documents: &'indexer DocumentsIdentifiers<'indexer>,
     indexing_context: IndexingContext,
     extractor_sender: &ExtractorBbqueueSender,
     settings_delta: &SD,

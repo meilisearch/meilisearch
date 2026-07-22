@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
+use meilisearch_types::features::{InstanceToggleableFeatures, RuntimeToggleableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 use meilisearch_types::network::route::Status;
@@ -23,15 +23,15 @@ mod db_keys {
 
 #[derive(Clone)]
 pub(crate) struct FeatureData {
-    persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
-    runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
+    persisted: Database<Str, SerdeJson<RuntimeToggleableFeatures>>,
+    runtime: Arc<RwLock<RuntimeToggleableFeatures>>,
     network: Arc<RwLock<Network>>,
     remote_availability: Arc<RemoteAvailability>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct RoFeatures {
-    runtime: RuntimeTogglableFeatures,
+    runtime: RuntimeToggleableFeatures,
 }
 
 impl RoFeatures {
@@ -40,11 +40,11 @@ impl RoFeatures {
         Self { runtime }
     }
 
-    pub fn from_runtime_features(features: RuntimeTogglableFeatures) -> Self {
+    pub fn from_runtime_features(features: RuntimeToggleableFeatures) -> Self {
         Self { runtime: features }
     }
 
-    pub fn runtime_features(&self) -> RuntimeTogglableFeatures {
+    pub fn runtime_features(&self) -> RuntimeToggleableFeatures {
         self.runtime
     }
 
@@ -234,20 +234,20 @@ impl FeatureData {
     pub fn new(
         env: &Env<WithoutTls>,
         wtxn: &mut RwTxn,
-        instance_features: InstanceTogglableFeatures,
+        instance_features: InstanceToggleableFeatures,
     ) -> Result<Self> {
         let runtime_features_db =
             env.create_database(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
 
-        let persisted_features: RuntimeTogglableFeatures =
+        let persisted_features: RuntimeToggleableFeatures =
             runtime_features_db.get(wtxn, db_keys::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
-        let InstanceTogglableFeatures {
+        let InstanceToggleableFeatures {
             metrics,
             logs_route,
             contains_filter,
             legacy_search_as_default: legacy_search,
         } = instance_features;
-        let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
+        let runtime = Arc::new(RwLock::new(RuntimeToggleableFeatures {
             metrics: metrics || persisted_features.metrics,
             logs_route: logs_route || persisted_features.logs_route,
             contains_filter: contains_filter || persisted_features.contains_filter,
@@ -270,7 +270,7 @@ impl FeatureData {
     pub fn put_runtime_features(
         &self,
         mut wtxn: RwTxn,
-        features: RuntimeTogglableFeatures,
+        features: RuntimeToggleableFeatures,
     ) -> Result<()> {
         self.persisted.put(&mut wtxn, db_keys::EXPERIMENTAL_FEATURES, &features)?;
         wtxn.commit()?;
@@ -283,7 +283,7 @@ impl FeatureData {
         Ok(())
     }
 
-    fn runtime_features(&self) -> RuntimeTogglableFeatures {
+    fn runtime_features(&self) -> RuntimeToggleableFeatures {
         // sound to unwrap, the lock will only fail if:
         // 1. requested by the same thread concurrently -> it is called and released in methods that don't call each other
         // 2. there's a panic while the thread is held -> it is only used for copying the data here

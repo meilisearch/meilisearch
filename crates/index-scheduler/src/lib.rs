@@ -58,7 +58,7 @@ use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{
-    ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
+    ChatCompletionSettings, InstanceToggleableFeatures, RuntimeToggleableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
@@ -156,7 +156,7 @@ pub struct IndexSchedulerOptions {
     /// The maximum size of the default payload for exporting documents, in bytes
     pub export_default_payload_size_bytes: Byte,
     /// The experimental features enabled for this instance.
-    pub instance_features: InstanceTogglableFeatures,
+    pub instance_features: InstanceToggleableFeatures,
     /// The maximal number of entries in the search query cache of an embedder.
     ///
     /// 0 disables the cache.
@@ -470,7 +470,7 @@ impl IndexScheduler {
             true
         } else {
             // We're treating all errors equally here, not only allocation errors.
-            // This means there's a possiblity for the budget to lower due to errors different from allocation errors.
+            // This means there's a possibility for the budget to lower due to errors different from allocation errors.
             // For persistent errors, this is OK as long as the task db is then reopened normally without ignoring the error this time.
             // For transient errors, this could lead to an instance with too low a budget.
             // However transient errors are: 1) less likely than persistent errors 2) likely to cause other issues down the line anyway.
@@ -1115,7 +1115,7 @@ impl IndexScheduler {
         self.features.remote_availability()
     }
 
-    pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
+    pub fn put_runtime_features(&self, features: RuntimeToggleableFeatures) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_runtime_features(wtxn, features)?;
         Ok(())

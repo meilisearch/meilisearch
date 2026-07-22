@@ -13,7 +13,7 @@ pub struct FieldidsWeightsMap {
 }
 
 impl FieldidsWeightsMap {
-    /// Insert a field id -> weigth into the map.
+    /// Insert a field id -> weight into the map.
     /// If the map did not have this key present, `None` is returned.
     /// If the map did have this key present, the value is updated, and the old value is returned.
     pub fn insert(&mut self, fid: FieldId, weight: Weight) -> Option<Weight> {

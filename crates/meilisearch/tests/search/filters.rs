@@ -1017,7 +1017,7 @@ async fn vector_filter_specific_fragment() {
 }
 
 #[actix_rt::test]
-async fn vector_filter_non_existant_fragment() {
+async fn vector_filter_non_existent_fragment() {
     let index = shared_index_for_fragments().await;
 
     let (value, _code) = index

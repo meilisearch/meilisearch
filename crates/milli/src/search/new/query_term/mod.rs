@@ -36,7 +36,7 @@ pub struct QueryTermSubset {
     ///
     /// Note that there are other reasons for which a term cannot be deleted, such as
     /// being a phrase. In that case, this field could be set to `false`, but it
-    /// still wouldn't be deleteable by the term matching strategy.
+    /// still wouldn't be deletable by the term matching strategy.
     mandatory: bool,
 }
 

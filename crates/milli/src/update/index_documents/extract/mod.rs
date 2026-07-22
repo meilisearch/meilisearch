@@ -28,7 +28,7 @@ use self::extract_vector_points::{
 use self::extract_word_docids::extract_word_docids;
 use self::extract_word_pair_proximity_docids::extract_word_pair_proximity_docids;
 use self::extract_word_position_docids::extract_word_position_docids;
-use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
+use super::helpers::{as_cloneable_grenad, CursorCloneableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::progress::EmbedderStats;
 use crate::update::index_documents::extract::extract_geo_points::extract_geojson;
@@ -181,7 +181,7 @@ pub(crate) fn data_from_obkv_documents(
 /// The result of merged chunks is serialized as TypedChunk using the serialize_fn
 /// and sent into lmdb_writer_sx.
 fn run_extraction_task<FE, FS, M>(
-    chunk: grenad::Reader<CursorClonableMmap>,
+    chunk: grenad::Reader<CursorCloneableMmap>,
     indexer: GrenadParameters,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
@@ -189,7 +189,7 @@ fn run_extraction_task<FE, FS, M>(
     serialize_fn: FS,
 ) where
     FE: Fn(
-            grenad::Reader<CursorClonableMmap>,
+            grenad::Reader<CursorCloneableMmap>,
             GrenadParameters,
             &InnerIndexSettingsDiff,
         ) -> Result<M>
@@ -365,8 +365,8 @@ fn send_and_extract_flattened_documents_data(
     settings_diff: Arc<InnerIndexSettingsDiff>,
     max_positions_per_attributes: Option<u32>,
 ) -> Result<(
-    grenad::Reader<CursorClonableMmap>,
-    (grenad::Reader<CursorClonableMmap>, grenad::Reader<CursorClonableMmap>),
+    grenad::Reader<CursorCloneableMmap>,
+    (grenad::Reader<CursorCloneableMmap>, grenad::Reader<CursorCloneableMmap>),
 )> {
     let flattened_documents_chunk =
         flattened_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;

@@ -17,7 +17,7 @@ use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_
 use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldId, Index, Result};
 
-/// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
+/// Algorithm to insert elements into the `facet_id_(string/f64)_docids` databases
 /// by rebuilding the database "from scratch".
 ///
 /// First, the new elements are inserted into the level 0 of the database. Then, the
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn bug_3165() {
-        // Indexing a number of facet values that falls within certains ranges (e.g. 22_540 qualifies)
+        // Indexing a number of facet values that falls within certain ranges (e.g. 22_540 qualifies)
         // would lead to a facet DB which was missing some levels.
         // That was because before writing a level into the database, we would
         // check that its size was higher than the minimum level size using

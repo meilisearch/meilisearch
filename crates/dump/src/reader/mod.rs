@@ -125,7 +125,7 @@ impl DumpReader {
         }
     }
 
-    pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
+    pub fn features(&self) -> Result<Option<v6::RuntimeToggleableFeatures>> {
         match self {
             DumpReader::Current(current) => Ok(current.features()),
             DumpReader::Compat(compat) => compat.features(),
@@ -239,7 +239,7 @@ pub(crate) mod test {
     use time::macros::datetime;
 
     use super::*;
-    use crate::reader::v6::RuntimeTogglableFeatures;
+    use crate::reader::v6::RuntimeToggleableFeatures;
     use crate::test::create_test_dump_writer;
 
     #[test]
@@ -286,10 +286,10 @@ pub(crate) mod test {
         //
         // "vector", configured with an embedder
         // contains:
-        // - one document with an overriden vector,
+        // - one document with an overridden vector,
         // - one document with a natural vector
         // - one document with a _vectors map containing one additional embedder name and a natural vector
-        // - one document with a _vectors map containing one additional embedder name and an overriden vector
+        // - one document with a _vectors map containing one additional embedder name and an overridden vector
         //
         // "novector", no embedder
         // contains:
@@ -414,7 +414,7 @@ pub(crate) mod test {
             }
         }
 
-        assert_eq!(dump.features().unwrap().unwrap(), RuntimeTogglableFeatures::default());
+        assert_eq!(dump.features().unwrap().unwrap(), RuntimeToggleableFeatures::default());
         assert_eq!(dump.network().unwrap(), None);
         assert_eq!(dump.webhooks(), None);
     }
@@ -463,7 +463,7 @@ pub(crate) mod test {
 
         assert_eq!(test.documents().unwrap().count(), 1);
 
-        assert_eq!(dump.features().unwrap().unwrap(), RuntimeTogglableFeatures::default());
+        assert_eq!(dump.features().unwrap().unwrap(), RuntimeToggleableFeatures::default());
     }
 
     #[test]

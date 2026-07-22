@@ -208,7 +208,7 @@ pub mod route {
         },
         /// The specified remote will see it's status change.
         ///
-        /// Send this message to change the accessiblity of a remote.
+        /// Send this message to change the accessibility of a remote.
         StatusChangeForRemote {
             /// Name of the remote whose status will be changed.
             remote: String,

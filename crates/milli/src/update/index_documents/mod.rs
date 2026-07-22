@@ -34,7 +34,7 @@ use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
 use crate::progress::{EmbedderStats, Progress};
-pub use crate::update::index_documents::helpers::CursorClonableMmap;
+pub use crate::update::index_documents::helpers::CursorCloneableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
@@ -272,7 +272,7 @@ where
                 let default_chunk_size = 1024 * 1024 * 4; // 4MiB
                 let min_chunk_size = 1024 * 512; // 512KiB
 
-                // compute the chunk size from the number of available threads and the inputed data size.
+                // compute the chunk size from the number of available threads and the input data size.
                 let total_size = match flattened_documents.as_ref() {
                     Some(flattened_documents) => flattened_documents.metadata().map(|m| m.len()),
                     None => Ok(default_chunk_size as u64),
@@ -339,7 +339,7 @@ where
 
                     let result = original_chunk_iter.and_then(|original_chunk| {
                         let flattened_chunk = flattened_chunk_iter?;
-                        // extract all databases from the chunked obkv douments
+                        // extract all databases from the chunked obkv documents
                         extract::data_from_obkv_documents(
                             original_chunk,
                             flattened_chunk,
@@ -393,7 +393,7 @@ where
                                         total_databases: TOTAL_POSTING_DATABASE_COUNT,
                                     });
                                 }
-                            // If no more chunk remains in the chunk accumulator and the channel is disconected, break.
+                            // If no more chunk remains in the chunk accumulator and the channel is disconnected, break.
                             } else if status == crossbeam_channel::RecvTimeoutError::Disconnected {
                                 break;
                             } else {
@@ -576,10 +576,10 @@ where
     )]
     pub fn execute_prefix_databases(
         &mut self,
-        word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
-        exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
-        word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
-        word_fid_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
+        word_docids: Option<Merger<CursorCloneableMmap, MergeDeladdCboRoaringBitmaps>>,
+        exact_word_docids: Option<Merger<CursorCloneableMmap, MergeDeladdCboRoaringBitmaps>>,
+        word_position_docids: Option<Merger<CursorCloneableMmap, MergeDeladdCboRoaringBitmaps>>,
+        word_fid_docids: Option<Merger<CursorCloneableMmap, MergeDeladdCboRoaringBitmaps>>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -776,7 +776,7 @@ where
 )]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn<'_>,
-    merger: Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
+    merger: Merger<CursorCloneableMmap, MergeDeladdCboRoaringBitmaps>,
     word_docids_db: Database<Str, CboRoaringBitmapCodec>,
     word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,

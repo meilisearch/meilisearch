@@ -199,7 +199,7 @@ impl CompatV5ToV6 {
         })))
     }
 
-    pub fn features(&self) -> Result<Option<v6::RuntimeTogglableFeatures>> {
+    pub fn features(&self) -> Result<Option<v6::RuntimeToggleableFeatures>> {
         Ok(None)
     }
 

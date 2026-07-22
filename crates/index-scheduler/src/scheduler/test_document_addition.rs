@@ -400,7 +400,7 @@ fn test_document_addition_cant_create_index_without_index() {
     // We're going to autobatch multiple document addition that don't have
     // the right to create an index while there is no index currently.
     // Thus, everything should be batched together and a IndexDoesNotExists
-    // error should be throwed.
+    // error should be thrown.
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     for i in 0..10 {
@@ -496,7 +496,7 @@ fn test_document_addition_cant_create_index_with_index() {
     // We're going to autobatch multiple document addition that don't have
     // the right to create an index while there is already an index.
     // Thus, everything should be batched together and no error should be
-    // throwed.
+    // thrown.
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     // Create the index.

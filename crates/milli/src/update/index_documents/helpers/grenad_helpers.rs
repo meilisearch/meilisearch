@@ -4,7 +4,7 @@ use std::io::{self, BufReader, BufWriter, Seek};
 use grenad::{CompressionType, MergeFunction, Sorter};
 use heed::types::Bytes;
 
-use super::ClonableMmap;
+use super::CloneableMmap;
 use crate::update::index_documents::valid_lmdb_key;
 use crate::Result;
 
@@ -12,7 +12,7 @@ use crate::Result;
 /// that there is one grenad sorter by thread.
 const MAX_GRENAD_SORTER_USAGE: usize = 500 * 1024 * 1024; // 500 MiB
 
-pub type CursorClonableMmap = io::Cursor<ClonableMmap>;
+pub type CursorCloneableMmap = io::Cursor<CloneableMmap>;
 
 pub fn create_writer<R: io::Write>(
     typ: grenad::CompressionType,
@@ -87,10 +87,10 @@ pub fn writer_into_reader(
 /// We use memory mapping inside. So, according to the Rust community, it's unsafe.
 pub unsafe fn as_cloneable_grenad(
     reader: &grenad::Reader<BufReader<File>>,
-) -> Result<grenad::Reader<CursorClonableMmap>> {
+) -> Result<grenad::Reader<CursorCloneableMmap>> {
     let file = reader.get_ref().get_ref();
     let mmap = memmap2::Mmap::map(file)?;
-    let cursor = io::Cursor::new(ClonableMmap::from(mmap));
+    let cursor = io::Cursor::new(CloneableMmap::from(mmap));
     let reader = grenad::Reader::new(cursor)?;
     Ok(reader)
 }

@@ -140,7 +140,7 @@ pub fn build_vectors(
     index_embeddings: Vec<IndexEmbeddingConfig>,
     vector_memory: Option<usize>,
     vector_stores: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
-    embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
+    embedder_actions: Option<&BTreeMap<String, EmbedderAction>>,
     must_stop_processing: &MustStopProcessing,
 ) -> Result<()> {
     if index_embeddings.is_empty() {
@@ -151,7 +151,7 @@ pub fn build_vectors(
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     for (_index, (embedder_name, _embedder, writer, dimensions)) in vector_stores {
         let dimensions = *dimensions;
-        let is_being_quantized = embeder_actions
+        let is_being_quantized = embedder_actions
             .and_then(|actions| actions.get(*embedder_name).map(|action| action.is_being_quantized))
             .unwrap_or(false);
         writer.build_and_quantize(

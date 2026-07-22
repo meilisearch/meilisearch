@@ -15,7 +15,7 @@ use itertools::{EitherOrBoth, Itertools};
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::features::RuntimeTogglableFeatures;
+use meilisearch_types::features::RuntimeToggleableFeatures;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::network::{
@@ -150,7 +150,7 @@ async fn patch_network_without_origin(
             async move {
                 {
                     // 1. check that the experimental feature is enabled
-                    let remote_features: RuntimeTogglableFeatures = match proxy::send_request(
+                    let remote_features: RuntimeToggleableFeatures = match proxy::send_request(
                         PathAndQuery::from_static("/experimental-features"),
                         http_client::reqwest::Method::GET,
                         None,

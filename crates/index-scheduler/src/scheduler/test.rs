@@ -109,7 +109,7 @@ fn process_tasks_without_autobatching() {
 }
 
 #[test]
-fn task_deletion_undeleteable() {
+fn task_deletion_undeletable() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
@@ -149,14 +149,14 @@ fn task_deletion_undeleteable() {
 
     handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
     // after the task deletion is processed, no task should actually have been deleted,
-    // because the tasks with ids 0 and 1 were still "enqueued", and thus undeleteable
+    // because the tasks with ids 0 and 1 were still "enqueued", and thus undeletable
     // the "task deletion" task should be marked as "succeeded" and, in its details, the
     // number of deleted tasks should be 0
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "task_deletion_done");
 }
 
 #[test]
-fn task_deletion_deleteable() {
+fn task_deletion_deletable() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     let (file0, documents_count0) = sample_documents(&index_scheduler, 0, 0);
@@ -933,7 +933,7 @@ fn create_and_list_index() {
         index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(format!("{empty:?}"), @"(0, [])");
 
-    // After advancing just once the index should've been created, the wtxn has been released and commited
+    // After advancing just once the index should've been created, the wtxn has been released and committed
     // but the indexUpdate task has not been processed yet
     handle.advance_till([InsideProcessBatch]);
 

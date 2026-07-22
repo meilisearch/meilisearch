@@ -24,7 +24,7 @@ impl ThreadPoolNoAbort {
         self.active_operations.fetch_add(1, Ordering::Relaxed);
         let output = self.thread_pool.install(op);
         self.active_operations.fetch_sub(1, Ordering::Relaxed);
-        // While reseting the pool panic catcher we return an error if we caught one.
+        // While resetting the pool panic catcher we return an error if we caught one.
         if self.pool_caught_panic.swap(false, Ordering::SeqCst) {
             Err(CaughtPanic)
         } else {
@@ -40,7 +40,7 @@ impl ThreadPoolNoAbort {
         self.active_operations.fetch_add(1, Ordering::Relaxed);
         let output = self.thread_pool.broadcast(op);
         self.active_operations.fetch_sub(1, Ordering::Relaxed);
-        // While reseting the pool panic catcher we return an error if we caught one.
+        // While resetting the pool panic catcher we return an error if we caught one.
         if self.pool_caught_panic.swap(false, Ordering::SeqCst) {
             Err(CaughtPanic)
         } else {

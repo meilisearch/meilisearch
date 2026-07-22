@@ -26,7 +26,7 @@
 //! to find it in the spilled entries. This is the reason why we use
 //! a grenad sorter/reader so that we can seek "efficiently" for a key.
 //!
-//! ## More Detailled Algorithm
+//! ## More Detailed Algorithm
 //!
 //! Each sub-cache has an in-memory HashMap and some spilled
 //! lexicographically ordered entries on disk (grenad). We first iterate
@@ -34,14 +34,14 @@
 //! join algorithm. This algorithm will merge the entries by using its
 //! merge function.
 //!
-//! Everytime a merged entry is emited by the merge join algorithm we also
+//! Everytime a merged entry is emitted by the merge join algorithm we also
 //! fetch the value from the other in-memory caches (HashMaps) to finish
 //! the merge. Everytime we retrieve an entry from the in-memory caches
 //! we mark them with a tombstone for later.
 //!
 //! Once we are done with the spilled entries we iterate over the in-memory
 //! HashMaps. We iterate over the first one, retrieve the content from the
-//! other onces and mark them with a tombstone again. We also make sure
+//! other ones and mark them with a tombstone again. We also make sure
 //! to ignore the dead (tombstoned) ones.
 //!
 //! ## Memory Control
@@ -155,7 +155,7 @@ impl<'extractor> BalancedCaches<'extractor> {
     }
 
     /// Make sure the cache is no longer allocating data
-    /// and writes every new and unknow entry to disk.
+    /// and writes every new and unknown entry to disk.
     fn start_spilling(&mut self) -> Result<()> {
         let BalancedCaches { hasher: _, alloc, max_memory: _, caches } = self;
 

@@ -154,7 +154,7 @@ fn test_task_queue_is_full() {
     }
     index_scheduler.assert_internally_consistent();
 
-    // at this point the task DB shoud have reached its limit and we should not be able to register new tasks
+    // at this point the task DB should have reached its limit and we should not be able to register new tasks
     let result = index_scheduler
         .register(KindWithContent::IndexCreation { index_uid: S("doggo"), primary_key: None })
         .unwrap_err();
