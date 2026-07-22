@@ -35,6 +35,8 @@ impl FilterableAttributesRule {
     pub fn intersect_patterns(&self, other: &str) -> bool {
         match self {
             // If the rule is a field, match the field against the provided pattern using the legacy behavior
+            // match using both the legacy and new syntaxes, so that we catch the old prefix based
+            // syntax and the new wildcard behavior, for example in the `facets` field of the search
             FilterableAttributesRule::Field(field) => {
                 let legacy = matches!(
                     match_field_legacy(other, field),
@@ -46,7 +48,7 @@ impl FilterableAttributesRule {
                     PatternMatch::Parent | PatternMatch::Match
                 );
 
-                legacy | new
+                legacy || new
             }
             // If the rule is a pattern, match each one of them against the provided pattern using the new behavior
             FilterableAttributesRule::Pattern(patterns) => patterns.intersect_patterns(other),
