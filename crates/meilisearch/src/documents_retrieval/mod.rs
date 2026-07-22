@@ -1,15 +1,21 @@
 use std::{rc::Rc, sync::Arc};
 
 use actix_web::web::Data;
-use index_scheduler::IndexScheduler;
-use meilisearch_types::error::ResponseError;
+use index_scheduler::filter::{
+    filters_into_index_filters, parse_filter, retrieve_foreign_keys_settings, SourceIndexUid,
+};
+use index_scheduler::{IndexScheduler, RoFeatures};
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::FederatingResultsStep;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::personalization::PersonalizationService;
+use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::hydration::HydrationContext;
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
     SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
@@ -51,9 +57,9 @@ impl DocumentSearch {
         let index_scheduler = guarded_index_scheduler.clone();
         let features = index_scheduler.features();
 
-        let hydration_cache = preprocess_filters(
+        let (hydration_cache, preprocessed_queries) = preprocess_filters(
             index_scheduler.clone(),
-            &mut self.queries,
+            self.queries,
             features,
             self.is_proxy,
             progress,
@@ -64,7 +70,7 @@ impl DocumentSearch {
         if let Some(federation) = self.federation.take() {
             let (search_result, _) = perform_federated_search(
                 index_scheduler,
-                self.queries,
+                preprocessed_queries,
                 hydration_cache,
                 federation,
                 features,
@@ -82,16 +88,23 @@ impl DocumentSearch {
 
         // Multi-search
         let search_results: Result<_, (ResponseError, _)> = async {
-            let mut search_results = Vec::with_capacity(self.queries.len());
-            for (query_index, query) in self.queries.iter().enumerate() {
-                if query.federation_options.is_some() {
+            let mut search_results = Vec::with_capacity(preprocessed_queries.len());
+            for (query_index, query) in preprocessed_queries.into_iter().enumerate() {
+                if query.query.federation_options.is_some() {
                     return Err((
                         MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
                         Some(query_index),
                     ));
                 }
 
-                let (fixed_query, federation) = fixup_query_federation(query);
+                let (q, index_uid, fixed_query, federation) = {
+                    let PreprocessedQuery { query, filter } = query;
+                    let q = query.q.clone();
+                    let index_uid = query.index_uid.to_string();
+                    let (fixed_query, federation) = fixup_query_federation(&query);
+
+                    (q, index_uid, PreprocessedQuery { query: fixed_query, filter }, federation)
+                };
 
                 let (search_result, _) = perform_federated_search(
                     index_scheduler.clone(),
@@ -111,11 +124,9 @@ impl DocumentSearch {
                 .map_err(|(err, _)| (err, Some(query_index)))?;
 
                 search_results.push(SearchResultWithIndex {
-                    index_uid: query.index_uid.to_string(),
-                    result: search_result.into_search_result(
-                        query.q.clone().unwrap_or_default(),
-                        query.index_uid.as_str(),
-                    ),
+                    result: search_result
+                        .into_search_result(q.unwrap_or_default(), index_uid.as_str()),
+                    index_uid,
                 });
             }
 
@@ -246,11 +257,11 @@ pub enum DocumentSearchResult {
 
 pub async fn preprocess_filters<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
-    queries: &mut [Q],
+    mut queries: Vec<Q>,
     features: RoFeatures,
     is_proxy: bool,
     progress: &Progress,
-) -> Result<Option<HydrationContext>, (ResponseError, Option<usize>)> {
+) -> Result<(Option<HydrationContext>, Vec<PreprocessedQuery<Q>>), (ResponseError, Option<usize>)> {
     progress.update_progress(FederatingResultsStep::PreprocessFilters);
 
     // Document join: list of indexes in the order of the queries
@@ -289,15 +300,13 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
         let hydration_cache = HydrationContext::new(index_uids, foreign_keys_settings);
         (Some(hydration_cache), filters)
     } else {
-        return Ok(None);
+        return Ok((None, Vec::new()));
     };
 
-    for (query, filter) in queries.iter_mut().zip(precomputed_filters.into_iter()) {
-        // Insert back the filter into the query as a string before sending it to the remote
-        *query.filter_field() = filter.as_ref().map(|f| {
-            serde_json::Value::String(serialize_index_filter_to_filter_string(f).unwrap())
-        });
-    }
-
-    Ok(hydration_cache)
+    let preprocessed_queries = queries
+        .into_iter()
+        .zip(precomputed_filters.into_iter())
+        .map(|(query, filter)| PreprocessedQuery { query, filter })
+        .collect();
+    Ok((hydration_cache, preprocessed_queries))
 }

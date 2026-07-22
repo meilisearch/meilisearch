@@ -4,9 +4,9 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::IndexFilter;
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
-use serde_json::Value;
 
 use crate::routes::indexes::facet_search::FacetSearchQuery;
+use crate::search::federated::types::PreprocessedQuery;
 use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 
 #[cfg(not(feature = "enterprise"))]
@@ -40,13 +40,13 @@ pub trait ProxyQuery {
     fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter>;
 }
 
-impl ProxyQuery for SearchQueryWithIndex {
+impl ProxyQuery for PreprocessedQuery<SearchQueryWithIndex> {
     /// Output type is the same, as SearchQueryWithIndex already allows for specifying a remote
-    type ProxiedQuery = SearchQueryWithIndex;
+    type ProxiedQuery = PreprocessedQuery<SearchQueryWithIndex>;
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         let mut query = (*self).clone();
-        query.federation_options.get_or_insert_default().remote = Some(remote);
+        query.query.federation_options.get_or_insert_default().remote = Some(remote);
         query
     }
 
@@ -55,7 +55,7 @@ impl ProxyQuery for SearchQueryWithIndex {
     }
 }
 
-impl ProxyQuery for &FacetSearchQuery {
+impl ProxyQuery for &PreprocessedQuery<(IndexUid, FacetSearchQuery)> {
     /// The only things that can change are the filter on shard and the remote, so recover this
     type ProxiedQuery = (String, Option<IndexFilter>);
 
@@ -110,17 +110,17 @@ impl Partition {
         })
     }
 
-    pub fn into_query_partition(
-        self,
-        federation: &mut Federation,
-        query: &SearchQuery,
-        federation_options: Option<FederationOptions>,
-        index_uid: &IndexUid,
-    ) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
-        let query = fixup_query_federation(federation, query, federation_options, index_uid);
+    // pub fn into_query_partition(
+    //     self,
+    //     federation: &mut Federation,
+    //     query: &SearchQuery,
+    //     federation_options: Option<FederationOptions>,
+    //     index_uid: &IndexUid,
+    // ) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
+    //     let query = fixup_query_federation(federation, query, federation_options, index_uid);
 
-        self.into_partition(query)
-    }
+    //     self.into_partition(query)
+    // }
 }
 
 fn fixup_query_federation(

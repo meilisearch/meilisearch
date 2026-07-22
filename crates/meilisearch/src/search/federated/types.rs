@@ -15,7 +15,9 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::order_by_map::OrderByMap;
-use meilisearch_types::milli::{AttributePatterns, OrderBy};
+use meilisearch_types::milli::{
+    serialize_index_filter_to_filter_string, AttributePatterns, IndexFilter, OrderBy,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -23,7 +25,7 @@ use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
-use crate::search::{Personalize, SearchMetadata, SearchResult};
+use crate::search::{NetworkableQuery, Personalize, SearchMetadata, SearchResult};
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -517,5 +519,15 @@ impl<Q: PreprocessableQuery> PreprocessedQuery<Q> {
         });
 
         query
+    }
+}
+
+impl<Q: NetworkableQuery + PreprocessableQuery> NetworkableQuery for PreprocessedQuery<Q> {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        self.query.use_network_field()
+    }
+
+    fn has_remote(&self) -> bool {
+        self.query.has_remote()
     }
 }

@@ -7,10 +7,7 @@ use std::vec::{IntoIter, Vec};
 
 use actix_http::StatusCode;
 use actix_web::web::Data;
-use index_scheduler::filter::{
-    filters_into_index_filters, parse_local_index_filter, retrieve_foreign_keys_settings,
-    SourceIndexUid,
-};
+use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
 use meilisearch_types::error::{Code, ResponseError};
@@ -19,9 +16,9 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
-    AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, AttributePatterns, Deadline, DocumentId,
+    FederatingResultsStep, FieldsIdsMap, MetadataBuilder, OrderBy, PatternMatch,
+    DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -47,7 +44,8 @@ use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{
-    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
+    PreprocessedQuery, FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION,
+    WEIGHTED_RANKING_SCORE,
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
@@ -57,7 +55,7 @@ use crate::search::{
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
     index_scheduler: Data<IndexScheduler>,
-    queries: Vec<SearchQueryWithIndex>,
+    queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
     mut hydration_cache: Option<HydrationContext>,
     federation: Federation,
     features: RoFeatures,
@@ -89,7 +87,7 @@ pub async fn perform_federated_search(
         (Some(page), Some(hits_per_page)) => hits_per_page * page,
     };
 
-    let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
+    let retrieve_vectors = queries.iter().any(|q| q.query.retrieve_vectors);
 
     let network = index_scheduler.network();
 
@@ -99,9 +97,9 @@ pub async fn perform_federated_search(
             .iter()
             .map(|q| {
                 (
-                    q.q.clone(),
-                    q.index_uid.to_string(),
-                    q.federation_options.as_ref().and_then(|o| o.remote.clone()),
+                    q.query.q.clone(),
+                    q.query.index_uid.to_string(),
+                    q.query.federation_options.as_ref().and_then(|o| o.remote.clone()),
                 )
             })
             .collect()
@@ -978,39 +976,39 @@ impl PartitionedQueries {
     fn partition(
         &mut self,
         federation: &mut Federation,
-        mut federated_query: SearchQueryWithIndex,
+        mut federated_query: PreprocessedQuery<SearchQueryWithIndex>,
         partition: &mut Option<Partition>,
         query_index: usize,
         network: &Network,
         features: RoFeatures,
         remote_availability: &RemoteAvailability,
     ) -> Result<(), ResponseError> {
-        if let Some(pagination_field) = federated_query.has_pagination() {
+        if let Some(pagination_field) = federated_query.query.has_pagination() {
             return Err(MeilisearchHttpError::PaginationInFederatedQuery(pagination_field).into());
         }
 
-        if let Some(facets) = federated_query.has_facets() {
+        if let Some(facets) = federated_query.query.has_facets() {
             let facets = facets.to_owned();
             return Err(MeilisearchHttpError::FacetsInFederatedQuery(
-                federated_query.index_uid.into_inner(),
+                federated_query.query.index_uid.into_inner(),
                 facets,
             )
             .into());
         }
 
-        if federated_query.has_personalize() {
+        if federated_query.query.has_personalize() {
             return Err(MeilisearchHttpError::PersonalizationInFederatedQuery.into());
         }
 
-        if federated_query.has_remote_and_use_network() {
+        if federated_query.query.has_remote_and_use_network() {
             return Err(MeilisearchHttpError::RemoteAndUseNetwork.into());
         }
 
-        if federated_query.has_show_performance_details() {
+        if federated_query.query.has_show_performance_details() {
             return Err(MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery.into());
         }
 
-        if federated_query.has_distinct() && federation.distinct.is_some() {
+        if federated_query.query.has_distinct() && federation.distinct.is_some() {
             return Err(MeilisearchHttpError::DistinctInFederatedQueryAndFederation.into());
         }
 
@@ -1025,7 +1023,7 @@ impl PartitionedQueries {
 
         for federated_query in queries {
             let (index_uid, query, federation_options) =
-                federated_query.into_index_query_federation();
+                federated_query.into_inner_preprocessed().into_index_query_federation();
 
             let federation_options = federation_options.unwrap_or_default();
 

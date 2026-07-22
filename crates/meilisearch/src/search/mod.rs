@@ -1618,7 +1618,7 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
     }
 }
 
-pub fn fuse_index_filters(
+pub fn intersect_index_filters(
     left: Option<IndexFilter>,
     right: Option<IndexFilter>,
 ) -> Option<IndexFilter> {
@@ -1626,6 +1626,17 @@ pub fn fuse_index_filters(
         (None, right) => right,
         (left, None) => left,
         (Some(left), Some(right)) => Some(left & right),
+    }
+}
+
+pub fn union_index_filters(
+    left: Option<IndexFilter>,
+    right: Option<IndexFilter>,
+) -> Option<IndexFilter> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => Some(left | right),
     }
 }
 

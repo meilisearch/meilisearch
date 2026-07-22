@@ -12,7 +12,7 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::filter::parse_local_index_filter;
-use index_scheduler::{IndexScheduler, RoFeatures, TaskId};
+use index_scheduler::{IndexScheduler, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -65,15 +65,16 @@ use crate::search::proxy::{
     json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search::{
-    ExternalDocumentId, NetworkableQuery, Partition, PreprocessedQuery, ProxyQuery,
-    RetrieveVectors, VisitFacetValues,
+    ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
 };
 use crate::{aggregate_methods, Opt};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
-use crate::search::federated::types::{PreprocessableQuery, FEDERATION_HIT, WEIGHTED_SCORE_VALUES};
+use crate::search::federated::types::{
+    PreprocessableQuery, PreprocessedQuery, FEDERATION_HIT, WEIGHTED_SCORE_VALUES,
+};
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -278,8 +279,6 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    // TODO: maybe use the progress result?
-    let progress = Progress::default();
     let features = index_scheduler.features();
     let network = index_scheduler.network();
     let mut query = params.into_inner();
@@ -316,26 +315,25 @@ pub async fn get_document(
 
     // If the document is not found locally, try to retrieve it from the network if it is enabled
     let document = if must_use_network && local_result.is_err() {
-        let query = BrowseQuery {
-            offset: 0,
-            limit: 1,
-            fields: attributes_to_retrieve,
-            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
+        let query = PreprocessedQuery {
             filter: None,
-            ids: Some(vec![serde_json::Value::String(document_id.clone())]),
-            sort: None,
-            use_network: Some(true),
+            query: BrowseQueryWithIndex {
+                index_uid,
+                remote: None,
+                query: BrowseQuery {
+                    offset: 0,
+                    limit: 1,
+                    fields: attributes_to_retrieve,
+                    retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
+                    filter: None,
+                    ids: Some(vec![serde_json::Value::String(document_id.clone())]),
+                    sort: None,
+                    use_network: Some(true),
+                },
+            },
         };
 
-        let mut ret = retrieve_documents_federated(
-            index_scheduler.clone(),
-            features,
-            index_uid,
-            query,
-            network,
-            &progress,
-        )
-        .await?;
+        let mut ret = retrieve_documents_federated(index_scheduler.clone(), query, network).await?;
         ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
     } else {
         local_result?
@@ -596,9 +594,16 @@ pub struct BrowseQuery {
     pub use_network: Option<bool>,
 }
 
-impl NetworkableQuery for BrowseQuery {
+#[derive(Clone, Debug)]
+struct BrowseQueryWithIndex {
+    index_uid: IndexUid,
+    remote: Option<String>,
+    query: BrowseQuery,
+}
+
+impl NetworkableQuery for BrowseQueryWithIndex {
     fn use_network_field(&mut self) -> &mut Option<bool> {
-        &mut self.use_network
+        &mut self.query.use_network
     }
 
     fn has_remote(&self) -> bool {
@@ -606,20 +611,32 @@ impl NetworkableQuery for BrowseQuery {
     }
 }
 
-impl ProxyQuery for &PreprocessedQuery<BrowseQuery> {
-    type ProxiedQuery = (String, PreprocessedQuery<BrowseQuery>);
+impl PreprocessableQuery for BrowseQueryWithIndex {
+    fn index_uid(&self) -> &IndexUid {
+        &self.index_uid
+    }
+
+    fn filter_field(&mut self) -> &mut Option<Value> {
+        &mut self.query.filter
+    }
+}
+
+impl ProxyQuery for &PreprocessedQuery<BrowseQueryWithIndex> {
+    type ProxiedQuery = PreprocessedQuery<BrowseQueryWithIndex>;
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         let mut query = (*self).clone();
         // because we merge the results from multiple sources,
         // we must always start from the first document and retrieve offset+limit documents
-        query.query.limit += self.query.offset;
-        query.query.offset = 0;
-        (remote, query)
+        // TODO: tooooo deep
+        query.query.query.limit += self.query.query.offset;
+        query.query.query.offset = 0;
+        query.query.remote = Some(remote);
+        query
     }
 
     fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
-        &mut query.1.filter
+        &mut query.filter
     }
 }
 
@@ -931,7 +948,7 @@ pub async fn get_documents(
 async fn documents_by_query(
     index_scheduler: Data<IndexScheduler>,
     index_uid: web::Path<String>,
-    mut query: BrowseQuery,
+    query: BrowseQuery,
     is_proxy: bool,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -941,29 +958,18 @@ async fn documents_by_query(
     let network = index_scheduler.network();
     let features = index_scheduler.features();
 
-    let _ = preprocess_filters(
-        index_scheduler.clone(),
-        &mut [(&index_uid, &mut query)],
-        features,
-        false,
-        &progress,
-    )
-    .await
-    .map_err(|(err, _)| err)?;
-
-    let ret = if query.must_use_network(&network, &features)? {
-        retrieve_documents_federated(
-            index_scheduler,
-            features,
-            index_uid,
-            query,
-            network,
-            &progress,
-        )
-        .await
-    } else {
-        retrieve_documents_local(index_scheduler, features, index_uid, query, is_proxy, &progress)
+    let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
+    let (_, mut queries) =
+        preprocess_filters(index_scheduler.clone(), queries, features, false, &progress)
             .await
+            .map_err(|(err, _)| err)?;
+    // we only have one query, so we can pop it
+    let mut query = queries.pop().unwrap();
+
+    let ret = if query.query.must_use_network(&network, &features)? {
+        retrieve_documents_federated(index_scheduler, query, network).await
+    } else {
+        retrieve_documents_local(index_scheduler, query, is_proxy).await
     };
 
     Ok(HttpResponse::Ok().json(ret?))
@@ -971,11 +977,8 @@ async fn documents_by_query(
 
 async fn retrieve_documents_federated(
     index_scheduler: Data<IndexScheduler>,
-    features: RoFeatures,
-    index_uid: IndexUid,
-    query: PreprocessedQuery<BrowseQuery>,
+    query: PreprocessedQuery<BrowseQueryWithIndex>,
     network: Network,
-    progress: &Progress,
 ) -> Result<DocumentsResult, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -985,7 +988,7 @@ async fn retrieve_documents_federated(
     let (local_queries, remote_queries): (Vec<_>, Vec<_>) =
         partition.into_partition(&query)?.enumerate().partition(
             // true is left, false is right
-            |(_, (remote, _))| Some(remote) == network.local.as_ref(),
+            |(_, query)| query.query.remote.as_ref() == network.local.as_ref(),
         );
 
     let mut results: Vec<_> = Vec::with_capacity(remote_queries.len() + local_queries.len());
@@ -994,11 +997,17 @@ async fn retrieve_documents_federated(
     const MAX_IN_FLIGHT_REQUESTS: usize = 40;
     let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
 
-    for (query_id, (remote_name, query)) in remote_queries {
+    for (query_id, query) in remote_queries {
+        let BrowseQueryWithIndex { query, remote: Some(remote_name), index_uid } =
+            query.into_inner_preprocessed()
+        else {
+            unreachable!("remote query must have a remote name");
+        };
+
         let Some(remote) = network.remotes.get(&remote_name) else {
             errors.insert(
                 remote_name.clone(),
-                ProxySearchError::UnknownRemote { remote: remote_name }.as_response_error(),
+                ProxySearchError::UnknownRemote { remote: remote_name.clone() }.as_response_error(),
             );
             continue;
         };
@@ -1008,7 +1017,7 @@ async fn retrieve_documents_federated(
                 Ok(path_and_query) => path_and_query,
                 Err(err) => {
                     errors.insert(
-                        remote_name,
+                        remote_name.clone(),
                         ProxySearchError::InvalidRemoteUrl { cause: err.to_string() }
                             .as_response_error(),
                     );
@@ -1026,7 +1035,7 @@ async fn retrieve_documents_federated(
         ) {
             Ok(request) => request,
             Err(err) => {
-                errors.insert(remote_name, err.as_response_error());
+                errors.insert(remote_name.clone(), err.as_response_error());
                 continue;
             }
         };
@@ -1047,20 +1056,12 @@ async fn retrieve_documents_federated(
             }
         }
         in_flight_requests
-            .push_back(tokio::spawn(async move { (request.await, remote_name, query_id) }));
+            .push_back(tokio::spawn(async move { (request.await, remote_name.clone(), query_id) }));
     }
 
     // Perform local search
-    for (query_id, (_, query)) in local_queries {
-        let result = retrieve_documents_local(
-            index_scheduler.clone(),
-            features,
-            index_uid.clone(),
-            query,
-            true,
-            progress,
-        )
-        .await?;
+    for (query_id, query) in local_queries {
+        let result = retrieve_documents_local(index_scheduler.clone(), query, true).await?;
         results.push((result, query_id));
     }
 
@@ -1081,13 +1082,15 @@ async fn retrieve_documents_federated(
     }
 
     // Merge results
-    let merged_results: Result<_, ResponseError> =
-        merge_documents_results(results).skip(query.offset).take(query.limit).collect();
+    let merged_results: Result<_, ResponseError> = merge_documents_results(results)
+        .skip(query.query.query.offset)
+        .take(query.query.query.limit)
+        .collect();
 
     Ok(DocumentsResult {
         results: merged_results?,
-        offset: query.offset,
-        limit: query.limit,
+        offset: query.query.query.offset,
+        limit: query.query.query.limit,
         total,
         remote_errors,
     })
@@ -1145,28 +1148,29 @@ fn merge_metadata(
 
 async fn retrieve_documents_local(
     index_scheduler: Data<IndexScheduler>,
-    features: RoFeatures,
-    index_uid: IndexUid,
-    query: PreprocessedQuery<BrowseQuery>,
+    query: PreprocessedQuery<BrowseQueryWithIndex>,
     is_proxy: bool,
-    progress: &Progress,
 ) -> Result<DocumentsResult, ResponseError> {
-    let features = index_scheduler.features();
-
     let PreprocessedQuery {
         query:
-            BrowseQuery {
-                offset,
-                limit,
-                fields,
-                retrieve_vectors,
-                filter: _,
-                ids,
-                sort,
-                use_network: _,
+            BrowseQueryWithIndex {
+                index_uid,
+                remote: _,
+                query:
+                    BrowseQuery {
+                        offset,
+                        limit,
+                        fields,
+                        retrieve_vectors,
+                        filter: _,
+                        ids,
+                        sort,
+                        use_network: _,
+                    },
             },
         filter,
     } = query;
+
     tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
         let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
         let ids = if let Some(ids) = ids {

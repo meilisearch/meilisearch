@@ -11,7 +11,7 @@ use meilisearch_types::network::{Network, RemoteAvailability};
 use rand::seq::IteratorRandom as _;
 
 use crate::search::federated::network::ProxyQuery;
-use crate::search::fuse_index_filters;
+use crate::search::intersect_index_filters;
 
 /// Partition over all shards such that each shard appears exactly once.
 ///
@@ -30,7 +30,7 @@ pub fn partition_shards<Q: ProxyQuery>(
 
         let filter = Q::filter_field(&mut query);
 
-        *filter = fuse_index_filters(filter.take(), shard_filter);
+        *filter = intersect_index_filters(filter.take(), shard_filter);
         query
     }))
 }
