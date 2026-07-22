@@ -21,7 +21,7 @@ use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
     AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, DEFAULT_VALUES_PER_FACET,
+    OrderBy, PatternMatch, SearchStep, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1370,7 +1370,10 @@ impl SearchByIndex {
 
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
 
-        let fidmap = index.fields_ids_map(&rtxn).without_index()?;
+        let fidmap = {
+            let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
+            index.fields_ids_map(&rtxn).without_index()?
+        };
 
         let mut degraded = false;
         let mut used_negative_operator = false;
