@@ -1253,11 +1253,12 @@ async fn remote_auto_sharding_dsrs() {
 
     let (value, code) = ms0.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updatedAt]"}), @r###"
     {
       "results": [
         {
           "uid": "propagated-to-all-remotes",
+          "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -1281,11 +1282,12 @@ async fn remote_auto_sharding_dsrs() {
 
     let (value, code) = ms1.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updatedAt]"}), @r###"
     {
       "results": [
         {
           "uid": "propagated-to-all-remotes",
+          "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -1309,11 +1311,12 @@ async fn remote_auto_sharding_dsrs() {
 
     let (value, code) = ms2.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updatedAt]"}), @r###"
     {
       "results": [
         {
           "uid": "propagated-to-all-remotes",
+          "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -1363,27 +1366,12 @@ async fn remote_auto_sharding_dsrs() {
 
     let (value, code) = ms0.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updatedAt]"}), @r###"
     {
       "results": [
         {
-          "uid": "propagated-to-all-remotes",
-          "active": true,
-          "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
-                "position": 0
-              }
-            }
-          ]
-        },
-        {
           "uid": "propagated-too",
+          "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -1394,6 +1382,23 @@ async fn remote_auto_sharding_dsrs() {
               "action": {
                 "type": "pin",
                 "position": 1
+              }
+            }
+          ]
+        },
+        {
+          "uid": "propagated-to-all-remotes",
+          "lastUpdatedAt": "[updatedAt]",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
               }
             }
           ]
@@ -1407,27 +1412,12 @@ async fn remote_auto_sharding_dsrs() {
 
     let (value, code) = ms1.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updatedAt]"}), @r###"
     {
       "results": [
         {
-          "uid": "propagated-to-all-remotes",
-          "active": true,
-          "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
-                "position": 0
-              }
-            }
-          ]
-        },
-        {
           "uid": "propagated-too",
+          "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -1438,6 +1428,23 @@ async fn remote_auto_sharding_dsrs() {
               "action": {
                 "type": "pin",
                 "position": 1
+              }
+            }
+          ]
+        },
+        {
+          "uid": "propagated-to-all-remotes",
+          "lastUpdatedAt": "[updatedAt]",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
               }
             }
           ]
@@ -1451,27 +1458,12 @@ async fn remote_auto_sharding_dsrs() {
 
     let (value, code) = ms2.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updatedAt]"}), @r###"
     {
       "results": [
         {
-          "uid": "propagated-to-all-remotes",
-          "active": true,
-          "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
-                "position": 0
-              }
-            }
-          ]
-        },
-        {
           "uid": "propagated-too",
+          "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -1482,6 +1474,23 @@ async fn remote_auto_sharding_dsrs() {
               "action": {
                 "type": "pin",
                 "position": 1
+              }
+            }
+          ]
+        },
+        {
+          "uid": "propagated-to-all-remotes",
+          "lastUpdatedAt": "[updatedAt]",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "remote"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
               }
             }
           ]
