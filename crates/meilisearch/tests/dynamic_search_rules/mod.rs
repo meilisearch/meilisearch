@@ -79,12 +79,13 @@ async fn list_supports_pagination() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "rule-b",
           "description": "rule-b",
+          "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -123,18 +124,19 @@ async fn list_filters_by_attribute_patterns() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
-          "uid": "promo-active",
-          "description": "promo-active",
-          "active": true,
+          "uid": "promo-inactive",
+          "description": "promo-inactive",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
           "conditions": {},
           "actions": [
             {
               "selector": {
-                "id": "1"
+                "id": "2"
               },
               "action": {
                 "type": "pin",
@@ -144,14 +146,15 @@ async fn list_filters_by_attribute_patterns() {
           ]
         },
         {
-          "uid": "promo-inactive",
-          "description": "promo-inactive",
-          "active": false,
+          "uid": "promo-active",
+          "description": "promo-active",
+          "lastUpdatedAt": "[updated]",
+          "active": true,
           "conditions": {},
           "actions": [
             {
               "selector": {
-                "id": "2"
+                "id": "1"
               },
               "action": {
                 "type": "pin",
@@ -184,18 +187,19 @@ async fn list_filters_by_active_and_combines_filters() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
-          "uid": "promo-active",
-          "description": "promo-active",
+          "uid": "standard-active",
+          "description": "standard-active",
+          "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
           "actions": [
             {
               "selector": {
-                "id": "1"
+                "id": "3"
               },
               "action": {
                 "type": "pin",
@@ -205,14 +209,15 @@ async fn list_filters_by_active_and_combines_filters() {
           ]
         },
         {
-          "uid": "standard-active",
-          "description": "standard-active",
+          "uid": "promo-active",
+          "description": "promo-active",
+          "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
           "actions": [
             {
               "selector": {
-                "id": "3"
+                "id": "1"
               },
               "action": {
                 "type": "pin",
@@ -237,12 +242,13 @@ async fn list_filters_by_active_and_combines_filters() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "promo-active",
           "description": "promo-active",
+          "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
           "actions": [
@@ -287,7 +293,25 @@ async fn create_and_get() {
 
     let (value, code) = server.get_dynamic_search_rule("rule-1").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), name: "get_rule_1");
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
+    {
+      "uid": "rule-1",
+      "lastUpdatedAt": "[updated]",
+      "active": true,
+      "conditions": {},
+      "actions": [
+        {
+          "selector": {
+            "id": "42"
+          },
+          "action": {
+            "type": "pin",
+            "position": 1
+          }
+        }
+      ]
+    }
+    "###);
 }
 
 #[actix_web::test]
@@ -335,10 +359,11 @@ async fn create_full_rule() {
 
     let (get_value, code) = server.get_dynamic_search_rule("black-friday").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(get_value), @r###"
+    snapshot!(json_string!(get_value, {".lastUpdatedAt" => "[updated]"}), @r###"
     {
       "uid": "black-friday",
       "description": "Black Friday 2025 rules",
+      "lastUpdatedAt": "[updated]",
       "precedence": 10,
       "active": true,
       "conditions": {
@@ -452,7 +477,49 @@ async fn full_lifecycle() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), name: "list_rules");
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
+    {
+      "results": [
+        {
+          "uid": "rule-b",
+          "lastUpdatedAt": "[updated]",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        },
+        {
+          "uid": "rule-a",
+          "lastUpdatedAt": "[updated]",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "0"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
 
     let (task, code) = server.delete_dynamic_search_rule("rule-a").await;
     snapshot!(code, @"202 Accepted");
@@ -460,7 +527,32 @@ async fn full_lifecycle() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), name: "list_rules_after_delete_rule_a");
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
+    {
+      "results": [
+        {
+          "uid": "rule-b",
+          "lastUpdatedAt": "[updated]",
+          "active": true,
+          "conditions": {},
+          "actions": [
+            {
+              "selector": {
+                "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
 
     let (_, code) = server.get_dynamic_search_rule("rule-a").await;
     snapshot!(code, @"404 Not Found");
@@ -507,12 +599,13 @@ async fn patch_rule() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "updatable",
           "description": "Updated",
+          "lastUpdatedAt": "[updated]",
           "precedence": 10,
           "active": true,
           "conditions": {},
@@ -541,12 +634,13 @@ async fn patch_rule() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "updatable",
           "description": "Updated",
+          "lastUpdatedAt": "[updated]",
           "precedence": 10,
           "active": false,
           "conditions": {},
@@ -584,12 +678,13 @@ async fn patch_rule() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "updatable",
           "description": "Updated",
+          "lastUpdatedAt": "[updated]",
           "precedence": 10,
           "active": false,
           "conditions": {
@@ -618,12 +713,13 @@ async fn patch_rule() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "updatable",
           "description": "Updated",
+          "lastUpdatedAt": "[updated]",
           "precedence": 10,
           "active": false,
           "conditions": {
@@ -660,12 +756,13 @@ async fn patch_rule() {
 
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
           "uid": "updatable",
           "description": "Updated",
+          "lastUpdatedAt": "[updated]",
           "precedence": 10,
           "active": false,
           "conditions": {
@@ -726,9 +823,10 @@ async fn patch_creates_rule_when_missing() {
 
     let (value, code) = server.get_dynamic_search_rule("foobar").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
     {
       "uid": "foobar",
+      "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
       "actions": [
@@ -766,7 +864,14 @@ async fn create_unknown_field() {
         }))
         .await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(value));
+    snapshot!(json_string!(value), @r###"
+    {
+      "message": "Unknown field `unknownField`: expected one of `description`, `precedence`, `active`, `conditions`, `actions`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
 }
 
 #[actix_web::test]
@@ -784,7 +889,14 @@ async fn patch_unknown_field() {
     let (value, code) =
         server.patch_dynamic_search_rule("rule-y", json!({ "bogusField": 42 })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(value));
+    snapshot!(json_string!(value), @r###"
+    {
+      "message": "Unknown field `bogusField`: expected one of `description`, `precedence`, `active`, `conditions`, `actions`",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "###);
 }
 
 #[actix_web::test]
@@ -797,9 +909,10 @@ async fn create_missing_actions() {
 
     let (value, code) = server.get_dynamic_search_rule("no-actions").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
     {
       "uid": "no-actions",
+      "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
       "actions": []
@@ -839,10 +952,11 @@ async fn patch_preserves_fields() {
 
     let (value, code) = server.get_dynamic_search_rule("preserve").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
     {
       "uid": "preserve",
       "description": "original",
+      "lastUpdatedAt": "[updated]",
       "precedence": 5,
       "active": true,
       "conditions": {
@@ -871,10 +985,11 @@ async fn patch_preserves_fields() {
 
     let (value, code) = server.get_dynamic_search_rule("preserve").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
     {
       "uid": "preserve",
       "description": "updated",
+      "lastUpdatedAt": "[updated]",
       "precedence": 5,
       "active": true,
       "conditions": {
@@ -895,8 +1010,6 @@ async fn patch_preserves_fields() {
       ]
     }
     "###);
-
-    snapshot!(json_string!(value));
 }
 
 #[actix_web::test]
@@ -928,7 +1041,25 @@ async fn patch_replaces_arrays() {
     snapshot!(code, @"202 Accepted");
     let (value, code) = server.get_dynamic_search_rule("arrays").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), name: "replace_actions");
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
+    {
+      "uid": "arrays",
+      "lastUpdatedAt": "[updated]",
+      "active": true,
+      "conditions": {},
+      "actions": [
+        {
+          "selector": {
+            "id": "3"
+          },
+          "action": {
+            "type": "pin",
+            "position": 4
+          }
+        }
+      ]
+    }
+    "###);
 }
 
 #[actix_web::test]
@@ -950,9 +1081,10 @@ async fn patch_empty_body() {
 
     let (value, code) = server.get_dynamic_search_rule("no-change").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value), @r###"
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
     {
       "uid": "no-change",
+      "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
       "actions": [
@@ -983,7 +1115,25 @@ async fn defaults_on_create() {
     server.wait_task(task.uid()).await.succeeded();
     let (value, code) = server.get_dynamic_search_rule("minimal").await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value));
+    snapshot!(json_string!(value, {".lastUpdatedAt" => "[updated]"}), @r###"
+    {
+      "uid": "minimal",
+      "lastUpdatedAt": "[updated]",
+      "active": true,
+      "conditions": {},
+      "actions": [
+        {
+          "selector": {
+            "id": "1"
+          },
+          "action": {
+            "type": "pin",
+            "position": 0
+          }
+        }
+      ]
+    }
+    "###);
 }
 
 #[actix_web::test]
@@ -1022,7 +1172,18 @@ async fn disabling_the_feature_stops_applying_rules_to_search() {
 
     let (value, code) = index.search_post(json!({ "q": "batman returns" })).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value["hits"]), name: "results_when_dsr_enabled");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "remote",
+        "title": "Batman"
+      },
+      {
+        "id": "local",
+        "title": "Batman Returns"
+      }
+    ]
+    "###);
 
     let (value, code) = server.set_features(json!({ "dynamicSearchRules": false })).await;
     snapshot!(code, @"200 OK");
@@ -1030,7 +1191,18 @@ async fn disabling_the_feature_stops_applying_rules_to_search() {
 
     let (value, code) = index.search_post(json!({ "q": "batman returns" })).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value["hits"]), name: "results_when_dsr_disabled");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "local",
+        "title": "Batman Returns"
+      },
+      {
+        "id": "remote",
+        "title": "Batman"
+      }
+    ]
+    "###);
 }
 
 #[actix_web::test]
@@ -1130,7 +1302,18 @@ async fn search_filters_out_pinned_documents_excluded_by_filters() {
     let (value, code) = index.search_post(json!({ "filter": "kind = keep", "limit": 10 })).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(value["hits"]));
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "organic-1",
+        "kind": "keep"
+      },
+      {
+        "id": "organic-2",
+        "kind": "keep"
+      }
+    ]
+    "###);
 }
 
 #[actix_web::test]
@@ -1615,12 +1798,36 @@ async fn search_pumps_pins_when_organic_results_run_out() {
     let (value, code) = index.search_post(json!({ "limit": 10 })).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(value["hits"]), name: "limit_10");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "organic-1"
+      },
+      {
+        "id": "organic-2"
+      },
+      {
+        "id": "late-pin-1"
+      },
+      {
+        "id": "late-pin-2"
+      }
+    ]
+    "###);
 
     let (value, code) = index.search_post(json!({ "offset": 2, "limit": 2 })).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(value["hits"]), name: "offset_2_limit_2");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "late-pin-1"
+      },
+      {
+        "id": "late-pin-2"
+      }
+    ]
+    "###);
 }
 
 #[actix_web::test]
@@ -1740,23 +1947,104 @@ async fn list_many_rules() {
           "filter": {
             "query": "DSR"
           },
-          "offset": 1000
+          "offset": 990
         }))
         .await;
 
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r###"
+    snapshot!(json_string!(value, {".results[].lastUpdatedAt" => "[updated]"}), @r###"
     {
       "results": [
         {
-          "uid": "dsr-number-1000",
+          "uid": "dsr-number-10",
           "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-9",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-8",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-7",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-6",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-5",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-4",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-3",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-2",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-1",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
+          "active": false,
+          "conditions": {},
+          "actions": []
+        },
+        {
+          "uid": "dsr-number-0",
+          "description": "Some DSR rule",
+          "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
           "actions": []
         }
       ],
-      "offset": 1000,
+      "offset": 990,
       "limit": 20,
       "total": 1001
     }

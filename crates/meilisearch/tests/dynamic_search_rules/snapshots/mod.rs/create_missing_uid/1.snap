@@ -1,9 +1,0 @@
----
-source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
----
-{
-  "message": "Missing field `uid`",
-  "code": "bad_request",
-  "type": "invalid_request",
-  "link": "https://docs.meilisearch.com/errors#bad_request"
-}
