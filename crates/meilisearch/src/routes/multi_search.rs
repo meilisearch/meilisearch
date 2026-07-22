@@ -15,14 +15,16 @@ use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
+use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::personalization::PersonalizationService;
 use crate::routes::parse_include_metadata_header;
 use crate::search::proxy::{PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
-    SearchQueryWithIndex, SearchResultWithIndex,
+    SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
 use crate::search_queue::SearchQueue;
 
@@ -39,7 +41,7 @@ use crate::search_queue::SearchQueue;
 pub struct MultiSearchApi;
 
 /// Response containing results from multiple search queries
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, Debug)]
 pub struct SearchResults {
     /// Array of search results for each query
     results: Vec<SearchResultWithIndex>,
@@ -50,8 +52,11 @@ pub struct SearchResults {
 /// Run multiple search queries in a single API request.
 ///
 /// Each query can target a different index, so you can search across several indexes at once and get one combined response.
+///
+/// **Warning:** If Meilisearch encounters an error processing any query in the request, it immediately
+/// stops and returns an error message for the first error encountered. Partial results are not returned.
 #[routes::path(
-    request_body(content = FederatedSearch),
+    request_body = FederatedSearch,
     security(("Bearer" = ["search", "*"])),
     responses(
         (status = OK, description = "Non federated multi-search.", body = SearchResults, content_type = "application/json", example = json!(
@@ -144,7 +149,98 @@ pub struct SearchResults {
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
-    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    personalization_service: Data<PersonalizationService>,
+    params: AwebJson<FederatedSearch, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let use_documents_retrieval = !index_scheduler.features().legacy_search();
+    if use_documents_retrieval {
+        // Since we don't want to process half of the search requests and then get a permit refused
+        // we're going to get one permit for the whole duration of the multi-search request.
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+        let request_uid = Uuid::now_v7();
+
+        let federated_search = params.into_inner();
+        debug!(
+            request_uid = ?request_uid,
+            parameters = ?federated_search,
+            "Multi-search"
+        );
+
+        let mut multi_aggregate = MultiSearchAggregator::from_federated_search(&federated_search);
+
+        let FederatedSearch { queries, federation } = federated_search;
+
+        // check remote header
+        let is_proxy = req
+            .headers()
+            .get(PROXY_SEARCH_HEADER)
+            .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+
+        let include_metadata = parse_include_metadata_header(&req);
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries,
+            federation,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
+
+        let search_results = document_retrieval.execute(index_scheduler, &progress).await;
+
+        if search_results.is_ok() {
+            multi_aggregate.succeed();
+        }
+
+        permit.drop().await;
+        analytics.publish(multi_aggregate, &req);
+        debug!(
+            request_uid = ?request_uid,
+            returns = ?&search_results,
+            progress = ?progress.accumulated_durations(),
+            "Multi-search"
+        );
+
+        let search_results = search_results.map_err(|(mut err, query_index)| {
+            // Add the query index that failed as context for the error message.
+            // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+            // of result and we can benefit from static typing.
+            if let Some(query_index) = query_index {
+                err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+            }
+            err
+        })?;
+
+        match search_results {
+            DocumentSearchResult::Federated(search_result) => {
+                Ok(HttpResponse::Ok().json(search_result))
+            }
+            DocumentSearchResult::Multi(search_results) => {
+                Ok(HttpResponse::Ok().json(SearchResults { results: search_results }))
+            }
+        }
+    } else {
+        legacy_multi_search_with_post(
+            index_scheduler,
+            search_queue,
+            personalization_service,
+            params,
+            req,
+            analytics,
+        )
+        .await
+    }
+}
+
+pub async fn legacy_multi_search_with_post(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: Data<SearchQueue>,
+    personalization_service: Data<PersonalizationService>,
     params: AwebJson<FederatedSearch, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
@@ -214,6 +310,8 @@ pub async fn multi_search_with_post(
                 is_proxy,
                 request_uid,
                 include_metadata,
+                ShowFederationInfo::Always,
+                &personalization_service,
                 &progress,
             )
             .await;
@@ -232,7 +330,15 @@ pub async fn multi_search_with_post(
                 "Federated-search"
             );
 
-            let (search_result, _) = search_result?;
+            let (search_result, _) = search_result.map_err(|(mut err, query_index)| {
+                // Add the query index that failed as context for the error message.
+                // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+                // of result and we can benefit from static typing.
+                if let Some(query_index) = query_index {
+                    err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+                }
+                err
+            })?;
             HttpResponse::Ok().json(search_result)
         }
         None => {
@@ -255,10 +361,7 @@ pub async fn multi_search_with_post(
 
                     if federation_options.is_some() {
                         return Err((
-                            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(
-                                query_index,
-                            )
-                            .into(),
+                            MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
                             query_index,
                         ));
                     }

@@ -16,7 +16,7 @@ use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
+use meilisearch_types::milli::{self, obkv_to_json, InternalError};
 use meilisearch_types::network::route;
 use meilisearch_types::settings::{self, SecretPolicy};
 use meilisearch_types::tasks::network::headers::SetHeader as _;
@@ -27,10 +27,10 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::MustStopProcessing;
-use crate::filter::filter_into_index_filter;
+use crate::filter::parse_local_index_filter;
 use crate::processing::AtomicDocumentStep;
 use crate::utils::UreqRequestWrapper;
-use crate::{Error, IndexScheduler, Result};
+use crate::{Error, IndexScheduler, Result, RoFeatures};
 
 type Response = http_client::ureq::http::Response<http_client::ureq::Body>;
 
@@ -47,7 +47,7 @@ impl IndexScheduler {
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessExport)?;
 
         let indexes: Vec<_> = self
-            .index_names()?
+            .user_index_names()?
             .into_iter()
             .flat_map(|uid| {
                 indexes
@@ -56,6 +56,8 @@ impl IndexScheduler {
                     .map(|(pattern, settings)| (pattern, uid, settings))
             })
             .collect();
+
+        let features = self.features();
 
         let mut output = BTreeMap::new();
 
@@ -83,18 +85,22 @@ impl IndexScheduler {
 
             let ExportIndexSettings { filter, override_settings } = export_settings;
 
-            let index = self.index(uid)?;
+            let index = self.user_index(uid)?;
             let index_rtxn = index.read_txn()?;
-            let filter = filter.as_ref().map(Filter::from_json).transpose().map_err(err)?.flatten();
+            let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
             let filter = filter
+                .as_ref()
                 .map(|f| {
-                    // evaluate foreign key filter
-                    filter_into_index_filter(f, &index, &index_rtxn, self, &progress, uid)
+                    // evaluate index filter
+                    parse_local_index_filter(f, Some(uid), features, Code::InvalidDocumentFilter)
                 })
-                .transpose()?;
+                .transpose()?
+                .flatten();
 
-            let filter_universe =
-                filter.map(|f| f.evaluate(&index_rtxn, &index)).transpose().map_err(err)?;
+            let filter_universe = filter
+                .map(|f| f.evaluate(&index_rtxn, &index, &fields_ids_map))
+                .transpose()
+                .map_err(err)?;
             let whole_universe =
                 index.documents_ids(&index_rtxn).map_err(milli::Error::from).map_err(err)?;
             let universe = filter_universe.unwrap_or(whole_universe);
@@ -106,6 +112,7 @@ impl IndexScheduler {
                 progress: &progress,
                 agent: &agent,
                 must_stop_processing: &must_stop_processing,
+                features,
             };
             let options = ExportOptions {
                 index_uid: uid,
@@ -210,12 +217,12 @@ impl IndexScheduler {
                 settings::settings(ctx.index, ctx.index_rtxn, SecretPolicy::RevealSecrets)
                     .map_err(err)?;
             // Remove the experimental chat setting if not enabled
-            if self.features().check_chat_completions("exporting chat settings").is_err() {
+            if ctx.features.check_chat_completions("exporting chat settings").is_err() {
                 settings.chat = Setting::NotSet;
             }
 
             // Remove the experimental foreign keys setting if not enabled
-            if self.features().check_foreign_keys_setting("exporting foreign keys").is_err() {
+            if ctx.features.check_foreign_keys_setting("exporting foreign keys").is_err() {
                 settings.foreign_keys = Setting::NotSet;
             }
 
@@ -320,7 +327,11 @@ impl IndexScheduler {
                                     document_id: {
                                         if let Ok(Some(Ok(index))) = ctx
                                             .index
-                                            .external_id_of(&index_rtxn, std::iter::once(docid))
+                                            .external_id_of(
+                                                &index_rtxn,
+                                                &fields_ids_map,
+                                                std::iter::once(docid),
+                                            )
                                             .map(|it| it.into_iter().next())
                                         {
                                             index
@@ -458,6 +469,138 @@ impl IndexScheduler {
 
         Ok(())
     }
+
+    #[cfg(feature = "enterprise")]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn export_dsr_index(
+        &self,
+        target: TargetInstance<'_>,
+        dsrs: &milli::dynamic_search_rules::DynamicSearchRules,
+        index_count: u64,
+        export_old_remote_name: &str,
+        network_change_origin: &Origin,
+        progress: &Progress,
+        agent: &http_client::ureq::Agent,
+        must_stop_processing: &MustStopProcessing,
+    ) -> Result<u64, Error> {
+        use meilisearch_types::dynamic_search_rules::DynamicSearchRule;
+        use meilisearch_types::index_uid::DsrIndex;
+        use meilisearch_types::milli::dynamic_search_rules::DynamicSearchRulesView;
+
+        let err = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_string()));
+
+        let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
+        let url =
+            route::url_from_base_and_route(target.base_url, route::dynamic_search_rules_path())
+                .map_err(|error| Error::InvalidRemoteUrl {
+                    url: target.base_url.to_owned(),
+                    cause: error.to_string(),
+                })?;
+
+        let options = ExportOptions {
+            index_uid: DsrIndex::dsr_uid(),
+            payload_size: None,
+            override_settings: true,
+            export_mode: ExportMode::NetworkBalancing {
+                index_count,
+                export_old_remote_name,
+                network_change_origin,
+            },
+        };
+
+        let all_rules = dsrs.all_rule_ids().map_err(err)?;
+        let url = url.to_string();
+
+        let mut task_network = options.task_network(all_rules.len());
+
+        if let Some((import_data, _, metadata)) = &mut task_network {
+            import_data.document_count = 0;
+            metadata.task_key = None;
+        }
+
+        if send_dsr_clear(
+            must_stop_processing,
+            agent,
+            &url,
+            target.remote_name,
+            bearer.as_deref(),
+            task_network.as_ref(),
+        )?
+        .is_break()
+        {
+            return Ok(0);
+        }
+
+        if all_rules.is_empty() {
+            return Ok(0);
+        }
+
+        let (step, progress_step) = AtomicDocumentStep::new(all_rules.len() as u32);
+        progress.update_progress(progress_step);
+
+        let (index, _, db_fields_ids_map) = dsrs.as_raw();
+
+        let results = request_threads()
+            .broadcast(|broadcast| -> Result<_, Error> {
+                let rtxn = index.read_txn().map_err(Into::into).map_err(err)?;
+                let dsrs = DynamicSearchRulesView::new(index, &rtxn, db_fields_ids_map);
+
+                let mut task_network = options.task_network(all_rules.len());
+
+                for (i, docid) in all_rules.iter().enumerate() {
+                    if i % broadcast.num_threads() != broadcast.index() {
+                        continue;
+                    }
+                    if let Some((import_data, _, metadata)) = &mut task_network {
+                        import_data.document_count = 1;
+                        metadata.task_key = None;
+                    }
+
+                    let dsr = dsrs
+                        .get_from_internal_id(docid)
+                        .transpose()
+                        .ok_or_else(|| {
+                            milli::UserError::UnknownInternalDocumentId { document_id: docid }
+                                .into()
+                        })
+                        .map_err(err)?
+                        .map_err(err)?;
+
+                    let dsr =
+                        DynamicSearchRule::try_from_meili_doc(dsr, milli::FaultSource::Runtime)
+                            .map_err(err)?;
+
+                    let (dsr_uid, dsr) = dsr.into_uid_update();
+
+                    if send_dsr(
+                        dsr_uid,
+                        dsr,
+                        must_stop_processing,
+                        agent,
+                        &url,
+                        target.remote_name,
+                        bearer.as_deref(),
+                        task_network.as_ref(),
+                    )?
+                    .is_break()
+                    {
+                        return Ok(());
+                    }
+
+                    if i > 0 && i % 100 == 0 {
+                        step.fetch_add(100, atomic::Ordering::Relaxed);
+                    }
+                }
+
+                Ok(())
+            })
+            .map_err(|e| err(milli::Error::InternalError(InternalError::PanicInThreadPool(e))))?;
+        for result in results {
+            result?;
+        }
+        step.store(all_rules.len() as u32, atomic::Ordering::Relaxed);
+        Ok(all_rules.len())
+    }
 }
 
 fn set_network_ureq_headers<P>(
@@ -524,6 +667,58 @@ fn send_buffer<'a>(
             request = set_network_ureq_headers(request, import_data, origin, metadata);
         }
         request.send(compressed_buffer.as_slice())
+    });
+
+    handle_response(remote_name, res)
+}
+
+#[cfg(feature = "enterprise")]
+#[allow(clippy::too_many_arguments)]
+fn send_dsr<'a>(
+    dsr_uid: meilisearch_types::dynamic_search_rules::RuleUid,
+    dsr: meilisearch_types::dynamic_search_rules::DynamicSearchRuleUpdateRequest,
+    must_stop_processing: &MustStopProcessing,
+    agent: &http_client::ureq::Agent,
+    dsr_url: &'a str,
+    remote_name: Option<&str>,
+    bearer: Option<&'a str>,
+    task_network: Option<&(ImportData, Origin, ImportMetadata)>,
+) -> Result<ControlFlow<(), ()>> {
+    let dsr_url = format!("{dsr_url}/{dsr_uid}");
+    let res = retry(must_stop_processing, || {
+        let mut request = agent.patch(&dsr_url);
+        request = request.header("Content-Type", "application/json");
+        if let Some(bearer) = bearer {
+            request = request.header(AUTHORIZATION, bearer);
+        }
+        if let Some((import_data, origin, metadata)) = task_network {
+            request = set_network_ureq_headers(request, import_data, origin, metadata);
+        }
+        request.send_json(&dsr)
+    });
+
+    handle_response(remote_name, res)
+}
+
+#[cfg(feature = "enterprise")]
+#[allow(clippy::too_many_arguments)]
+fn send_dsr_clear<'a>(
+    must_stop_processing: &MustStopProcessing,
+    agent: &http_client::ureq::Agent,
+    dsr_url: &'a str,
+    remote_name: Option<&str>,
+    bearer: Option<&'a str>,
+    task_network: Option<&(ImportData, Origin, ImportMetadata)>,
+) -> Result<ControlFlow<(), ()>> {
+    let res = retry(must_stop_processing, || {
+        let mut request = agent.delete(dsr_url);
+        if let Some(bearer) = bearer {
+            request = request.header(AUTHORIZATION, bearer);
+        }
+        if let Some((import_data, origin, metadata)) = task_network {
+            request = set_network_ureq_headers(request, import_data, origin, metadata);
+        }
+        request.call()
     });
 
     handle_response(remote_name, res)
@@ -678,6 +873,7 @@ pub(super) struct ExportContext<'a> {
     pub(super) progress: &'a Progress,
     pub(super) agent: &'a http_client::ureq::Agent,
     pub(super) must_stop_processing: &'a MustStopProcessing,
+    pub(super) features: RoFeatures,
 }
 
 pub(super) enum ExportMode<'a> {

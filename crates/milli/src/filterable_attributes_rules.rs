@@ -4,7 +4,9 @@ use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::attribute_patterns::{match_distinct_field, match_field_legacy, PatternMatch};
+use crate::attribute_patterns::{
+    match_distinct_field, match_field_legacy, match_pattern, PatternMatch,
+};
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::AttributePatterns;
 
@@ -15,6 +17,9 @@ pub enum FilterableAttributesRule {
     Pattern(FilterableAttributesPatterns),
 }
 
+// deserr hard to implement here
+impl routes::RequestBody for FilterableAttributesRule {}
+
 impl FilterableAttributesRule {
     /// Match a field against the filterable attributes rule.
     pub fn match_str(&self, field: &str) -> PatternMatch {
@@ -23,6 +28,30 @@ impl FilterableAttributesRule {
             FilterableAttributesRule::Field(pattern) => match_field_legacy(pattern, field),
             // If the rule is a pattern, match the field against the pattern using the new behavior
             FilterableAttributesRule::Pattern(patterns) => patterns.match_str(field),
+        }
+    }
+
+    /// Takes two patterns and returns true if one pattern matches another.
+    pub fn intersect_patterns(&self, other: &str) -> bool {
+        match self {
+            // If the rule is a field, match the field against the provided pattern using the legacy behavior
+            // match using both the legacy and new syntaxes, so that we catch the old prefix based
+            // syntax and the new wildcard behavior, for example in the `facets` field of the search
+            FilterableAttributesRule::Field(field) => {
+                let legacy = matches!(
+                    match_field_legacy(other, field),
+                    PatternMatch::Parent | PatternMatch::Match
+                );
+
+                let new = matches!(
+                    match_pattern(other, field),
+                    PatternMatch::Parent | PatternMatch::Match
+                );
+
+                legacy || new
+            }
+            // If the rule is a pattern, match each one of them against the provided pattern using the new behavior
+            FilterableAttributesRule::Pattern(patterns) => patterns.intersect_patterns(other),
         }
     }
 
@@ -73,6 +102,10 @@ pub struct FilterableAttributesPatterns {
 impl FilterableAttributesPatterns {
     pub fn match_str(&self, field: &str) -> PatternMatch {
         self.attribute_patterns.match_str(field)
+    }
+
+    pub fn intersect_patterns(&self, other: &str) -> bool {
+        self.attribute_patterns.intersect_patterns(other)
     }
 
     pub fn features(&self) -> FilterableAttributesFeatures {

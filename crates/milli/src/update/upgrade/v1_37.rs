@@ -62,7 +62,7 @@ impl UpgradeIndex for ConvertArroyToHannoy {
                         &rtxn,
                         wtxn,
                         progress.clone(),
-                        &|| must_stop_processing.get(),
+                        must_stop_processing,
                         None,
                     )?;
                 }

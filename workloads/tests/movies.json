@@ -25,11 +25,22 @@
           ],
           "searchableAttributes": [
             "title",
-            "overview"
+            "overview",
+            "genres"
           ],
           "sortableAttributes": [
             "release_date"
-          ]
+          ],
+          "synonyms": {
+            "chaussure": [
+              "sport shoes"
+            ]
+          },
+          "typoTolerance": {
+            "disableOnAttributes": [
+              "genres"
+            ]
+          }
         }
       },
       "expectedStatus": 202,
@@ -61,8 +72,9 @@
     {
       "binary": {
         "source": "build",
+        "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -148,6 +160,72 @@
       "synchronous": "DontWait"
     },
     {
+      "description": "It is expected not to retrieve any synonyms while the dumpless upgrade is not finished",
+      "route": "indexes/movies/settings",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "dictionary": [],
+        "displayedAttributes": [
+          "*"
+        ],
+        "distinctAttribute": null,
+        "embedders": {},
+        "facetSearch": true,
+        "faceting": {
+          "maxValuesPerFacet": 100,
+          "sortFacetValuesBy": {
+            "*": "alpha"
+          }
+        },
+        "filterableAttributes": "[filterableAttributes]",
+        "localizedAttributes": null,
+        "nonSeparatorTokens": [],
+        "pagination": {
+          "maxTotalHits": 1000
+        },
+        "prefixSearch": "indexingTime",
+        "proximityPrecision": "byWord",
+        "rankingRules": [
+          "words",
+          "typo",
+          "proximity",
+          "attributeRank",
+          "sort",
+          "wordPosition",
+          "exactness"
+        ],
+        "searchCutoffMs": null,
+        "searchableAttributes": [
+          "title",
+          "overview",
+          "genres"
+        ],
+        "separatorTokens": [],
+        "sortableAttributes": [
+          "release_date"
+        ],
+        "stopWords": [],
+        "synonyms": {
+          "chaussure": ["sport shoes"]
+        },
+        "typoTolerance": {
+          "disableOnAttributes": [
+            "genres"
+          ],
+          "disableOnNumbers": false,
+          "disableOnWords": [],
+          "enabled": true,
+          "minWordSizeForTypos": {
+            "oneTypo": 5,
+            "twoTypos": 9
+          }
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
       "route": "indexes/movies/stats",
       "method": "GET",
       "body": null,
@@ -173,7 +251,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade"
+          "--upgrade-db"
         ]
       }
     },
@@ -264,6 +342,72 @@
         "processingTimeMs": "[duration]",
         "query": "bitcoin",
         "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "description": "Now that the dumpless upgrade is done, synonyms are visible",
+      "route": "indexes/movies/settings",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "dictionary": [],
+        "displayedAttributes": [
+          "*"
+        ],
+        "distinctAttribute": null,
+        "embedders": {},
+        "facetSearch": true,
+        "faceting": {
+          "maxValuesPerFacet": 100,
+          "sortFacetValuesBy": {
+            "*": "alpha"
+          }
+        },
+        "filterableAttributes": "[filterableAttributes]",
+        "localizedAttributes": null,
+        "nonSeparatorTokens": [],
+        "pagination": {
+          "maxTotalHits": 1000
+        },
+        "prefixSearch": "indexingTime",
+        "proximityPrecision": "byWord",
+        "rankingRules": [
+          "words",
+          "typo",
+          "proximity",
+          "attributeRank",
+          "sort",
+          "wordPosition",
+          "exactness"
+        ],
+        "searchCutoffMs": null,
+        "searchableAttributes": [
+          "title",
+          "overview",
+          "genres"
+        ],
+        "separatorTokens": [],
+        "sortableAttributes": [
+          "release_date"
+        ],
+        "stopWords": [],
+        "synonyms": {
+          "chaussure": ["sport shoes"]
+        },
+        "typoTolerance": {
+          "disableOnAttributes": [
+            "genres"
+          ],
+          "disableOnNumbers": false,
+          "disableOnWords": [],
+          "enabled": true,
+          "minWordSizeForTypos": {
+            "oneTypo": 5,
+            "twoTypos": 9
+          }
+        }
       },
       "synchronous": "DontWait"
     },

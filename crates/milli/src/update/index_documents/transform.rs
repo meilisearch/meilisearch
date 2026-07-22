@@ -33,7 +33,9 @@ use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::{RemoveFragments, WriteBackToDocuments};
 use crate::vector::VectorStore;
-use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
+use crate::{
+    FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, MustStopProcessing, Result,
+};
 
 pub struct TransformOutput {
     pub primary_key: String,
@@ -164,17 +166,16 @@ impl<'a, 'i> Transform<'a, 'i> {
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
-    pub fn read_documents<R, FP, FA>(
+    pub fn read_documents<R, FP>(
         &mut self,
         reader: EnrichedDocumentsBatchReader<R>,
         wtxn: &mut heed::RwTxn<'_>,
         progress_callback: FP,
-        should_abort: FA,
+        should_abort: &MustStopProcessing,
     ) -> Result<usize>
     where
         R: Read + Seek,
         FP: Fn(UpdateIndexingStep) + Sync,
-        FA: Fn() -> bool + Sync,
     {
         let (mut cursor, fields_index) = reader.into_cursor_and_fields_index();
         let external_documents_ids = self.index.external_documents_ids();
@@ -193,7 +194,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         while let Some(enriched_document) = cursor.next_enriched_document()? {
             let EnrichedDocument { document, document_id } = enriched_document;
 
-            if should_abort() {
+            if should_abort.get() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
             }
 

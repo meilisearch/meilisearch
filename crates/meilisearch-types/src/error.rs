@@ -21,7 +21,7 @@ pub struct ResponseError {
     /// The error code.
     #[schema(value_type = Code)]
     #[serde(rename = "code")]
-    error_code: String,
+    pub error_code: String,
     /// The error type.
     #[schema(value_type = ErrorType)]
     #[serde(rename = "type")]
@@ -197,6 +197,7 @@ macro_rules! make_error_codes {
 make_error_codes! {
 ApiKeyAlreadyExists                            , InvalidRequest       , CONFLICT ;
 ApiKeyNotFound                                 , InvalidRequest       , NOT_FOUND ;
+IndexScopedApiKeyWithGlobalAction              , InvalidRequest       , BAD_REQUEST ;
 BadParameter                                   , InvalidRequest       , BAD_REQUEST;
 BadRequest                                     , InvalidRequest       , BAD_REQUEST;
 DatabaseSizeLimitReached                       , Internal             , INTERNAL_SERVER_ERROR;
@@ -243,6 +244,7 @@ MissingDocumentEditionFunction                 , InvalidRequest       , BAD_REQU
 InconsistentDocumentChangeHeaders              , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentUseNetwork                      , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST ;
 InvalidHeaderValue                             , InvalidRequest       , BAD_REQUEST ;
@@ -461,6 +463,12 @@ InvalidIndexFieldsFilterDistinct               , InvalidRequest       , BAD_REQU
 InvalidIndexFieldsFilterRankingRule            , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexFieldsFilterFilterable             , InvalidRequest       , BAD_REQUEST ;
 RequiresEnterpriseEdition                      , InvalidRequest       , UNAVAILABLE_FOR_LEGAL_REASONS ;
+// Render
+InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
+RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
+TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
+TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST ;
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhookUrl                              , InvalidRequest       , BAD_REQUEST ;
@@ -478,7 +486,7 @@ InvalidDynamicSearchRulePriority               , InvalidRequest       , BAD_REQU
 InvalidDynamicSearchRuleActive                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleConditions             , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleActions                , InvalidRequest       , BAD_REQUEST ;
-InvalidDynamicSearchRuleFilterAttributePatterns, InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterQuery            , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleFilterActive           , InvalidRequest       , BAD_REQUEST ;
 DynamicSearchRuleNotFound                      , InvalidRequest       , NOT_FOUND
 }

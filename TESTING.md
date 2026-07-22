@@ -198,9 +198,9 @@ In most cases, the change binary instruction will be used to update a database.
 
 To properly test the dumpless upgrade, one should typically:
 
-1. Open the database without processing the update task: Use a `binary` instruction to switch to the desired version, passing `--experimental-dumpless-upgrade` and `--experimental-max-number-of-batched-tasks=0` as extra CLI arguments
+1. Open the database without processing the update task: Use a `binary` instruction to switch to the desired version, passing `--upgrade-db` and `--experimental-max-number-of-batched-tasks=0` as extra CLI arguments
 2. Check that the search, stats and task queue still work.
-3. Open the database and process the update task: Use a `binary` instruction to switch to the desired version, passing `--experimental-dumpless-upgrade` as the extra CLI argument. Use a `health` command to wait for the upgrade task to finish.
+3. Open the database and process the update task: Use a `binary` instruction to switch to the desired version, passing `--upgrade-db` as the extra CLI argument. Use a `health` command to wait for the upgrade task to finish.
 4. Check that the indexing, search, stats, and task queue still work.
 
 ```jsonc
@@ -223,7 +223,7 @@ To properly test the dumpless upgrade, one should typically:
         "source": "build", // build the binary from the sources in the current git repository
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade", // allows to open with a newer MS
+          "--upgrade-db", // allows to open with a newer MS
           "--experimental-max-number-of-batched-tasks=0" // prevent processing of the update task
         ]
       }
@@ -238,7 +238,7 @@ To properly test the dumpless upgrade, one should typically:
         "source": "build", // build the binary from the sources in the current git repository
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade" // allows to open with a newer MS
+          "--upgrade-db" // allows to open with a newer MS
           // no `--experimental-max-number-of-batched-tasks=0`
         ]
       }

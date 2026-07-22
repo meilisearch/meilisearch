@@ -157,7 +157,8 @@ fn test_no_typo() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -175,6 +176,7 @@ fn test_no_typo() {
 fn test_default_typo() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
     let ot = index.min_word_len_one_typo(&txn).unwrap();
     let tt = index.min_word_len_two_typos(&txn).unwrap();
@@ -182,7 +184,7 @@ fn test_default_typo() {
     insta::assert_debug_snapshot!(tt, @"9");
 
     // 0 typo
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -202,7 +204,7 @@ fn test_default_typo() {
     "###);
 
     // 1 typo on one word, replaced letter
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quack brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -216,7 +218,7 @@ fn test_default_typo() {
     "###);
 
     // 1 typo on one word, missing letter, extra letter
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quicest brownest fox jummps over the laziest dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -235,7 +237,8 @@ fn test_phrase_no_typo_allowed() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the \"quick brewn\" fox jumps over the lazy dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -258,6 +261,7 @@ fn test_typo_exact_word() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
     let ot = index.min_word_len_one_typo(&txn).unwrap();
     let tt = index.min_word_len_two_typos(&txn).unwrap();
@@ -265,7 +269,7 @@ fn test_typo_exact_word() {
     insta::assert_debug_snapshot!(tt, @"9");
 
     // don't match quivk
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -279,7 +283,7 @@ fn test_typo_exact_word() {
     "###);
 
     // Don't match quick
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quack brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -287,7 +291,7 @@ fn test_typo_exact_word() {
     insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
 
     // words not in exact_words (quicest, jummps) have normal typo handling
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quicest brownest fox jummps over the laziest dog");
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
@@ -301,7 +305,7 @@ fn test_typo_exact_word() {
     "###);
 
     // exact words do not disable prefix (sunflowering OK, but no sunflowar)
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
@@ -333,6 +337,7 @@ fn test_typo_exact_attribute() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
     let ot = index.min_word_len_one_typo(&txn).unwrap();
     let tt = index.min_word_len_two_typos(&txn).unwrap();
@@ -340,7 +345,7 @@ fn test_typo_exact_attribute() {
     insta::assert_debug_snapshot!(tt, @"9");
 
     // Exact match returns both exact attributes and tolerant ones.
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lazy dog");
@@ -365,7 +370,7 @@ fn test_typo_exact_attribute() {
     "###);
 
     // 1 typo only returns the tolerant attribute
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quidk brown fox jumps over the lazy dog");
@@ -386,7 +391,7 @@ fn test_typo_exact_attribute() {
     "###);
 
     // combine with exact words
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quivk brown fox jumps over the lazy dog");
@@ -414,7 +419,7 @@ fn test_typo_exact_attribute() {
     "###);
 
     // No result in tolerant attribute
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quicest brownest fox jummps over the laziest dog");
@@ -428,7 +433,8 @@ fn test_ngram_typos() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the extra lagant fox skyrocketed over the languorous dog");
@@ -442,7 +448,7 @@ fn test_ngram_typos() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the ex tra lagant fox skyrocketed over the languorous dog");
@@ -463,7 +469,8 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lazy dog");
@@ -499,7 +506,7 @@ fn test_typo_ranking_rule_not_preceded_by_words_ranking_rule() {
         })
         .unwrap();
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lazy dog");
@@ -515,9 +522,10 @@ fn test_typo_bucketing() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
     // First do the search with just the Words ranking rule
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
@@ -545,7 +553,8 @@ fn test_typo_bucketing() {
         .unwrap();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sunflower");
@@ -564,7 +573,7 @@ fn test_typo_bucketing() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("network interconnection sun flower");
@@ -600,7 +609,8 @@ fn test_typo_synonyms() {
         .unwrap();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the quick brown fox jumps over the lackadaisical dog");
@@ -616,7 +626,7 @@ fn test_typo_synonyms() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("the fast brownish fox jumps over the lackadaisical dog");

@@ -18,6 +18,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -27,9 +28,10 @@ use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
     MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult,
+    SemanticRatio, ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -157,6 +159,8 @@ pub struct SearchQueryGet {
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
     ///
     /// Supported value types are string, number, array, and object.
+    ///
+    /// Note: highlights matches within all listed attributes, even those not in `searchableAttributes`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_highlight: Option<CS<String>>,
@@ -178,7 +182,7 @@ pub struct SearchQueryGet {
     ///
     /// This is useful when you need custom highlighting.
     ///
-    /// Note that positions are given in bytes, not characters.
+    /// Note: reports match positions in all attributes, even non-searchable ones. Positions are measured in bytes, not characters.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     #[param(required = false, value_type = bool)]
     show_matches_position: Param<bool>,
@@ -220,7 +224,7 @@ pub struct SearchQueryGet {
     ///
     /// The response includes `facetDistribution` and, for numeric facets, `facetStats` (min/max).
     ///
-    /// Use `["*"]` to request counts for all [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
+    /// This route also supports patterns, i.e., "title", "dogs.*", "*", which can match over the [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
     ///
     /// The number of values returned per facet is limited by the index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-faceting#body-max-values-per-facet-one-of-0) setting; attributes not in filterableAttributes are ignored.
     ///
@@ -311,8 +315,6 @@ pub struct SearchQueryGet {
     /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
     ///
     /// When `false` or omitted, the query runs locally.
-    ///
-    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
     ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
@@ -433,7 +435,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             distinct: other.distinct,
-            facets: other.facets.map(|o| o.into_iter().collect()),
+            facets: other.facets.map(|o| o.into_iter().collect::<Vec<_>>().into()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
             matching_strategy: other.matching_strategy,
@@ -484,6 +486,10 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with POST route](/docs/reference/api/search/search-with-post) in the Meilisearch API.
+///
+/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+///
+/// **Note:** The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
@@ -537,7 +543,90 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
-    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    personalization_service: web::Data<PersonalizationService>,
+    index_uid: web::Path<String>,
+    params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let use_documents_retrieval = !index_scheduler.features().legacy_search();
+    if use_documents_retrieval {
+        let request_uid = Uuid::now_v7();
+        debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+        let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+        let query: SearchQuery = params.into_inner().try_into()?;
+
+        let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
+
+        let include_metadata = parse_include_metadata_header(&req);
+        let is_proxy = false;
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries: vec![SearchQueryWithIndex::from_index_query_federation(
+                index_uid.clone(),
+                query,
+                None,
+            )],
+            federation: None,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
+
+        let search_result = document_retrieval
+            .execute(index_scheduler, &progress)
+            .await
+            .map(|result| {
+                let DocumentSearchResult::Multi(mut search_results) = result else {
+                    unreachable!()
+                };
+
+                search_results.pop().unwrap().result
+            })
+            .map_err(|(mut err, _)| match err.error_code.as_str() {
+                "index_not_found" => {
+                    // If the index is not found, return a 404 status code
+                    err.code = StatusCode::NOT_FOUND;
+                    err
+                }
+                _ => err,
+            });
+
+        permit.drop().await;
+
+        if let Ok(search_result) = search_result.as_ref() {
+            aggregate.succeed(search_result);
+        }
+        analytics.publish(aggregate, &req);
+
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search get");
+
+        let search_result = search_result?;
+
+        Ok(HttpResponse::Ok().json(search_result))
+    } else {
+        legacy_search_with_url_query(
+            index_scheduler,
+            search_queue,
+            personalization_service,
+            index_uid,
+            params,
+            req,
+            analytics,
+        )
+        .await
+    }
+}
+
+pub async fn legacy_search_with_url_query(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -608,7 +697,7 @@ pub(crate) async fn search(
     let network = index_scheduler.network();
     let remote_availability = index_scheduler.remote_availability();
 
-    let (mut search_result, deadline) = if query.must_use_network(&network, &features)? {
+    if query.must_use_network(&network, &features)? {
         let mut federation = Federation::default();
         let queries = Partition::new(network, remote_availability)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
@@ -622,17 +711,20 @@ pub(crate) async fn search(
             false,
             request_uid,
             include_metadata,
+            ShowFederationInfo::OnNetworkOnly,
+            service,
             progress,
         )
-        .await;
+        .await
+        .map_err(|(err, _)| err);
 
-        let (search_result, deadline) = search_result?;
+        let (search_result, _deadline) = search_result?;
         let search_result =
             search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
 
-        (search_result, deadline)
+        Ok(search_result)
     } else {
-        let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
+        let index = index_scheduler.user_index(&index_uid).map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
                 let mut err = ResponseError::from(err);
                 err.code = index_not_found_http_code;
@@ -645,6 +737,7 @@ pub(crate) async fn search(
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
+        let show_performance_details = query.show_performance_details;
         let search_result = tokio::task::spawn_blocking(move || {
             perform_search(
                 SearchParams {
@@ -663,23 +756,30 @@ pub(crate) async fn search(
         })
         .await;
 
-        search_result??
-    };
+        let (mut search_result, deadline) = search_result??;
 
-    // Apply personalization if requested
-    if let Some(personalize) = personalize {
-        search_result.hits = service
-            .rerank_search_results(
-                std::mem::take(&mut search_result.hits),
-                &personalize,
-                personalize_query.as_deref(),
-                deadline,
-                progress,
-            )
-            .await?;
+        // Apply personalization if requested
+        // in the legacy search, personalization is applied after pinning hits,
+        // the new implementation applies personalization before pinning hits.
+        if let Some(personalize) = personalize {
+            search_result.hits = service
+                .rerank_search_results(
+                    std::mem::take(&mut search_result.hits),
+                    &personalize,
+                    personalize_query.as_deref(),
+                    &deadline,
+                    progress,
+                )
+                .await?;
+        }
+
+        // Add performance details at the end if requested
+        if show_performance_details {
+            search_result.performance_details = Some(progress.accumulated_durations());
+        }
+
+        Ok(search_result)
     }
-
-    Ok(search_result)
 }
 
 /// Search with POST
@@ -687,6 +787,8 @@ pub(crate) async fn search(
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with GET route](/docs/reference/api/search/search-with-get) in the Meilisearch API.
+///
+/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
@@ -738,6 +840,90 @@ pub(crate) async fn search(
     )
 )]
 pub async fn search_with_post(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    index_uid: web::Path<String>,
+    params: AwebJson<SearchQuery, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let use_documents_retrieval = !index_scheduler.features().legacy_search();
+    if use_documents_retrieval {
+        let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+        let request_uid = Uuid::now_v7();
+
+        let progress = Progress::default();
+        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+        let permit = search_queue.try_get_search_permit().await?;
+        progress.update_progress(TotalProcessingTimeStep::Search);
+
+        let query = params.into_inner();
+        debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
+
+        let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
+
+        let include_metadata = parse_include_metadata_header(&req);
+        let is_proxy = false;
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries: vec![SearchQueryWithIndex::from_index_query_federation(
+                index_uid.clone(),
+                query,
+                None,
+            )],
+            federation: None,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
+
+        let search_result = document_retrieval
+            .execute(index_scheduler, &progress)
+            .await
+            .map(|result| {
+                let DocumentSearchResult::Multi(mut search_results) = result else {
+                    unreachable!()
+                };
+
+                search_results.pop().unwrap().result
+            })
+            .map_err(|(mut err, _)| match err.error_code.as_str() {
+                "index_not_found" => {
+                    // If the index is not found, return a 404 status code
+                    err.code = StatusCode::NOT_FOUND;
+                    err
+                }
+                _ => err,
+            });
+
+        permit.drop().await;
+
+        if let Ok(search_result) = search_result.as_ref() {
+            aggregate.succeed(search_result);
+        }
+        analytics.publish(aggregate, &req);
+
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search post");
+
+        let search_result = search_result?;
+
+        Ok(HttpResponse::Ok().json(search_result))
+    } else {
+        legacy_search_with_post(
+            index_scheduler,
+            search_queue,
+            personalization_service,
+            index_uid,
+            params,
+            req,
+            analytics,
+        )
+        .await
+    }
+}
+
+pub async fn legacy_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
     personalization_service: web::Data<crate::personalization::PersonalizationService>,

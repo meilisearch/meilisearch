@@ -38,7 +38,7 @@ jobs:
       - name: Build deb package
         run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
       - name: Upload debian pkg to release
-        uses: svenstaro/upload-release-action@2.11.5
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: target/debian/meilisearch.deb
@@ -53,7 +53,7 @@ jobs:
     needs: check-version
     steps:
       - name: Create PR to Homebrew
-        uses: mislav/bump-homebrew-formula-action@v4
+        uses: mislav/bump-homebrew-formula-action@f865c8b0dbebd6e263cc06782a0e974c61cf12d2 # v4
         with:
           formula-name: meilisearch
           formula-path: Formula/m/meilisearch.rb

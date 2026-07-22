@@ -140,7 +140,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -175,7 +175,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade"
+          "--upgrade-db"
         ]
       }
     },

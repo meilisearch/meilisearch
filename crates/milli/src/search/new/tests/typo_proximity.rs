@@ -87,7 +87,8 @@ fn test_trap_basic_and_complex1() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("beautiful summer");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -110,7 +111,8 @@ fn test_trap_complex2() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("delicious sweet dessert");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);

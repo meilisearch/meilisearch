@@ -6,6 +6,7 @@ pub mod error;
 pub mod analytics;
 #[macro_use]
 pub mod extractors;
+pub mod documents_retrieval;
 pub mod metrics;
 pub mod middleware;
 pub mod option;
@@ -18,13 +19,13 @@ pub mod search;
 pub mod search_queue;
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use ::routes::Routes;
 use actix_cors::Cors;
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
@@ -41,15 +42,14 @@ use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
-use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
-    default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
-    MissingDocumentPolicy,
+    default_thread_pool_and_threads, IndexerConfig, MissingDocumentPolicy,
 };
+use meilisearch_types::milli::{FilterConstraintFuel, MustStopProcessing};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -64,7 +64,6 @@ use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
-use ::routes::Routes;
 
 /// Default number of simultaneously opened indexes.
 ///
@@ -241,6 +240,65 @@ pub fn setup_meilisearch(
         }
     };
 
+    let dsr_fuel = {
+        let max_counted_words = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_COUNTED_WORDS")
+        {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 10,
+            Err(err) => bail!(err),
+        };
+
+        let max_active_rules = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_ACTIVE_RULES") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 1000,
+            Err(err) => bail!(err),
+        };
+        let max_pin_actions = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_PIN_ACTIONS") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+        let word_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_WORD_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 4096,
+            Err(err) => bail!(err),
+        };
+        let filter_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 4096,
+            Err(err) => bail!(err),
+        };
+
+        let or_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_OR_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+
+        let and_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_AND_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+
+        let depth_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_DEPTH_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 25,
+            Err(err) => bail!(err),
+        };
+
+        let filter_constraint_fuel = FilterConstraintFuel::new(or_fuel, and_fuel, depth_fuel);
+
+        DsrFuel::new(
+            max_counted_words,
+            max_active_rules,
+            max_pin_actions,
+            word_fuel,
+            filter_fuel,
+            filter_constraint_fuel,
+        )
+    };
+
     let index_scheduler_opt = IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
@@ -260,7 +318,6 @@ pub fn setup_meilisearch(
             IndexerConfig { s3_snapshot_options, ..(&opt.indexer_options).try_into()? }
         }),
         autobatching_enabled: true,
-        cleanup_enabled: !opt.experimental_replication_parameters,
         max_number_of_tasks: 1_000_000,
         export_default_payload_size_bytes: almost_as_big_as(opt.http_payload_size_limit),
         max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
@@ -278,10 +335,9 @@ pub fn setup_meilisearch(
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features: opt.to_instance_features(),
-        auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
-        experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
         ip_policy,
+        dsr_fuel,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -362,9 +418,7 @@ pub fn setup_meilisearch(
             .name(String::from("register-snapshot-tasks"))
             .spawn(move || loop {
                 thread::sleep(snapshot_delay);
-                if let Err(e) =
-                    index_scheduler.register(KindWithContent::SnapshotCreation, None, false)
-                {
+                if let Err(e) = index_scheduler.register(KindWithContent::SnapshotCreation) {
                     error!("Error while registering snapshot: {}", e);
                 }
             })
@@ -424,7 +478,7 @@ fn check_version(
     let (db_major, db_minor, db_patch) = get_version(&opt.db_path)?;
 
     if db_major != bin_major || db_minor != bin_minor || db_patch != bin_patch {
-        if opt.experimental_dumpless_upgrade {
+        if opt.upgrade_db {
             update_version_file_for_dumpless_upgrade(
                 opt,
                 index_scheduler_opt,
@@ -572,15 +626,6 @@ fn import_dump(
     let wtxn = index_scheduler.env.write_txn()?;
     index_scheduler.put_network(wtxn, network)?;
 
-    let mut dynamic_search_rules = DynamicSearchRules::new();
-    for result in dump_reader.dynamic_search_rules()? {
-        let (uid, rule) = result?;
-        dynamic_search_rules.insert(uid, rule);
-    }
-    if !dynamic_search_rules.is_empty() {
-        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
-    }
-
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
     let base_config = index_scheduler.indexer_config();
@@ -607,11 +652,12 @@ fn import_dump(
         let mut index_reader = index_reader?;
         let metadata = index_reader.metadata();
         let uid = metadata.uid.clone();
-        tracing::info!("Importing index `{uid}`.");
+        let uid = meilisearch_types::index_uid::AnyIndex::new(&uid);
+        tracing::info!("Importing index `{uid}`.", uid = uid.uid());
 
         let date = Some((metadata.created_at, metadata.updated_at));
         // no shards at import time
-        let index = index_scheduler.create_raw_index(&metadata.uid, date, None)?;
+        let index = index_scheduler.create_raw_index(uid, date, None)?;
 
         let mut wtxn = index.write_txn()?;
 
@@ -627,7 +673,7 @@ fn import_dump(
         apply_settings_to_builder(&settings, &mut builder);
         let embedder_stats: Arc<EmbedderStats> = Default::default();
         builder.execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &progress,
             index_scheduler.ip_policy(),
             embedder_stats.clone(),
@@ -637,99 +683,58 @@ fn import_dump(
         let mut wtxn = index.write_txn()?;
         let rtxn = index.read_txn()?;
 
-        if index_scheduler.no_edition_2024_for_dumps() {
-            // 6.3 Import the documents.
-            // 6.3.1 We need to recreate the grenad+obkv format accepted by the index.
-            tracing::info!("Importing the documents.");
-            let file = tempfile::tempfile()?;
-            let mut builder = DocumentsBatchBuilder::new(BufWriter::new(file));
-            for document in index_reader.documents()? {
-                builder.append_json_object(&document?)?;
-            }
+        // 6.3 Import the documents.
+        let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let primary_key = index.primary_key(&rtxn)?;
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            // This flush the content of the batch builder.
-            let file = builder.into_inner()?.into_inner()?;
+        let mut indexer = indexer::IndexOperations::new();
+        let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
+        let embedders = index_scheduler.embedders(uid.uid().to_string(), embedders)?;
 
-            // 6.3.2 We feed it to the milli index.
-            let reader = BufReader::new(file);
-            let reader = DocumentsBatchReader::from_reader(reader)?;
+        let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
-            let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
-            let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
+        indexer.replace_documents(&mmap, MissingDocumentPolicy::default())?;
 
-            let builder = milli::update::IndexDocuments::new(
-                &mut wtxn,
-                &index,
-                indexer_config,
-                IndexDocumentsConfig {
-                    update_method: IndexDocumentsMethod::ReplaceDocuments,
-                    ..Default::default()
-                },
-                |indexing_step| tracing::trace!("update: {:?}", indexing_step),
-                || false,
-                &embedder_stats,
-                index_scheduler.ip_policy(),
-            )?;
+        let indexer_config = index_scheduler.indexer_config();
+        let pool = &indexer_config.thread_pool;
 
-            let builder = builder.with_embedders(embedders);
+        let indexer_alloc = Bump::new();
+        let (document_changes, mut operation_stats, primary_key) = indexer.into_changes(
+            &indexer_alloc,
+            &index,
+            &rtxn,
+            primary_key,
+            &mut new_fields_ids_map,
+            &MustStopProcessing::default(), // never stop processing a dump
+            progress.clone(),
+            None,
+        )?;
 
-            let (builder, user_result) = builder.add_documents(reader)?;
-            let user_result = user_result?;
-            tracing::info!(documents_found = user_result, "{} documents found.", user_result);
-            builder.execute()?;
-        } else {
-            let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
-            let primary_key = index.primary_key(&rtxn)?;
-            let mut new_fields_ids_map = db_fields_ids_map.clone();
-
-            let mut indexer = indexer::IndexOperations::new();
-            let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
-            let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
-
-            let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
-
-            indexer.replace_documents(&mmap, MissingDocumentPolicy::default())?;
-
-            let indexer_config = index_scheduler.indexer_config();
-            let pool = &indexer_config.thread_pool;
-
-            let indexer_alloc = Bump::new();
-            let (document_changes, mut operation_stats, primary_key) = indexer.into_changes(
-                &indexer_alloc,
-                &index,
-                &rtxn,
-                primary_key,
-                &mut new_fields_ids_map,
-                &|| false, // never stop processing a dump
-                progress.clone(),
-                None,
-            )?;
-
-            let operation_stats = operation_stats.pop().unwrap();
-            if let Some(error) = operation_stats.error {
-                return Err(error.into());
-            }
-
-            let _congestion = indexer::index(
-                &mut wtxn,
-                &index,
-                pool,
-                indexer_config.grenad_parameters(),
-                &db_fields_ids_map,
-                new_fields_ids_map,
-                primary_key,
-                &document_changes,
-                embedders,
-                &|| false, // never stop processing a dump
-                &progress,
-                index_scheduler.ip_policy(),
-                &embedder_stats,
-            )?;
+        let operation_stats = operation_stats.pop().unwrap();
+        if let Some(error) = operation_stats.error {
+            return Err(error.into());
         }
+
+        let _congestion = indexer::index(
+            &mut wtxn,
+            &index,
+            pool,
+            indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            primary_key,
+            &document_changes,
+            embedders,
+            &MustStopProcessing::default(), // never stop processing a dump
+            &progress,
+            index_scheduler.ip_policy(),
+            &embedder_stats,
+        )?;
 
         wtxn.commit()?;
         tracing::info!("All documents successfully imported.");
-        index_scheduler.refresh_index_stats(&uid)?;
+        index_scheduler.refresh_index_stats(uid)?;
     }
 
     // 7. Import the queue

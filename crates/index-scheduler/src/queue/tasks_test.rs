@@ -14,13 +14,13 @@ fn query_tasks_from_and_limit() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     let kind = index_creation_task("doggo", "bone");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     let kind = index_creation_task("whalo", "plankton");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
     let kind = index_creation_task("catto", "his_own_vomit");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
     handle.advance_n_successful_batches(3);
@@ -86,11 +86,11 @@ fn query_tasks_simple() {
         IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("whalo", "fish");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -300,17 +300,17 @@ fn query_tasks_special_rules() {
         IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = KindWithContent::IndexSwap {
         swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()), rename: false }],
     };
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = KindWithContent::IndexSwap {
         swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()), rename: false }],
     };
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -395,20 +395,20 @@ fn query_tasks_canceled_by() {
         IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _ = index_scheduler.register(kind, None, false).unwrap();
+    let _ = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _ = index_scheduler.register(kind, None, false).unwrap();
+    let _ = index_scheduler.register(kind).unwrap();
     let kind = KindWithContent::IndexSwap {
         swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()), rename: false }],
     };
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     handle.advance_n_successful_batches(1);
     let kind = KindWithContent::TaskCancelation {
         query: "test_query".to_string(),
         tasks: [0, 1, 2, 3].into_iter().collect(),
     };
-    let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
+    let task_cancelation = index_scheduler.register(kind).unwrap();
     handle.advance_n_successful_batches(1);
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");

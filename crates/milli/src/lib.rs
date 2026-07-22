@@ -14,6 +14,7 @@ mod attribute_patterns;
 mod criterion;
 pub mod database_stats;
 pub mod disabled_typos_terms;
+pub mod dynamic_search_rules;
 mod error;
 mod external_documents_ids;
 pub mod facet;
@@ -40,6 +41,7 @@ pub mod snapshot_tests;
 pub mod constants;
 mod fieldids_weights_map;
 pub mod progress;
+mod value_paths_visitor;
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
@@ -48,33 +50,38 @@ use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 pub use documents::GeoSortStrategy;
-pub use filter_parser::{Condition, FilterCondition, IndexFilterCondition, Span, Token};
+pub use filter_parser::{
+    Condition, FilterCondition, FilterConstraintFuel, IndexFilterCondition, Span, Token, TokenLike,
+};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use must_stop_processing::MustStopProcessing;
+use permissive_json_pointer::contained_in;
 pub use search::new::{
     execute_search, filtered_universe, DefaultSearchLogger, SearchContext, SearchLogger,
     VisualSearchLogger,
 };
+use serde::de::DeserializeSeed as _;
 use serde_json::Value;
 pub use thread_pool_no_abort::{CaughtPanic, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+use value_paths_visitor::ValuePathsVisitor;
 pub use {arroy, cellulite, charabia as tokenizer, hannoy, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::attribute_patterns::{AttributePatterns, PatternMatch};
 pub use self::criterion::{default_criteria, AttributeState, Criterion, CriterionError};
 pub use self::error::{
-    Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
+    Error, FaultSource, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
+pub use self::fields_ids_map::metadata::Metadata;
 pub use self::fields_ids_map::{
-    metadata::Metadata, FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap,
-    MetadataBuilder,
+    FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
 };
 pub use self::filterable_attributes_rules::{
-    FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
-    FilterableAttributesRule,
+    filtered_matching_patterns, FilterFeatures, FilterableAttributesFeatures,
+    FilterableAttributesPatterns, FilterableAttributesRule,
 };
 pub use self::foreign_key::ForeignKey;
 pub use self::heed_codec::{
@@ -139,6 +146,9 @@ pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 32;
 pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
+
+/// The maximum amount of words counted inside of a field.
+pub const MAX_COUNTED_WORDS: usize = 30;
 
 #[derive(Clone)]
 pub struct Deadline {
@@ -249,6 +259,7 @@ pub fn bucketed_position(relative: u16) -> u16 {
     }
 }
 
+// TODO: deprecate this function in favor of `some_documents` in routes/indexes/documents.rs
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
     displayed_fields: &[FieldId],
@@ -268,6 +279,34 @@ pub fn obkv_to_json(
             Ok((name.to_owned(), value))
         })
         .collect()
+}
+
+pub fn make_document<S, I>(
+    obkv: &obkv::KvReaderU16,
+    field_ids_map: &FieldsIdsMap,
+    selectors: impl IntoIterator<IntoIter = I>,
+) -> Result<serde_json::Map<String, Value>>
+where
+    S: AsRef<str>,
+    I: Clone + Iterator<Item = S>,
+{
+    let selectors = selectors.into_iter();
+    let mut document = serde_json::Map::new();
+
+    for (key, value_bytes) in obkv {
+        let key = field_ids_map.name(key).expect("Missing field name");
+        if !selectors.clone().any(|selector| contained_in(selector.as_ref(), key)) {
+            // If the key is not part of the selection, skip this value
+            continue;
+        }
+
+        let visitor = ValuePathsVisitor::new_from_path(selectors.clone(), key);
+        let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
+        let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
+        document.insert(key.to_string(), value);
+    }
+
+    Ok(document)
 }
 
 /// Transform every field of a raw obkv store into a JSON Object.

@@ -54,6 +54,9 @@ pub enum LogMode {
     Profile,
 }
 
+// manual impl: not sure why we need the Serialize derive
+impl routes::RequestBody for LogMode {}
+
 /// Simple wrapper around the `Targets` from `tracing_subscriber` to
 /// implement `MergeWithError` on it.
 #[derive(Clone, Debug)]
@@ -98,27 +101,29 @@ impl MergeWithError<MyParseError> for DeserrJsonError<BadRequest> {
 }
 
 /// Request body for streaming logs
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields, validate = validate_get_logs -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(validate = validate_get_logs -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
+#[derive(Debug)]
 pub struct GetLogs {
     /// Log targets to filter. Format: code_part=log_level (e.g.,
     /// milli=trace,actix_web=off)
-    #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[request(
+        default = "info".parse().unwrap(),
+        schema_default = "info",
+        try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>,
+        schema_type = String,
+        example = json!("milli=trace,index_scheduler,actix_web=off")
+    )]
     target: MyTargets,
 
     /// Output format for log entries. `human` provides readable text output,
     /// `json` provides structured JSON for parsing, and `profile` outputs
     /// Firefox profiler format for performance visualization.
-    #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    #[schema(required = false, default = LogMode::default)]
+    #[request(schema_default = LogMode::default, error = DeserrJsonError<BadRequest>)]
     mode: LogMode,
 
     /// Enable memory profiling (only useful with profile mode, significantly
     /// slows down the engine)
-    #[deserr(default = false, error = DeserrJsonError<BadRequest>)]
-    #[schema(required = false, default = false)]
+    #[request(default, error = DeserrJsonError<BadRequest>)]
     profile_memory: bool,
 }
 
@@ -378,13 +383,18 @@ pub async fn cancel_logs(
 }
 
 /// Request body for updating stderr log configuration
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request]
+#[derive(Debug)]
 pub struct UpdateStderrLogs {
     /// Log targets to filter. Format: code_part=log_level (e.g.,
     /// milli=trace,actix_web=off)
-    #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[request(
+        default = "info".parse().unwrap(),
+        schema_default = "info",
+        try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>,
+        schema_type = String,
+        example = json!("milli=trace,index_scheduler,actix_web=off")
+    )]
     target: MyTargets,
 }
 

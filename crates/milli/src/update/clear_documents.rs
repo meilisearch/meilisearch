@@ -29,6 +29,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             external_documents_ids,
             word_docids,
             exact_word_docids,
+            synonyms: _,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,

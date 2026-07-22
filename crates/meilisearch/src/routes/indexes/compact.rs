@@ -25,6 +25,7 @@ pub struct CompactApi;
 /// Compaction reorganizes the index database to reclaim space and improve read performance.
 #[routes::path(
     security(("Bearer" = ["indexes.compact", "*"])),
+    no_request_body,
     params(("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -65,13 +66,10 @@ pub async fn compact(
     analytics.publish(IndexCompacted::default(), &req);
 
     let task = KindWithContent::IndexCompaction { index_uid: index_uid.to_string() };
-    let task =
-        match tokio::task::spawn_blocking(move || index_scheduler.register(task, None, false))
-            .await?
-        {
-            Ok(task) => task,
-            Err(e) => return Err(e.into()),
-        };
+    let task = match tokio::task::spawn_blocking(move || index_scheduler.register(task)).await? {
+        Ok(task) => task,
+        Err(e) => return Err(e.into()),
+    };
 
     debug!(returns = ?task, "Compact the {index_uid} index");
     Ok(HttpResponse::Accepted().json(SummarizedTaskView::from(task)))

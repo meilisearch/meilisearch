@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::io::{ErrorKind, Seek as _};
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -10,8 +11,8 @@ use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::filter::filter_into_index_filter;
-use index_scheduler::{IndexScheduler, TaskId};
+use index_scheduler::filter::{filter_into_index_filter, parse_filter, parse_local_index_filter};
+use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -19,12 +20,19 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::constants::{
+    RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
+};
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter};
+use meilisearch_types::milli::{
+    make_document, AscDesc, DocumentId, FieldsIdsMap, IndexFilter, Member,
+};
+use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -40,6 +48,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
+use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
@@ -49,14 +58,20 @@ use crate::extractors::payload::Payload;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
-    get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+    PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
-use crate::{aggregate_methods, Opt};
+use crate::search::federated::weighted_scores;
+use crate::search::proxy::{
+    json_proxy, ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+};
+use crate::search::{
+    ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
+};
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
+use crate::search::federated::types::{FEDERATION_HIT, WEIGHTED_SCORE_VALUES};
 
 /// Extracts the mime type from the content type and return
 /// a meilisearch error if anything bad happen.
@@ -120,6 +135,33 @@ pub struct GetDocument {
     #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
+    use_network: Option<bool>,
+}
+
+impl NetworkableQuery for GetDocument {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
 }
 
 aggregate_methods!(
@@ -234,14 +276,18 @@ pub async fn get_document(
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
 
-    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors } = params.into_inner();
+    let features = index_scheduler.features();
+    let network = index_scheduler.network();
+    let mut query = params.into_inner();
+    let must_use_network = query.must_use_network(&network, &features)?;
+    let GetDocument { fields, retrieve_vectors: param_retrieve_vectors, use_network: _ } = query;
     let attributes_to_retrieve = fields.merge_star_and_none();
 
     let retrieve_vectors = RetrieveVectors::new(param_retrieve_vectors.0);
 
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsGET> {
-            retrieve_vectors: param_retrieve_vectors.0,
+            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
             per_document_id: true,
             per_filter: false,
             with_vector_filter: false,
@@ -254,9 +300,36 @@ pub async fn get_document(
         &req,
     );
 
-    let index = index_scheduler.index(&index_uid)?;
-    let document =
-        retrieve_document(&index, &document_id, attributes_to_retrieve, retrieve_vectors)?;
+    let index = index_scheduler.user_index(&index_uid)?;
+
+    // Try to retrieve the document locally first
+    let local_result = retrieve_document(
+        &index,
+        &document_id,
+        attributes_to_retrieve.as_deref(),
+        retrieve_vectors,
+    );
+
+    // If the document is not found locally, try to retrieve it from the network if it is enabled
+    let document = if must_use_network && local_result.is_err() {
+        let query = BrowseQuery {
+            offset: 0,
+            limit: 1,
+            fields: attributes_to_retrieve,
+            retrieve_vectors: retrieve_vectors == RetrieveVectors::Retrieve,
+            filter: None,
+            ids: Some(vec![serde_json::Value::String(document_id.clone())]),
+            sort: None,
+            use_network: Some(true),
+        };
+        let mut ret =
+            retrieve_documents_federated(index_scheduler.clone(), index_uid, query, network)
+                .await?;
+        ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
+    } else {
+        local_result?
+    };
+
     debug!(returns = ?document, "Get document");
     Ok(HttpResponse::Ok().json(document))
 }
@@ -296,6 +369,7 @@ impl Aggregate for DocumentsDeletionAggregator {
     params(
         ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         ("document_id" = String, Path, example = "853", description = "Document identifier.", nullable = false),
+        CustomMetadataQuery,
     ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -330,7 +404,6 @@ pub async fn delete_document(
     path: web::Path<DocumentParam>,
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
@@ -353,18 +426,10 @@ pub async fn delete_document(
         index_uid: index_uid.to_string(),
         documents_ids: vec![document_id],
     };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -413,9 +478,9 @@ pub struct BrowseQueryGet {
     #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentIds>)]
     ids: Option<CS<String>>,
-    /// Filter expression to select which documents to return. Uses the same
-    /// syntax as search filters. Only documents matching the filter will be
-    /// included in the response. Example: `genres = action AND rating > 4`.
+    /// Filter expression to select which documents to return. Attributes must be added to the
+    /// `filterableAttributes` index setting before they can be used in filters. Only accepts
+    /// string expressions (not array syntax). Example: `genres = action AND rating > 4`.
     #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
@@ -425,69 +490,200 @@ pub struct BrowseQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
+    pub use_network: Option<bool>,
 }
 
 /// Request body for browsing and retrieving documents from an index. Use
 /// this to fetch documents with optional filtering, sorting, and pagination.
 /// This is useful for displaying document lists, exporting data, or
 /// inspecting index contents.
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug, Clone)]
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
     /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
-    #[schema(required = false, default, example = 150)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
+    #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
     offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time and memory usage. Defaults to
     /// `20`.
-    #[schema(required = false, default = 20, example = 1)]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentLimit>)]
+    #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     limit: usize,
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
     /// fields you need. Example: `["title", "description", "price"]`.
-    #[schema(required = false, example = json!(["title, description"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentFields>, example = json!(["title, description"]))]
     fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
     /// size. Defaults to `false`.
-    #[schema(required = false, default, example = true)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
     retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
     /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
     /// documents matching other criteria are returned. This is useful for
     /// fetching specific known documents.
-    #[schema(required = false, value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentIds>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentIds>, schema_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
     ids: Option<Vec<serde_json::Value>>,
-    /// Filter expression to select which documents to return. Uses the same
-    /// syntax as search filters. Only documents matching the filter will be
-    /// included in the response. Example: `"genres = action AND rating > 4"`
-    /// or as an array `[["genres = action"], "rating > 4"]`.
-    #[schema(required = false, default, value_type = Option<Value>, example = "popularity > 1000")]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    /// Filter expression to select which documents to return. Attributes must be added to the
+    /// `filterableAttributes` index setting before they can be used in filters. Accepts a string
+    /// or an array of arrays of strings for AND/OR combinations.
+    /// Example string: `"genres = action AND rating > 4"`.
+    /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
+    #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
     filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
     /// (ascending) or `desc` (descending). Example: `["price:asc",
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
-    #[schema(required = false, default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentSort>)]
+    #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     sort: Option<Vec<String>>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    #[request(default, error = DeserrJsonError<InvalidDocumentUseNetwork>)]
+    pub use_network: Option<bool>,
+}
+
+impl NetworkableQuery for BrowseQuery {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
+}
+
+impl ProxyQuery for &BrowseQuery {
+    type ProxiedQuery = (String, BrowseQuery);
+
+    fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
+        let mut query = (*self).clone();
+        // because we merge the results from multiple sources,
+        // we must always start from the first document and retrieve offset+limit documents
+        query.limit += self.offset;
+        query.offset = 0;
+        (remote, query)
+    }
+
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+        &mut query.1.filter
+    }
+}
+
+/// Response from a documents retrieval query
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct DocumentsResult {
+    /// Documents for the current page.
+    #[schema(value_type = Vec<serde_json::Map<String, serde_json::Value>>)]
+    pub results: Vec<Document>,
+    /// Number of items skipped.
+    pub offset: usize,
+    /// Maximum number of items returned.
+    pub limit: usize,
+    /// Total number of items matching the query.
+    pub total: usize,
+    /// Errors from remote servers
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
+}
+
+/// A single merged document.
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct MergedDocument {
+    /// Document fields as stored in the index.
+    ///
+    /// According to `attributesToRetrieve`.
+    #[serde(flatten)]
+    #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
+    pub document: Document,
+
+    /// Weighted score values for the document.
+    /// This contains each facet value needed to sort the document.
+    ///
+    /// They are never de/serialized and must be manually
+    /// mounted to/unmounted from `_federation.weightedScoreValues` in a federated context.
+    ///
+    #[serde(default, skip)]
+    #[schema(ignore)]
+    score: Vec<WeightedScoreValue>,
+}
+
+impl TryFrom<Document> for MergedDocument {
+    type Error = ResponseError;
+
+    fn try_from(mut document: Document) -> Result<Self, Self::Error> {
+        let mut federation = document
+            .remove(FEDERATION_HIT)
+            .ok_or(ProxySearchError::MissingPathInResponse("._federation").as_response_error())?;
+
+        let federation = match federation.as_object_mut() {
+            Some(federation) => federation,
+            None => {
+                return Err(ProxySearchError::UnexpectedValueInPath {
+                    path: "._federation",
+                    expected_type: "map",
+                    received_value: federation.to_string(),
+                }
+                .as_response_error());
+            }
+        };
+
+        let score: Vec<WeightedScoreValue> = serde_json::from_value(
+            federation.remove(WEIGHTED_SCORE_VALUES).ok_or(
+                ProxySearchError::MissingPathInResponse("._federation.weightedScoreValues")
+                    .as_response_error(),
+            )?,
+        )
+        .map_err(ProxySearchError::CouldNotParseWeightedScoreValues)
+        .map_err(|err| err.as_response_error())?;
+
+        Ok(MergedDocument { document, score })
+    }
 }
 
 /// List documents with POST
 ///
-/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
+/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
+/// body to specify filters, sort order, and which fields to return.
+///
+/// **Note:** Sending an empty payload (`{}`) returns all documents in the index.
+///
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
@@ -544,11 +740,21 @@ pub async fn documents_by_query_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<BrowseQuery, DeserrJsonError>,
+    search_queue: web::Data<crate::search_queue::SearchQueue>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let use_queue = index_scheduler.features().queue_documents_fetch();
+    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
+
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
+
+    // check remote header
+    let is_proxy = req
+        .headers()
+        .get(PROXY_SEARCH_HEADER)
+        .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
 
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsPOST> {
@@ -568,12 +774,20 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    documents_by_query(index_scheduler.clone(), index_uid, body).await
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, body, is_proxy).await;
+    if let Some(permit) = permit {
+        permit.drop().await;
+    }
+    ret
 }
 
 /// List documents with GET
 ///
-/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering. Suited for browsing or exporting index contents.
+/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering.
+///
+/// **Deprecated:** This endpoint will be deprecated in a future release. Use `POST /indexes/{index_uid}/documents/fetch` instead, which supports more parameters and array-based filter expressions.
+///
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
@@ -626,12 +840,16 @@ pub async fn get_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
+    search_queue: web::Data<crate::search_queue::SearchQueue>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
 
-    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
+    let use_queue = index_scheduler.features().queue_documents_fetch();
+    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
+
+    let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort, use_network } =
         params.into_inner();
 
     let filter = match filter {
@@ -650,6 +868,7 @@ pub async fn get_documents(
         filter,
         ids: ids.map(|ids| ids.into_iter().map(Into::into).collect()),
         sort: sort.map(|attr| fix_sort_query_parameters(&attr)),
+        use_network,
     };
 
     analytics.publish(
@@ -670,20 +889,211 @@ pub async fn get_documents(
         &req,
     );
 
-    documents_by_query(index_scheduler.clone(), index_uid, query).await
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, query, false).await;
+
+    if let Some(permit) = permit {
+        permit.drop().await;
+    }
+
+    ret
 }
 
 async fn documents_by_query(
     index_scheduler: Data<IndexScheduler>,
     index_uid: web::Path<String>,
-    query: BrowseQuery,
+    mut query: BrowseQuery,
+    is_proxy: bool,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort } = query;
 
-    let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
+    let features = index_scheduler.features();
+    let network = index_scheduler.network();
 
-    let ret = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+    let ret = if query.must_use_network(&network, &features)? {
+        retrieve_documents_federated(index_scheduler, index_uid, query, network).await
+    } else {
+        retrieve_documents_local(index_scheduler, index_uid, query, is_proxy).await
+    };
+
+    Ok(HttpResponse::Ok().json(ret?))
+}
+
+async fn retrieve_documents_federated(
+    index_scheduler: Data<IndexScheduler>,
+    index_uid: IndexUid,
+    query: BrowseQuery,
+    network: Network,
+) -> Result<DocumentsResult, ResponseError> {
+    let params =
+        ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
+    let remote_availability = index_scheduler.remote_availability();
+    let partition = Partition::new(network.clone(), remote_availability);
+
+    let (local_queries, remote_queries): (Vec<_>, Vec<_>) =
+        partition.into_partition(&query)?.enumerate().partition(
+            // true is left, false is right
+            |(_, (remote, _))| Some(remote) == network.local.as_ref(),
+        );
+
+    let mut results: Vec<_> = Vec::with_capacity(remote_queries.len() + local_queries.len());
+    let mut errors: BTreeMap<String, ResponseError> = BTreeMap::new();
+
+    const MAX_IN_FLIGHT_REQUESTS: usize = 40;
+    let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
+
+    for (query_id, (remote_name, query)) in remote_queries {
+        let Some(remote) = network.remotes.get(&remote_name) else {
+            errors.insert(
+                remote_name.clone(),
+                ProxySearchError::UnknownRemote { remote: remote_name }.as_response_error(),
+            );
+            continue;
+        };
+
+        let path_and_query =
+            match meilisearch_types::network::route::documents_fetch_path(&index_uid) {
+                Ok(path_and_query) => path_and_query,
+                Err(err) => {
+                    errors.insert(
+                        remote_name,
+                        ProxySearchError::InvalidRemoteUrl { cause: err.to_string() }
+                            .as_response_error(),
+                    );
+                    continue;
+                }
+            };
+
+        let request = match json_proxy(
+            path_and_query,
+            http_client::reqwest::Method::POST,
+            remote,
+            &query,
+            &params,
+            false, // no metadata on documents-fetch
+        ) {
+            Ok(request) => request,
+            Err(err) => {
+                errors.insert(remote_name, err.as_response_error());
+                continue;
+            }
+        };
+
+        if in_flight_requests.len() == MAX_IN_FLIGHT_REQUESTS {
+            // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
+            let task: tokio::task::JoinHandle<(
+                Result<DocumentsResult, ProxySearchError>,
+                String,
+                usize,
+            )> = in_flight_requests.pop_front().unwrap();
+            match task.await.unwrap() {
+                (Ok(result), _, query_id) => results.push((result, query_id)),
+                (Err(err), remote_name, _) => {
+                    errors.insert(remote_name, err.as_response_error());
+                    continue;
+                }
+            }
+        }
+        in_flight_requests
+            .push_back(tokio::spawn(async move { (request.await, remote_name, query_id) }));
+    }
+
+    // Perform local search
+    for (query_id, (_, query)) in local_queries {
+        let result =
+            retrieve_documents_local(index_scheduler.clone(), index_uid.clone(), query, true)
+                .await?;
+        results.push((result, query_id));
+    }
+
+    // Retrieve remote results
+    for task in in_flight_requests {
+        match task.await.unwrap() {
+            (Ok(result), _, query_id) => results.push((result, query_id)),
+            (Err(err), remote_name, _) => {
+                errors.insert(remote_name, err.as_response_error());
+            }
+        }
+    }
+
+    // merge metadata
+    let (total, mut remote_errors) = merge_metadata(&mut results);
+    if !errors.is_empty() {
+        remote_errors.get_or_insert_with(BTreeMap::new).extend(errors);
+    }
+
+    // Merge results
+    let merged_results: Result<_, ResponseError> =
+        merge_documents_results(results).skip(query.offset).take(query.limit).collect();
+
+    Ok(DocumentsResult {
+        results: merged_results?,
+        offset: query.offset,
+        limit: query.limit,
+        total,
+        remote_errors,
+    })
+}
+
+fn merge_documents_results(
+    results: Vec<(DocumentsResult, usize)>,
+) -> impl Iterator<Item = Result<Document, ResponseError>> {
+    itertools::kmerge_by(
+        results.into_iter().map(|(results, query_id)| {
+            results
+                .results
+                .into_iter()
+                .map(move |result| (MergedDocument::try_from(result), query_id))
+        }),
+        |left: &(Result<MergedDocument, ResponseError>, usize),
+         right: &(Result<MergedDocument, ResponseError>, usize)| {
+            let Ok(left_hit) = left.0.as_ref() else {
+                return true;
+            };
+            let Ok(right_hit) = right.0.as_ref() else {
+                return false;
+            };
+            match compare_documents(left_hit, right_hit) {
+                Ordering::Greater => true,
+                Ordering::Less => false,
+                // break ties using query index
+                Ordering::Equal => left.1 < right.1,
+            }
+        },
+    )
+    .map(|(merged_document, _query_id)| merged_document.map(|md| md.document))
+}
+
+fn compare_documents(left: &MergedDocument, right: &MergedDocument) -> Ordering {
+    weighted_scores::compare_partial(left.score.iter().cloned(), right.score.iter().cloned())
+        // unwrap: comparison should be always possible because all documents use the same sorting strategy
+        .unwrap()
+}
+
+fn merge_metadata(
+    results: &mut [(DocumentsResult, usize)],
+) -> (usize, Option<BTreeMap<String, ResponseError>>) {
+    let mut errors = None;
+    let mut total = 0;
+    for (result, _query_id) in results {
+        total += result.total;
+        if let Some(remote_errors) = result.remote_errors.take() {
+            errors.get_or_insert_with(BTreeMap::new).extend(remote_errors);
+        }
+    }
+
+    (total, errors)
+}
+
+async fn retrieve_documents_local(
+    index_scheduler: Data<IndexScheduler>,
+    index_uid: IndexUid,
+    query: BrowseQuery,
+    is_proxy: bool,
+) -> Result<DocumentsResult, ResponseError> {
+    let BrowseQuery { offset, limit, fields, retrieve_vectors, filter, ids, sort, use_network: _ } =
+        query;
+    tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+        let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
         let ids = if let Some(ids) = ids {
             let mut parsed_ids = Vec::with_capacity(ids.len());
             for (index, id) in ids.into_iter().enumerate() {
@@ -710,14 +1120,19 @@ async fn documents_by_query(
             None
         };
 
-        let index = index_scheduler.index(&index_uid)?;
+        let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let progress = Progress::default();
 
         let filter = &filter;
         let filter = if let Some(filter) = filter {
-            let filter =
-                parse_filter(filter, Code::InvalidDocumentFilter, index_scheduler.features())?;
+            let filter = parse_filter(
+                filter,
+                Code::InvalidDocumentFilter,
+                index_scheduler.features(),
+                None,
+            )?;
             filter
                 .map(|f| {
                     filter_into_index_filter(
@@ -733,9 +1148,11 @@ async fn documents_by_query(
         } else {
             None
         };
+
         let (total, documents) = retrieve_documents(
             &index,
             &rtxn,
+            &fields_ids_map,
             offset,
             limit,
             ids,
@@ -743,13 +1160,19 @@ async fn documents_by_query(
             fields,
             retrieve_vectors,
             sort_criteria,
+            is_proxy,
         )?;
-        Ok(PaginationView::new(offset, limit, total as usize, documents))
+
+        Ok(DocumentsResult {
+            results: documents,
+            offset,
+            limit,
+            total: total as usize,
+            remote_errors: None,
+        })
     })
     .await
-    .unwrap()?;
-
-    Ok(HttpResponse::Ok().json(ret))
+    .unwrap()
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -762,7 +1185,9 @@ pub struct UpdateDocumentsQuery {
     #[param(required = false, example = "id")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
-    /// Customize the csv delimiter when importing CSV documents.
+    /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
+    /// character. Only valid when the content type is `text/csv`; using this parameter with
+    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
@@ -864,16 +1289,17 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 ///
 /// Add a list of documents or replace them if they already exist.
 ///
-/// If you send an already existing document (same id) the whole existing
-/// document will be overwritten by the new document. Fields previously in the
-/// document not present in the new document are removed.
+/// If you send an already existing document (same id) the whole existing document will be
+/// overwritten by the new document. Fields previously in the document not present in the new
+/// document are removed.
 ///
 /// If the provided index does not exist, it will be created.
 ///
-/// For a partial update of the document see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
+/// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
-/// > Use the reserved `_geo` object to add geo coordinates to a document.
-/// > `_geo` is an object made of `lat` and `lng` field.
+/// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+///
+/// For a partial update see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
 
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
@@ -917,7 +1343,6 @@ pub async fn replace_documents(
     params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -941,15 +1366,13 @@ pub async fn replace_documents(
         DocumentsAggregator::<Replaced> {
             payload_types: content_types,
             primary_key: primary_keys,
-            index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+            index_creation: index_scheduler.user_index_exists(&index_uid).map_or(true, |x| !x),
             method: PhantomData,
         },
         &req,
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task = document_addition(
         index_scheduler,
         index_uid,
@@ -957,9 +1380,7 @@ pub async fn replace_documents(
         params.csv_delimiter,
         body,
         IndexDocumentsMethod::ReplaceDocuments,
-        uid,
         params.custom_metadata,
-        dry_run,
         allow_index_creation,
         params.skip_creation,
         &req,
@@ -980,12 +1401,17 @@ pub async fn replace_documents(
 /// Thus, any fields not present in the new document are kept and remained
 /// unchanged.
 ///
+/// **Important:** Partial updates apply only to top-level fields. Updating an object attribute
+/// replaces the entire object, removing any subfields not present in the update. Dot notation
+/// in an update request creates a new flat attribute rather than updating an existing nested field.
+///
 /// If the provided index does not exist, it will be created.
 ///
-/// To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
+/// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
-/// > Use the reserved `_geo` object to add geo coordinates to a document.
-/// > `_geo` is an object made of `lat` and `lng` field.
+/// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
+///
+/// To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
 
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
@@ -1029,7 +1455,6 @@ pub async fn update_documents(
     params: AwebQueryParameter<UpdateDocumentsQuery, DeserrQueryParamError>,
     body: Payload,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -1053,15 +1478,13 @@ pub async fn update_documents(
         DocumentsAggregator::<Updated> {
             payload_types: content_types,
             primary_key: primary_keys,
-            index_creation: index_scheduler.index_exists(&index_uid).map_or(true, |x| !x),
+            index_creation: index_scheduler.user_index_exists(&index_uid).map_or(true, |x| !x),
             method: PhantomData,
         },
         &req,
     );
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task = document_addition(
         index_scheduler,
         index_uid,
@@ -1069,9 +1492,7 @@ pub async fn update_documents(
         params.csv_delimiter,
         body,
         IndexDocumentsMethod::UpdateDocuments,
-        uid,
         params.custom_metadata,
-        dry_run,
         allow_index_creation,
         params.skip_creation,
         &req,
@@ -1090,9 +1511,7 @@ async fn document_addition(
     csv_delimiter: Option<u8>,
     body: Payload,
     method: IndexDocumentsMethod,
-    task_id: Option<TaskId>,
     custom_metadata: Option<String>,
-    dry_run: bool,
     allow_index_creation: bool,
     skip_creation: Option<bool>,
     req: &HttpRequest,
@@ -1131,26 +1550,22 @@ async fn document_addition(
         }
     };
 
-    let (uuid, mut update_file) = index_scheduler.queue.create_update_file(dry_run)?;
+    let (uuid, mut update_file) = index_scheduler.queue.create_update_file()?;
     let res = match format {
         PayloadType::Ndjson => {
             let (path, file) = update_file.into_parts();
-            let file = match file {
-                Some(file) => {
-                    let (file, path) = file.into_parts();
-                    let mut file = copy_body_to_file(file, body, format).await?;
-                    file.rewind().map_err(|e| {
-                        index_scheduler::Error::FileStore(file_store::Error::IoError(e))
-                    })?;
-                    Some(tempfile::NamedTempFile::from_parts(file, path))
-                }
-                None => None,
+            let file = {
+                let (file, temp_path) = file.into_parts();
+                let mut file = copy_body_to_file(file, body, format).await?;
+                file.rewind().map_err(|e| {
+                    index_scheduler::Error::FileStore(file_store::Error::IoError(e))
+                })?;
+                tempfile::NamedTempFile::from_parts(file, temp_path)
             };
 
             let res = tokio::task::spawn_blocking(move || {
-                let documents_count = file.as_ref().map_or(Ok(0), |ntf| {
-                    read_ndjson(ntf.as_file()).map_err(MeilisearchHttpError::DocumentFormat)
-                })?;
+                let documents_count =
+                    read_ndjson(file.as_file()).map_err(MeilisearchHttpError::DocumentFormat)?;
 
                 let update_file = file_store::File::from_parts(path, file);
                 let update_file = update_file.persist()?;
@@ -1226,13 +1641,7 @@ async fn document_addition(
     // FIXME: not new to #6000, but _any_ error here will cause the payload to unduly persist
     let scheduler = index_scheduler.clone();
     let mut task = match tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(
-            task,
-            task_id,
-            custom_metadata,
-            dry_run,
-            task_network,
-        )
+        scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
     })
     .await?
     {
@@ -1244,18 +1653,16 @@ async fn document_addition(
     };
 
     if let Some(task_network) = task.network.take() {
-        if let Some(file) = file {
-            proxy(
-                &index_scheduler,
-                Some(&index_uid),
-                req,
-                task_network,
-                network,
-                Body::with_ndjson_payload(file),
-                &task,
-            )
-            .await?;
-        }
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            req,
+            task_network,
+            network,
+            Body::with_ndjson_payload(file),
+            &task,
+        )
+        .await?;
     }
 
     Ok(task.into())
@@ -1301,6 +1708,7 @@ async fn copy_body_to_file(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
     ),
     request_body(content = Vec<Value>),
     responses(
@@ -1337,7 +1745,6 @@ pub async fn delete_documents_batch(
     body: web::Json<Vec<Value>>,
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by batch");
@@ -1364,18 +1771,10 @@ pub async fn delete_documents_batch(
 
     let task =
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -1400,13 +1799,13 @@ pub async fn delete_documents_batch(
 }
 
 /// Request body for deleting documents by filter
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct DocumentDeletionByFilter {
-    /// Filter expression to match documents for deletion
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
+    /// Filter expression to match documents for deletion. Attributes must be in
+    /// `filterableAttributes` before they can be used. Accepts a string or an array of arrays.
+    /// Sending an empty filter will return a `bad_request` error.
+    #[request(required, error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
 
@@ -1415,7 +1814,10 @@ pub struct DocumentDeletionByFilter {
 /// Delete all documents in the index that match the given filter expression.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
+    ),
     request_body = DocumentDeletionByFilter,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -1451,7 +1853,6 @@ pub async fn delete_documents_by_filter(
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by filter");
@@ -1474,10 +1875,11 @@ pub async fn delete_documents_by_filter(
     );
 
     // we ensure the filter is well formed before enqueuing it
-    crate::search::parse_filter(
+    parse_local_index_filter(
         &filter.filter,
-        Code::InvalidDocumentFilter,
+        None,
         index_scheduler.features(),
+        Code::InvalidDocumentFilter,
     )?
     .ok_or(MeilisearchHttpError::EmptyFilter)?;
 
@@ -1486,18 +1888,10 @@ pub async fn delete_documents_by_filter(
         filter_expr: filter.filter.clone(),
     };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -1521,21 +1915,23 @@ pub async fn delete_documents_by_filter(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-/// Request body for editing documents using a JavaScript function
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+/// Request body for editing documents using a RHAI function
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct DocumentEditionByFunction {
-    /// Filter expression to select which documents to edit
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
+    /// Filter expression to select which documents to edit. If omitted, all documents in the
+    /// index will be processed. Attributes must be in `filterableAttributes` to be used.
+    #[request(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
-    /// Data to make available for the editing function
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
+    /// Arbitrary data to pass into the function scope. By default the function only has access
+    /// to the current document being edited via the `doc` variable.
+    #[request(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
-    /// RHAI function to apply to each document
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
+    /// A [RHAI](https://rhai.rs) function string to apply to each document. The function has
+    /// access to a `doc` variable representing the current document. Modify `doc` fields to
+    /// update the document. Return `null` or `()` to delete the document.
+    /// To enable this feature: `PATCH /experimental-features/ {"editDocumentsByFunction": true}`.
+    #[request(required, error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     pub function: String,
 }
 
@@ -1576,6 +1972,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     security(("Bearer" = ["documents.*", "*"])),
     params(
         ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
     ),
     request_body = DocumentEditionByFunction,
     responses(
@@ -1612,7 +2009,6 @@ pub async fn edit_documents_by_function(
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     body: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Edit documents by function");
@@ -1633,7 +2029,7 @@ pub async fn edit_documents_by_function(
         EditDocumentsByFunctionAggregator {
             filtered: body.filter.is_some(),
             with_context: body.context.is_some(),
-            index_creation: index_scheduler.index(&index_uid).is_err(),
+            index_creation: index_scheduler.user_index(&index_uid).is_err(),
         },
         &req,
     );
@@ -1645,10 +2041,11 @@ pub async fn edit_documents_by_function(
 
     if let Some(ref filter) = body.filter {
         // we ensure the filter is well formed before enqueuing it
-        crate::search::parse_filter(
+        parse_local_index_filter(
             filter,
-            Code::InvalidDocumentFilter,
+            Some(index_uid.as_str()),
             index_scheduler.features(),
+            Code::InvalidDocumentFilter,
         )?
         .ok_or(MeilisearchHttpError::EmptyFilter)?;
     }
@@ -1668,18 +2065,10 @@ pub async fn edit_documents_by_function(
         function: body.function.clone(),
     };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -1708,7 +2097,10 @@ pub async fn edit_documents_by_function(
 /// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        CustomMetadataQuery,
+    ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -1742,7 +2134,6 @@ pub async fn clear_all_documents(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -1761,20 +2152,12 @@ pub async fn clear_all_documents(
     );
 
     let task = KindWithContent::DocumentClear { index_uid: index_uid.to_string() };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
 
     let mut task = {
         let index_scheduler = index_scheduler.clone();
 
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
-                task,
-                uid,
-                custom_metadata,
-                dry_run,
-                task_network,
-            )
+            index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
     };
@@ -1790,18 +2173,55 @@ pub async fn clear_all_documents(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-fn some_documents<'a, 't: 'a>(
+fn some_documents<'a, 't: 'a, 'i, I1, I2, S1, S2>(
     index: &'a Index,
     rtxn: &'t RoTxn,
+    fields_ids_map: &'a FieldsIdsMap,
     doc_ids: impl IntoIterator<Item = DocumentId> + 'a,
     retrieve_vectors: RetrieveVectors,
-) -> Result<impl Iterator<Item = Result<Document, ResponseError>> + 'a, ResponseError> {
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
-    let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+    attributes_to_retrieve: Option<I1>,
+    extra_attributes_to_retrieve: Option<I2>,
+) -> Result<impl Iterator<Item = Result<(Document, Document), ResponseError>> + 'a, ResponseError>
+where
+    I1: IntoIterator<Item = S1> + 'i,
+    I2: IntoIterator<Item = S2> + 'i,
+    S1: AsRef<str> + 'i,
+    S2: AsRef<str> + 'i,
+{
+    let attributes_to_retrieve: BTreeSet<_> = match attributes_to_retrieve {
+        Some(attributes) => attributes
+            .into_iter()
+            .filter(|attribute| fields_ids_map.id(attribute.as_ref()).is_some())
+            .map(|attribute| attribute.as_ref().to_string())
+            .collect(),
+        None => fields_ids_map.iter().map(|(_, name)| name.to_string()).collect(),
+    };
+
+    let extra_attributes_to_retrieve: Option<Vec<_>> = match extra_attributes_to_retrieve {
+        Some(attributes) => Some(
+            attributes
+                .into_iter()
+                .filter(|attribute| {
+                    fields_ids_map
+                        .id(attribute.as_ref())
+                        .is_some()
+                        // skip attributes that are already in attributes_to_retrieve
+                        && !attributes_to_retrieve.contains(attribute.as_ref())
+                })
+                .map(|attribute| attribute.as_ref().to_string())
+                .collect(),
+        )
+        .filter(|ids: &Vec<_>| !ids.is_empty()),
+        None => None,
+    };
 
     Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
-        ret.map_err(ResponseError::from).and_then(|(key, document)| -> Result<_, ResponseError> {
-            let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, document)?;
+        ret.map_err(ResponseError::from).and_then(|(key, obkv)| -> Result<_, ResponseError> {
+            let mut document = make_document(obkv, fields_ids_map, &attributes_to_retrieve)?;
+            let extra_document = extra_attributes_to_retrieve
+                .as_ref()
+                .map(|extra_attributes| make_document(obkv, fields_ids_map, extra_attributes))
+                .transpose()?;
             match retrieve_vectors {
                 RetrieveVectors::Hide => {
                     document.remove("_vectors");
@@ -1827,7 +2247,7 @@ fn some_documents<'a, 't: 'a>(
                 }
             }
 
-            Ok(document)
+            Ok((document, extra_document.unwrap_or_default()))
         })
     }))
 }
@@ -1836,6 +2256,7 @@ fn some_documents<'a, 't: 'a>(
 fn retrieve_documents<S: AsRef<str>>(
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     offset: usize,
     limit: usize,
     ids: Option<Vec<ExternalDocumentId>>,
@@ -1843,6 +2264,7 @@ fn retrieve_documents<S: AsRef<str>>(
     attributes_to_retrieve: Option<Vec<S>>,
     retrieve_vectors: RetrieveVectors,
     sort_criteria: Option<Vec<AscDesc>>,
+    is_proxy: bool,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
@@ -1859,7 +2281,7 @@ fn retrieve_documents<S: AsRef<str>>(
     };
 
     if let Some(filter) = filter {
-        candidates &= filter.evaluate(rtxn, index).map_err(|err| match err {
+        candidates &= filter.evaluate(rtxn, index, fields_ids_map).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
             }
@@ -1867,80 +2289,176 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let (it, number_of_documents) = if let Some(sort) = sort_criteria {
+    let (it, number_of_documents) = if let Some(sort) = sort_criteria.as_ref() {
         let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, rtxn, fields_ids_map, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
             documents.push(result?);
         }
+
+        // retrieve each facet values for the documents if is_proxy is true
+        let extra_attributes_to_retrieve: Option<_> = if is_proxy {
+            Some(sort.iter().map(|asc_desc| asc_desc.field().unwrap_or(RESERVED_GEO_FIELD_NAME)))
+        } else {
+            None
+        };
+
         (
             itertools::Either::Left(some_documents(
                 index,
                 rtxn,
+                fields_ids_map,
                 documents.into_iter(),
                 retrieve_vectors,
+                attributes_to_retrieve,
+                extra_attributes_to_retrieve,
             )?),
             number_of_documents,
         )
     } else {
         let number_of_documents = candidates.len();
+        let extra_attributes_to_retrieve: Option<Vec<String>> = None;
         (
             itertools::Either::Right(some_documents(
                 index,
                 rtxn,
+                fields_ids_map,
                 candidates.into_iter().skip(offset).take(limit),
                 retrieve_vectors,
+                attributes_to_retrieve,
+                extra_attributes_to_retrieve,
             )?),
             number_of_documents,
         )
     };
 
     let documents: Vec<_> = it
-        .map(|document| {
-            Ok(match &attributes_to_retrieve {
-                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
-                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
-                    ),
-                ),
-                None => document?,
-            })
+        .map(|res| {
+            let (mut document, extra_document) = res?;
+
+            // retrieve each facet values for the documents if is_proxy is true
+            if is_proxy {
+                let mut weighted_score_values = Vec::new();
+                if let Some(sort) = sort_criteria.as_ref() {
+                    for asc_desc in sort {
+                        let weighted_score_value =
+                            build_weighted_score_value(asc_desc, &(&document, &extra_document));
+
+                        weighted_score_values.push(weighted_score_value);
+                    }
+                }
+
+                // insert the federation hit
+                document.insert(
+                    FEDERATION_HIT.to_string(),
+                    build_federation_hit(weighted_score_values),
+                );
+            }
+            Ok(document)
         })
         .collect::<Result<_, ResponseError>>()?;
 
     Ok((number_of_documents, documents))
 }
 
+impl VisitFacetValues for (&Document, &Document) {
+    fn document(&self) -> &Document {
+        self.0
+    }
+
+    fn extra_document(&self) -> &Document {
+        self.1
+    }
+}
+
+fn build_weighted_score_value<D: VisitFacetValues>(
+    asc_desc: &AscDesc,
+    document: &D,
+) -> WeightedScoreValue {
+    let asc = asc_desc.is_asc();
+    let member = asc_desc.member();
+
+    match member {
+        Member::Field(field) => {
+            let mut best: Option<WeightedScoreValue> = None;
+            document.facet_values(field, |facet_value| {
+                let weighted_score_value =
+                    WeightedScoreValue::Sort { asc, value: facet_value.into_value() };
+                best = match best.take() {
+                    Some(best) => {
+                        // unwrap: comparison should be always possible, we are comparing the same type of scores
+                        match best.partial_cmp(&weighted_score_value).unwrap() {
+                            Ordering::Greater | Ordering::Equal => Some(best),
+                            Ordering::Less => Some(weighted_score_value),
+                        }
+                    }
+                    None => Some(weighted_score_value),
+                };
+            });
+
+            best.unwrap_or(WeightedScoreValue::Sort { asc, value: Value::Null })
+        }
+        Member::Geo(target_point) => {
+            let mut lat = None;
+            document.facet_values(RESERVED_GEO_LAT_FIELD_NAME, |facet_value| {
+                lat = facet_value.into_value().as_f64();
+            });
+
+            let mut lng = None;
+            document.facet_values(RESERVED_GEO_LNG_FIELD_NAME, |facet_value| {
+                lng = facet_value.into_value().as_f64();
+            });
+
+            let distance = if let (Some(lat), Some(lng)) = (lat, lng) {
+                GeoSort { target_point: *target_point, ascending: asc, value: Some([lat, lng]) }
+                    .distance()
+            } else {
+                None
+            };
+
+            WeightedScoreValue::GeoSort { asc, distance }
+        }
+    }
+}
+
+// TODO: factorize with build_federation_hit in search/federated/perform.rs by using a serializable struct?
+fn build_federation_hit(scores: Vec<WeightedScoreValue>) -> serde_json::Value {
+    let mut federation = serde_json::Map::new();
+
+    // insert the weighted score values
+    federation.insert(WEIGHTED_SCORE_VALUES.to_string(), serde_json::json!(scores));
+
+    serde_json::Value::Object(federation)
+}
+
 fn retrieve_document<S: AsRef<str>>(
     index: &Index,
     doc_id: &str,
-    attributes_to_retrieve: Option<Vec<S>>,
+    attributes_to_retrieve: Option<&[S]>,
     retrieve_vectors: RetrieveVectors,
 ) -> Result<Document, ResponseError> {
     let txn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&txn)?;
 
     let internal_id = index
         .external_documents_ids()
         .get(&txn, doc_id)?
         .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))?;
 
-    let document = some_documents(index, &txn, Some(internal_id), retrieve_vectors)?
-        .next()
-        .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))??;
-
-    let document = match &attributes_to_retrieve {
-        Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-            document,
-            attributes_to_retrieve
-                .iter()
-                .map(|s| s.as_ref())
-                .chain((retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors")),
-        ),
-        None => document,
-    };
+    let extra_attributes_to_retrieve: Option<Vec<String>> = None;
+    let (document, _extra_document) = some_documents(
+        index,
+        &txn,
+        &fields_ids_map,
+        Some(internal_id),
+        retrieve_vectors,
+        attributes_to_retrieve,
+        extra_attributes_to_retrieve,
+    )?
+    .next()
+    .ok_or_else(|| MeilisearchHttpError::DocumentNotFound(doc_id.to_string()))??;
 
     Ok(document)
 }

@@ -25,19 +25,15 @@ fn document_addition() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_register");
 
@@ -62,37 +58,29 @@ fn document_addition_and_document_deletion() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletion {
-                index_uid: S("doggos"),
-                documents_ids: vec![S("1"), S("2")],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletion {
+            index_uid: S("doggos"),
+            documents_ids: vec![S("1"), S("2")],
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
     handle.advance_one_successful_batch(); // The addition AND deletion should've been batched together
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
 
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -108,14 +96,10 @@ fn document_addition_and_document_deletion() {
 fn document_deletion_and_document_addition() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletion {
-                index_uid: S("doggos"),
-                documents_ids: vec![S("1"), S("2")],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletion {
+            index_uid: S("doggos"),
+            documents_ids: vec![S("1"), S("2")],
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -129,19 +113,15 @@ fn document_deletion_and_document_addition() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
 
@@ -153,7 +133,7 @@ fn document_deletion_and_document_addition() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_last_successful_addition");
 
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -182,19 +162,15 @@ fn test_document_replace() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -205,7 +181,7 @@ fn test_document_replace() {
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -234,19 +210,15 @@ fn test_document_update() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: UpdateDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: UpdateDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -257,7 +229,7 @@ fn test_document_update() {
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -288,19 +260,15 @@ fn test_mixed_document_addition() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -311,7 +279,7 @@ fn test_mixed_document_addition() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -340,19 +308,15 @@ fn test_document_replace_without_autobatching() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -367,7 +331,7 @@ fn test_document_replace_without_autobatching() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -396,19 +360,15 @@ fn test_document_update_without_autobatching() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: UpdateDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: UpdateDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -423,7 +383,7 @@ fn test_document_update_without_autobatching() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -456,19 +416,15 @@ fn test_document_addition_cant_create_index_without_index() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: false,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -485,7 +441,7 @@ fn test_document_addition_cant_create_index_without_index() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_10_tasks");
 
     // The index should not exist.
-    snapshot!(matches!(index_scheduler.index_exists("doggos"), Ok(true)), @"false");
+    snapshot!(matches!(index_scheduler.user_index_exists("doggos"), Ok(true)), @"false");
 }
 
 #[test]
@@ -509,19 +465,15 @@ fn test_document_addition_cant_create_index_without_index_without_autobatching()
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: false,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -536,7 +488,7 @@ fn test_document_addition_cant_create_index_without_index_without_autobatching()
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // The index should not exist.
-    snapshot!(matches!(index_scheduler.index_exists("doggos"), Ok(true)), @"false");
+    snapshot!(matches!(index_scheduler.user_index_exists("doggos"), Ok(true)), @"false");
 }
 
 #[test]
@@ -549,11 +501,7 @@ fn test_document_addition_cant_create_index_with_index() {
 
     // Create the index.
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     handle.advance_one_successful_batch();
@@ -572,19 +520,15 @@ fn test_document_addition_cant_create_index_with_index() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: false,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -595,7 +539,7 @@ fn test_document_addition_cant_create_index_with_index() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_10_tasks");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -617,11 +561,7 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
 
     // Create the index.
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     handle.advance_one_successful_batch();
@@ -640,19 +580,15 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: false,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: false,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -667,7 +603,7 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -689,11 +625,7 @@ fn test_document_addition_mixed_rights_with_index() {
 
     // Create the index.
     index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation { index_uid: S("doggos"), primary_key: None })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     handle.advance_one_successful_batch();
@@ -713,19 +645,15 @@ fn test_document_addition_mixed_rights_with_index() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -736,7 +664,7 @@ fn test_document_addition_mixed_rights_with_index() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -771,19 +699,15 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -798,7 +722,7 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -828,19 +752,15 @@ fn test_document_addition_with_multiple_primary_key() {
         file.persist().unwrap();
 
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S(primary_key)),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S(primary_key)),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -858,7 +778,7 @@ fn test_document_addition_with_multiple_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_fails");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -892,19 +812,15 @@ fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
         file.persist().unwrap();
 
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S(primary_key)),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S(primary_key)),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -919,7 +835,7 @@ fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_and_third_tasks_fails");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -953,19 +869,15 @@ fn test_document_addition_with_bad_primary_key() {
         file.persist().unwrap();
 
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S(primary_key)),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S(primary_key)),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -979,7 +891,7 @@ fn test_document_addition_with_bad_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_and_second_task_fails");
 
     // The primary key should be set to none since we failed the batch.
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"true");
@@ -989,7 +901,7 @@ fn test_document_addition_with_bad_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
 
     // The primary key should be set to `id` since this batch succeeded.
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -1004,7 +916,7 @@ fn test_document_addition_with_bad_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fifth_task_succeeds");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -1040,19 +952,15 @@ fn test_document_addition_with_set_and_null_primary_key() {
         file.persist().unwrap();
 
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: primary_key.map(|pk| pk.to_string()),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: primary_key.map(|pk| pk.to_string()),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -1070,7 +978,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
     // No primary key should be set at this point.
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"true");
@@ -1080,7 +988,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
     // The primary key should be set to `paw` since this batch succeeded.
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"paw");
@@ -1116,19 +1024,15 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
         file.persist().unwrap();
 
         index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: primary_key.map(|pk| pk.to_string()),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: primary_key.map(|pk| pk.to_string()),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         index_scheduler.assert_internally_consistent();
     }
@@ -1140,7 +1044,7 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_task_succeed");
 
     // Checking the primary key.
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"false");
@@ -1154,7 +1058,7 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"doggoid");
@@ -1193,19 +1097,15 @@ fn test_task_deletion_issue_5827() {
         let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
         file.persist().unwrap();
         let task = index_scheduler
-            .register(
-                KindWithContent::DocumentAdditionOrUpdate {
-                    index_uid: S("doggos"),
-                    primary_key: Some(S("id")),
-                    method: ReplaceDocuments,
-                    content_file: uuid,
-                    documents_count,
-                    allow_index_creation: true,
-                    on_missing_document: MissingDocumentPolicy::default(),
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::DocumentAdditionOrUpdate {
+                index_uid: S("doggos"),
+                primary_key: Some(S("id")),
+                method: ReplaceDocuments,
+                content_file: uuid,
+                documents_count,
+                allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
+            })
             .unwrap();
         tasks.push(task);
         index_scheduler.assert_internally_consistent();
@@ -1217,14 +1117,10 @@ fn test_task_deletion_issue_5827() {
     assert_eq!(batches.into_iter().collect::<Vec<_>>().as_slice(), &[0]);
 
     index_scheduler
-        .register(
-            KindWithContent::TaskDeletion {
-                query: String::from("whatever"),
-                tasks: RoaringBitmap::from_iter([tasks[0].uid]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion {
+            query: String::from("whatever"),
+            tasks: RoaringBitmap::from_iter([tasks[0].uid]),
+        })
         .unwrap();
     handle.advance_one_successful_batch();
     let rtxn = index_scheduler.read_txn().unwrap();
@@ -1232,14 +1128,10 @@ fn test_task_deletion_issue_5827() {
     assert_eq!(batches.into_iter().collect::<Vec<_>>().as_slice(), &[0, 1]);
 
     index_scheduler
-        .register(
-            KindWithContent::TaskDeletion {
-                query: String::from("whatever"),
-                tasks: RoaringBitmap::from_iter([tasks[1].uid]),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion {
+            query: String::from("whatever"),
+            tasks: RoaringBitmap::from_iter([tasks[1].uid]),
+        })
         .unwrap();
     handle.advance_one_successful_batch();
     let rtxn = index_scheduler.read_txn().unwrap();

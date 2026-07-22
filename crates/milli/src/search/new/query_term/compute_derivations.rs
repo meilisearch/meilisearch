@@ -2,12 +2,14 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use charabia::Tokenizer;
 use fst::automaton::Str;
 use fst::{IntoStreamer, Streamer};
 use heed::types::DecodeIgnore;
 use itertools::{merge_join_by, EitherOrBoth};
 
 use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
+use crate::heed_codec::SynonymsKeyCodec;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{Lazy, TwoTypoTerm};
@@ -167,6 +169,7 @@ fn find_one_two_typo_derivations(
 
 pub fn partially_initialized_term_from_word(
     ctx: &mut SearchContext<'_>,
+    tokenizer: &Tokenizer<'_>,
     word: &str,
     max_typo: u8,
     is_prefix: bool,
@@ -214,12 +217,14 @@ pub fn partially_initialized_term_from_word(
     if is_prefix && use_prefix_db.is_none() {
         find_zero_typo_prefix_derivations(ctx, word_interned, &mut prefix_of)?;
     }
-    let synonyms = ctx.get_synonyms()?;
+
     let mut synonym_word_count = 0;
-    let synonyms = synonyms
-        .get(&vec![word.to_owned()])
-        .cloned()
-        .unwrap_or_default()
+    let synonyms = ctx
+        .index
+        .synonyms
+        .remap_key_type::<SynonymsKeyCodec<&str>>()
+        .get(ctx.txn, &[word])?
+        .map_or(Vec::<Vec<_>>::new(), |synonyms| synonyms.synonyms(tokenizer))
         .into_iter()
         .take(limits::MAX_SYNONYM_PHRASE_COUNT)
         .filter_map(|words| {
@@ -227,10 +232,12 @@ pub fn partially_initialized_term_from_word(
                 return None;
             }
             synonym_word_count += words.len();
-            let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
+            let words =
+                words.into_iter().map(|w| Some(ctx.word_interner.insert(w.to_owned()))).collect();
             Some(ctx.phrase_interner.insert(Phrase { words }))
         })
         .collect();
+
     let zero_typo =
         ZeroTypoTerm { phrase: None, exact: zero_typo, prefix_of, synonyms, use_prefix_db };
 

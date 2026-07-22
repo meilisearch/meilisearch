@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::fmt::{Debug, Write as FmtWrite};
-use std::ops::Bound::{self, Excluded, Included, Unbounded};
+use std::ops::Bound::{self, Excluded, Included};
 
 pub use filter_parser::Condition;
-use filter_parser::{IndexFilterCondition, VectorFilter};
+use filter_parser::{IndexFilterCondition, TokenLike, VectorFilter};
 use heed::types::LazyDecode;
 use heed::BytesEncode;
 use memchr::memmem::Finder;
@@ -20,6 +20,7 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValu
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::search::facet::filter::{FilterError, MAX_FILTER_DEPTH};
+use crate::search::facet::value_bounds::{evaluate_equal, ValueBounds};
 use crate::search::facet::BadGeoError;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
@@ -28,26 +29,24 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IndexFilter<'a> {
-    pub condition: IndexFilterCondition<'a>,
+pub struct IndexFilter {
+    pub condition: IndexFilterCondition,
 }
 
-impl<'a> From<IndexFilterCondition<'a>> for IndexFilter<'a> {
-    fn from(condition: IndexFilterCondition<'a>) -> Self {
+impl From<IndexFilterCondition> for IndexFilter {
+    fn from(condition: IndexFilterCondition) -> Self {
         IndexFilter { condition }
     }
 }
 
-impl IndexFilter<'_> {
-    pub fn into_owned(self) -> IndexFilter<'static> {
-        IndexFilter { condition: self.condition.into_owned() }
-    }
-}
-
-impl<'a> IndexFilter<'a> {
-    pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
+impl IndexFilter {
+    pub fn evaluate(
+        &self,
+        rtxn: &heed::RoTxn<'_>,
+        index: &Index,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
 
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
@@ -70,7 +69,7 @@ impl<'a> IndexFilter<'a> {
             }))?;
         }
 
-        self.inner_evaluate(rtxn, index, &fields_ids_map, &filterable_attributes_rules, None)
+        self.inner_evaluate(rtxn, index, fields_ids_map, &filterable_attributes_rules, None)
     }
 
     fn evaluate_operator(
@@ -78,20 +77,18 @@ impl<'a> IndexFilter<'a> {
         index: &Index,
         field_id: FieldId,
         universe_hint: Option<&RoaringBitmap>,
-        operator: &Condition<'a>,
+        operator: &Condition,
         features: &FilterableAttributesFeatures,
         rule_index: usize,
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
-        let left_normalized_value;
-        let right_normalized_value;
 
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
 
-        let (number_bounds, (left_str, right_str)) = match operator {
+        match operator {
             // return an error if the filter is not allowed for this field
             Condition::GreaterThan(_)
             | Condition::GreaterThanOrEqual(_)
@@ -124,93 +121,49 @@ impl<'a> IndexFilter<'a> {
                     rtxn, index, field_id, operator, features, rule_index,
                 ));
             }
-            Condition::GreaterThan(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Excluded(number), Included(f64::MAX)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Excluded(left_normalized_value.as_str()), Unbounded);
-                (number_bounds, str_bounds)
-            }
-            Condition::GreaterThanOrEqual(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Included(number), Included(f64::MAX)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Included(left_normalized_value.as_str()), Unbounded);
-                (number_bounds, str_bounds)
-            }
-            Condition::LowerThan(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Included(f64::MIN), Excluded(number)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Unbounded, Excluded(left_normalized_value.as_str()));
-                (number_bounds, str_bounds)
-            }
-            Condition::LowerThanOrEqual(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Included(f64::MIN), Included(number)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Unbounded, Included(left_normalized_value.as_str()));
-                (number_bounds, str_bounds)
-            }
-            Condition::Between { from, to } => {
-                let from_number = from.parse_finite_float().ok();
-                let to_number = to.parse_finite_float().ok();
+            _ => (),
+        };
 
-                let number_bounds =
-                    from_number.zip(to_number).map(|(from, to)| (Included(from), Included(to)));
-                left_normalized_value = crate::normalize_facet(from.fragment());
-                right_normalized_value = crate::normalize_facet(to.fragment());
-                let str_bounds = (
-                    Included(left_normalized_value.as_str()),
-                    Included(right_normalized_value.as_str()),
-                );
-                (number_bounds, str_bounds)
-            }
-            Condition::Null => {
-                let is_null = index.null_faceted_documents_ids(rtxn, field_id)?;
-                return Ok(is_null);
-            }
-            Condition::Empty => {
-                let is_empty = index.empty_faceted_documents_ids(rtxn, field_id)?;
-                return Ok(is_empty);
-            }
-            Condition::Exists => {
-                let exist = index.exists_faceted_documents_ids(rtxn, field_id)?;
-                return Ok(exist);
-            }
-            Condition::Equal(val) => {
-                let string_docids = strings_db
-                    .get(
+        Ok(match ValueBounds::new(operator) {
+            ValueBounds::Range { normalized, number } => {
+                let mut output = RoaringBitmap::new();
+
+                if let Some((left_number, right_number)) = number {
+                    Self::explore_facet_levels(
                         rtxn,
-                        &FacetGroupKey {
-                            field_id,
-                            level: 0,
-                            left_bound: &crate::normalize_facet(val.fragment()),
-                        },
-                    )?
-                    .map(|v| v.bitmap)
-                    .unwrap_or_default();
-                let number = val.parse_finite_float().ok();
-                let number_docids = match number {
-                    Some(n) => numbers_db
-                        .get(rtxn, &FacetGroupKey { field_id, level: 0, left_bound: n })?
-                        .map(|v| v.bitmap)
-                        .unwrap_or_default(),
-                    None => RoaringBitmap::new(),
-                };
-                return Ok(string_docids | number_docids);
-            }
-            Condition::NotEqual(val) => {
-                let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(
-                    rtxn, index, field_id, None, &operator, features, rule_index,
+                        numbers_db,
+                        field_id,
+                        &left_number,
+                        &right_number,
+                        universe_hint,
+                        &mut output,
+                    )?;
+                }
+
+                Self::explore_facet_levels(
+                    rtxn,
+                    strings_db,
+                    field_id,
+                    &normalized.0.as_ref().map(|b| b.as_str()),
+                    &normalized.1.as_ref().map(|b| b.as_str()),
+                    universe_hint,
+                    &mut output,
                 )?;
-                let all_ids = index.documents_ids(rtxn)?;
-                return Ok(all_ids - docids);
+
+                output
             }
-            Condition::Contains { keyword: _, word } => {
-                let value = crate::normalize_facet(word.fragment());
-                let finder = Finder::new(&value);
+            ValueBounds::FieldIsEmpty => index.empty_faceted_documents_ids(rtxn, field_id)?,
+            ValueBounds::FieldIsNull => index.null_faceted_documents_ids(rtxn, field_id)?,
+            ValueBounds::FieldExists => index.exists_faceted_documents_ids(rtxn, field_id)?,
+            ValueBounds::Equal { normalized, number } => {
+                evaluate_equal(rtxn, field_id, numbers_db, strings_db, normalized, number)?
+            }
+            ValueBounds::NotEqual { normalized, number } => {
+                index.documents_ids(rtxn)?
+                    - evaluate_equal(rtxn, field_id, numbers_db, strings_db, normalized, number)?
+            }
+            ValueBounds::Contains { normalized } => {
+                let finder = Finder::new(&normalized);
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
                 let docids = strings_db
                     .prefix_iter(rtxn, &base)?
@@ -241,15 +194,13 @@ impl<'a> IndexFilter<'a> {
                     })
                     .union()?;
 
-                return Ok(docids);
+                docids
             }
-            Condition::StartsWith { keyword: _, word } => {
+            ValueBounds::StartsWith { normalized } => {
                 // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
                 // We just incremented the last letter to find the upper bound.
                 // The upper bound may not be valid utf8, but lmdb doesn't care as it works over bytes.
-
-                let value = crate::normalize_facet(word.fragment());
-                let mut value2 = value.as_bytes().to_owned();
+                let mut value2 = normalized.as_bytes().to_owned();
 
                 let last = match value2.last_mut() {
                     Some(last) => last,
@@ -289,48 +240,22 @@ impl<'a> IndexFilter<'a> {
                     rtxn,
                     bytes_db,
                     field_id,
-                    &Included(value.as_bytes()),
+                    &Included(normalized.as_bytes()),
                     &Excluded(value2.as_slice()),
                     universe_hint,
                     &mut docids,
                 )?;
 
-                return Ok(docids);
+                docids
             }
-        };
-
-        let mut output = RoaringBitmap::new();
-
-        if let Some((left_number, right_number)) = number_bounds {
-            Self::explore_facet_levels(
-                rtxn,
-                numbers_db,
-                field_id,
-                &left_number,
-                &right_number,
-                universe_hint,
-                &mut output,
-            )?;
-        }
-
-        Self::explore_facet_levels(
-            rtxn,
-            strings_db,
-            field_id,
-            &left_str,
-            &right_str,
-            universe_hint,
-            &mut output,
-        )?;
-
-        Ok(output)
+        })
     }
 
     fn evaluate_shard_operator(
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
         universe_hint: Option<&RoaringBitmap>,
-        operator: &Condition<'a>,
+        operator: &Condition,
     ) -> Result<RoaringBitmap> {
         Ok(match operator {
             Condition::Equal(token) => {
@@ -436,7 +361,7 @@ impl<'a> IndexFilter<'a> {
             }
             IndexFilterCondition::In { fid, els } if fid.fragment() == SHARD_FIELD => els
                 .iter()
-                .map(|el| Condition::Equal(el.clone()))
+                .map(|el| Condition::Equal(el.clone().into()))
                 .map(|op| Self::evaluate_shard_operator(rtxn, index, universe_hint, &op))
                 .union(),
             IndexFilterCondition::In { fid, els } => {
@@ -450,7 +375,7 @@ impl<'a> IndexFilter<'a> {
                 };
 
                 els.iter()
-                    .map(|el| Condition::Equal(el.clone()))
+                    .map(|el| Condition::Equal(el.clone().into()))
                     .map(|op| {
                         Self::evaluate_operator(
                             rtxn,
@@ -810,7 +735,7 @@ fn generate_filter_error(
     rtxn: &heed::RoTxn<'_>,
     index: &Index,
     field_id: FieldId,
-    operator: &Condition<'_>,
+    operator: &Condition,
     features: &FilterableAttributesFeatures,
     rule_index: usize,
 ) -> Error {
@@ -828,7 +753,7 @@ fn generate_filter_error(
     }
 }
 
-pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter<'_>) -> Result<String> {
+pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter) -> Result<String> {
     let mut s = String::new();
     serialize_index_filter_condition(&mut s, &filter.condition)
         .map_err(|_| SerializationError::FailedToSerializeFilter)?;
@@ -837,7 +762,7 @@ pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter<'_>) -> Resu
 
 fn serialize_index_filter_condition(
     f: &mut impl FmtWrite,
-    condition: &IndexFilterCondition<'_>,
+    condition: &IndexFilterCondition,
 ) -> std::fmt::Result {
     match condition {
         IndexFilterCondition::Not(filter) => {
@@ -846,16 +771,16 @@ fn serialize_index_filter_condition(
             write!(f, ")")?;
         }
         IndexFilterCondition::Condition { fid, op } => {
-            write!(f, "'{}' ", fid.fragment())?;
+            write!(f, "{} ", fid.escaped_fragment())?;
             serialize_condition(f, op)?;
         }
         IndexFilterCondition::In { fid, els } => {
-            write!(f, "'{}' IN [", fid.fragment())?;
+            write!(f, "{} IN [", fid.escaped_fragment())?;
             for (i, el) in els.iter().enumerate() {
                 if i > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "'{}'", el.fragment())?;
+                write!(f, "{}", el.escaped_fragment())?;
             }
             write!(f, "]")?;
         }
@@ -882,11 +807,11 @@ fn serialize_index_filter_condition(
         IndexFilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
             write!(f, "_vectors")?;
             if let Some(embedder) = embedder {
-                write!(f, ".{:?}", embedder.fragment())?;
+                write!(f, ".{}", embedder.escaped_fragment())?;
             }
             match inner {
                 VectorFilter::Fragment(fragment) => {
-                    write!(f, ".fragments.{:?}", fragment.fragment())?
+                    write!(f, ".fragments.{}", fragment.escaped_fragment())?
                 }
                 VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                 VectorFilter::UserProvided => write!(f, ".userProvided")?,
@@ -942,23 +867,25 @@ fn serialize_index_filter_condition(
     Ok(())
 }
 
-fn serialize_condition(f: &mut impl FmtWrite, condition: &Condition<'_>) -> std::fmt::Result {
+fn serialize_condition(f: &mut impl FmtWrite, condition: &Condition) -> std::fmt::Result {
     match condition {
-        Condition::GreaterThan(token) => write!(f, "> '{}'", token.fragment()),
-        Condition::GreaterThanOrEqual(token) => write!(f, ">= '{}'", token.fragment()),
-        Condition::Equal(token) => write!(f, "= '{}'", token.fragment()),
-        Condition::NotEqual(token) => write!(f, "!= '{}'", token.fragment()),
+        Condition::GreaterThan(token) => write!(f, "> {}", token.escaped_fragment()),
+        Condition::GreaterThanOrEqual(token) => write!(f, ">= {}", token.escaped_fragment()),
+        Condition::Equal(token) => write!(f, "= {}", token.escaped_fragment()),
+        Condition::NotEqual(token) => write!(f, "!= {}", token.escaped_fragment()),
         Condition::Null => write!(f, "IS NULL"),
         Condition::Empty => write!(f, "IS EMPTY"),
         Condition::Exists => write!(f, "EXISTS"),
-        Condition::LowerThan(token) => write!(f, "< '{}'", token.fragment()),
-        Condition::LowerThanOrEqual(token) => write!(f, "<= '{}'", token.fragment()),
+        Condition::LowerThan(token) => write!(f, "< {}", token.escaped_fragment()),
+        Condition::LowerThanOrEqual(token) => write!(f, "<= {}", token.escaped_fragment()),
         Condition::Between { from, to } => {
-            write!(f, "'{}' TO '{}'", from.fragment(), to.fragment())
+            write!(f, "{} TO {}", from.escaped_fragment(), to.escaped_fragment())
         }
-        Condition::Contains { word, keyword: _ } => write!(f, "CONTAINS '{}'", word.fragment()),
+        Condition::Contains { word, keyword: _ } => {
+            write!(f, "CONTAINS {}", word.escaped_fragment())
+        }
         Condition::StartsWith { word, keyword: _ } => {
-            write!(f, "STARTS WITH '{}'", word.fragment())
+            write!(f, "STARTS WITH {}", word.escaped_fragment())
         }
     }
 }

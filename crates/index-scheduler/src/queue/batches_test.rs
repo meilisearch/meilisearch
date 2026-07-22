@@ -19,13 +19,13 @@ fn query_batches_from_and_limit() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     let kind = index_creation_task("doggo", "bone");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     let kind = index_creation_task("whalo", "plankton");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_second_task");
     let kind = index_creation_task("catto", "his_own_vomit");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_third_task");
 
     handle.advance_n_successful_batches(3);
@@ -91,11 +91,11 @@ fn query_batches_simple() {
         IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("whalo", "fish");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -347,17 +347,17 @@ fn query_batches_special_rules() {
         IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = KindWithContent::IndexSwap {
         swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()), rename: false }],
     };
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     let kind = KindWithContent::IndexSwap {
         swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()), rename: false }],
     };
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
@@ -455,20 +455,20 @@ fn query_batches_canceled_by() {
         IndexScheduler::test(true, vec![(3, FailureLocation::InsideProcessBatch)]);
 
     let kind = index_creation_task("catto", "mouse");
-    let _ = index_scheduler.register(kind, None, false).unwrap();
+    let _ = index_scheduler.register(kind).unwrap();
     let kind = index_creation_task("doggo", "sheep");
-    let _ = index_scheduler.register(kind, None, false).unwrap();
+    let _ = index_scheduler.register(kind).unwrap();
     let kind = KindWithContent::IndexSwap {
         swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()), rename: false }],
     };
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     handle.advance_n_successful_batches(1);
     let kind = KindWithContent::TaskCancelation {
         query: "test_query".to_string(),
         tasks: [0, 1, 2, 3].into_iter().collect(),
     };
-    let task_cancelation = index_scheduler.register(kind, None, false).unwrap();
+    let task_cancelation = index_scheduler.register(kind).unwrap();
     handle.advance_n_successful_batches(1);
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
@@ -497,7 +497,7 @@ fn query_batches_canceled_by() {
 fn batch_skip_creation_with_deletion() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
     let kind = index_creation_task("docs", "id");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     handle.advance_one_successful_batch();
 
@@ -506,16 +506,12 @@ fn batch_skip_creation_with_deletion() {
     file0.persist().unwrap();
     file1.persist().unwrap();
     let kind = replace_document_import_task("docs", Some("id"), 1, documents_count0);
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletion {
-                index_uid: "docs".to_string(),
-                documents_ids: vec!["1".to_string()],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletion {
+            index_uid: "docs".to_string(),
+            documents_ids: vec!["1".to_string()],
+        })
         .unwrap();
     let kind = replace_document_import_task_with_opts(
         "docs",
@@ -524,13 +520,13 @@ fn batch_skip_creation_with_deletion() {
         documents_count1,
         MissingDocumentPolicy::Skip,
     );
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
 
     handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-    let index = index_scheduler.index("docs").unwrap();
+    let index = index_scheduler.user_index("docs").unwrap();
     let rtxn = index.read_txn().unwrap();
     snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }
@@ -540,25 +536,20 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
     let _task = index_scheduler
-        .register(
-            KindWithContent::IndexCreation { index_uid: "docs".to_string(), primary_key: None },
-            None,
-            false,
-        )
+        .register(KindWithContent::IndexCreation {
+            index_uid: "docs".to_string(),
+            primary_key: None,
+        })
         .unwrap();
 
     handle.advance_one_successful_batch();
 
     // First register a deletion task
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletion {
-                index_uid: "docs".to_string(),
-                documents_ids: vec!["1".to_string()],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletion {
+            index_uid: "docs".to_string(),
+            documents_ids: vec!["1".to_string()],
+        })
         .unwrap();
 
     // conflicting pk
@@ -574,7 +565,7 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
         documents_count0,
         MissingDocumentPolicy::Create,
     );
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
 
     // no primary
     let content = r#"{ "toto": "Hello!", "titi": "World!" }"#.to_string();
@@ -590,7 +581,7 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
         documents_count1,
         MissingDocumentPolicy::Create,
     );
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
 
     // actually guessing the pk
     let content = r#"{ "id": "1234", "content": "Hello World!" }"#.to_string();
@@ -606,7 +597,7 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
         documents_count2,
         MissingDocumentPolicy::Create,
     );
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
 
     // We now know the pk, GG!
     let content = r#"{ "id": "12345", "noid": "World!" }"#.to_string();
@@ -621,13 +612,13 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
         documents_count0,
         MissingDocumentPolicy::Create,
     );
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
 
     handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-    let index = index_scheduler.index("docs").unwrap();
+    let index = index_scheduler.user_index("docs").unwrap();
     let rtxn = index.read_txn().unwrap();
     snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }
@@ -636,27 +627,23 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
 fn batch_deletion_by_filter_and_addition() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
     let kind = index_creation_task("docs", "id");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     handle.advance_one_successful_batch();
 
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: "docs".to_string(),
-                new_settings: Box::new(meilisearch_types::settings::Settings {
-                    filterable_attributes: meilisearch_types::milli::update::Setting::Set(vec![
-                        FilterableAttributesRule::Field("id".to_string()),
-                    ]),
-                    _kind: std::marker::PhantomData,
-                    ..Default::default()
-                }),
-                is_deletion: false,
-                allow_index_creation: true,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: "docs".to_string(),
+            new_settings: Box::new(meilisearch_types::settings::Settings {
+                filterable_attributes: meilisearch_types::milli::update::Setting::Set(vec![
+                    FilterableAttributesRule::Field("id".to_string()),
+                ]),
+                _kind: std::marker::PhantomData,
+                ..Default::default()
+            }),
+            is_deletion: false,
+            allow_index_creation: true,
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -665,26 +652,18 @@ fn batch_deletion_by_filter_and_addition() {
     file0.persist().unwrap();
     file1.persist().unwrap();
     let kind = replace_document_import_task("docs", Some("id"), 1, documents_count0);
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletionByFilter {
-                index_uid: "docs".to_string(),
-                filter_expr: serde_json::json!("id = 1"),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletionByFilter {
+            index_uid: "docs".to_string(),
+            filter_expr: serde_json::json!("id = 1"),
+        })
         .unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletionByFilter {
-                index_uid: "docs".to_string(),
-                filter_expr: serde_json::json!("NOT id = 3"),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletionByFilter {
+            index_uid: "docs".to_string(),
+            filter_expr: serde_json::json!("NOT id = 3"),
+        })
         .unwrap();
     let kind = replace_document_import_task_with_opts(
         "docs",
@@ -693,14 +672,14 @@ fn batch_deletion_by_filter_and_addition() {
         documents_count1,
         MissingDocumentPolicy::Skip,
     );
-    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler.register(kind).unwrap();
 
     handle.advance_one_successful_batch();
     handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-    let index = index_scheduler.index("docs").unwrap();
+    let index = index_scheduler.user_index("docs").unwrap();
     let rtxn = index.read_txn().unwrap();
     snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }

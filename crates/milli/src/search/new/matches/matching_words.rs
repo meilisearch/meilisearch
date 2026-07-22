@@ -259,12 +259,20 @@ pub(crate) mod tests {
     fn matching_words() {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn().unwrap();
-        let mut ctx = SearchContext::new(&temp_index, &rtxn).unwrap();
+        let fields_ids_map = temp_index.fields_ids_map(&rtxn).unwrap();
+        let mut ctx = SearchContext::new(
+            &temp_index,
+            &rtxn,
+            &fields_ids_map,
+            "test",
+            time::OffsetDateTime::now_utc(),
+        )
+        .unwrap();
         let mut builder = TokenizerBuilder::default();
         let tokenizer = builder.build();
         let tokens = tokenizer.tokenize("split this world");
         let ExtractedTokens { query_terms, .. } =
-            located_query_terms_from_tokens(&mut ctx, tokens, None).unwrap();
+            located_query_terms_from_tokens(&mut ctx, &tokenizer, tokens, None).unwrap();
         let matching_words = MatchingWords::new(ctx, query_terms);
 
         assert_eq!(

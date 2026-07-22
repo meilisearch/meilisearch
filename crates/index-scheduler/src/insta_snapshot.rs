@@ -19,8 +19,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     scheduler.assert_internally_consistent();
 
     let IndexScheduler {
-        cleanup_enabled: _,
-        experimental_no_edition_2024_for_dumps: _,
         processing_tasks,
         env,
         version,
@@ -31,7 +29,6 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
 
         index_mapper,
         features: _,
-        dynamic_search_rules: _,
         webhooks: _,
         test_breakpoint_sdr: _,
         planned_failures: _,
@@ -40,6 +37,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         chat_settings: _,
         runtime: _,
         web_client: _,
+        dsr_fuel: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();
@@ -333,7 +331,10 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ index_uid: {index_uid:?}, pre_compaction_size: {pre_compaction_size:?}, post_compaction_size: {post_compaction_size:?} }}")
         }
         Details::NetworkTopologyChange { moved_documents, message } => {
-            format!("{{ moved_documents: {moved_documents:?}, message: {message:?}")
+            format!("{{ moved_documents: {moved_documents:?}, message: {message:?} }}")
+        }
+        Details::DsrUpdate(update) => {
+            format!("{{ update: {update:?} }}")
         }
     }
 }
@@ -439,12 +440,15 @@ pub fn snapshot_batch(batch: &Batch) -> String {
 
 pub fn snapshot_index_mapper(rtxn: &RoTxn, mapper: &IndexMapper) -> String {
     let mut s = String::new();
-    let names = mapper.index_names(rtxn).unwrap();
+    let names = mapper.index_names::<meilisearch_types::index_uid::UserIndex>(rtxn).unwrap();
 
     for name in names {
-        let stats = mapper.stats_of(rtxn, &name).unwrap();
+        let name = name.unwrap();
+        let uid = name.uid();
+
+        let stats = mapper.stats_of(rtxn, name).unwrap();
         s.push_str(&format!(
-            "{name}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
+            "{uid}: {{ number_of_documents: {}, field_distribution: {:?} }}\n",
             stats.documents_database_stats.number_of_entries(),
             stats.field_distribution
         ));

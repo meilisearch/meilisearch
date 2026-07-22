@@ -120,7 +120,7 @@ async fn fields_after_uploading_recipe_and_settings() {
             "is_dairy_free": false,
             "created_at": "2023-01-10T14:30:00Z",
             "updated_at": "2023-06-15T09:15:30Z",
-            "image_url": "https://example.com/images/spaghetti-carbonara.jpg"
+            "image_url": "http://localhost:6666/images/spaghetti-carbonara.jpg"
         }
     ]);
     let (task, code) = index.add_documents(doc, Some("id")).await;

@@ -135,6 +135,10 @@ pub mod route {
 
     use crate::tasks::network::Origin;
 
+    pub fn dynamic_search_rules_path() -> PathAndQuery {
+        PathAndQuery::from_static("/dynamic-search-rules")
+    }
+
     pub fn network_control_path() -> PathAndQuery {
         // WARNING: if you change this path, you must also change the path in the network route macro in the meilisearch crate.
         PathAndQuery::from_static("/network/control")
@@ -150,6 +154,13 @@ pub mod route {
     ) -> Result<PathAndQuery, HttpError> {
         // WARNING: if you change this path, you must also change the path in the federated search route macro in the meilisearch crate.
         Ok(PathAndQuery::try_from(format!("/indexes/{index_uid}/facet-search"))?)
+    }
+
+    pub fn documents_fetch_path(
+        index_uid: &crate::index_uid::IndexUid,
+    ) -> Result<PathAndQuery, HttpError> {
+        // WARNING: if you change this path, you must also change the path in the documents route macro in the meilisearch crate.
+        Ok(PathAndQuery::try_from(format!("/indexes/{index_uid}/documents/fetch"))?)
     }
 
     pub fn indexes_root_path() -> PathAndQuery {
@@ -226,4 +237,7 @@ pub mod route {
         /// Message to send to control the network topology change task.
         pub message: Message,
     }
+
+    // manual impl because Origin is hard to make deserr
+    impl routes::RequestBody for NetworkChange {}
 }

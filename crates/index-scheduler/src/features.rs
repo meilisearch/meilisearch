@@ -48,6 +48,14 @@ impl RoFeatures {
         self.runtime
     }
 
+    pub fn legacy_search(&self) -> bool {
+        self.runtime.legacy_search.unwrap_or(false)
+    }
+
+    pub fn queue_documents_fetch(&self) -> bool {
+        !self.runtime.disable_documents_fetch_queue
+    }
+
     pub fn check_metrics(&self) -> Result<()> {
         if self.runtime.metrics {
             Ok(())
@@ -203,6 +211,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_render_route(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.render_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "render_route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/888",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
@@ -220,11 +241,17 @@ impl FeatureData {
 
         let persisted_features: RuntimeTogglableFeatures =
             runtime_features_db.get(wtxn, db_keys::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
-        let InstanceTogglableFeatures { metrics, logs_route, contains_filter } = instance_features;
+        let InstanceTogglableFeatures {
+            metrics,
+            logs_route,
+            contains_filter,
+            legacy_search_as_default: legacy_search,
+        } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
             logs_route: logs_route || persisted_features.logs_route,
             contains_filter: contains_filter || persisted_features.contains_filter,
+            legacy_search: persisted_features.legacy_search.or(Some(legacy_search)),
             ..persisted_features
         }));
 

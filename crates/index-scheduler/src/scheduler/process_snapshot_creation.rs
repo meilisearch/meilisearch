@@ -3,6 +3,7 @@ use std::fs;
 use std::sync::atomic::Ordering;
 
 use meilisearch_types::heed::CompactionOption;
+use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::{compression, VERSION_FILE_NAME};
@@ -129,12 +130,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
         let dst = temp_snapshot_dir.path().join("tasks");
         fs::create_dir_all(&dst)?;
-        let compaction_option = if self.scheduler.experimental_no_snapshot_compaction {
-            CompactionOption::Disabled
-        } else {
-            CompactionOption::Enabled
-        };
-        self.env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
+        self.env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 2.2 Remove the current snapshot tasks
         //
@@ -145,7 +141,7 @@ impl IndexScheduler {
         // This is safe because we open the env file we just created in a temporary directory.
         // We are sure it's not being used by any other process nor thread.
         unsafe {
-            remove_tasks(&tasks, &dst, self.index_mapper.index_base_map_size)?;
+            remove_tasks(&tasks, &dst, self.index_mapper.index_base_map_size())?;
         }
 
         // 2.3 Create a read transaction on the index-scheduler
@@ -173,20 +169,33 @@ impl IndexScheduler {
 
         // 3. Snapshot every indexes
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexes);
-        let index_mapping = self.index_mapper.index_mapping;
-        let nb_indexes = index_mapping.len(&rtxn)? as u32;
+        let nb_indexes = self.index_mapper.index_count::<AnyIndex>(&rtxn)? as u32;
 
-        for (i, result) in index_mapping.iter(&rtxn)?.enumerate() {
-            let (name, uuid) = result?;
+        for (i, result) in self.index_mapper.index_names::<AnyIndex>(&rtxn)?.enumerate() {
+            let name = result?;
             progress.update_progress(VariableNameStep::<SnapshotCreationProgress>::new(
-                name, i as u32, nb_indexes,
+                name.uid(),
+                i as u32,
+                nb_indexes,
             ));
             let index = self.index_mapper.index(&rtxn, name)?;
+
+            let uuid = self.index_mapper.index_uuid(&rtxn, name)?.ok_or_else(|| {
+                Error::from_milli(
+                    meilisearch_types::milli::InternalError::DatabaseMissingEntry {
+                        db_name: "index_mapping",
+                        key: None,
+                    }
+                    .into(),
+                    Some(name.uid().to_string()),
+                )
+            })?;
+
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());
             fs::create_dir_all(&dst)?;
             index
-                .copy_to_path(dst.join("data.mdb"), compaction_option)
-                .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+                .copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)
+                .map_err(|e| Error::from_milli(e, Some(name.uid().to_string())))?;
         }
 
         drop(rtxn);
@@ -195,7 +204,7 @@ impl IndexScheduler {
         progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
         let dst = temp_snapshot_dir.path().join("auth");
         fs::create_dir_all(&dst)?;
-        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), compaction_option)?;
+        self.scheduler.auth_env.copy_to_path(dst.join("data.mdb"), CompactionOption::Enabled)?;
 
         // 5. Copy and tarball the flat snapshot
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);

@@ -24,11 +24,11 @@ use tokio::io::AsyncReadExt;
 use tokio::task;
 use utoipa::{IntoParams, ToSchema};
 
-use super::{get_task_id, is_dry_run, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use super::{SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::{aggregate_methods, Opt};
 
 #[routes::routes(
     routes(
@@ -68,7 +68,7 @@ pub struct TasksFilterQuery {
     /// It's possible to specify several batch uids by separating them with
     /// the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidBatchUids>)]
-    #[param(required = false, value_type = Option<u32>, example = 12421)]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([1, 2, 3]))]
     pub batch_uids: OptionStarOrList<BatchId>,
 
     /// Permits to filter tasks by their uid. By default, when the uids query
@@ -335,8 +335,16 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 /// Cancel tasks
 ///
 /// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
+///
+/// **Note:** Task cancellation is atomic — either all matched tasks are canceled or none are.
+///
+/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
+///
+/// **Tip:** You can cancel `taskCancelation` type tasks as long as they are `enqueued` or `processing`,
+/// because cancellation tasks are processed in reverse order of enqueueing.
 #[routes::path(
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
+    no_request_body,
     params(TaskDeletionOrCancelationQuery),
     responses(
         (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -370,7 +378,6 @@ async fn cancel_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_CANCEL }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -405,11 +412,7 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task =
-        task::spawn_blocking(move || index_scheduler.register(task_cancelation, uid, dry_run))
-            .await??;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_cancelation)).await??;
     let task: SummarizedTaskView = task.into();
 
     // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
@@ -419,6 +422,13 @@ async fn cancel_tasks(
 /// Delete tasks
 ///
 /// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
+///
+/// **Note:** Only finished tasks (`succeeded`, `failed`, or `canceled`) can be deleted.
+/// You cannot delete `enqueued` or `processing` tasks.
+///
+/// **Note:** Task deletion is atomic — either all matched tasks are deleted or none are.
+///
+/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
 #[routes::path(
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
@@ -462,7 +472,6 @@ async fn delete_tasks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_DELETE }>, Data<IndexScheduler>>,
     params: AwebQueryParameter<TaskDeletionOrCancelationQuery, DeserrQueryParamError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -497,10 +506,7 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion, uid, dry_run))
-        .await??;
+    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
     let task: SummarizedTaskView = task.into();
 
     // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
@@ -518,7 +524,7 @@ pub struct AllTasks {
     pub limit: u32,
     /// The first task uid returned
     pub from: Option<u32>,
-    /// Value to send in from to fetch the next slice of results. Null when all data has been browsed
+    /// Value to pass as `from` parameter to get the next page. When `null`, there are no more tasks to retrieve.
     pub next: Option<u32>,
 }
 

@@ -4,6 +4,7 @@
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
 use meilisearch_types::heed::Env;
+use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::tasks::{Status, Task};
@@ -276,25 +277,30 @@ fn stream_tarball_into_pipe(
 
     // 3. Snapshot every indexes
     progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexes);
-    let index_mapping = index_scheduler.index_mapper.index_mapping;
-    let nb_indexes = index_mapping.len(&rtxn)? as u32;
+    let nb_indexes = index_scheduler.index_mapper.index_count::<AnyIndex>(&rtxn)? as u32;
     let indexes_dir = Path::new("indexes");
-    let indexes_references: Vec<_> = index_scheduler
-        .index_mapper
-        .index_mapping
-        .iter(&rtxn)?
-        .map(|res| res.map_err(Error::from).map(|(name, uuid)| (name.to_string(), uuid)))
-        .collect::<Result<_, Error>>()?;
 
     // It's prettier to use a for loop instead of the IndexMapper::try_for_each_index
-    // method, especially when we need to access the UUID, local path and index number.
-    for (i, (name, uuid)) in indexes_references.into_iter().enumerate() {
+    // method, especially when we need to access the UUID, local path and index number
+    for (i, res) in index_scheduler.index_mapper.index_names::<AnyIndex>(&rtxn)?.enumerate() {
+        let name = res?;
         progress.update_progress(VariableNameStep::<SnapshotCreationProgress>::new(
-            &name, i as u32, nb_indexes,
+            name.uid(),
+            i as u32,
+            nb_indexes,
         ));
+
+        let uuid = index_scheduler.index_mapper.index_uuid(&rtxn, name)?.ok_or_else(|| {
+            Error::from_milli(
+                milli::InternalError::DatabaseMissingEntry { db_name: "index_mapping", key: None }
+                    .into(),
+                Some(name.uid().to_string()),
+            )
+        })?;
+
         let path = indexes_dir.join(uuid.to_string()).join("data.mdb");
-        let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
-        tracing::trace!("Appending index file for {name} in {}", path.display());
+        let index = index_scheduler.index_mapper.index(&rtxn, name)?;
+        tracing::trace!("Appending index file for {name} in {}", path.display(), name = name.uid(),);
         append_index_to_tarball(&mut tarball, path, &index)?;
     }
 
@@ -396,7 +402,7 @@ async fn multipart_stream_to_s3(
     use std::path::PathBuf;
 
     use bytes::{BufMut as _, Bytes, BytesMut};
-    use http_client::reqwest::{Client, Response};
+    use http_client::reqwest::{Client, Response, StatusCode};
     use rusty_s3::actions::CreateMultipartUpload;
     use rusty_s3::{Bucket, BucketError, Credentials, S3Action as _, UrlStyle};
     use tokio::task::JoinHandle;
@@ -423,19 +429,35 @@ async fn multipart_stream_to_s3(
     let url = action.sign(s3_signature_duration);
 
     let client = Client::builder().build_with_policies(ip_policy, Default::default()).unwrap();
-    let resp = client.post(url).send().await.map_err(Error::S3HttpError)?;
-    let status = resp.status();
-
-    let body = match resp.error_for_status_ref() {
-        Ok(_) => resp
-            .text()
-            .await
-            .map_err(http_client::reqwest::Error::from)
-            .map_err(Error::S3HttpError)?,
-        Err(_) => {
-            return Err(Error::S3Error { status, body: resp.text().await.unwrap_or_default() })
+    let request = client.post(url);
+    let body = backoff::future::retry(retry_backoff.clone(), move || {
+        // safety: it fails only with stream body. We send a request without a body.
+        let request = request.try_clone().unwrap();
+        let request = request.send();
+        async {
+            let resp =
+                request.await.map_err(Error::S3HttpError).map_err(backoff::Error::transient)?;
+            let status = resp.status();
+            let result = resp.text().await;
+            match status {
+                status if status.is_success() => result
+                    .map_err(http_client::reqwest::Error::from)
+                    .map_err(Error::S3HttpError)
+                    .map_err(backoff::Error::transient),
+                status if status.is_client_error() && status != StatusCode::TOO_MANY_REQUESTS => {
+                    result
+                        .map_err(http_client::reqwest::Error::from)
+                        .map_err(Error::S3HttpError)
+                        .map_err(backoff::Error::Permanent)
+                }
+                _ => Err(backoff::Error::transient(Error::S3Error {
+                    status,
+                    body: result.unwrap_or_default(),
+                })),
+            }
         }
-    };
+    })
+    .await?;
 
     let multipart =
         CreateMultipartUpload::parse_response(&body).map_err(|e| Error::S3XmlError(Box::new(e)))?;
@@ -467,7 +489,13 @@ async fn multipart_stream_to_s3(
 
             let mut buffer = match buffer.try_into_mut() {
                 Ok(buffer) => buffer,
-                Err(_) => unreachable!("All bytes references were consumed in the task"),
+                Err(_) => {
+                    // There could be a race condition where the body is dropped after the task is completed.
+                    // That is a known issue with the tokio runtime: When a task is completed, the tokio runtime
+                    // drops the task body after having informed that the task is done. In this case, we fallback
+                    // on creating a new buffer instead of using the one that was dropped.
+                    BytesMut::with_capacity(s3_multipart_part_size as usize)
+                }
             };
             buffer.clear();
             buffer
@@ -503,15 +531,18 @@ async fn multipart_stream_to_s3(
 
         let body = buffer.freeze();
         tracing::trace!("Sending part {part_number}");
-        let task = tokio::spawn({
-            let client = client.clone();
+        let request = client.put(url).prepare({
             let body = body.clone();
+            |inner| inner.body(body)
+        });
+
+        let task = tokio::spawn({
             backoff::future::retry(retry_backoff.clone(), move || {
-                let client = client.clone();
-                let url = url.clone();
-                let body = body.clone();
-                async move {
-                    match client.put(url).prepare(|inner| inner.body(body)).send().await {
+                // safety: it fails only with stream body
+                let request = request.try_clone().unwrap();
+                let request = request.send();
+                async {
+                    match request.await {
                         Ok(resp) if resp.status().is_client_error() => resp
                             .error_for_status()
                             .map_err(http_client::reqwest::Error::from)
@@ -522,6 +553,7 @@ async fn multipart_stream_to_s3(
                 }
             })
         });
+
         in_flight.push_back((task, body));
     }
 

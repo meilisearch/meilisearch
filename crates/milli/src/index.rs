@@ -1,19 +1,18 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
 use cellulite::Cellulite;
-use deserr::Deserr;
-use heed::types::*;
+use charabia::Tokenizer;
+use heed::types::{SerdeJson, *};
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::database_stats::DatabaseStats;
@@ -26,13 +25,14 @@ use crate::heed_codec::facet::{
     FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::version::VersionCodec;
-use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
+use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec, SynonymsKeyCodec};
 use crate::order_by_map::OrderByMap;
 use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::sharding::{DbShardDocids, Shards};
 use crate::update::new::StdResult;
+use crate::update::settings::normalize;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
@@ -68,7 +68,6 @@ pub mod main_key {
     pub const NON_SEPARATOR_TOKENS_KEY: &str = "non-separator-tokens";
     pub const SEPARATOR_TOKENS_KEY: &str = "separator-tokens";
     pub const DICTIONARY_KEY: &str = "dictionary";
-    pub const SYNONYMS_KEY: &str = "synonyms";
     pub const USER_DEFINED_SYNONYMS_KEY: &str = "user-defined-synonyms";
     pub const WORDS_FST_KEY: &str = "words-fst";
     pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
@@ -98,6 +97,7 @@ pub mod db_name {
     pub const MAIN: &str = "main";
     pub const WORD_DOCIDS: &str = "word-docids";
     pub const EXACT_WORD_DOCIDS: &str = "exact-word-docids";
+    pub const SYNONYMS: &str = "synonyms";
     pub const WORD_PREFIX_DOCIDS: &str = "word-prefix-docids";
     pub const EXACT_WORD_PREFIX_DOCIDS: &str = "exact-word-prefix-docids";
     pub const EXTERNAL_DOCUMENTS_IDS: &str = "external-documents-ids";
@@ -123,7 +123,7 @@ pub mod db_name {
     pub const CELLULITE: &str = "cellulite"; // used as a prefix, counted as `Cellulite::nb_dbs`
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 26 + Cellulite::nb_dbs();
+const NUMBER_OF_DBS: u32 = 27 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -141,6 +141,9 @@ pub struct Index {
 
     /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
     pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
+
+    /// A list of words and the list of synonyms associated to it.
+    pub synonyms: heed::Database<SynonymsKeyCodec<String>, SerdeJson<AssociatedSynonyms>>,
 
     /// A prefix of word and all the documents ids containing this prefix.
     pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
@@ -230,6 +233,7 @@ impl Index {
             env.create_database(&mut wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?;
         let exact_word_docids = env.create_database(&mut wtxn, Some(EXACT_WORD_DOCIDS))?;
         let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
+        let synonyms = env.create_database(&mut wtxn, Some(SYNONYMS))?;
         let exact_word_prefix_docids =
             env.create_database(&mut wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?;
         let word_pair_proximity_docids =
@@ -277,6 +281,7 @@ impl Index {
             external_documents_ids,
             word_docids,
             exact_word_docids,
+            synonyms,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
@@ -525,13 +530,6 @@ impl Index {
             .get(rtxn, main_key::VECTOR_STORE_BACKEND)?)
     }
 
-    pub(crate) fn delete_vector_store(&self, wtxn: &mut RwTxn<'_>) -> Result<bool> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
-            .delete(wtxn, main_key::VECTOR_STORE_BACKEND)?)
-    }
-
     /* documents ids */
 
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
@@ -643,7 +641,7 @@ impl Index {
 
     /// Returns the fields ids map with metadata.
     ///
-    /// This structure is not yet stored in the index, and is generated on the fly.
+    /// This structure is not yet stored in the index, and is generated on the fly, which can be costly.
     pub fn fields_ids_map_with_metadata(&self, rtxn: &RoTxn<'_>) -> Result<FieldIdMapWithMetadata> {
         Ok(FieldIdMapWithMetadata::new(
             self.fields_ids_map(rtxn)?,
@@ -669,15 +667,17 @@ impl Index {
     }
 
     /// Get the fieldids weights map which associates the field ids to their weights
-    pub fn fieldids_weights_map(&self, rtxn: &RoTxn<'_>) -> heed::Result<FieldidsWeightsMap> {
+    pub fn fieldids_weights_map(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> heed::Result<FieldidsWeightsMap> {
         self.main
             .remap_types::<Str, SerdeJson<_>>()
             .get(rtxn, main_key::FIELDIDS_WEIGHTS_MAP_KEY)?
             .map(Ok)
             .unwrap_or_else(|| {
-                Ok(FieldidsWeightsMap::from_field_id_map_without_searchable(
-                    &self.fields_ids_map(rtxn)?,
-                ))
+                Ok(FieldidsWeightsMap::from_field_id_map_without_searchable(fields_ids_map))
             })
     }
 
@@ -700,18 +700,19 @@ impl Index {
     pub fn searchable_fields_and_weights<'a>(
         &self,
         rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &FieldsIdsMap,
     ) -> Result<Vec<(Cow<'a, str>, FieldId, Weight)>> {
-        let fid_map = self.fields_ids_map(rtxn)?;
-        let weight_map = self.fieldids_weights_map(rtxn)?;
-        let searchable = self.searchable_fields(rtxn)?;
+        let weight_map = self.fieldids_weights_map(rtxn, fields_ids_map)?;
+        let searchable = self.searchable_fields(rtxn, fields_ids_map)?;
 
         searchable
             .into_iter()
             .map(|field| -> Result<_> {
-                let fid = fid_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                    field_name: field.to_string(),
-                    process: "searchable_fields_and_weights",
-                })?;
+                let fid =
+                    fields_ids_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                        field_name: field.to_string(),
+                        process: "searchable_fields_and_weights",
+                    })?;
                 let weight = weight_map
                     .weight(fid)
                     .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
@@ -844,10 +845,13 @@ impl Index {
     }
 
     /// Identical to `displayed_fields`, but returns the ids instead.
-    pub fn displayed_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<Option<Vec<FieldId>>> {
+    pub fn displayed_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<Option<Vec<FieldId>>> {
         match self.displayed_fields(rtxn)? {
             Some(fields) => {
-                let fields_ids_map = self.fields_ids_map(rtxn)?;
                 let mut fields_ids = Vec::new();
                 for name in fields.into_iter() {
                     if let Some(field_id) = fields_ids_map.id(name) {
@@ -931,14 +935,17 @@ impl Index {
     }
 
     /// Returns the searchable fields, those are the fields that are indexed,
-    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn<'_>) -> heed::Result<Vec<Cow<'t, str>>> {
+    pub fn searchable_fields<'t>(
+        &self,
+        rtxn: &'t RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> heed::Result<Vec<Cow<'t, str>>> {
         self.main
             .remap_types::<Str, SerdeBincode<Vec<&'t str>>>()
             .get(rtxn, main_key::SEARCHABLE_FIELDS_KEY)?
             .map(|fields| Ok(fields.into_iter().map(Cow::Borrowed).collect()))
             .unwrap_or_else(|| {
-                Ok(self
-                    .fields_ids_map(rtxn)?
+                Ok(fields_ids_map
                     .names()
                     .filter(|name| !crate::is_faceted_by(name, RESERVED_VECTORS_FIELD_NAME))
                     .map(|field| Cow::Owned(field.to_string()))
@@ -947,9 +954,12 @@ impl Index {
     }
 
     /// Identical to `searchable_fields`, but returns the ids instead.
-    pub fn searchable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<Vec<FieldId>> {
-        let fields = self.searchable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
+    pub fn searchable_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<Vec<FieldId>> {
+        let fields = self.searchable_fields(rtxn, fields_ids_map)?;
         let mut fields_ids = Vec::new();
         for name in fields {
             if let Some(field_id) = fields_ids_map.id(&name) {
@@ -994,10 +1004,10 @@ impl Index {
     pub fn user_defined_searchable_fields_ids(
         &self,
         rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
     ) -> Result<Option<Vec<FieldId>>> {
         match self.user_defined_searchable_fields(rtxn)? {
             Some(fields) => {
-                let fields_ids_map = self.fields_ids_map(rtxn)?;
                 let mut fields_ids = Vec::new();
                 for name in fields {
                     if let Some(field_id) = fields_ids_map.id(name) {
@@ -1075,9 +1085,12 @@ impl Index {
     }
 
     /// Identical to `sortable_fields`, but returns ids instead.
-    pub fn sortable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    pub fn sortable_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<HashSet<FieldId>> {
         let fields = self.sortable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
         Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
     }
 
@@ -1347,29 +1360,6 @@ impl Index {
 
     /* synonyms */
 
-    pub(crate) fn put_synonyms(
-        &self,
-        wtxn: &mut RwTxn<'_>,
-        synonyms: &HashMap<Vec<String>, Vec<Vec<String>>>,
-        user_defined_synonyms: &BTreeMap<String, Vec<String>>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, SerdeBincode<_>>().put(
-            wtxn,
-            main_key::SYNONYMS_KEY,
-            synonyms,
-        )?;
-        self.main.remap_types::<Str, SerdeBincode<_>>().put(
-            wtxn,
-            main_key::USER_DEFINED_SYNONYMS_KEY,
-            user_defined_synonyms,
-        )
-    }
-
-    pub(crate) fn delete_synonyms(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::SYNONYMS_KEY)?;
-        self.main.remap_key_type::<Str>().delete(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
-    }
-
     pub fn user_defined_synonyms(
         &self,
         rtxn: &RoTxn<'_>,
@@ -1381,24 +1371,20 @@ impl Index {
             .unwrap_or_default())
     }
 
-    pub fn synonyms(
+    pub fn put_user_defined_synonyms(
         &self,
-        rtxn: &RoTxn<'_>,
-    ) -> heed::Result<HashMap<Vec<String>, Vec<Vec<String>>>> {
-        Ok(self
-            .main
-            .remap_types::<Str, SerdeBincode<_>>()
-            .get(rtxn, main_key::SYNONYMS_KEY)?
-            .unwrap_or_default())
+        wtxn: &mut RwTxn<'_>,
+        user_defined_synonyms: &BTreeMap<String, Vec<String>>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, SerdeBincode<_>>().put(
+            wtxn,
+            main_key::USER_DEFINED_SYNONYMS_KEY,
+            user_defined_synonyms,
+        )
     }
 
-    pub fn words_synonyms<S: AsRef<str>>(
-        &self,
-        rtxn: &RoTxn<'_>,
-        words: &[S],
-    ) -> heed::Result<Option<Vec<Vec<String>>>> {
-        let words: Vec<_> = words.iter().map(|s| s.as_ref().to_owned()).collect();
-        Ok(self.synonyms(rtxn)?.remove(&words))
+    pub fn delete_user_defined_synonyms(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::USER_DEFINED_SYNONYMS_KEY)
     }
 
     /* words prefixes fst */
@@ -1481,16 +1467,15 @@ impl Index {
     pub fn external_id_of<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
+        fields_ids_map: &'a FieldsIdsMap,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
     ) -> Result<impl IntoIterator<Item = Result<String>> + 'a> {
-        let fields = self.fields_ids_map(rtxn)?;
-
         // uses precondition "never called on an empty index"
         let primary_key = self.primary_key(rtxn)?.ok_or(InternalError::DatabaseMissingEntry {
             db_name: db_name::MAIN,
             key: Some(main_key::PRIMARY_KEY_KEY),
         })?;
-        let primary_key = PrimaryKey::new(primary_key, &fields).ok_or_else(|| {
+        let primary_key = PrimaryKey::new(primary_key, &fields_ids_map).ok_or_else(|| {
             InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldName {
                 field_name: primary_key.to_owned(),
                 process: "external_id_of",
@@ -1498,7 +1483,7 @@ impl Index {
         })?;
         Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, obkv) = entry?;
-            match primary_key.document_id(obkv, &fields)? {
+            match primary_key.document_id(obkv, &fields_ids_map)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
                     crate::documents::Error::InvalidDocumentFormat,
@@ -1508,12 +1493,23 @@ impl Index {
         }))
     }
 
-    pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn<'a>) -> FacetDistribution<'a> {
-        FacetDistribution::new(rtxn, self)
+    pub fn facets_distribution<'a>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
+    ) -> FacetDistribution<'a> {
+        FacetDistribution::new(rtxn, self, fields_ids_map)
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>, progress: &'a Progress) -> Search<'a> {
-        Search::new(rtxn, self, progress)
+    pub fn search<'a>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        index_uid: &'a str,
+        fields_ids_map: &'a FieldsIdsMap,
+        before_search: time::OffsetDateTime,
+        progress: &'a Progress,
+    ) -> Search<'a> {
+        Search::new(rtxn, self, fields_ids_map, index_uid, before_search, progress)
     }
 
     /// Returns the index creation time.
@@ -1650,10 +1646,13 @@ impl Index {
     }
 
     /// Returns the list of exact attributes field ids.
-    pub fn exact_attributes_ids(&self, txn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    pub fn exact_attributes_ids(
+        &self,
+        txn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<HashSet<FieldId>> {
         let attrs = self.exact_attributes(txn)?;
-        let fid_map = self.fields_ids_map(txn)?;
-        Ok(attrs.iter().filter_map(|attr| fid_map.id(attr)).collect())
+        Ok(attrs.iter().filter_map(|attr| fields_ids_map.id(attr)).collect())
     }
 
     /// Writes the exact attributes to the database.
@@ -1931,6 +1930,7 @@ impl Index {
             external_documents_ids,
             word_docids,
             exact_word_docids,
+            synonyms,
             word_prefix_docids,
             exact_word_prefix_docids,
             word_pair_proximity_docids,
@@ -1974,6 +1974,7 @@ impl Index {
             .insert("external_documents_ids", external_documents_ids.stat(rtxn).map(compute_size)?);
         sizes.insert("word_docids", word_docids.stat(rtxn).map(compute_size)?);
         sizes.insert("exact_word_docids", exact_word_docids.stat(rtxn).map(compute_size)?);
+        sizes.insert("synonyms", synonyms.stat(rtxn).map(compute_size)?);
         sizes.insert("word_prefix_docids", word_prefix_docids.stat(rtxn).map(compute_size)?);
         sizes.insert(
             "exact_word_prefix_docids",
@@ -2041,6 +2042,33 @@ impl Index {
     }
 }
 
+/// The synonyms that are associated to the synonyms key
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssociatedSynonyms {
+    synonyms: Vec<String>,
+}
+
+impl AssociatedSynonyms {
+    pub fn new(synonyms: Vec<String>) -> AssociatedSynonyms {
+        AssociatedSynonyms { synonyms }
+    }
+
+    /// The original, unnormalized, unsplit, associated synonyms, e.g. "iphone".
+    pub fn original_synonyms(&self) -> impl Iterator<Item = &str> + '_ {
+        self.synonyms.iter().map(AsRef::as_ref)
+    }
+
+    /// The normalized and split associated synonyms, e.g.
+    pub fn synonyms(&self, tokenizer: &Tokenizer) -> Vec<Vec<String>> {
+        self.original_synonyms()
+            .filter_map(|s| {
+                let normalized = normalize(tokenizer, s);
+                Some(normalized).filter(|n| !n.is_empty())
+            })
+            .collect()
+    }
+}
+
 pub struct EmbeddingsWithMetadata {
     pub embeddings: Vec<Embedding>,
     pub regenerate: bool,
@@ -2074,8 +2102,8 @@ pub struct SearchParameters {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Deserr, ToSchema)]
-#[deserr(try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
+#[routes::request(setting, no_error, try_from(f64) = TryFrom::try_from -> InvalidSettingsRankingScoreThreshold)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct RankingScoreThreshold(f64);
 
 impl RankingScoreThreshold {
@@ -2125,11 +2153,11 @@ pub struct PrefixSettings {
     pub compute_prefixes: PrefixSearch,
 }
 
-/// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
-/// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize, Deserialize)]
-#[deserr(rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
+// This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
+// The reason why it is duplicated is because milli cannot depend on meilisearch. It would be cyclic imports.
+/// Strategy used to match query terms within documents
+#[routes::request(no_error, setting)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
     #[default]

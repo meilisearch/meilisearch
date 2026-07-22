@@ -172,7 +172,7 @@ impl<'doc> Extractor<'doc> for DocumentTemplateExtractor<'doc, '_, '_> {
         external_docid: &Self::DocumentMetadata,
     ) -> Result<Option<Self::Input>, Self::Error> {
         Ok(Some(self.template.render_document(
-            external_docid,
+            Some(external_docid),
             doc,
             self.field_id_map,
             self.doc_alloc,

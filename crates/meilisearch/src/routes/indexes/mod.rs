@@ -18,15 +18,11 @@ use time::OffsetDateTime;
 use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
-use super::{
-    get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
-};
+use super::{Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::routes::is_dry_run;
-use crate::Opt;
 
 pub mod compact;
 pub mod documents;
@@ -157,7 +153,7 @@ pub async fn list_indexes(
     debug!(parameters = ?paginate, "List indexes");
     let filters = index_scheduler.filters();
     let (total, indexes) =
-        index_scheduler.paginated_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
+        index_scheduler.paginated_user_indexes_stats(filters, *paginate.offset, *paginate.limit)?;
     let indexes = indexes
         .into_iter()
         .map(|(name, stats)| IndexView {
@@ -174,18 +170,14 @@ pub async fn list_indexes(
 }
 
 /// Request body for creating a new index
-#[derive(Deserr, Serialize, Debug, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(proxied)]
+#[derive(Debug)]
 pub struct IndexCreateRequest {
     /// Unique identifier for the index
-    #[schema(required = true, example = "movies")]
-    #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
+    #[request(required, example = "movies", error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
     /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
-    #[schema(required = false, example = "id")]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[request(default, example = "id", error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
 
@@ -240,7 +232,6 @@ pub async fn create_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_CREATE }>, Data<IndexScheduler>>,
     body: AwebJson<IndexCreateRequest, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Create index");
@@ -261,11 +252,9 @@ pub async fn create_index(
             index_uid: uid.to_string(),
             primary_key: primary_key.clone(),
         };
-        let tuid = get_task_id(&req, &opt)?;
-        let dry_run = is_dry_run(&req, &opt)?;
         let scheduler = index_scheduler.clone();
         let mut task = tokio::task::spawn_blocking(move || {
-            scheduler.register_with_custom_metadata(task, tuid, None, dry_run, task_network)
+            scheduler.register_with_custom_metadata(task, None, task_network)
         })
         .await??;
 
@@ -346,7 +335,7 @@ pub async fn get_index(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let index = index_scheduler.index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid)?;
     let index_view = IndexView::new(index_uid.into_inner(), &index)?;
 
     debug!(returns = ?index_view, "Get index");
@@ -374,18 +363,14 @@ impl Aggregate for IndexUpdatedAggregate {
 }
 
 /// Request body for updating an existing index
-#[derive(Deserr, Serialize, Debug, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
-#[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
+#[routes::request(deny_unknown_fields = deny_immutable_fields_index, proxied)]
+#[derive(Debug)]
 pub struct UpdateIndexRequest {
     /// New [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
     /// New uid for the index (for renaming)
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexUid>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexUid>)]
     uid: Option<String>,
 }
 
@@ -431,7 +416,6 @@ pub async fn update_index(
     index_uid: web::Path<String>,
     body: AwebJson<UpdateIndexRequest, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Update index");
@@ -458,11 +442,9 @@ pub async fn update_index(
         new_index_uid: body.uid.clone(),
     };
 
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let scheduler = index_scheduler.clone();
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 
@@ -523,19 +505,16 @@ pub async fn delete_index(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
 ) -> Result<HttpResponse, ResponseError> {
     let network = index_scheduler.network();
     let task_network = task_network_and_check_leader_and_version(&req, &network)?;
 
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.clone().into_inner() };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let scheduler = index_scheduler.clone();
 
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 
@@ -725,7 +704,7 @@ pub async fn get_index_stats(
     } = params.into_inner();
 
     let stats = IndexStats::from_db_index_stats(
-        index_scheduler.index_stats(&index_uid)?,
+        index_scheduler.user_index_stats(&index_uid)?,
         size_format.unwrap_or(SizeFormat::Raw), // default to `raw` for backcompat.
         show_internal_database_sizes,
     );

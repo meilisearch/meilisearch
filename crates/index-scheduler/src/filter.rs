@@ -1,17 +1,17 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use meilisearch_types::{
-    error::ResponseError,
-    heed::RoTxn,
-    milli::{
-        self, filtered_universe, progress::Progress, Filter, FilterCondition, IndexFilter,
-        IndexFilterCondition,
-    },
-    Index,
+use either::Either;
+use meilisearch_types::error::Code;
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{
+    self, filtered_universe, Filter, FilterCondition, IndexFilter, IndexFilterCondition, TokenLike,
 };
-use std::collections::HashMap;
+use meilisearch_types::Index;
+use serde_json::Value;
 
-use crate::{Error, IndexScheduler, Result};
+use crate::{Error, IndexScheduler, Result, RoFeatures};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ForeignIndexUid(pub Rc<str>);
@@ -63,14 +63,14 @@ pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, Sou
 /// Convert a filter into an index filter by evaluating the foreign filters
 ///
 /// this function is a wrapper around the `filters_into_index_filters`.
-pub fn filter_into_index_filter<'a>(
-    filter: Filter<'a>,
+pub fn filter_into_index_filter(
+    filter: Filter,
     index: &Index,
     rtxn: &RoTxn,
     index_scheduler: &IndexScheduler,
     progress: &Progress,
     index_uid: &str,
-) -> Result<IndexFilter<'a>> {
+) -> Result<IndexFilter> {
     let foreign_keys = index
         .foreign_keys(rtxn)
         .map_err(|err| Error::from_milli(milli::Error::from(err), Some(index_uid.to_string())))?;
@@ -103,12 +103,12 @@ pub fn filter_into_index_filter<'a>(
 /// Convert a vector of filters into a vector of index filters by evaluating the foreign filters
 ///
 /// This function will open each foreign index once and process the filters.
-pub fn filters_into_index_filters<'a>(
-    filters: Vec<(SourceIndexUid, Option<Filter<'a>>)>,
+pub fn filters_into_index_filters(
+    filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     index_scheduler: &IndexScheduler,
     progress: &Progress,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+) -> Result<Vec<Option<IndexFilter>>> {
     // list all the foreign filters and check their validity
     let mut foreign_filters = Vec::new();
     for (index_uid, filter) in filters.iter() {
@@ -169,8 +169,9 @@ pub fn filters_into_index_filters<'a>(
     // TODO: do remote document filtering here (linear: EXP-1027)
     // local
     for (foreign_index_uid, filter_indices) in filters_per_foreign_index.iter() {
-        let foreign_index = index_scheduler.index(foreign_index_uid.as_ref())?;
+        let foreign_index = index_scheduler.user_index(foreign_index_uid.as_ref())?;
         let foreign_rtxn = foreign_index.read_txn()?;
+        let foreign_fields_ids_map = foreign_index.fields_ids_map(&foreign_rtxn).unwrap();
         let foreign_external_docids = foreign_index.external_documents_ids();
 
         // Gather the internal docids for each filter
@@ -179,10 +180,15 @@ pub fn filters_into_index_filters<'a>(
             let (_, foreign_index_uid, _, index_filter, _) = &foreign_filters[*filter_index];
 
             // filter the foreign index
-            let docids = filtered_universe(&foreign_index, &foreign_rtxn, index_filter, progress)
-                .map_err(|err| {
-                Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string()))
-            })?;
+            let docids = filtered_universe(
+                &foreign_index,
+                &foreign_rtxn,
+                &foreign_fields_ids_map,
+                index_filter,
+                None,
+                progress,
+            )
+            .map_err(|err| Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string())))?;
 
             filters_internal_docids.push(docids);
         }
@@ -216,7 +222,7 @@ pub fn filters_into_index_filters<'a>(
             let mut inner = Vec::new();
             for internal in docids.iter() {
                 if let Some(external) = internal_to_external_docids.get(&internal) {
-                    inner.push(external.to_string().into());
+                    inner.push(external.as_str().into());
                 }
             }
 
@@ -241,9 +247,9 @@ pub fn filters_into_index_filters<'a>(
 /// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
 ///
 /// This function will not open any foreign index but will panic if a foreign filter is encountered.
-pub fn filters_into_index_filters_unchecked<'a>(
-    filters: Vec<Option<Filter<'a>>>,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+pub fn filters_into_index_filters_unchecked(
+    filters: Vec<Option<Filter>>,
+) -> Result<Vec<Option<IndexFilter>>> {
     filters
         .into_iter()
         .map(|filter| {
@@ -254,12 +260,12 @@ pub fn filters_into_index_filters_unchecked<'a>(
         .collect::<Result<_>>()
 }
 
-fn condition_to_index_condition<'a, F>(
-    filter: FilterCondition<'a>,
+fn condition_to_index_condition<F>(
+    filter: FilterCondition,
     foreign_filter: &mut F,
-) -> Result<IndexFilterCondition<'a>>
+) -> Result<IndexFilterCondition>
 where
-    F: FnMut(FilterCondition<'a>) -> Result<IndexFilterCondition<'a>>,
+    F: FnMut(FilterCondition) -> Result<IndexFilterCondition>,
 {
     match filter {
         FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
@@ -299,14 +305,14 @@ where
 pub fn retrieve_foreign_keys_settings<'a>(
     index_scheduler: &IndexScheduler,
     index_uids: impl IntoIterator<Item = &'a SourceIndexUid>,
-) -> Result<ForeignKeysPerIndex, ResponseError> {
+) -> Result<ForeignKeysPerIndex> {
     let mut foreign_keys_settings = HashMap::new();
     for index_uid in index_uids.into_iter() {
         if foreign_keys_settings.contains_key(index_uid.as_ref()) {
             continue;
         }
 
-        let index = index_scheduler.index(index_uid.as_ref())?;
+        let index = index_scheduler.user_index(index_uid.as_ref())?;
         let rtxn = index.read_txn()?;
         let foreign_keys = index
             .foreign_keys(&rtxn)?
@@ -321,4 +327,177 @@ pub fn retrieve_foreign_keys_settings<'a>(
         foreign_keys_settings.insert(index_uid.clone(), foreign_keys);
     }
     Ok(foreign_keys_settings)
+}
+
+pub fn parse_filter(
+    facets: &Value,
+    filter_parsing_error_code: Code,
+    features: RoFeatures,
+    index_uid: Option<&str>,
+) -> Result<Option<Filter>> {
+    let filter = match facets {
+        Value::String(expr) => Filter::from_str(expr).map_err(|e| {
+            Error::Milli { error: e, index_uid: index_uid.map(String::from) }
+                .with_custom_error_code(filter_parsing_error_code)
+        }),
+        Value::Array(arr) => parse_filter_array(arr, filter_parsing_error_code, index_uid),
+        v => Err(invalid_filter_syntax_error(
+            &["String", "Array"],
+            v,
+            filter_parsing_error_code,
+            index_uid,
+        )),
+    }?;
+
+    check_filter_experimental_features(filter, features, index_uid)
+}
+
+fn check_filter_experimental_features(
+    filter: Option<Filter>,
+    features: RoFeatures,
+    index_uid: Option<&str>,
+) -> Result<Option<Filter>> {
+    if let Some(ref filter) = filter {
+        // If the contains operator is used while the contains filter feature is not enabled, errors out
+        if let Some((token, error)) =
+            filter.use_contains_operator().zip(features.check_contains_filter().err())
+        {
+            return Err(Error::Milli {
+                error: token.to_external_error(error).into(),
+                index_uid: index_uid.map(String::from),
+            }
+            .with_custom_error_code(Code::FeatureNotEnabled));
+        }
+
+        // If a foreign filter is used while the foreign keys feature is not enabled, errors out
+        if let Some((token, error)) = filter
+            .use_foreign_filter()
+            .zip(features.check_foreign_keys_setting("using a foreign filter").err())
+        {
+            return Err(Error::Milli {
+                error: token.to_external_error(error).into(),
+                index_uid: index_uid.map(String::from),
+            }
+            .with_custom_error_code(Code::FeatureNotEnabled));
+        }
+
+        // If a shard filter is used while the network feature is not enabled, errors out
+        if let Some((token, error)) =
+            filter.use_shard_filter().zip(features.check_network("using a shard filter").err())
+        {
+            return Err(Error::Milli {
+                error: token.to_external_error(error).into(),
+                index_uid: index_uid.map(String::from),
+            }
+            .with_custom_error_code(Code::FeatureNotEnabled));
+        }
+
+        // If a vector filter is used while the multi modal feature is not enabled, errors out
+        if let Some((token, error)) =
+            filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())
+        {
+            return Err(Error::Milli {
+                error: token.to_external_error(error).into(),
+                index_uid: index_uid.map(String::from),
+            }
+            .with_custom_error_code(Code::FeatureNotEnabled));
+        }
+    }
+
+    Ok(filter)
+}
+
+fn parse_filter_array(
+    arr: &[Value],
+    code: Code,
+    index_uid: Option<&str>,
+) -> Result<Option<Filter>> {
+    let mut ands = Vec::new();
+    for value in arr {
+        match value {
+            Value::String(s) => ands.push(Either::Right(s.as_str())),
+            Value::Array(arr) => {
+                let mut ors = Vec::new();
+                for value in arr {
+                    match value {
+                        Value::String(s) => ors.push(s.as_str()),
+                        v => {
+                            return Err(invalid_filter_syntax_error(
+                                &["String"],
+                                v,
+                                code,
+                                index_uid,
+                            ));
+                        }
+                    }
+                }
+                ands.push(Either::Left(ors));
+            }
+            v => {
+                return Err(invalid_filter_syntax_error(
+                    &["String", "[String]"],
+                    v,
+                    code,
+                    index_uid,
+                ));
+            }
+        }
+    }
+
+    Filter::from_array(ands)
+        .map_err(|e| Error::Milli { error: e, index_uid: None }.with_custom_error_code(code))
+}
+
+fn invalid_filter_syntax_error(
+    expected: &[&str],
+    found: &Value,
+    code: Code,
+    index_uid: Option<&str>,
+) -> Error {
+    let error = milli::Error::UserError(milli::UserError::InvalidFilter(format!(
+        "Invalid syntax for the filter parameter: `expected {}, found: {}`.",
+        expected.join(", "),
+        found
+    )));
+
+    Error::Milli { error, index_uid: index_uid.map(String::from) }.with_custom_error_code(code)
+}
+
+fn unsupported_foreign_filter_error(
+    filter: FilterCondition,
+    code: Code,
+    index_uid: Option<&str>,
+) -> Error {
+    let FilterCondition::Foreign { fid, op: _ } = filter else { unreachable!() };
+    let error = milli::Error::UserError(milli::UserError::InvalidFilter(String::from(
+        "Filter condition `_foreign` is not supported for this endpoint.",
+    )));
+
+    Error::Milli {
+        error: fid.to_external_error(error).into(),
+        index_uid: index_uid.map(String::from),
+    }
+    .with_custom_error_code(code)
+}
+
+/// Parse an index filter from a JSON value
+///
+/// This function will:
+/// - Check the experimental features
+/// - Parse the filter
+/// - if a foreign filter is encountered, return an error "Unsupported foreign filter"
+pub fn parse_local_index_filter(
+    filter: &Value,
+    index_uid: Option<&str>,
+    features: RoFeatures,
+    code: Code,
+) -> Result<Option<IndexFilter>> {
+    let Some(Filter { condition }) = parse_filter(filter, code, features, index_uid)? else {
+        return Ok(None);
+    };
+    let condition = condition_to_index_condition(condition, &mut |filter| {
+        Err(unsupported_foreign_filter_error(filter, code, index_uid))
+    })?;
+
+    Ok(Some(IndexFilter { condition }))
 }

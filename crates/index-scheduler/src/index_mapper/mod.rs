@@ -5,6 +5,7 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex, RESERVED_UID_PREFIX};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::milli::sharding::Shards;
@@ -61,22 +62,22 @@ pub struct IndexMapper {
     index_map: Arc<RwLock<IndexMap>>,
 
     /// Map an index name with an index uuid currently available on disk.
-    pub(crate) index_mapping: Database<Str, UuidCodec>,
+    index_mapping: Database<Str, UuidCodec>,
     /// Map an index UUID with the cached stats associated to the index.
     ///
     /// Using an UUID forces to use the index_mapping table to recover the index behind a name, ensuring
     /// consistency wrt index swapping.
-    pub(crate) index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
+    index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
     /// The map size an index is opened with on the first time.
-    pub(crate) index_base_map_size: usize,
+    index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
     index_growth_amount: usize,
     /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
     enable_mdb_writemap: bool,
-    pub indexer_config: Arc<IndexerConfig>,
+    indexer_config: Arc<IndexerConfig>,
 
     /// A few types of long running batches of tasks that act on a single index set this field
     /// so that a handle to the index is available from other threads (search) in an optimized manner.
@@ -203,10 +204,10 @@ impl IndexMapper {
     }
 
     /// Get or create the index.
-    pub fn create_index(
+    pub fn create_index<'a>(
         &self,
         mut wtxn: RwTxn,
-        name: &str,
+        name: impl IndexUid<'a>,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         shards: Option<Shards>,
     ) -> Result<Index> {
@@ -217,9 +218,9 @@ impl IndexMapper {
             }
             Err(Error::IndexNotFound(_)) => {
                 let uuid = Uuid::new_v4();
-                self.index_mapping.put(&mut wtxn, name, &uuid)?;
+                self.index_mapping.put(&mut wtxn, name.uid(), &uuid)?;
 
-                let index_path = self.index_path(uuid);
+                let index_path = self.index_path_from_uuid(uuid);
                 fs::create_dir_all(&index_path)?;
 
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
@@ -240,7 +241,7 @@ impl IndexMapper {
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                 let index_rtxn = index.read_txn()?;
                 let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
-                    .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+                    .map_err(|e| Error::from_milli(e, Some(name.uid().to_string())))?;
                 self.store_stats_of(&mut wtxn, name, &stats)?;
                 drop(index_rtxn);
 
@@ -254,7 +255,8 @@ impl IndexMapper {
 
     /// Removes the index from the mapping table and the in-memory index map
     /// but keeps the associated tasks.
-    pub fn delete_index(&self, mut wtxn: RwTxn, name: &str) -> Result<()> {
+    pub fn delete_index<'a>(&self, mut wtxn: RwTxn, name: impl IndexUid<'a>) -> Result<()> {
+        let name = name.uid();
         let uuid = self
             .index_mapping
             .get(&wtxn, name)?
@@ -306,7 +308,7 @@ impl IndexMapper {
         };
 
         let index_map = self.index_map.clone();
-        let index_path = self.index_path(uuid);
+        let index_path = self.index_path_from_uuid(uuid);
         let index_name = name.to_string();
         thread::Builder::new()
             .name(String::from("index_deleter"))
@@ -333,7 +335,8 @@ impl IndexMapper {
         Ok(())
     }
 
-    pub fn exists(&self, rtxn: &RoTxn, name: &str) -> Result<bool> {
+    pub fn exists<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<bool> {
+        let name = name.uid();
         Ok(self.index_mapping.get(rtxn, name)?.is_some())
     }
 
@@ -345,7 +348,8 @@ impl IndexMapper {
     ///
     /// - If the Index corresponding to the passed name is concurrently being deleted/resized or cannot be found in the
     ///   in memory hash map.
-    pub fn resize_index(&self, rtxn: &RoTxn, name: &str) -> Result<()> {
+    pub fn resize_index<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<()> {
+        let name = name.uid();
         let uuid = self
             .index_mapping
             .get(rtxn, name)?
@@ -369,7 +373,8 @@ impl IndexMapper {
     ///
     /// - If the Index corresponding to the passed name is concurrently being deleted/resized or cannot be found in the
     ///   in memory hash map.
-    pub fn close_index(&self, rtxn: &RoTxn, name: &str) -> Result<()> {
+    pub fn close_index<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<()> {
+        let name = name.uid();
         let uuid = self
             .index_mapping
             .get(rtxn, name)?
@@ -382,13 +387,13 @@ impl IndexMapper {
     }
 
     /// The number of indexes in the database
-    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
-    pub fn index_count(&self, rtxn: &RoTxn) -> Result<u64> {
-        Ok(self.index_mapping.len(rtxn)?)
+    pub fn index_count<'a, I: IndexUid<'a>>(&self, rtxn: &'a RoTxn) -> Result<u64> {
+        I::count(self.index_mapping, rtxn)
     }
 
     /// Return an index, may open it if it wasn't already opened.
-    pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
+    pub fn index<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<Index> {
+        let name = name.uid();
         if let Some((current_name, current_index)) =
             self.currently_updating_index.read().unwrap().as_ref()
         {
@@ -434,7 +439,7 @@ impl IndexMapper {
                     } else {
                         continue;
                     };
-                    let index_path = self.index_path(uuid);
+                    let index_path = self.index_path_from_uuid(uuid);
                     // take the lock to reopen the environment.
                     reopen
                         .reopen(&mut self.index_map.write().unwrap(), &index_path)
@@ -451,7 +456,7 @@ impl IndexMapper {
                     // if it's not already there.
                     match index_map.get(&uuid) {
                         Missing => {
-                            let index_path = self.index_path(uuid);
+                            let index_path = self.index_path_from_uuid(uuid);
 
                             break index_map
                                 .create(
@@ -482,16 +487,26 @@ impl IndexMapper {
     ///
     /// The folder located at this path is containing the data.mdb,
     /// the lock.mdb and an optional data.mdb.cpy file.
-    pub fn index_path(&self, uuid: Uuid) -> PathBuf {
+    fn index_path_from_uuid(&self, uuid: Uuid) -> PathBuf {
         self.base_path.join(uuid.to_string())
     }
 
-    pub fn rollback_index(
+    pub fn index_path<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<Option<PathBuf>> {
+        Ok(self.index_uuid(rtxn, name)?.map(|index_uuid| self.index_path_from_uuid(index_uuid)))
+    }
+
+    pub fn index_uuid<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<Option<Uuid>> {
+        let name = name.uid();
+        Ok(self.index_mapping.get(rtxn, name)?)
+    }
+
+    pub fn rollback_index<'a>(
         &self,
         rtxn: &RoTxn,
-        name: &str,
+        name: impl IndexUid<'a>,
         to: (u32, u32, u32),
     ) -> Result<RollbackOutcome> {
+        let name = name.uid();
         // remove any currently updating index to make sure that we aren't keeping a reference to the index somewhere
         drop(self.currently_updating_index.write().unwrap().take());
 
@@ -526,7 +541,7 @@ impl IndexMapper {
             };
         }
 
-        let index_path = self.index_path(uuid);
+        let index_path = self.index_path_from_uuid(uuid);
         Index::rollback(milli::heed::EnvOpenOptions::new().read_txn_without_tls(), index_path, to)
             .map_err(|err| crate::Error::from_milli(err, Some(name.to_string())))
     }
@@ -538,33 +553,37 @@ impl IndexMapper {
     ///
     /// Since `f` is allowed to return a result, and `Index` is cloneable, it is still possible to wrongly build e.g. a vector of
     /// all the indexes, but this function makes it harder and so less likely to do accidentally.
-    pub fn try_for_each_index<U, V>(
+    pub fn try_for_each_index<'a, U, V, I: IndexUid<'a>>(
         &self,
-        rtxn: &RoTxn,
-        mut f: impl FnMut(&str, &Index) -> Result<U>,
+        rtxn: &'a RoTxn,
+        mut f: impl FnMut(I, &Index) -> Result<U>,
     ) -> Result<V>
     where
         V: FromIterator<U>,
     {
-        self.index_mapping
-            .iter(rtxn)?
-            .map(|res| {
-                res.map_err(Error::from)
-                    .and_then(|(name, _)| self.index(rtxn, name).and_then(|index| f(name, &index)))
-            })
+        self.index_names::<I>(rtxn)?
+            .map(|res| res.and_then(|uid| self.index(rtxn, uid).and_then(|index| f(uid, &index))))
             .collect()
     }
 
-    /// Return the name of all indexes without opening them.
-    pub fn index_names(&self, rtxn: &RoTxn) -> Result<Vec<String>> {
-        self.index_mapping
-            .iter(rtxn)?
-            .map(|res| res.map_err(Error::from).map(|(name, _)| name.to_string()))
-            .collect()
+    /// Iterate over the names of all indexes that match the `IndexUid` impl, without opening the indexes.
+    pub fn index_names<'a, I: IndexUid<'a>>(
+        &self,
+        rtxn: &'a RoTxn,
+    ) -> Result<impl Iterator<Item = Result<I>> + 'a> {
+        Ok(self.index_mapping.iter(rtxn)?.filter_map(|res| {
+            let uid = match res {
+                Ok((name, _)) => name,
+                Err(err) => return Some(Err(err.into())),
+            };
+            I::try_from_uid(uid).ok().map(Ok)
+        }))
     }
 
     /// Swap two index names.
-    pub fn swap(&self, wtxn: &mut RwTxn, lhs: &str, rhs: &str) -> Result<()> {
+    pub fn swap<'a, I: IndexUid<'a>>(&self, wtxn: &mut RwTxn, lhs: I, rhs: I) -> Result<()> {
+        let lhs = lhs.uid();
+        let rhs = rhs.uid();
         let lhs_uuid = self
             .index_mapping
             .get(wtxn, lhs)?
@@ -581,7 +600,9 @@ impl IndexMapper {
     }
 
     /// Rename an index.
-    pub fn rename(&self, wtxn: &mut RwTxn, current: &str, new: &str) -> Result<()> {
+    pub fn rename<'a, I: IndexUid<'a>>(&self, wtxn: &mut RwTxn, current: I, new: I) -> Result<()> {
+        let current = current.uid();
+        let new = new.uid();
         let uuid = self
             .index_mapping
             .get(wtxn, current)?
@@ -599,11 +620,12 @@ impl IndexMapper {
     /// If available in the cache, they are directly returned.
     /// Otherwise, the `Index` is opened to compute the stats on the fly (the result is not cached).
     /// The stats for an index are cached after each `Index` update.
-    pub fn stats_of(&self, rtxn: &RoTxn, index_uid: &str) -> Result<IndexStats> {
+    pub fn stats_of<'a>(&self, rtxn: &RoTxn, index_uid: impl IndexUid<'a>) -> Result<IndexStats> {
+        let index_uid_name = index_uid.uid();
         let uuid = self
             .index_mapping
-            .get(rtxn, index_uid)?
-            .ok_or_else(|| Error::IndexNotFound(index_uid.to_string()))?;
+            .get(rtxn, index_uid_name)?
+            .ok_or_else(|| Error::IndexNotFound(index_uid_name.to_string()))?;
 
         match self.index_stats.get(rtxn, &uuid)? {
             Some(stats) => Ok(stats),
@@ -619,12 +641,13 @@ impl IndexMapper {
     /// Stores the new stats for an index.
     ///
     /// Expected usage is to compute the stats the index using `IndexStats::new`, the pass it to this function.
-    pub fn store_stats_of(
+    pub fn store_stats_of<'a>(
         &self,
         wtxn: &mut RwTxn,
-        index_uid: &str,
+        index_uid: impl IndexUid<'a>,
         stats: &IndexStats,
     ) -> Result<()> {
+        let index_uid = index_uid.uid();
         let uuid = self
             .index_mapping
             .get(wtxn, index_uid)?
@@ -634,15 +657,89 @@ impl IndexMapper {
         Ok(())
     }
 
-    pub fn index_exists(&self, rtxn: &RoTxn, name: &str) -> Result<bool> {
-        Ok(self.index_mapping.get(rtxn, name)?.is_some())
+    pub fn index_exists<'a>(&self, rtxn: &RoTxn, name: impl IndexUid<'a>) -> Result<bool> {
+        Ok(self.index_mapping.get(rtxn, name.uid())?.is_some())
     }
 
     pub fn indexer_config(&self) -> &IndexerConfig {
         &self.indexer_config
     }
 
+    pub fn index_base_map_size(&self) -> usize {
+        self.index_base_map_size
+    }
+
     pub fn set_currently_updating_index(&self, index: Option<(String, Index)>) {
         *self.currently_updating_index.write().unwrap() = index;
+    }
+}
+
+pub trait IndexUid<'a>: Clone + Copy {
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64>;
+
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized;
+    fn uid(&self) -> &'a str;
+}
+
+impl<'a> IndexUid<'a> for AnyIndex<'a> {
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Ok(AnyIndex::new(uid))
+    }
+
+    fn uid(&self) -> &'a str {
+        AnyIndex::uid(self)
+    }
+
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
+        Ok(db.len(rtxn)?)
+    }
+}
+
+impl<'a> IndexUid<'a> for UserIndex<'a> {
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        UserIndex::new(uid).ok_or_else(|| Error::InvalidIndexUid { index_uid: uid.to_string() })
+    }
+
+    fn uid(&self) -> &'a str {
+        UserIndex::uid(self)
+    }
+
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
+        let reserved_index_count =
+            db.prefix_iter(rtxn, RESERVED_UID_PREFIX)?.try_fold(0, |count, res| {
+                res?;
+                Ok::<_, crate::Error>(count + 1)
+            })?;
+
+        Ok(AnyIndex::count(db, rtxn)?.saturating_sub(reserved_index_count))
+    }
+}
+
+impl<'a> IndexUid<'a> for DsrIndex {
+    fn try_from_uid(uid: &'a str) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        if uid == Self::dsr_uid() {
+            Ok(Self)
+        } else {
+            Err(Error::ExpectedDsrUid { index_uid: uid.to_string() })
+        }
+    }
+
+    fn uid(&self) -> &'a str {
+        Self::dsr_uid()
+    }
+
+    fn count(db: Database<Str, UuidCodec>, rtxn: &RoTxn) -> Result<u64> {
+        Ok(if db.get(rtxn, Self::dsr_uid())?.is_some() { 1 } else { 0 })
     }
 }

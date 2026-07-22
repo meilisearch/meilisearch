@@ -42,6 +42,9 @@ jobs:
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
 
+      - name: Check all routes have descriptions
+        run: cargo run --release -p openapi-generator -- --check-descriptions
+
       - name: Check for duplicate or malformed paths
         run: cargo run --release -p openapi-generator -- --check-paths
 
@@ -58,4 +61,4 @@ jobs:
       # Lints the OpenAPI file for best practices (descriptions, examples, naming conventions, etc.)
       # Ruleset is defined in crates/openapi-generator/.spectral.yaml
       - name: Lint OpenAPI specification
-        run: spectral lint /tmp/meilisearch-openapi.json --ruleset crates/openapi-generator/.spectral.yaml
+        run: spectral lint /tmp/meilisearch-openapi.json --verbose --ruleset crates/openapi-generator/.spectral.yaml

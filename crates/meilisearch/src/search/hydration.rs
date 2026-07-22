@@ -4,12 +4,14 @@ use index_scheduler::filter::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexU
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
-use meilisearch_types::milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey};
+use meilisearch_types::milli::{
+    self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
+};
 use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
-use crate::search::{make_document, ExternalDocumentId, SearchHit};
+use crate::search::{ExternalDocumentId, SearchHit};
 
 /// Hydrate the documents based on the foreign keys
 ///
@@ -28,9 +30,11 @@ pub fn hydrate_documents(
 
     // Open each foreign index once
     for (foreign_index_uid, field_names) in foreign_keys_by_index_uid {
-        let index = index_scheduler.index(foreign_index_uid)?;
+        let index = index_scheduler.user_index(foreign_index_uid)?;
         let rtxn = index.read_txn()?;
-        let formatter = HydrationFormatter::new(&index, &rtxn, field_names.as_slice())?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let formatter =
+            HydrationFormatter::new(&index, &rtxn, &fields_ids_map, field_names.as_slice())?;
 
         for document in documents.iter_mut() {
             formatter.hydrate_document(&mut document.document)?;
@@ -50,9 +54,10 @@ impl<'a> HydrationFormatter<'a> {
     fn new(
         index: &'a Index,
         rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
         field_names: &'a [&'a str],
     ) -> milli::Result<Self> {
-        let document_maker = IndexDocumentMaker::new(index, rtxn)?;
+        let document_maker = IndexDocumentMaker::new(index, rtxn, fields_ids_map)?;
 
         Ok(Self { document_maker, field_names })
     }
@@ -92,16 +97,19 @@ struct IndexDocumentMaker<'a> {
     rtxn: &'a RoTxn<'a>,
     external_documents_ids: ExternalDocumentsIds,
     displayed_ids: BTreeSet<FieldId>,
-    fields_ids_map: FieldsIdsMap,
+    fields_ids_map: &'a FieldsIdsMap,
 }
 
 impl<'a> IndexDocumentMaker<'a> {
-    fn new(index: &'a Index, rtxn: &'a RoTxn<'a>) -> milli::Result<Self> {
+    fn new(
+        index: &'a Index,
+        rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
+    ) -> milli::Result<Self> {
         let external_documents_ids = index.external_documents_ids();
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
 
         // If displayed_fields_ids is None, we use all the fields ids present in the fields_ids_map
-        let displayed_ids = index.displayed_fields_ids(rtxn)?.map_or_else(
+        let displayed_ids = index.displayed_fields_ids(rtxn, fields_ids_map)?.map_or_else(
             || fields_ids_map.iter().map(|(id, _)| id).collect(),
             |fields| fields.into_iter().collect::<BTreeSet<_>>(),
         );
@@ -128,7 +136,7 @@ impl<'a> IndexDocumentMaker<'a> {
             .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"))
             .collect();
 
-        make_document(obkv, &self.fields_ids_map, &selectors).map_err(ResponseError::from)
+        make_document(obkv, self.fields_ids_map, &selectors).map_err(ResponseError::from)
     }
 }
 
@@ -215,9 +223,10 @@ impl FederatedHydrationFormatter {
         // Fetch the documents from the foreign indexes
         let mut hydration_documents = HashMap::new();
         for (index_uid, docids) in hydration_docids {
-            let index = index_scheduler.index(index_uid.as_ref())?;
+            let index = index_scheduler.user_index(index_uid.as_ref())?;
             let rtxn = index.read_txn()?;
-            let document_maker = IndexDocumentMaker::new(&index, &rtxn)?;
+            let fields_ids_map = index.fields_ids_map(&rtxn)?;
+            let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;
             for docid in docids {
                 let document = document_maker.make_document(&docid)?;
                 hydration_documents.insert((index_uid.clone(), docid), document);

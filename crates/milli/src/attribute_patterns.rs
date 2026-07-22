@@ -1,3 +1,5 @@
+use std::fmt;
+
 use deserr::Deserr;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -8,16 +10,19 @@ use crate::is_faceted_by;
 /// include wildcards (`*`) for flexible matching. For example, `title`
 /// matches exactly, `overview_*` matches any attribute starting with
 /// `overview_`, and `*_date` matches any attribute ending with `_date`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct AttributePatterns {
     /// An array of attribute name patterns. Each pattern can be an exact
     /// attribute name, or include wildcards (`*`) at the start, end, or
     /// both. Examples: `["title", "description_*", "*_date", "*content*"]`.
-    #[schema(value_type = Vec<String>, example = json!(["title", "overview_*", "release_date"]))]
+    #[schema(example = json!(["title", "overview_*", "release_date"]))]
     pub patterns: Vec<String>,
 }
+
+// manual impl: transparent + manual deserr impl
+impl routes::RequestBody for AttributePatterns {}
 
 impl<E: deserr::DeserializeError> Deserr<E> for AttributePatterns {
     fn deserialize_from_value<V: deserr::IntoValue>(
@@ -43,10 +48,33 @@ impl AttributePatterns {
             match match_pattern(pattern, str) {
                 PatternMatch::Match => return PatternMatch::Match,
                 PatternMatch::Parent => pattern_match = PatternMatch::Parent,
-                PatternMatch::NoMatch => {}
+                PatternMatch::NoMatch => (),
             }
         }
         pattern_match
+    }
+
+    pub fn intersect_patterns(&self, other: &str) -> bool {
+        for pattern in &self.patterns {
+            match match_pattern(other, pattern) {
+                PatternMatch::Match | PatternMatch::Parent => return true,
+                PatternMatch::NoMatch => match match_pattern(pattern, other) {
+                    PatternMatch::Match | PatternMatch::Parent => return true,
+                    PatternMatch::NoMatch => (),
+                },
+            }
+        }
+        false
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
+    }
+}
+
+impl fmt::Debug for AttributePatterns {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.patterns.iter()).finish()
     }
 }
 

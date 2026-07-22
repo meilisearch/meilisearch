@@ -169,7 +169,7 @@ async fn logs_stream_without_enabling_the_route() {
     }
     "###);
 
-    let (response, code) = server.service.delete("/logs/stream").await;
+    let (response, code) = server.service.delete("/logs/stream", Default::default()).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {

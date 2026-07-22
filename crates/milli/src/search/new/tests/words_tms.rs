@@ -131,7 +131,8 @@ fn test_words_tms_last_simple() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -166,7 +167,7 @@ fn test_words_tms_last_simple() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("extravagant the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -180,7 +181,8 @@ fn test_words_tms_last_phrase() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox\" jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -205,7 +207,7 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox\" jumps over the \"lazy\" dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -227,7 +229,7 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox jumps over the lazy dog\"");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -243,7 +245,7 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("\"the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -270,7 +272,8 @@ fn test_words_proximity_tms_last_simple() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -305,7 +308,7 @@ fn test_words_proximity_tms_last_simple() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the brown quick fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -351,7 +354,8 @@ fn test_words_proximity_tms_last_phrase() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the \"quick brown\" fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -382,7 +386,7 @@ fn test_words_proximity_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the \"quick brown\" \"fox jumps\" over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -421,7 +425,8 @@ fn test_words_tms_all() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -447,7 +452,7 @@ fn test_words_tms_all() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("extravagant");
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -457,4 +462,63 @@ fn test_words_tms_all() {
     insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
     insta::assert_debug_snapshot!(texts, @"[]");
+}
+
+// Regression test for https://github.com/meilisearch/meilisearch/issues/6185
+//
+// Placing the `attributeRank` or `wordPosition` ranking rule before `words`
+// used to disable the word-dropping performed by the `words` rule, silently
+// returning fewer hits. Reordering the ranking rules must change only the order
+// of the hits, never their count.
+#[test]
+fn test_words_tms_attribute_rank_word_position_order_keeps_hits() {
+    let index = create_index();
+
+    let hit_count = |criteria: Vec<Criterion>| -> usize {
+        index.update_settings(|s| s.set_criteria(criteria.clone())).unwrap();
+        let txn = index.read_txn().unwrap();
+        let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+        let mut s = index.search(&txn, &fields_ids_map);
+        s.query("the quick brown fox jumps over the lazy dog");
+        s.terms_matching_strategy(TermsMatchingStrategy::Last);
+        s.limit(100);
+        let SearchResult { documents_ids, .. } = s.execute().unwrap();
+        documents_ids.len()
+    };
+
+    let words_first = hit_count(vec![
+        Criterion::Words,
+        Criterion::Typo,
+        Criterion::Proximity,
+        Criterion::AttributeRank,
+        Criterion::WordPosition,
+        Criterion::Exactness,
+    ]);
+
+    let attribute_rank_first = hit_count(vec![
+        Criterion::AttributeRank,
+        Criterion::Words,
+        Criterion::Typo,
+        Criterion::Proximity,
+        Criterion::WordPosition,
+        Criterion::Exactness,
+    ]);
+
+    let word_position_first = hit_count(vec![
+        Criterion::WordPosition,
+        Criterion::Words,
+        Criterion::Typo,
+        Criterion::Proximity,
+        Criterion::AttributeRank,
+        Criterion::Exactness,
+    ]);
+
+    // Sanity check: word-dropping returns the partial matches, not just the
+    // documents containing every term. The fixture yields 22 hits for this
+    // query under `Last`; only document 9 contains every term, so a regression
+    // to whole-query matching would drop this to 1.
+    assert_eq!(words_first, 22);
+    // Reordering must not drop hits.
+    assert_eq!(words_first, attribute_rank_first);
+    assert_eq!(words_first, word_position_first);
 }

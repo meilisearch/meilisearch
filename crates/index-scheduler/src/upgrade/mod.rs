@@ -12,6 +12,8 @@ mod v1_29;
 mod v1_30;
 mod v1_37;
 mod v1_38;
+mod v1_49;
+mod v1_50;
 
 trait UpgradeIndexScheduler {
     fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()>;
@@ -50,6 +52,7 @@ pub fn upgrade_index_scheduler(
         &v1_37::MigrateNetwork,
         &v1_38::RemoveOrphanBatches,
         &v1_38::FixupIndexTasks,
+        &v1_50::MigrateDynamicSearchRules,
     ];
 
     let (initial_major, initial_minor, initial_patch) = initial_version;
@@ -62,7 +65,7 @@ pub fn upgrade_index_scheduler(
 
     if initial_version < (1, 12, 0) {
         bail!(
-                "Database version {initial_major}.{initial_minor}.{initial_patch} is too old for the experimental dumpless upgrade feature. Please generate a dump using the v{initial_major}.{initial_minor}.{initial_patch} and import it in the v{target_major}.{target_minor}.{target_patch}",
+                "Database version {initial_major}.{initial_minor}.{initial_patch} is too old to be upgraded via `--upgrade-db`. Please generate a dump using the v{initial_major}.{initial_minor}.{initial_patch} and import it in the v{target_major}.{target_minor}.{target_patch}",
             );
     }
 

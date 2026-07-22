@@ -35,16 +35,16 @@ use heed::RoTxn;
 use interner::{DedupInterner, Interner};
 pub use logger::visual::VisualSearchLogger;
 pub use logger::{DefaultSearchLogger, SearchLogger};
-use query_graph::{QueryGraph, QueryNode};
-use query_term::{
-    located_query_terms_from_tokens, ExtractedTokens, LocatedQueryTerm, Phrase, QueryTerm,
-};
+pub use query_graph::{QueryGraph, QueryNode};
+use query_term::{located_query_terms_from_tokens, Phrase, QueryTerm};
+pub use query_term::{ExtractedTokens, LocatedQueryTerm};
 use ranking_rules::{
     BoxRankingRule, PlaceholderQuery, RankingRule, RankingRuleOutput, RankingRuleQueryTrait,
 };
 use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
+use time::OffsetDateTime;
 
 pub(crate) use self::distinct::{facet_string_values, facet_values_prefix_key};
 use self::geo_sort::GeoSort;
@@ -63,8 +63,8 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
-    UserError, Weight,
+    AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, PinDoc, Result,
+    TermsMatchingStrategy, UserError, Weight,
 };
 
 /// Cache for synonyms to avoid repeated database access
@@ -77,6 +77,9 @@ pub struct SynonymCache {
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
     pub txn: &'ctx RoTxn<'ctx>,
+    pub fields_ids_map: &'ctx FieldsIdsMap,
+    pub index_uid: &'ctx str,
+    pub before_search: OffsetDateTime,
     pub db_cache: DatabaseCache<'ctx>,
     pub word_interner: DedupInterner<String>,
     pub phrase_interner: DedupInterner<Phrase>,
@@ -89,9 +92,15 @@ pub struct SearchContext<'ctx> {
 }
 
 impl<'ctx> SearchContext<'ctx> {
-    pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Result<Self> {
-        let searchable_fids = index.searchable_fields_and_weights(txn)?;
-        let exact_attributes_ids = index.exact_attributes_ids(txn)?;
+    pub fn new(
+        index: &'ctx Index,
+        txn: &'ctx RoTxn<'ctx>,
+        fields_ids_map: &'ctx FieldsIdsMap,
+        index_uid: &'ctx str,
+        before_search: OffsetDateTime,
+    ) -> Result<Self> {
+        let searchable_fids = index.searchable_fields_and_weights(txn, fields_ids_map)?;
+        let exact_attributes_ids = index.exact_attributes_ids(txn, fields_ids_map)?;
 
         let mut exact = Vec::new();
         let mut tolerant = Vec::new();
@@ -108,6 +117,9 @@ impl<'ctx> SearchContext<'ctx> {
         Ok(Self {
             index,
             txn,
+            fields_ids_map,
+            index_uid,
+            before_search,
             db_cache: <_>::default(),
             word_interner: <_>::default(),
             phrase_interner: <_>::default(),
@@ -124,24 +136,15 @@ impl<'ctx> SearchContext<'ctx> {
         self.prefix_search != PrefixSearch::Disabled
     }
 
-    /// Get synonyms with caching to avoid repeated database access
-    pub fn get_synonyms(&mut self) -> Result<&HashMap<Vec<String>, Vec<Vec<String>>>> {
-        match self.synonym_cache.cache {
-            Some(ref synonyms) => Ok(synonyms),
-            None => {
-                let synonyms = self.index.synonyms(self.txn)?;
-                Ok(self.synonym_cache.cache.insert(synonyms))
-            }
-        }
-    }
-
     pub fn attributes_to_search_on(
         &mut self,
         attributes_to_search_on: &'ctx [String],
     ) -> Result<()> {
         let user_defined_searchable = self.index.user_defined_searchable_fields(self.txn)?;
-        let searchable_fields_weights = self.index.searchable_fields_and_weights(self.txn)?;
-        let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
+        let searchable_fields_weights =
+            self.index.searchable_fields_and_weights(self.txn, self.fields_ids_map)?;
+        let exact_attributes_ids =
+            self.index.exact_attributes_ids(self.txn, self.fields_ids_map)?;
 
         let mut universal_wildcard = false;
 
@@ -317,7 +320,7 @@ fn resolve_universe(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
-fn resolve_negative_words(
+pub(in crate::search) fn resolve_negative_words(
     ctx: &mut SearchContext<'_>,
     universe: Option<&RoaringBitmap>,
     negative_words: &[Word],
@@ -332,7 +335,7 @@ fn resolve_negative_words(
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
-fn resolve_negative_phrases(
+pub(in crate::search) fn resolve_negative_phrases(
     ctx: &mut SearchContext<'_>,
     negative_phrases: &[LocatedQueryTerm],
 ) -> Result<RoaringBitmap> {
@@ -386,14 +389,26 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -464,14 +479,26 @@ fn get_ranking_rules_for_vector<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -506,10 +533,15 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut ranking_rules: Vec<BoxRankingRule<'ctx, QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
-        // Add Words before any of: typo, proximity, attribute
+        // Add Words before any of: typo, proximity, attribute, attribute rank,
+        // word position, exactness. Without this, placing one of the newer
+        // `attributeRank`/`wordPosition` rules before `words` would skip the
+        // word-dropping done by Words and silently return fewer hits.
         match rr {
             crate::Criterion::Typo
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => {
                 if !words {
@@ -590,14 +622,26 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -621,14 +665,26 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             AscDesc::Desc(Member::Field(field_name)) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
             AscDesc::Asc(Member::Geo(point)) => {
                 if *geo_sorted {
@@ -663,14 +719,24 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
-    filters: &Option<IndexFilter<'_>>,
+    fields_ids_map: &FieldsIdsMap,
+    filters: &Option<IndexFilter>,
+    candidates: Option<&RoaringBitmap>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {
-    Ok(if let Some(filters) = filters {
-        let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
-        filters.evaluate(txn, index)?
-    } else {
-        index.documents_ids(txn)?
+    Ok(match (filters, candidates) {
+        (None, None) => index.documents_ids(txn)?,
+        (None, Some(candidates)) => candidates.clone(),
+        (Some(filters), None) => {
+            let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
+            filters.evaluate(txn, index, fields_ids_map)?
+        }
+        (Some(filters), Some(candidates)) => {
+            let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
+            let mut filtered = filters.evaluate(txn, index, fields_ids_map)?;
+            filtered &= candidates;
+            filtered
+        }
     })
 }
 
@@ -738,7 +804,6 @@ pub fn execute_vector_search(
         documents_ids: docids,
         located_query_terms: None,
         degraded,
-        used_negative_operator: false,
     })
 }
 
@@ -746,7 +811,7 @@ pub fn execute_vector_search(
 #[tracing::instrument(level = "trace", skip_all, target = "search::main")]
 pub fn execute_search(
     ctx: &mut SearchContext<'_>,
-    query: Option<&str>,
+    query_graph_terms: Option<(QueryGraph, Vec<LocatedQueryTerm>)>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
@@ -757,117 +822,18 @@ pub fn execute_search(
     geo_param: GeoSortParameter,
     from: usize,
     length: usize,
-    words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
-    locales: Option<&Vec<Language>>,
     progress: &Progress,
     pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
-    let mut used_negative_operator = false;
-    let mut located_query_terms = None;
-    let query_terms = if let Some(query) = query {
-        let _step = progress.update_progress_scoped(SearchStep::TokenizeQuery);
-        let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
-        let entered = span.enter();
+    let (query_graph, located_query_terms) = query_graph_terms.unzip();
 
-        // We make sure that the analyzer is aware of the stop words
-        // this ensures that the query builder is able to properly remove them.
-        let mut tokbuilder = TokenizerBuilder::new();
-        let stop_words = ctx.index.stop_words(ctx.txn)?;
-        if let Some(ref stop_words) = stop_words {
-            tokbuilder.stop_words(stop_words);
-        }
-
-        let separators = ctx.index.allowed_separators(ctx.txn)?;
-        let separators: Option<Vec<_>> =
-            separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-        if let Some(ref separators) = separators {
-            tokbuilder.separators(separators);
-        }
-
-        let dictionary = ctx.index.dictionary(ctx.txn)?;
-        let dictionary: Option<Vec<_>> =
-            dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
-        if let Some(ref dictionary) = dictionary {
-            tokbuilder.words_dict(dictionary);
-        }
-
-        let db_locales;
-        match locales {
-            Some(locales) => {
-                if !locales.is_empty() {
-                    tokbuilder.allow_list(locales);
-                }
-            }
-            None => {
-                // If no locales are specified, we use the locales specified in the localized attributes rules
-                let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
-                let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
-                let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn)?;
-
-                let localized_fields = match &ctx.restricted_fids {
-                    // if AttributeToSearchOn is set, use the restricted list of ids
-                    Some(restricted_fids) => {
-                        let iter = restricted_fids
-                            .exact
-                            .iter()
-                            .chain(restricted_fids.tolerant.iter())
-                            .map(|(fid, _)| *fid);
-
-                        LocalizedFieldIds::new(&localized_attributes_rules, &fields_ids_map, iter)
-                    }
-                    // Otherwise use the full list of ids coming from the index searchable fields
-                    None => LocalizedFieldIds::new(
-                        &localized_attributes_rules,
-                        &fields_ids_map,
-                        searchable_fields.into_iter(),
-                    ),
-                };
-
-                db_locales = localized_fields.all_locales();
-                if !db_locales.is_empty() {
-                    tokbuilder.allow_list(&db_locales);
-                }
-            }
-        };
-
-        let tokenizer = tokbuilder.build();
-        drop(entered);
-
-        let span = tracing::trace_span!(target: "search::tokens", "tokenize");
-        let entered = span.enter();
-        let tokens = tokenizer.tokenize(query);
-        drop(entered);
-
-        let ExtractedTokens { query_terms, negative_words, negative_phrases } =
-            located_query_terms_from_tokens(ctx, tokens, words_limit)?;
-        used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
-
-        let ignored_documents = resolve_negative_words(ctx, Some(&universe), &negative_words)?;
-        let ignored_phrases = resolve_negative_phrases(ctx, &negative_phrases)?;
-
-        universe -= ignored_documents;
-        universe -= ignored_phrases;
-
-        if query_terms.is_empty() {
-            // Do a placeholder search instead
-            None
-        } else {
-            Some(query_terms)
-        }
-    } else {
-        None
-    };
-
-    let bucket_sort_output = if let Some(query_terms) = query_terms {
-        let (graph, new_located_query_terms) = QueryGraph::from_query(ctx, &query_terms)?;
-        located_query_terms = Some(new_located_query_terms);
-
+    let bucket_sort_output = if let Some(query_graph) = query_graph {
         let ranking_rules = get_ranking_rules_for_query_graph_search(
             ctx,
             sort_criteria,
@@ -878,7 +844,7 @@ pub fn execute_search(
         universe &= resolve_universe(
             ctx,
             &universe,
-            &graph,
+            &query_graph,
             terms_matching_strategy,
             query_graph_logger,
             progress,
@@ -888,7 +854,7 @@ pub fn execute_search(
         bucket_sort(
             ctx,
             ranking_rules,
-            &graph,
+            &query_graph,
             distinct.as_deref(),
             &universe,
             from,
@@ -924,7 +890,6 @@ pub fn execute_search(
     };
 
     let BucketSortOutput { docids, scores, mut all_candidates, degraded } = bucket_sort_output;
-    let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
 
     // The candidates is the universe unless the exhaustive number of hits
     // is requested and a distinct attribute is set.
@@ -935,7 +900,7 @@ pub fn execute_search(
         };
 
         if let Some(f) = distinct_field {
-            if let Some(distinct_fid) = fields_ids_map.id(f) {
+            if let Some(distinct_fid) = ctx.fields_ids_map.id(f) {
                 all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
             }
         }
@@ -947,8 +912,87 @@ pub fn execute_search(
         documents_ids: docids,
         located_query_terms,
         degraded,
-        used_negative_operator,
     })
+}
+
+pub fn extract_tokens(
+    ctx: &mut SearchContext<'_>,
+    query: &str,
+    words_limit: Option<usize>,
+    locales: Option<&Vec<Language>>,
+) -> Result<ExtractedTokens> {
+    let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
+    let entered = span.enter();
+
+    // We make sure that the analyzer is aware of the stop words
+    // this ensures that the query builder is able to properly remove them.
+    let mut tokbuilder = TokenizerBuilder::new();
+    let stop_words = ctx.index.stop_words(ctx.txn)?;
+    if let Some(ref stop_words) = stop_words {
+        tokbuilder.stop_words(stop_words);
+    }
+
+    let separators = ctx.index.allowed_separators(ctx.txn)?;
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref separators) = separators {
+        tokbuilder.separators(separators);
+    }
+
+    let dictionary = ctx.index.dictionary(ctx.txn)?;
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref dictionary) = dictionary {
+        tokbuilder.words_dict(dictionary);
+    }
+
+    let db_locales;
+    match locales {
+        Some(locales) => {
+            if !locales.is_empty() {
+                tokbuilder.allow_list(locales);
+            }
+        }
+        None => {
+            // If no locales are specified, we use the locales specified in the localized attributes rules
+            let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
+            let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn, ctx.fields_ids_map)?;
+
+            let localized_fields = match &ctx.restricted_fids {
+                // if AttributeToSearchOn is set, use the restricted list of ids
+                Some(restricted_fids) => {
+                    let iter = restricted_fids
+                        .exact
+                        .iter()
+                        .chain(restricted_fids.tolerant.iter())
+                        .map(|(fid, _)| *fid);
+
+                    LocalizedFieldIds::new(&localized_attributes_rules, ctx.fields_ids_map, iter)
+                }
+                // Otherwise use the full list of ids coming from the index searchable fields
+                None => LocalizedFieldIds::new(
+                    &localized_attributes_rules,
+                    ctx.fields_ids_map,
+                    searchable_fields.into_iter(),
+                ),
+            };
+
+            db_locales = localized_fields.all_locales();
+            if !db_locales.is_empty() {
+                tokbuilder.allow_list(&db_locales);
+            }
+        }
+    };
+
+    let tokenizer = tokbuilder.build();
+    drop(entered);
+
+    let span = tracing::trace_span!(target: "search::tokens", "tokenize");
+    let entered = span.enter();
+    let tokens = tokenizer.tokenize(query);
+    drop(entered);
+
+    located_query_terms_from_tokens(ctx, &tokenizer, tokens, words_limit)
 }
 
 pub(crate) fn check_sort_criteria(
@@ -1013,5 +1057,4 @@ pub struct PartialSearchResult {
     pub document_scores: Vec<Vec<ScoreDetails>>,
 
     pub degraded: bool,
-    pub used_negative_operator: bool,
 }

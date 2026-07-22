@@ -8,6 +8,7 @@ use crate::common::{
     shared_index_with_nested_documents, Server, DOCUMENTS, NESTED_DOCUMENTS,
 };
 use crate::json;
+use crate::vector::rest::create_mock;
 
 #[actix_rt::test]
 async fn search_with_filter_string_notation() {
@@ -759,7 +760,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:11 doggos.age > 2",
+              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:12 \"doggos.age\" > \"2\"",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -785,7 +786,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:7 doggos EXISTS",
+              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:8 \"doggos\" EXISTS",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -862,14 +863,14 @@ async fn vector_filter_nonexistent_embedder() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n10:15 _vectors.other EXISTS",
+      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n11:16 _vectors.\"other\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -884,14 +885,14 @@ async fn vector_filter_all_embedders_user_provided() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n10:22 _vectors.userProvided EXISTS",
+      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n11:23 _vectors.\"userProvided\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1025,14 +1026,14 @@ async fn vector_filter_non_existant_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n25:33 _vectors.rest.fragments.withBred EXISTS",
+      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n28:36 _vectors.\"rest\".fragments.\"withBred\" EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1060,7 +1061,7 @@ async fn vector_filter_document_template_but_fragments_used() {
 
 #[actix_rt::test]
 async fn vector_filter_document_template() {
-    let (_mock, setting) = crate::vector::create_mock().await;
+    let (_mock, setting) = create_mock().await;
     let server = crate::vector::get_server_vector().await;
     let index = server.index("doggo");
 

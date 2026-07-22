@@ -17,7 +17,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
 use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
-use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
+use crate::{DocumentId, Error, Index, InternalError, MustStopProcessing, Result, UserError};
 
 pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,
@@ -115,11 +115,25 @@ impl ChannelCongestion {
     pub fn congestion_ratio(&self) -> f32 {
         self.blocking_attempts as f32 / self.attempts as f32
     }
+
+    pub fn merge(left: Option<Self>, right: Option<Self>) -> Option<Self> {
+        match (left, right) {
+            (None, None) => None,
+            (None, Some(this)) | (Some(this), None) => Some(this),
+            (
+                Some(Self { attempts: left_attempts, blocking_attempts: left_blocking_attempts }),
+                Some(Self { attempts: right_attempts, blocking_attempts: right_blocking_attempts }),
+            ) => Some(Self {
+                attempts: left_attempts + right_attempts,
+                blocking_attempts: left_blocking_attempts + right_blocking_attempts,
+            }),
+        }
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all, target = "indexing::vectors")]
 #[allow(clippy::too_many_arguments)]
-pub fn build_vectors<MSP>(
+pub fn build_vectors(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     progress: &Progress,
@@ -127,11 +141,8 @@ pub fn build_vectors<MSP>(
     vector_memory: Option<usize>,
     vector_stores: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
     embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
-    must_stop_processing: &MSP,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync + Send,
-{
+    must_stop_processing: &MustStopProcessing,
+) -> Result<()> {
     if index_embeddings.is_empty() {
         return Ok(());
     }

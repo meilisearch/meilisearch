@@ -1,7 +1,6 @@
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
@@ -17,7 +16,7 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::tokenizer::Language;
 use meilisearch_types::milli::{
     AttributePatterns, FieldSortOrder, FilterFeatures, FilterableAttributesFeatures,
-    FilterableAttributesRule, LocalizedAttributesRule, Metadata, MetadataBuilder, PatternMatch,
+    FilterableAttributesRule, LocalizedAttributesRule, Metadata, PatternMatch,
 };
 use serde::{Serialize, Serializer};
 use utoipa::ToSchema;
@@ -146,20 +145,17 @@ pub struct FieldLocalizedConfig<'a> {
     pub locales: &'a [Language],
 }
 
-#[derive(Deserr, Debug, Clone, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request]
+#[derive(Debug, Clone)]
 pub struct ListFields {
     /// Number of fields to skip. Defaults to 0.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexOffset>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexOffset>)]
     pub offset: usize,
     /// Maximum number of fields to return. Defaults to 20.
-    #[schema(required = false)]
-    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidIndexLimit>)]
+    #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidIndexLimit>)]
     pub limit: usize,
     /// Optional filter to restrict which fields are returned (e.g. by attribute patterns or by capability: displayed, searchable, sortable, filterable, etc.).
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilter>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilter>)]
     pub filter: Option<ListFieldsFilter>,
 }
 
@@ -218,33 +214,30 @@ impl ListFields {
     }
 }
 
-/// Filter to restrict which index fields are returned.
-#[derive(Deserr, Debug, Clone, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidIndexFieldsFilter>, rename_all = camelCase, deny_unknown_fields)]
-#[schema(
-    description = "Filter fields by attribute name patterns or by capability (displayed, searchable, sortable, etc.). All criteria are ANDed."
-)]
+/// Filter fields by attribute name patterns or by capability (displayed, searchable, sortable, etc.). All criteria are ANDed.
+#[routes::request(override_error = DeserrJsonError<InvalidIndexFieldsFilter>)]
+#[derive(Debug, Clone)]
 pub struct ListFieldsFilter {
     /// Only include fields whose names match these patterns (e.g. `["title", "desc*"]`).
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterAttributePatterns>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterAttributePatterns>)]
     pub attribute_patterns: Option<AttributePatterns>,
     /// Only include fields that are displayed (true) or not displayed (false) in search results.
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterDisplayed>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterDisplayed>)]
     pub displayed: Option<bool>,
     /// Only include fields that are searchable (true) or not searchable (false).
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterSearchable>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterSearchable>)]
     pub searchable: Option<bool>,
     /// Only include fields that are sortable (true) or not sortable (false).
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterSortable>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterSortable>)]
     pub sortable: Option<bool>,
     /// Only include fields that are used as distinct attribute (true) or not (false).
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterDistinct>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterDistinct>)]
     pub distinct: Option<bool>,
     /// Only include fields that have a custom ranking rule (asc/desc) (true) or not (false).
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterRankingRule>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterRankingRule>)]
     pub ranking_rule: Option<bool>,
     /// Only include fields that are filterable (true) or not filterable (false).
-    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterFilterable>)]
+    #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilterFilterable>)]
     pub filterable: Option<bool>,
 }
 
@@ -311,18 +304,19 @@ pub async fn post_index_fields(
     index_uid: web::Path<String>,
     body: AwebJson<ListFields, DeserrJsonError>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = index_scheduler.index(index_uid.as_str())?;
+    let index = index_scheduler.user_index(index_uid.as_str())?;
     let rtxn = index.read_txn()?;
-    let builder = MetadataBuilder::from_index(&index, &rtxn)?;
-    let fields = builder
-        .fields_metadata()
+
+    let fidmap = index.fields_ids_map_with_metadata(&rtxn)?;
+
+    let mut fields = fidmap
         .iter()
-        .filter_map(|(name, metadata)| {
+        .filter_map(|(_, name, meta)| {
             let field = Field::new(
                 name,
-                metadata,
-                builder.filterable_attributes(),
-                builder.localized_attributes_rules(),
+                &meta,
+                fidmap.metadata_builder().filterable_attributes(),
+                fidmap.metadata_builder().localized_attributes_rules(),
             );
 
             if !body.0.apply_filter(&field) {
@@ -333,6 +327,9 @@ pub async fn post_index_fields(
         })
         // collect into a vector to get the total length for pagination
         .collect::<Vec<_>>();
+
+    // keep existing alphabetical behavior
+    fields.sort_unstable_by_key(|field| field.name);
 
     let pagination = Pagination { offset: body.0.offset, limit: body.0.limit };
     let pagination_view = pagination.auto_paginate_sized(fields.into_iter());

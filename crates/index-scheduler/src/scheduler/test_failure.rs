@@ -19,7 +19,7 @@ fn fail_in_process_batch_for_index_creation() {
 
     let kind = index_creation_task("catto", "mouse");
 
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_register");
 
     handle.advance_one_failed_batch();
@@ -44,19 +44,15 @@ fn fail_in_process_batch_for_document_addition() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
     handle.advance_till([Start, BatchCreated]);
@@ -87,19 +83,15 @@ fn fail_in_update_task_after_process_batch_success_for_document_addition() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
@@ -132,16 +124,12 @@ fn fail_in_process_batch_for_document_deletion() {
         Setting::Set(vec![FilterableAttributesRule::Field(S("catto"))]);
 
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: S("doggos"),
-                new_settings,
-                is_deletion: false,
-                allow_index_creation: true,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: S("doggos"),
+            new_settings,
+            is_deletion: false,
+            allow_index_creation: true,
+        })
         .unwrap();
 
     let content = r#"[
@@ -154,19 +142,15 @@ fn fail_in_process_batch_for_document_deletion() {
     let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
     file.persist().unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_setting_and_document_addition");
 
@@ -176,46 +160,30 @@ fn fail_in_process_batch_for_document_deletion() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_adding_the_documents");
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletion {
-                index_uid: S("doggos"),
-                documents_ids: vec![S("1")],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletion {
+            index_uid: S("doggos"),
+            documents_ids: vec![S("1")],
+        })
         .unwrap();
     // This one should not be caught by Meilisearch but it's still nice to handle it because if one day we break the filters it could happens
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletionByFilter {
-                index_uid: S("doggos"),
-                filter_expr: serde_json::json!(true),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletionByFilter {
+            index_uid: S("doggos"),
+            filter_expr: serde_json::json!(true),
+        })
         .unwrap();
     // Should fail because the ids are not filterable
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletionByFilter {
-                index_uid: S("doggos"),
-                filter_expr: serde_json::json!("id = 2"),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletionByFilter {
+            index_uid: S("doggos"),
+            filter_expr: serde_json::json!("id = 2"),
+        })
         .unwrap();
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletionByFilter {
-                index_uid: S("doggos"),
-                filter_expr: serde_json::json!("catto EXISTS"),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletionByFilter {
+            index_uid: S("doggos"),
+            filter_expr: serde_json::json!("catto EXISTS"),
+        })
         .unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_document_deletions");
 
@@ -223,7 +191,7 @@ fn fail_in_process_batch_for_document_deletion() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_removing_the_documents");
 
-    let index = index_scheduler.index("doggos").unwrap();
+    let index = index_scheduler.user_index("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -242,7 +210,7 @@ fn panic_in_process_batch_for_index_creation() {
 
     let kind = index_creation_task("catto", "mouse");
 
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_the_first_task");
 
     handle.advance_till([Start, BatchCreated, ProcessBatchFailed, AfterProcessing]);
@@ -263,7 +231,7 @@ fn upgrade_failure() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "register_automatic_upgrade_task");
 
     let kind = index_creation_task("catto", "mouse");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "registered_a_task_while_the_upgrade_task_is_enqueued");
 
     handle.advance_one_failed_batch();
@@ -271,7 +239,7 @@ fn upgrade_failure() {
 
     // We can still register tasks
     let kind = index_creation_task("doggo", "bone");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
 
     // But the scheduler is down and won't process anything ever again
     handle.scheduler_is_down();
@@ -286,7 +254,7 @@ fn upgrade_failure() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "upgrade_task_failed_again");
     // We can still register tasks
     let kind = index_creation_task("doggo", "bone");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     // And the scheduler is still down and won't process anything ever again
     handle.scheduler_is_down();
 
@@ -298,7 +266,7 @@ fn upgrade_failure() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "upgrade_task_succeeded");
     // We can still register tasks
     let kind = index_creation_task("girafo", "leaves");
-    let _task = index_scheduler.register(kind, None, false).unwrap();
+    let _task = index_scheduler.register(kind).unwrap();
     // The scheduler is up and running
     handle.advance_one_successful_batch();
     handle.advance_one_successful_batch();
@@ -314,14 +282,10 @@ fn upgrade_failure() {
         .unwrap();
     // When deleting the single upgrade task it should remove the associated batch
     let _task = index_scheduler
-        .register(
-            KindWithContent::TaskDeletion {
-                query: String::from("types=upgradeDatabase"),
-                tasks: upgrade_tasks_ids,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::TaskDeletion {
+            query: String::from("types=upgradeDatabase"),
+            tasks: upgrade_tasks_ids,
+        })
         .unwrap();
 
     handle.advance_one_successful_batch();

@@ -11,7 +11,8 @@ use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{
-    AscDesc, CreateOrOpen, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy,
+    AscDesc, CreateOrOpen, Criterion, Index, Member, MustStopProcessing, Search, SearchResult,
+    TermsMatchingStrategy,
 };
 use rand::Rng;
 use Criterion::*;
@@ -29,9 +30,17 @@ macro_rules! test_criterion {
             let criteria = $criteria;
             let index = search::setup_search_index_with_criteria(&criteria);
             let rtxn = index.read_txn().unwrap();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
             let progress = Progress::default();
-            let mut search = Search::new(&rtxn, &index, &progress);
+            let mut search = Search::new(
+                &rtxn,
+                &index,
+                &fields_ids_map,
+                "test",
+                time::OffsetDateTime::now_utc(),
+                &progress,
+            );
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.terms_matching_strategy($optional_word);
@@ -242,7 +251,7 @@ fn criteria_mixup() {
         builder.set_criteria(criteria.clone());
         builder
             .execute(
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -252,9 +261,17 @@ fn criteria_mixup() {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
         let progress = Progress::default();
-        let mut search = Search::new(&rtxn, &index, &progress);
+        let mut search = Search::new(
+            &rtxn,
+            &index,
+            &fields_ids_map,
+            "test",
+            time::OffsetDateTime::now_utc(),
+            &progress,
+        );
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
         search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
@@ -291,7 +308,7 @@ fn criteria_ascdesc() {
     });
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -348,7 +365,7 @@ fn criteria_ascdesc() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -364,7 +381,7 @@ fn criteria_ascdesc() {
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
@@ -385,7 +402,7 @@ fn criteria_ascdesc() {
         builder.set_criteria(vec![criterion.clone()]);
         builder
             .execute(
-                &|| false,
+                &MustStopProcessing::default(),
                 &Progress::default(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
@@ -395,9 +412,17 @@ fn criteria_ascdesc() {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
         let progress = Progress::default();
-        let mut search = Search::new(&rtxn, &index, &progress);
+        let mut search = Search::new(
+            &rtxn,
+            &index,
+            &fields_ids_map,
+            "test",
+            time::OffsetDateTime::now_utc(),
+            &progress,
+        );
         search.limit(ASC_DESC_CANDIDATES_THRESHOLD + 1);
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();

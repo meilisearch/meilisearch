@@ -6,9 +6,10 @@ use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::progress::ProgressStepView;
-use meilisearch_types::tasks::Status;
+use meilisearch_types::task_view::DetailsView;
+use meilisearch_types::tasks::{Kind, Status};
 use prometheus::{Encoder, TextEncoder};
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -106,6 +107,12 @@ meilisearch_nb_tasks{kind="types",value="taskDeletion"} 0
 # HELP meilisearch_used_db_size_bytes Meilisearch Used DB Size In Bytes
 # TYPE meilisearch_used_db_size_bytes gauge
 meilisearch_used_db_size_bytes 409600
+# HELP meilisearch_last_indexed_documents_count The last number of indexed documents in a batch
+# TYPE meilisearch_last_indexed_documents_count gauge
+meilisearch_last_indexed_documents_count{batch_uid="0",index="movies"} 31944
+# HELP meilisearch_last_indexed_documents_duration_ms The duration in ms of the last batch that indexed documents
+# TYPE meilisearch_last_indexed_documents_duration_ms gauge
+meilisearch_last_indexed_documents_duration_ms{batch_uid="0",index="movies"} 17904
 "#
         )),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -216,6 +223,51 @@ pub async fn get_metrics(
                         .set(duration.as_millis() as i64);
                 }
                 Err(e) => tracing::error!("Failed to parse duration: {e}"),
+            }
+        }
+    }
+
+    crate::metrics::MEILISEARCH_LAST_INDEXED_DOCUMENTS_COUNT.reset();
+    crate::metrics::MEILISEARCH_LAST_INDEXED_DOCUMENTS_DURATION_MS.reset();
+
+    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
+        // Fetch the finished batches with documents...
+        &Query {
+            statuses: Some(vec![Status::Succeeded]),
+            types: Some(vec![
+                Kind::DocumentAdditionOrUpdate,
+                Kind::DocumentEdition,
+                Kind::DocumentDeletion,
+            ]),
+            limit: Some(1),
+            ..Query::default()
+        },
+        auth_filters,
+    )?;
+    // ...and get the last batch only.
+    if let Some(batch) = batches.into_iter().next() {
+        // If this last batch is too old to be kept, just keep the metrics reset (unspecified)
+        if let Some(finished_at) = batch.finished_at {
+            let batch_duration = finished_at - batch.started_at;
+            let now = OffsetDateTime::now_utc();
+            // We add a small offset of 5min so that Prometheus can catch the value.
+            if now >= finished_at && now - finished_at <= batch_duration + Duration::minutes(5) {
+                let DetailsView { indexed_documents, edited_documents, deleted_documents, .. } =
+                    &batch.details;
+                let number_of_modified_documents = indexed_documents.flatten().unwrap_or(0)
+                    + edited_documents.flatten().unwrap_or(0)
+                    + deleted_documents.flatten().unwrap_or(0);
+
+                let batch_uid = batch.uid.to_string();
+                // There should always be an index name when modifying documents.
+                let index = batch.stats.index_uids.first_key_value().map_or("", |(uid, _)| uid);
+
+                crate::metrics::MEILISEARCH_LAST_INDEXED_DOCUMENTS_COUNT
+                    .with_label_values(&[batch_uid.as_str(), index])
+                    .set(number_of_modified_documents as i64);
+                crate::metrics::MEILISEARCH_LAST_INDEXED_DOCUMENTS_DURATION_MS
+                    .with_label_values(&[batch_uid.as_str(), index])
+                    .set(batch_duration.whole_milliseconds() as i64);
             }
         }
     }

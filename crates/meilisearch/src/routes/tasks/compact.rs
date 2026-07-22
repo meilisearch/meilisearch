@@ -58,6 +58,7 @@ pub struct TaskCompactionSummary {
 /// safely resume normal writes.
 #[routes::path(
     security(("Bearer" = ["tasks.compact", "tasks.*", "*"])),
+    no_request_body,
     responses(
         (status = 200, description = "Task queue compaction successfully completed.", body = TaskCompactionSummary, content_type = "application/json", example = json!(
             {
@@ -157,7 +158,7 @@ fn execute_task_queue_compaction(
     let src_path = tasks_path.join("data.mdb");
     let pre_size = std::fs::metadata(&src_path)?.len();
 
-    let dest_path = TempPath::from_path(tasks_path.join("data.mdb.cpy"));
+    let dest_path = TempPath::try_from_path(tasks_path.join("data.mdb.cpy"))?;
     let dest_file = File::create(&dest_path)?;
     let mut dest_file = tempfile::NamedTempFile::from_parts(dest_file, dest_path);
 

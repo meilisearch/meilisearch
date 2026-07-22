@@ -16,7 +16,7 @@ async fn import_v1_12_0() {
     let temp = tempfile::tempdir().unwrap();
     let original_db_path = exist_relative_path!("tests/upgrade/v1_12/v1_12_0.ms");
     let options = Opt {
-        experimental_dumpless_upgrade: true,
+        upgrade_db: true,
         master_key: Some("kefir".to_string()),
         ..default_settings(temp.path())
     };

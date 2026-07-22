@@ -7,7 +7,7 @@ source: crates/meilisearch/tests/search/multi/proxy.rs
     "title": "Batman",
     "_federation": {
       "indexUid": "test",
-      "queriesPosition": 1,
+      "queriesPosition": 0,
       "weightedRankingScore": 1.0,
       "remote": "ms1"
     }

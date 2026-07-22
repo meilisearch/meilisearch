@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
 
 use charabia::normalizer::NormalizedTokenIter;
-use charabia::{SeparatorKind, TokenKind};
+use charabia::{SeparatorKind, TokenKind, Tokenizer};
 
 use super::compute_derivations::partially_initialized_term_from_word;
 use super::{LocatedQueryTerm, ZeroTypoTerm};
+use crate::search::new::query_graph::QueryGraph;
 use crate::search::new::query_term::{Lazy, Phrase, QueryTerm};
 use crate::search::new::Word;
 use crate::{Result, SearchContext, MAX_WORD_LENGTH};
@@ -14,6 +15,8 @@ use crate::{Result, SearchContext, MAX_WORD_LENGTH};
 pub struct ExtractedTokens {
     /// The terms to search for in the database.
     pub query_terms: Vec<LocatedQueryTerm>,
+    /// The graph associated with these query terms
+    pub graph: QueryGraph,
     /// The words that must not appear in the results.
     pub negative_words: Vec<Word>,
     /// The phrases that must not appear in the results.
@@ -24,6 +27,7 @@ pub struct ExtractedTokens {
 #[tracing::instrument(level = "trace", skip_all, target = "search::query")]
 pub fn located_query_terms_from_tokens(
     ctx: &mut SearchContext<'_>,
+    tokenizer: &Tokenizer<'_>,
     query: NormalizedTokenIter<'_, '_, '_, '_>,
     words_limit: Option<usize>,
 ) -> Result<ExtractedTokens> {
@@ -52,7 +56,9 @@ pub fn located_query_terms_from_tokens(
 
         // early return if word limit is exceeded
         if query_terms.len() >= parts_limit {
-            return Ok(ExtractedTokens { query_terms, negative_words, negative_phrases });
+            let (graph, query_terms) = QueryGraph::from_query(ctx, tokenizer, &query_terms)?;
+
+            return Ok(ExtractedTokens { query_terms, graph, negative_words, negative_phrases });
         }
 
         match token.kind {
@@ -76,6 +82,7 @@ pub fn located_query_terms_from_tokens(
                             let word = token.lemma();
                             let term = partially_initialized_term_from_word(
                                 ctx,
+                                tokenizer,
                                 word,
                                 nbr_typos(word),
                                 false,
@@ -93,6 +100,7 @@ pub fn located_query_terms_from_tokens(
                     let word = token.lemma();
                     let term = partially_initialized_term_from_word(
                         ctx,
+                        tokenizer,
                         word,
                         nbr_typos(word),
                         allow_prefix_search,
@@ -188,7 +196,9 @@ pub fn located_query_terms_from_tokens(
         }
     }
 
-    Ok(ExtractedTokens { query_terms, negative_words, negative_phrases })
+    let (graph, query_terms) = QueryGraph::from_query(ctx, tokenizer, &query_terms)?;
+
+    Ok(ExtractedTokens { query_terms, graph, negative_words, negative_phrases })
 }
 
 pub fn number_of_typos_allowed<'ctx>(
@@ -216,6 +226,7 @@ pub fn number_of_typos_allowed<'ctx>(
 
 pub fn make_ngram(
     ctx: &mut SearchContext<'_>,
+    tokenizer: &Tokenizer<'_>,
     terms: &[LocatedQueryTerm],
     number_of_typos_allowed: &impl Fn(&str) -> u8,
 ) -> Result<Option<LocatedQueryTerm>> {
@@ -254,18 +265,24 @@ pub fn make_ngram(
     let max_nbr_typos =
         number_of_typos_allowed(ngram_str.as_str()).saturating_sub(terms.len() as u8 - 1);
 
-    let mut term =
-        partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix, true)?;
+    let mut term = partially_initialized_term_from_word(
+        ctx,
+        tokenizer,
+        &ngram_str,
+        max_nbr_typos,
+        is_prefix,
+        true,
+    )?;
 
     // Now add the synonyms
-    let index_synonyms = ctx.get_synonyms()?;
-
-    term.zero_typo.synonyms.extend(
-        index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(|words| {
-            let words = words.into_iter().map(|w| Some(ctx.word_interner.insert(w))).collect();
-            ctx.phrase_interner.insert(Phrase { words })
-        }),
-    );
+    if let Some(synonyms) = ctx.index.synonyms.get(ctx.txn, &words)? {
+        for synonym in synonyms.synonyms(tokenizer) {
+            let words =
+                synonym.into_iter().map(|w| Some(ctx.word_interner.insert(w.to_owned()))).collect();
+            let interned = ctx.phrase_interner.insert(Phrase { words });
+            term.zero_typo.synonyms.insert(interned);
+        }
+    }
 
     let term = QueryTerm {
         original: ngram_str_interned,
@@ -372,10 +389,17 @@ mod tests {
         let tokens = tokenizer.tokenize(".");
         let index = temp_index_with_documents();
         let rtxn = index.read_txn()?;
-        let mut ctx = SearchContext::new(&index, &rtxn)?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let mut ctx = SearchContext::new(
+            &index,
+            &rtxn,
+            &fields_ids_map,
+            "test",
+            time::OffsetDateTime::now_utc(),
+        )?;
         // panics with `attempt to add with overflow` before <https://github.com/meilisearch/meilisearch/issues/3785>
         let ExtractedTokens { query_terms, .. } =
-            located_query_terms_from_tokens(&mut ctx, tokens, None)?;
+            located_query_terms_from_tokens(&mut ctx, &tokenizer, tokens, None)?;
         assert!(query_terms.is_empty());
 
         Ok(())
@@ -385,7 +409,14 @@ mod tests {
     fn test_unicode_typo_tolerance_fixed() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
-        let ctx = SearchContext::new(&temp_index, &rtxn)?;
+        let fields_ids_map = temp_index.fields_ids_map(&rtxn)?;
+        let ctx = SearchContext::new(
+            &temp_index,
+            &rtxn,
+            &fields_ids_map,
+            "test",
+            time::OffsetDateTime::now_utc(),
+        )?;
 
         let nbr_typos = number_of_typos_allowed(&ctx)?;
 
@@ -414,7 +445,14 @@ mod tests {
     fn test_various_unicode_scripts() -> Result<()> {
         let temp_index = temp_index_with_documents();
         let rtxn = temp_index.read_txn()?;
-        let ctx = SearchContext::new(&temp_index, &rtxn)?;
+        let fields_ids_map = temp_index.fields_ids_map(&rtxn)?;
+        let ctx = SearchContext::new(
+            &temp_index,
+            &rtxn,
+            &fields_ids_map,
+            "test",
+            time::OffsetDateTime::now_utc(),
+        )?;
 
         let nbr_typos = number_of_typos_allowed(&ctx)?;
 

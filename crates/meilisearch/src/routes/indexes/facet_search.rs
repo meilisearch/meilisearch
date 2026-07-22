@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BinaryHeap, HashSet, VecDeque};
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use index_scheduler::filter::filter_into_index_filter;
+use index_scheduler::filter::{filter_into_index_filter, parse_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools as _;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -14,10 +14,8 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{FacetValueHit, OrderBy};
 use meilisearch_types::network::Network;
-use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
@@ -25,11 +23,10 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
-    add_search_rules, fuse_filters, parse_filter, perform_facet_search, prepare_search,
-    FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery, Partition,
-    RankingScoreThreshold, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET,
+    add_search_rules, fuse_filters, perform_facet_search, prepare_search, FacetSearchResult,
+    HybridQuery, MatchingStrategy, NetworkableQuery, Partition, RankingScoreThreshold, SearchQuery,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
@@ -39,72 +36,60 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Facet Search",
-            description = "The `/facet-search` route allows you to search for facet values. Facet search supports prefix search and typo tolerance. The returned hits are sorted lexicographically in ascending order. You can configure how facets are sorted using the sortFacetValuesBy property of the faceting index settings.",
+            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n**Note:** Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n\n**Note:** Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
         ),
     ),
 )]
 pub struct FacetSearchApi;
 
-// # Important
-//
-// Intentionally don't use `deny_unknown_fields` to ignore search parameters sent by user
 /// Request body for searching facet values
-#[derive(Debug, Clone, Default, PartialEq, deserr::Deserr, Serialize, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase)]
-#[serde(rename_all = "camelCase")]
+#[routes::request(
+    // **Important**:  ignore search parameters sent by user
+    allow_unknown_fields,
+    proxied
+)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct FacetSearchQuery {
-    /// Query string to search for facet values
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
+    /// Query string to search for matching facet values. If not specified, Meilisearch returns all facet values for the `facetName`, limited to 100 results. Note: only the first word is used for matching.
+    #[request(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
-    /// Name of the facet to search
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
+    /// Name of the facet attribute to search. Must be present in the index's `filterableAttributes` list.
+    #[request(required, error = DeserrJsonError<InvalidFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
     pub facet_name: String,
-    /// Query string to filter documents before facet search
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
+    /// Query string to filter the underlying documents before computing facet values. This affects which facet values appear and their counts, but does not filter the facet values themselves.
+    #[request(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Custom query vector for semantic search
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     /// Multimodal content for AI-powered search
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<Value>,
     /// Hybrid search configuration that combines keyword search with semantic
     /// (vector) search. Set `semanticRatio` to balance between keyword
     /// matching (0.0) and semantic similarity (1.0). Requires an embedder to
     /// be configured in the index settings.
-    #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
-    #[schema(required = false, value_type = Option<HybridQuery>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
-    /// Filter expression to apply before facet search
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
+    /// Filter expression to restrict which documents are considered when computing facet values. Attributes must be in `filterableAttributes` before they can be used in filters.
+    #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Strategy used to match query terms
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to specified attributes
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
     /// Minimum ranking score threshold (0.0 to 1.0) that documents must
     /// achieve to be considered when computing facet counts. Documents with
     /// scores below this threshold are excluded from facet value counts.
-    #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
-    #[schema(required = false, value_type = Option<f64>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, schema_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     /// Languages to use for query processing
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
+    #[request(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
     /// Return exhaustive facet count instead of an estimate
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
+    #[request(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
     pub exhaustive_facet_count: Option<bool>,
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
@@ -115,15 +100,12 @@ pub struct FacetSearchQuery {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
-    ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
     /// When using the network, the index must exist with compatible settings on all remotes.
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
+    #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
 }
 
@@ -250,39 +232,38 @@ impl Aggregate for FacetSearchAggregator {
     }
 }
 
-/// Search in facets
+/// Search for facet values
 ///
-/// Search for facet values within a given facet.
+/// Search for facet values matching a query within a given facet attribute. Use this to build
+/// autocomplete or dropdown UIs for facet filters.
 ///
-/// > Use this to build autocomplete or refinement UIs for facet filters.
+/// **Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list.
+/// Facet search will not work without this configuration.
+///
+/// **Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
+/// returns `Jane Austen`, but searching for `Austen` does not.
+///
+/// **Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
+/// to search them as facets.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
-        (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(
+        (status = 200, description = "Facet values matching the query are returned.", body = FacetSearchResult, content_type = "application/json", example = json!(
             {
-              "hits": [
+              "facetHits": [
                 {
-                  "id": 2770,
-                  "title": "American Pie 2",
-                  "poster": "https://image.tmdb.org/t/p/w1280/q4LNgUnRfltxzp3gf1MAGiK5LhV.jpg",
-                  "overview": "The whole gang are back and as close as ever. They decide to get even closer by spending the summer together at a beach house. They decide to hold the biggest…",
-                  "release_date": 997405200
+                  "value": "action",
+                  "count": 273
                 },
                 {
-                  "id": 190859,
-                  "title": "American Sniper",
-                  "poster": "https://image.tmdb.org/t/p/w1280/svPHnYE7N5NAGO49dBmRhq0vDQ3.jpg",
-                  "overview": "U.S. Navy SEAL Chris Kyle takes his sole mission—protect his comrades—to heart and becomes one of the most lethal snipers in American history. His pinpoint accuracy not only saves countless lives but also makes him a prime…",
-                  "release_date": 1418256000
+                  "value": "animated",
+                  "count": 15
                 }
               ],
-              "offset": 0,
-              "limit": 2,
-              "estimatedTotalHits": 976,
-              "processingTimeMs": 35,
-              "query": "american "
+              "facetQuery": "ac",
+              "processingTimeMs": 0
             }
         )),
         (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
@@ -314,6 +295,8 @@ pub async fn search(
     let progress = Progress::default();
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
+    let before_search = time::OffsetDateTime::now_utc();
+
     let permit = search_queue.try_get_search_permit().await?;
 
     let mut query = params.into_inner();
@@ -330,10 +313,19 @@ pub async fn search(
     let network = index_scheduler.network();
 
     let search_result = if query.must_use_network(&network, &features)? {
-        search_federated(index_scheduler.clone(), query, index_uid, progress, features, network)
-            .await
+        search_federated(
+            index_scheduler.clone(),
+            query,
+            index_uid,
+            before_search,
+            progress,
+            features,
+            network,
+        )
+        .await
     } else {
-        search_local(index_scheduler.clone(), query, index_uid, progress, features).await
+        search_local(index_scheduler.clone(), query, index_uid, before_search, progress, features)
+            .await
     };
 
     permit.drop().await;
@@ -353,6 +345,7 @@ async fn search_federated(
     index_scheduler: Data<IndexScheduler>,
     mut query: FacetSearchQuery,
     index_uid: IndexUid,
+    before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
     network: Network,
@@ -433,9 +426,16 @@ async fn search_federated(
 
     query.filter = original_filter;
 
-    let (mut local_results, order) =
-        search_multi_local(local_queries, index_scheduler, query, index_uid, progress, features)
-            .await?;
+    let (mut local_results, order) = search_multi_local(
+        local_queries,
+        index_scheduler,
+        query,
+        index_uid,
+        before_search,
+        progress,
+        features,
+    )
+    .await?;
 
     for task in in_flight_requests {
         match task.await.unwrap() {
@@ -494,6 +494,7 @@ async fn search_multi_local(
     index_scheduler: Data<IndexScheduler>,
     query: FacetSearchQuery,
     index_uid: IndexUid,
+    before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
 ) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
@@ -504,8 +505,9 @@ async fn search_multi_local(
 
     let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
-        let index = index_scheduler.index(&index_uid)?;
+        let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let deadline = index.search_deadline(&rtxn)?;
         let search_kind =
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
@@ -520,17 +522,17 @@ async fn search_multi_local(
 
         let filter = filter
             .as_ref()
-            .and_then(|f| parse_filter(f, Code::InvalidSearchFilter, features).transpose())
+            .and_then(|f| parse_filter(f, Code::InvalidSearchFilter, features, None).transpose())
             .map(|f| {
                 f.and_then(|f| {
-                    Ok(filter_into_index_filter(
+                    filter_into_index_filter(
                         f,
                         &index,
                         &rtxn,
                         &index_scheduler,
                         &progress_clone,
                         &index_uid,
-                    )?)
+                    )
                 })
             })
             .transpose()?;
@@ -538,6 +540,9 @@ async fn search_multi_local(
         let (search, _, _, _) = prepare_search(
             &index,
             &rtxn,
+            &fields_ids_map,
+            index_uid.as_str(),
+            before_search,
             &search_query,
             filter,
             &search_kind,
@@ -546,7 +551,16 @@ async fn search_multi_local(
             &progress_clone,
         )?;
 
-        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
+        perform_facet_search(
+            &index,
+            &rtxn,
+            &fields_ids_map,
+            search,
+            facet_query,
+            facet_name,
+            search_kind,
+            locales,
+        )
     })
     .await;
     search_result?
@@ -556,6 +570,7 @@ async fn search_local(
     index_scheduler: Data<IndexScheduler>,
     query: FacetSearchQuery,
     index_uid: IndexUid,
+    before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
 ) -> Result<FacetSearchResult, ResponseError> {
@@ -566,14 +581,15 @@ async fn search_local(
 
     let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
-        let index = index_scheduler.index(&index_uid)?;
+        let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let search_kind =
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
         let filter = match &search_query.filter {
             Some(filter) => {
-                let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+                let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
                 filter
                     .map(|f| {
                         filter_into_index_filter(
@@ -593,6 +609,9 @@ async fn search_local(
         let (search, _, _, _) = prepare_search(
             &index,
             &rtxn,
+            &fields_ids_map,
+            index_uid.as_str(),
+            before_search,
             &search_query,
             filter,
             &search_kind,
@@ -601,8 +620,17 @@ async fn search_local(
             &progress_clone,
         )?;
 
-        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
-            .map(|(results, _)| results)
+        perform_facet_search(
+            &index,
+            &rtxn,
+            &fields_ids_map,
+            search,
+            facet_query,
+            facet_name,
+            search_kind,
+            locales,
+        )
+        .map(|(results, _)| results)
     })
     .await;
     search_result?

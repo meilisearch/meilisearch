@@ -40,7 +40,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     logger.ranking_rules(&ranking_rules);
     logger.initial_universe(universe);
 
-    let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn)?;
+    let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn, ctx.fields_ids_map)?;
 
     // When pins are present we need the organic prefix up to the end of the
     // requested page. Injecting the surviving pins into that prefix and slicing

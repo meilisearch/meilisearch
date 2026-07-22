@@ -24,4 +24,4 @@ utoipa = { version = "5.4.0", features = [
 quote = "1.0"
 proc-macro2 = "1.0"
 syn = { version = "2.0", features = ["full"] }
-proc-macro2-diagnostics = "0.10.1"
+proc-macro2-diagnostics = { version = "0.10.1", default-features = false }

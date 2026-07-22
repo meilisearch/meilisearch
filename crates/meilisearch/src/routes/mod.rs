@@ -56,7 +56,6 @@ use crate::search::{
     INCLUDE_METADATA_HEADER,
 };
 use crate::search_queue::SearchQueue;
-use crate::Opt;
 
 const PAGINATION_DEFAULT_LIMIT: usize = 20;
 const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
@@ -76,6 +75,8 @@ mod multi_search;
 mod multi_search_analytics;
 pub mod network;
 mod open_api_utils;
+pub mod render;
+mod render_analytics;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
@@ -105,6 +106,7 @@ mod webhooks;
         "/network"=> sub(network::NetworkApi),
         "/webhooks"=> sub(webhooks::WebhooksApi),
         "/dynamic-search-rules"=> sub(dynamic_search_rules::DynamicSearchRulesApi),
+        "/render-template" => sub(render::RenderApi),
     ),
     tag = "Root",
     tags(
@@ -120,59 +122,9 @@ mod webhooks;
         url = "http://localhost:7700",
         description = "Local server.",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter, SizeFormat))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, ListFields, ListFieldsFilter, SizeFormat))
 )]
 pub struct MeilisearchApi;
-
-pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
-    if !opt.experimental_replication_parameters {
-        return Ok(None);
-    }
-    let task_id = req
-        .headers()
-        .get("TaskId")
-        .map(|header| {
-            header.to_str().map_err(|e| {
-                ResponseError::from_msg(
-                    format!("TaskId is not a valid utf-8 string: {e}"),
-                    Code::BadRequest,
-                )
-            })
-        })
-        .transpose()?
-        .map(|s| {
-            s.parse::<TaskId>().map_err(|e| {
-                ResponseError::from_msg(
-                    format!(
-                        "Could not parse the TaskId as a {}: {e}",
-                        std::any::type_name::<TaskId>(),
-                    ),
-                    Code::BadRequest,
-                )
-            })
-        })
-        .transpose()?;
-    Ok(task_id)
-}
-
-pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
-    if !opt.experimental_replication_parameters {
-        return Ok(false);
-    }
-    Ok(req
-        .headers()
-        .get("DryRun")
-        .map(|header| {
-            header.to_str().map_err(|e| {
-                ResponseError::from_msg(
-                    format!("DryRun is not a valid utf-8 string: {e}"),
-                    Code::BadRequest,
-                )
-            })
-        })
-        .transpose()?
-        .is_some_and(|s| s.to_lowercase() == "true"))
-}
 
 /// Parse the `Meili-Include-Metadata` header from an HTTP request.
 ///
@@ -232,7 +184,7 @@ pub struct Pagination {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct PaginationView<T> {
@@ -247,6 +199,24 @@ pub struct PaginationView<T> {
 }
 
 impl Pagination {
+    pub fn empty(self) -> PaginationView<()> {
+        self.format_with(0, Default::default())
+    }
+
+    pub fn try_auto_paginate_sized<T, E>(
+        self,
+        content: impl IntoIterator<Item = Result<T, E>> + ExactSizeIterator,
+    ) -> Result<PaginationView<T>, E>
+    where
+        T: Serialize,
+    {
+        let total = content.len();
+        let content: Result<Vec<_>, _> =
+            content.into_iter().skip(self.offset).take(self.limit).collect();
+        let content = content?;
+        Ok(self.format_with(total, content))
+    }
+
     /// Given the full data to paginate, returns the selected section.
     pub fn auto_paginate_sized<T>(
         self,
@@ -499,11 +469,11 @@ pub fn create_all_stats(
     let size_format = params.size_format.unwrap_or(SizeFormat::Raw); // default to `raw` for backcompat.
     let Param(show_internal_database_sizes) = params.show_internal_database_sizes;
 
-    for index_uid in index_scheduler.index_names()? {
+    for index_uid in index_scheduler.user_index_names()? {
         // Accumulate the size of all indexes, even unauthorized ones, so
         // as to return a database_size representative of the correct database size on disk.
         // See <https://github.com/meilisearch/meilisearch/pull/3541#discussion_r1126747643> for context.
-        let stats = index_scheduler.index_stats(&index_uid)?;
+        let stats = index_scheduler.user_index_stats(&index_uid)?;
         database_size += stats.inner_stats.database_size;
         used_database_size += stats.inner_stats.used_database_size;
 

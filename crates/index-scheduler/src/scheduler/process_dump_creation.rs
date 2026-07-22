@@ -4,6 +4,7 @@ use std::io::BufWriter;
 use std::sync::atomic::Ordering;
 
 use dump::IndexMetadata;
+use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
@@ -144,118 +145,117 @@ impl IndexScheduler {
 
         // 5. Dump the indexes
         progress.update_progress(DumpCreationProgress::DumpTheIndexes);
-        let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
+        let nb_indexes = self.index_mapper.index_count::<AnyIndex>(&rtxn)? as u32;
         let mut count = 0;
-        let () = self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
-            progress.update_progress(VariableNameStep::<DumpCreationProgress>::new(
-                uid.to_string(),
-                count,
-                nb_indexes,
-            ));
-            count += 1;
+        let () = self.index_mapper.try_for_each_index::<_, _, AnyIndex>(
+            &rtxn,
+            |uid, index| -> Result<()> {
+                progress.update_progress(VariableNameStep::<DumpCreationProgress>::new(
+                    uid.uid().to_string(),
+                    count,
+                    nb_indexes,
+                ));
+                count += 1;
 
-            let rtxn = index.read_txn()?;
-            let metadata = IndexMetadata {
-                uid: uid.to_owned(),
-                primary_key: index.primary_key(&rtxn)?.map(String::from),
-                created_at: index
-                    .created_at(&rtxn)
-                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?,
-                updated_at: index
-                    .updated_at(&rtxn)
-                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?,
-            };
-            let mut index_dumper = dump.create_index(uid, &metadata)?;
+                let from_milli = |err| Error::from_milli(err, Some(uid.uid().to_string()));
 
-            let fields_ids_map = index.fields_ids_map(&rtxn)?;
-            let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
+                let rtxn = index.read_txn()?;
+                let metadata = IndexMetadata {
+                    uid: uid.uid().to_owned(),
+                    primary_key: index.primary_key(&rtxn)?.map(String::from),
+                    created_at: index.created_at(&rtxn).map_err(from_milli)?,
+                    updated_at: index.updated_at(&rtxn).map_err(from_milli)?,
+                };
+                let mut index_dumper = dump.create_index(uid.uid(), &metadata)?;
 
-            let nb_documents = index
-                .number_of_documents(&rtxn)
-                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?
-                as u32;
-            let (atomic, update_document_progress) = AtomicDocumentStep::new(nb_documents);
-            progress.update_progress(update_document_progress);
-            let documents = index
-                .all_documents(&rtxn)
-                .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-            // 5.1. Dump the documents
-            for ret in documents {
-                if self.scheduler.must_stop_processing.get() {
-                    return Err(Error::AbortedTask);
-                }
+                let fields_ids_map = index.fields_ids_map(&rtxn)?;
+                let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
 
-                let (id, doc) = ret.map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-
-                let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)
-                    .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-
-                'inject_vectors: {
-                    let embeddings = index
-                        .embeddings(&rtxn, id)
-                        .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-
-                    if embeddings.is_empty() {
-                        break 'inject_vectors;
+                let nb_documents = index.number_of_documents(&rtxn).map_err(from_milli)? as u32;
+                let (atomic, update_document_progress) = AtomicDocumentStep::new(nb_documents);
+                progress.update_progress(update_document_progress);
+                let documents = index.all_documents(&rtxn).map_err(from_milli)?;
+                // 5.1. Dump the documents
+                for ret in documents {
+                    if self.scheduler.must_stop_processing.get() {
+                        return Err(Error::AbortedTask);
                     }
 
-                    let vectors = document
-                        .entry(RESERVED_VECTORS_FIELD_NAME.to_owned())
-                        .or_insert(serde_json::Value::Object(Default::default()));
+                    let (id, doc) = ret.map_err(from_milli)?;
 
-                    let serde_json::Value::Object(vectors) = vectors else {
-                        let user_err =
-                            milli::Error::UserError(milli::UserError::InvalidVectorsMapType {
-                                document_id: {
-                                    if let Ok(Some(Ok(index))) = index
-                                        .external_id_of(&rtxn, std::iter::once(id))
-                                        .map(|it| it.into_iter().next())
-                                    {
-                                        index
-                                    } else {
-                                        format!("internal docid={id}")
-                                    }
-                                },
-                                value: vectors.clone(),
-                            });
+                    let mut document = milli::obkv_to_json(&all_fields, &fields_ids_map, doc)
+                        .map_err(from_milli)?;
 
-                        return Err(Error::from_milli(user_err, Some(uid.to_string())));
-                    };
+                    'inject_vectors: {
+                        let embeddings = index.embeddings(&rtxn, id).map_err(from_milli)?;
 
-                    for (
-                        embedder_name,
-                        EmbeddingsWithMetadata { embeddings, regenerate, has_fragments },
-                    ) in embeddings
-                    {
-                        let embeddings = ExplicitVectors {
-                            embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
-                                embeddings,
-                            )),
-                            regenerate: regenerate &&
+                        if embeddings.is_empty() {
+                            break 'inject_vectors;
+                        }
+
+                        let vectors = document
+                            .entry(RESERVED_VECTORS_FIELD_NAME.to_owned())
+                            .or_insert(serde_json::Value::Object(Default::default()));
+
+                        let serde_json::Value::Object(vectors) = vectors else {
+                            let user_err =
+                                milli::Error::UserError(milli::UserError::InvalidVectorsMapType {
+                                    document_id: {
+                                        if let Ok(Some(Ok(index))) = index
+                                            .external_id_of(
+                                                &rtxn,
+                                                &fields_ids_map,
+                                                std::iter::once(id),
+                                            )
+                                            .map(|it| it.into_iter().next())
+                                        {
+                                            index
+                                        } else {
+                                            format!("internal docid={id}")
+                                        }
+                                    },
+                                    value: vectors.clone(),
+                                });
+
+                            return Err(from_milli(user_err));
+                        };
+
+                        for (
+                            embedder_name,
+                            EmbeddingsWithMetadata { embeddings, regenerate, has_fragments },
+                        ) in embeddings
+                        {
+                            let embeddings = ExplicitVectors {
+                                embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
+                                    embeddings,
+                                )),
+                                regenerate: regenerate &&
                             // Meilisearch does not handle well dumps with fragments, because as the fragments
                             // are marked as user-provided,
                             // all embeddings would be regenerated on any settings change or document update.
                             // To prevent this, we mark embeddings has non regenerate in this case.
                             !has_fragments,
-                        };
-                        vectors.insert(embedder_name, serde_json::to_value(embeddings).unwrap());
+                            };
+                            vectors
+                                .insert(embedder_name, serde_json::to_value(embeddings).unwrap());
+                        }
                     }
+
+                    index_dumper.push_document(&document)?;
+                    atomic.fetch_add(1, Ordering::Relaxed);
                 }
 
-                index_dumper.push_document(&document)?;
-                atomic.fetch_add(1, Ordering::Relaxed);
-            }
-
-            // 5.2. Dump the settings
-            let settings = meilisearch_types::settings::settings(
-                index,
-                &rtxn,
-                meilisearch_types::settings::SecretPolicy::RevealSecrets,
-            )
-            .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
-            index_dumper.settings(&settings)?;
-            Ok(())
-        })?;
+                // 5.2. Dump the settings
+                let settings = meilisearch_types::settings::settings(
+                    index,
+                    &rtxn,
+                    meilisearch_types::settings::SecretPolicy::RevealSecrets,
+                )
+                .map_err(from_milli)?;
+                index_dumper.settings(&settings)?;
+                Ok(())
+            },
+        )?;
 
         // 6. Dump experimental feature settings
         progress.update_progress(DumpCreationProgress::DumpTheExperimentalFeatures);
@@ -268,14 +268,6 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::DumpTheWebhooks);
         let webhooks = self.webhooks_dump_view();
         dump.create_webhooks(webhooks)?;
-
-        // 8. Dump the dynamic search rules
-        progress.update_progress(DumpCreationProgress::DumpDynamicSearchRules);
-        let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules()?;
-        for result in self.dynamic_search_rules.persisted.iter(&rtxn)? {
-            let (_, rule) = result?;
-            dump_dynamic_search_rules.push_rule(&rule)?;
-        }
 
         let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"

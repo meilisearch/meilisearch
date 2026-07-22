@@ -8,8 +8,10 @@ use file_store::File;
 use http_client::policy::IpPolicy;
 use meilisearch_auth::open_auth_store_env;
 use meilisearch_types::document_formats::DocumentFormatError;
+use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
 use meilisearch_types::milli::update::{IndexerConfig, MissingDocumentPolicy};
+use meilisearch_types::milli::FilterConstraintFuel;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{versioning, VERSION_FILE_NAME};
 use tempfile::{NamedTempFile, TempDir};
@@ -108,17 +110,15 @@ impl IndexScheduler {
             index_count: 5,
             indexer_config: Arc::new(indexer_config),
             autobatching_enabled: true,
-            cleanup_enabled: true,
             max_number_of_tasks: 1_000_000,
             max_number_of_batched_tasks: usize::MAX,
             batched_tasks_size_limit: u64::MAX,
             instance_features: Default::default(),
             export_default_payload_size_bytes: byte_unit::Byte::parse_str("20MiB", false).unwrap(),
-            auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
-            experimental_no_snapshot_compaction: false,
+            dsr_fuel: DsrFuel::new(3, 10, 3, 128, 128, FilterConstraintFuel::new(100, 100, 25)),
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)

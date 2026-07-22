@@ -1,7 +1,6 @@
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidSwapIndexes, InvalidSwapRename};
@@ -9,15 +8,13 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
-use utoipa::ToSchema;
 
-use super::{get_task_id, is_dry_run, SummarizedTaskView};
+use super::SummarizedTaskView;
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::Opt;
 
 #[routes::routes(
     routes(
@@ -28,16 +25,14 @@ use crate::Opt;
 pub struct SwapIndexesApi;
 
 /// Request body for swapping two indexes
-#[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[routes::request(proxied)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SwapIndexesPayload {
     /// Array of the two index names to be swapped
-    #[schema(required = true)]
-    #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
+    #[request(required, error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
     /// If true, rename the first index to the second instead of swapping
-    #[schema(required = false)]
-    #[deserr(default, error = DeserrJsonError<InvalidSwapRename>)]
+    #[request(default, error = DeserrJsonError<InvalidSwapRename>)]
     rename: bool,
 }
 
@@ -98,7 +93,6 @@ pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
     params: AwebJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -133,11 +127,9 @@ pub async fn swap_indexes(
     }
 
     let task = KindWithContent::IndexSwap { swaps };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let scheduler = index_scheduler.clone();
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 

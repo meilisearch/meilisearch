@@ -19,8 +19,7 @@ actix-http = { version = "3.12.1", default-features = false, features = [
     "compress-gzip",
     "rustls-0_23",
 ] }
-actix-utils = "3.0.1"
-actix-web = { version = "4.12.0", default-features = false, features = [
+actix-web = { version = "4.13.0", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
@@ -38,17 +37,17 @@ deserr = { version = "0.6.4", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.15.0"
 file-store = { path = "../file-store" }
-flate2 = "1.1.5"
-fst = "0.4.7"
-futures = "0.3.31"
-futures-util = "0.3.31"
+flate2 = "1.1.9"
+futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
+futures-util = "0.3.32"
 index-scheduler = { path = "../index-scheduler" }
 http-client = { path = "../http-client" }
 indexmap = { version = "2.12.0", features = ["serde"] }
 is-terminal = "0.4.17"
 itertools = "0.14.0"
-jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.4.0", default-features = false, features = ["rust_crypto", "hmac", "sha2", "rand"] }
 lazy_static = "1.5.0"
+liquid = "0.26.11"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.9"
@@ -56,39 +55,33 @@ mimalloc = { workspace = true }
 mime = "0.3.17"
 num_cpus = "1.17.0"
 obkv = "0.3.0"
-once_cell = "1.21.3"
-ordered-float = "5.1.0"
-parking_lot = "0.12.5"
+once_cell = "1.21.4"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.16"
 platform-dirs = "0.3.0"
-prometheus = { version = "0.14.0", features = ["process"] }
-rand = "0.8.5"
-rayon = "1.11.0"
-regex = "1.12.2"
-rustls = { version = "0.23.36", features = ["ring"], default-features = false }
-rustls-pki-types = { version = "1.13.0", features = ["alloc"] }
+prometheus = { version = "0.14.0", default-features = false, features = ["process"] }
+rand = "0.8.6"
+
+regex = "1.12.3"
+rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+
 rustls-pemfile = "2.2.0"
 segment = { version = "0.2.6" }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-sha2 = "0.10.9"
-siphasher = "1.0.1"
-slice-group-by = "0.3.1"
+serde_json = { version = "1.0.150", features = ["preserve_order"] }
 static-files = { version = "0.3.1", optional = true }
-sysinfo = "0.38.4"
-tar = "0.4.46"
-tempfile = "3.23.0"
-thiserror = "2.0.17"
+sysinfo = { version = "0.38.4", default-features = false, features = ["system", "disk"] }
+tempfile = "3.27.0"
+thiserror = "2.0.18"
 time = { version = "0.3.47", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tokio = { version = "1.48.0", features = ["full"] }
-toml = "0.9.8"
-uuid = { version = "1.18.1", features = ["serde", "v4", "v7"] }
+tokio = { version = "1.52.3", features = ["full"] }
+toml = { version = "1.1.2", default-features = false, features = ["std", "serde", "parse"] }
+uuid = { version = "1.23.2", features = ["serde", "v4", "v7"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.7", features = ["serde"] }
@@ -117,6 +110,7 @@ backoff = { version = "0.4.0", features = ["tokio"] }
 humantime = { version = "2.3.0", default-features = false }
 cidr = { version = "0.3.2", features = ["serde"] }
 routes = { path = "../routes" }
+bumparaw-collections = "0.1.7"
 
 [dev-dependencies]
 actix-rt = "2.11.0"
@@ -140,8 +134,8 @@ reqwest = { version = "0.12.24", features = [
 ], default-features = false, optional = true }
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.3.1", optional = true }
-tempfile = { version = "3.23.0", optional = true }
-zip = { version = "6.0.0", optional = true }
+tempfile = { version = "3.27.0", optional = true }
+zip = { version = "6.0.0", optional = true, default-features = false, features = ["deflate-flate2"] }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]

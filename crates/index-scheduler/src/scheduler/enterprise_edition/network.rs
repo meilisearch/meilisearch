@@ -10,6 +10,7 @@ use bumpalo::Bump;
 use hashbrown::hash_map::EntryRef;
 use http_client::reqwest::header::AUTHORIZATION;
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::{AnyIndex, UserIndex};
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::RwTxn;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
@@ -90,8 +91,8 @@ impl IndexScheduler {
         };
 
         let origin;
-        let origin = match task_network.origin() {
-            Some(origin) => origin,
+        let (origin, is_leader) = match task_network.origin() {
+            Some(origin) => (origin, false),
             None => {
                 let myself =
                     network_topology_change.name_for_import().expect("origin is not the leader");
@@ -100,7 +101,7 @@ impl IndexScheduler {
                     task_uid: task.uid,
                     network_version: task_network.network_version(),
                 };
-                &origin
+                (&origin, true)
             }
         };
 
@@ -116,6 +117,7 @@ impl IndexScheduler {
                 out_name,
                 new_shards,
                 origin,
+                is_leader,
                 &progress,
                 &self.scheduler.must_stop_processing,
             )?
@@ -155,6 +157,7 @@ impl IndexScheduler {
         Ok((vec![task], Default::default()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn balance_documents<
         'a,
         I: Iterator<Item = (&'a str, &'a Remote, J)> + Clone,
@@ -165,6 +168,7 @@ impl IndexScheduler {
         out_name: &str,
         new_shards: Shards,
         network_change_origin: &Origin,
+        is_leader: bool,
         progress: &Progress,
         must_stop_processing: &MustStopProcessing,
     ) -> crate::Result<()> {
@@ -180,7 +184,15 @@ impl IndexScheduler {
 
         let scheduler_rtxn = self.env.read_txn()?;
 
-        let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;
+        let features = self.features();
+
+        let index_count = if is_leader {
+            // leader sends both UserIndex and DsrIndex
+            self.index_mapper.index_count::<AnyIndex>(&scheduler_rtxn)?
+        } else {
+            // follower only sends UserIndex
+            self.index_mapper.index_count::<UserIndex>(&scheduler_rtxn)?
+        };
 
         // when the instance is empty, we still need to tell that to remotes, as they cannot know of that fact and will be waiting for
         // data
@@ -209,6 +221,55 @@ impl IndexScheduler {
 
         let mut index_index = 0;
 
+        // DSR export
+        if is_leader {
+            'dsr: {
+                let Ok(dsrs) = self.dynamic_search_rules(features, "") else {
+                    break 'dsr;
+                };
+
+                let Some(dsrs) = dsrs.milli_dsrs()? else {
+                    break 'dsr;
+                };
+
+                progress.update_progress(
+                    VariableNameStep::<processing::network::ExportIndex>::new(
+                        "Exporting dynamic search rules".to_string(),
+                        index_index,
+                        index_count as u32,
+                    ),
+                );
+
+                index_index += 1;
+
+                for (remote_name, remote, _) in remotes.clone() {
+                    let target = TargetInstance {
+                        remote_name: Some(remote_name),
+                        base_url: &remote.url,
+                        api_key: remote.write_api_key.as_deref(),
+                    };
+
+                    let res = self.export_dsr_index(
+                        target,
+                        &dsrs,
+                        index_count,
+                        out_name,
+                        network_change_origin,
+                        progress,
+                        &agent,
+                        must_stop_processing,
+                    );
+
+                    match res {
+                        Ok(_) => {}
+                        Err(err) => {
+                            tracing::warn!("Could not export dynamic search rules to `{remote_name}` due to error: {err}");
+                        }
+                    }
+                }
+            }
+        }
+
         // shard rebalancing
         //
         // when a shard is removed, its documents must be redistributed among the other shards.
@@ -216,16 +277,16 @@ impl IndexScheduler {
         // in other words, for each (remote, shard):
         // 1. if shard is new for remote, and local is responsible for sending shard, send full shard
         // 2. otherwise, send shard ^ resharded documents
-        self.index_mapper.try_for_each_index::<(), ()>(
+        self.index_mapper.try_for_each_index::<(), (), UserIndex>(
             &scheduler_rtxn,
             |index_uid, index| -> crate::Result<()> {
-                let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
+                let err = |err| Error::from_milli(err, Some(index_uid.uid().to_string()));
 
                 let mut index_wtxn = index.write_txn()?;
 
                 progress.update_progress(
                     VariableNameStep::<processing::network::ExportIndex>::new(
-                        format!("Exporting documents from index `{index_uid}`"),
+                        format!("Exporting documents from index `{index_uid}`", index_uid=index_uid.uid()),
                         index_index,
                         index_count as u32,
                     ),
@@ -271,7 +332,7 @@ impl IndexScheduler {
                         api_key: remote.write_api_key.as_deref(),
                     };
                     let options = ExportOptions {
-                        index_uid,
+                        index_uid: index_uid.uid(),
                         payload_size: None,
                         override_settings: false,
                         export_mode:
@@ -288,6 +349,7 @@ impl IndexScheduler {
                         progress,
                         agent: &agent,
                         must_stop_processing,
+                        features
                     };
 
                     let res = self.export_one_index(target, options, ctx);
@@ -326,30 +388,33 @@ impl IndexScheduler {
 
         let scheduler_rtxn = self.env.read_txn()?;
 
-        let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;
+        let index_count = self.index_mapper.index_count::<UserIndex>(&scheduler_rtxn)?;
         let mut index_index = 0;
 
-        self.index_mapper.try_for_each_index::<(), ()>(
+        self.index_mapper.try_for_each_index::<(), (), UserIndex>(
             &scheduler_rtxn,
             |index_uid, index| -> crate::Result<()> {
                 indexer_alloc.reset();
                 let mut index_wtxn = index.write_txn()?;
 
-                let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
+                let err = |err| Error::from_milli(err, Some(index_uid.uid().to_string()));
 
                 let embedders = index
                     .embedding_configs()
                     .embedding_configs(&index_wtxn)
                     .map_err(milli::Error::from)
                     .map_err(err)?;
-                let embedders = self.embedders(index_uid.to_string(), embedders)?;
+                let embedders = self.embedders(index_uid.uid().to_string(), embedders)?;
 
                 let shard_docids = index.shard_docids();
 
                 progress.update_progress(VariableNameStep::<
                     processing::network::DeleteDocumentsFromIndex,
                 >::new(
-                    format!("Deleting removed shards for index `{index_uid}`"),
+                    format!(
+                        "Deleting removed shards for index `{index_uid}`",
+                        index_uid = index_uid.uid()
+                    ),
                     index_index,
                     index_count as u32,
                 ));
@@ -498,7 +563,7 @@ impl IndexScheduler {
             None, // document deletion never changes primary key
             &document_changes,
             embedders,
-            &|| must_stop_processing.get(),
+            must_stop_processing,
             progress,
             self.ip_policy(),
             &EmbedderStats::default(),

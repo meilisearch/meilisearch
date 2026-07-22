@@ -11,9 +11,7 @@ use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::Result;
-
-const MAX_COUNTED_WORDS: usize = 30;
+use crate::{Result, MAX_COUNTED_WORDS};
 
 /// Extracts the field id word count and the documents ids where
 /// this field id with this amount of words appear.

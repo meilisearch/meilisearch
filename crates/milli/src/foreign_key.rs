@@ -1,21 +1,17 @@
-use deserr::Deserr;
-use heed::{
-    types::{SerdeJson, Str},
-    RoTxn, RwTxn,
-};
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use heed::types::{SerdeJson, Str};
+use heed::{RoTxn, RwTxn};
 
-use crate::{index::main_key, Index};
+use crate::index::main_key;
+use crate::Index;
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema, Deserr)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-#[deserr(rename_all = camelCase, deny_unknown_fields)]
-#[derive(Default)]
+#[routes::request(setting, no_error)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct ForeignKey {
     // Index uid of the foreign index
+    #[request(required)]
     pub foreign_index_uid: String,
     // Field name of the current index documents containing document ids of the foreign index
+    #[request(required)]
     pub field_name: String,
 }
 

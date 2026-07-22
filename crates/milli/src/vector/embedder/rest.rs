@@ -114,7 +114,7 @@ impl RequestData {
             for (name, value) in indexing_fragments {
                 JsonTemplate::new(value).map_err(|error| {
                     NewEmbedderError::rest_could_not_parse_template(
-                        error.parsing(&format!(".indexingFragments.{name}")),
+                        error.parsing_error(&format!(".indexingFragments.{name}")),
                     )
                 })?;
             }
@@ -429,10 +429,23 @@ where
         return Ok(Vec::new());
     }
 
+    let timeout = deadline.map(|deadline| {
+        let now = std::time::Instant::now();
+
+        deadline.saturating_duration_since(now)
+    });
+
     // for some reason, ureq 3 `Request` is not `Clone`.
     // So write a closure that will be called each time to setup the request
     let request_builder = || {
         let request = data.client.post(&data.url);
+        let request_config = request.config();
+        let request_config = if let Some(timeout) = timeout {
+            request_config.timeout_global(Some(timeout))
+        } else {
+            request_config
+        };
+        let request = request_config.build();
         let request = if let Some(bearer) = &data.bearer {
             request.header("Authorization", bearer)
         } else {
@@ -489,9 +502,8 @@ where
 
         let retry_duration = retry_duration.min(data.max_retry_duration); // don't wait more than the max duration
 
-        // randomly up to double the retry duration
-        let retry_duration = retry_duration
-            + rand::thread_rng().gen_range(std::time::Duration::ZERO..retry_duration);
+        // randomly divide the retry duration by up to two
+        let retry_duration = retry_duration.mul_f32(rand::thread_rng().gen_range(0.5f32..=1.0f32));
 
         tracing::warn!("Attempt #{}, retrying after {}ms.", attempt, retry_duration.as_millis());
         std::thread::sleep(retry_duration);
@@ -668,7 +680,7 @@ impl RequestFromFragments {
             .map(|(name, value)| {
                 let json_template = JsonTemplate::new(value).map_err(|error| {
                     NewEmbedderError::rest_could_not_parse_template(
-                        error.parsing(&format!(".searchFragments.{name}")),
+                        error.parsing_error(&format!(".searchFragments.{name}")),
                     )
                 })?;
                 Ok((name, json_template))

@@ -62,8 +62,9 @@ fn create_index() -> TempIndex {
 fn basic_degraded_search() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     search.query("hello puppy kefir");
     search.limit(3);
     search.deadline(Deadline::from_budget(Duration::from_millis(0)));
@@ -76,8 +77,9 @@ fn basic_degraded_search() {
 fn degraded_search_cannot_skip_filter() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     search.query("hello puppy kefir");
     search.limit(100);
     search.deadline(Deadline::from_budget(Duration::from_millis(0)));
@@ -97,8 +99,9 @@ fn degraded_search_cannot_skip_filter() {
 fn degraded_search_and_score_details() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     search.query("hello puppy kefir");
     search.limit(4);
     search.scoring_strategy(ScoringStrategy::Detailed);
@@ -558,12 +561,12 @@ fn degraded_search_and_score_details_vector() {
                 }),
             );
             settings.set_embedder_settings(embedders);
-            settings.set_vector_store(crate::vector::VectorStoreBackend::Hannoy);
         })
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
 
     let embedder = Arc::new(
         Embedder::new(

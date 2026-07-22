@@ -1,7 +1,7 @@
 use http_client::policy::IpPolicy;
 use milli::progress::Progress;
 use milli::update::{IndexerConfig, Settings};
-use milli::{Criterion, Index, Search, TermsMatchingStrategy};
+use milli::{Criterion, Index, MustStopProcessing, Search, TermsMatchingStrategy};
 
 use crate::search::Criterion::{Attribute, Exactness, Proximity};
 
@@ -14,7 +14,7 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     builder.set_stop_words(stop_words);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -32,9 +32,17 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
 
     // Phrase search containing stop words
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
     let progress = Progress::default();
-    let mut search = Search::new(&txn, &index, &progress);
+    let mut search = Search::new(
+        &txn,
+        &index,
+        &fields_ids_map,
+        "test",
+        time::OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.query("\"the use of force\"");
     search.limit(10);
     search.terms_matching_strategy(TermsMatchingStrategy::All);

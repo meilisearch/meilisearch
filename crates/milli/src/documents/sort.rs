@@ -11,7 +11,7 @@ use crate::documents::GeoSortParameter;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
-use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
+use crate::{is_faceted, AscDesc, DocumentId, FieldsIdsMap, Member, UserError};
 
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {
@@ -412,11 +412,11 @@ impl<'ctx> SortedDocuments<'ctx> {
 pub fn recursive_sort<'ctx>(
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
-    sort: Vec<AscDesc>,
+    fields_ids_map: &FieldsIdsMap,
+    sort: &[AscDesc],
     candidates: &'ctx RoaringBitmap,
 ) -> crate::Result<SortedDocuments<'ctx>> {
     let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
 
     // Retrieve the field ids that are used for sorting
     let mut fields = Vec::new();
@@ -429,12 +429,12 @@ pub fn recursive_sort<'ctx>(
             AscDesc::Desc(Member::Geo(target_point)) => (None, Some((target_point, false))),
         };
         if let Some((field, ascending)) = field {
-            if is_faceted(&field, &sortable_fields) {
+            if is_faceted(field, &sortable_fields) {
                 // The field may be in sortable_fields but not in fields_ids_map if no document
                 // has ever contained this field. In that case, we just skip this sort criterion
                 // since there are no values to sort by. Documents will be returned in their
                 // default order for this field.
-                if let Some(field_id) = fields_ids_map.id(&field) {
+                if let Some(field_id) = fields_ids_map.id(field) {
                     fields.push(AscDescId::Facet { field_id, ascending });
                 }
                 continue;
@@ -452,6 +452,7 @@ pub fn recursive_sort<'ctx>(
                     fields_ids_map.id(RESERVED_GEO_LNG_FIELD_NAME),
                 ) {
                     need_geo_candidates = true;
+                    let target_point = [target_point[0], target_point[1]];
                     fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
                     continue;
                 }

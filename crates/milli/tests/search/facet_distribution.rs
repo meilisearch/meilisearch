@@ -7,7 +7,10 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{CreateOrOpen, FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
+use milli::{
+    CreateOrOpen, FacetDistribution, FilterableAttributesRule, Index, MustStopProcessing, Object,
+    OrderBy,
+};
 use serde_json::{from_value, json};
 
 #[test]
@@ -28,7 +31,7 @@ fn test_facet_distribution_with_no_facet_values() {
     ]);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -66,7 +69,7 @@ fn test_facet_distribution_with_no_facet_values() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -82,7 +85,7 @@ fn test_facet_distribution_with_no_facet_values() {
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
@@ -93,12 +96,13 @@ fn test_facet_distribution_with_no_facet_values() {
     wtxn.commit().unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut distrib = FacetDistribution::new(&rtxn, &index);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut distrib = FacetDistribution::new(&rtxn, &index, &fields_ids_map);
     distrib.facets(vec![("genres", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["genres"].len(), 0);
 
-    let mut distrib = FacetDistribution::new(&rtxn, &index);
+    let mut distrib = FacetDistribution::new(&rtxn, &index, &fields_ids_map);
     distrib.facets(vec![("tags", OrderBy::default())]);
     let result = distrib.execute().unwrap();
     assert_eq!(result["tags"].len(), 2);

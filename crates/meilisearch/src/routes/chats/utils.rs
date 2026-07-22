@@ -15,7 +15,7 @@ use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::prompt::{Prompt, PromptData};
 use meilisearch_types::milli::update::new::document::DocumentFromDb;
 use meilisearch_types::milli::{
-    DocumentId, FieldIdMapWithMetadata, GlobalFieldsIdsMap, MetadataBuilder,
+    DocumentId, FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
 };
 use meilisearch_types::{Document, Index};
 use serde::Serialize;
@@ -214,6 +214,7 @@ impl SseEventSender {
 pub fn format_documents<'doc>(
     rtxn: &RoTxn<'_>,
     index: &Index,
+    fields_ids_map: &FieldsIdsMap,
     doc_alloc: &'doc Bump,
     internal_docids: Vec<DocumentId>,
 ) -> Result<Vec<&'doc str>, ResponseError> {
@@ -223,32 +224,32 @@ pub fn format_documents<'doc>(
         ResponseError::from_msg(e.to_string(), Code::InvalidChatSettingDocumentTemplate)
     })?;
 
-    let fid_map = index.fields_ids_map(rtxn)?;
     let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
-    let fid_map_with_meta = FieldIdMapWithMetadata::new(fid_map.clone(), metadata_builder);
+    let fid_map_with_meta = FieldIdMapWithMetadata::new(fields_ids_map.clone(), metadata_builder);
     let global = RwLock::new(fid_map_with_meta);
     let gfid_map = RefCell::new(GlobalFieldsIdsMap::new(&global));
 
     let external_ids: Vec<String> = index
-        .external_id_of(rtxn, internal_docids.iter().copied())?
+        .external_id_of(rtxn, fields_ids_map, internal_docids.iter().copied())?
         .into_iter()
         .collect::<Result<_, _>>()?;
 
     let mut renders = Vec::new();
     for (docid, external_docid) in internal_docids.into_iter().zip(external_ids) {
-        let document = match DocumentFromDb::new(docid, rtxn, index, &fid_map)? {
+        let document = match DocumentFromDb::new(docid, rtxn, index, fields_ids_map)? {
             Some(doc) => doc,
             None => unreachable!("Document with internal ID {docid} not found"),
         };
-        let text = match prompt.render_document(&external_docid, document, &gfid_map, doc_alloc) {
-            Ok(text) => text,
-            Err(err) => {
-                return Err(ResponseError::from_msg(
-                    err.to_string(),
-                    Code::InvalidChatSettingDocumentTemplate,
-                ))
-            }
-        };
+        let text =
+            match prompt.render_document(Some(&external_docid), document, &gfid_map, doc_alloc) {
+                Ok(text) => text,
+                Err(err) => {
+                    return Err(ResponseError::from_msg(
+                        err.to_string(),
+                        Code::InvalidChatSettingDocumentTemplate,
+                    ))
+                }
+            };
         renders.push(text);
     }
 

@@ -51,13 +51,13 @@ const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
-const MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE: &str = "MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE";
-const MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS: &str = "MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS";
+const MEILI_UPGRADE_DB: &str = "MEILI_UPGRADE_DB";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
+const MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT: &str = "MEILI_EXPERIMENTAL_LEGACY_SEARCH";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
 const MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE: &str = "MEILI_EXPERIMENTAL_NB_SEARCHES_PER_CORE";
@@ -69,9 +69,6 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
     "MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE";
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
-const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
-const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
-    "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
 const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
     "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
 
@@ -396,6 +393,13 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_metrics: bool,
 
+    /// Experimental legacy search feature.
+    ///
+    /// Enables the legacy search pipeline by default.
+    #[clap(long, env = MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT)]
+    #[serde(default)]
+    pub experimental_legacy_search_default: bool,
+
     /// Experimental search queue size. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/729>
     ///
@@ -436,12 +440,14 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_logs_mode: LogMode,
 
-    /// Experimental dumpless upgrade. For more information, see: <https://github.com/orgs/meilisearch/discussions/804>
+    /// Upgrade the database from a previous Meilisearch version without a dump. For more
+    /// information, see: <https://github.com/orgs/meilisearch/discussions/804>
     ///
-    /// When set, Meilisearch will auto-update its database without using a dump.
-    #[clap(long, env = MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE, default_value_t)]
+    /// When set, Meilisearch will upgrade its database on startup if it was created by a
+    /// previous version.
+    #[clap(long, env = MEILI_UPGRADE_DB, default_value_t)]
     #[serde(default)]
-    pub experimental_dumpless_upgrade: bool,
+    pub upgrade_db: bool,
 
     /// Experimental logs route feature. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/721>
@@ -451,17 +457,6 @@ pub struct Opt {
     #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE)]
     #[serde(default)]
     pub experimental_enable_logs_route: bool,
-
-    /// Enable multiple features that helps you to run meilisearch in a replicated context.
-    /// For more information, see: <https://github.com/orgs/meilisearch/discussions/725>
-    ///
-    /// - /!\ Disable the automatic clean up of old processed tasks, you're in charge of that now
-    /// - Lets you specify a custom task ID upon registering a task
-    /// - Lets you execute dry-register a task (get an answer from the route but nothing is actually
-    ///   registered in meilisearch and it won't be processed)
-    #[clap(long, env = MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS)]
-    #[serde(default)]
-    pub experimental_replication_parameters: bool,
 
     /// Experimental RAM reduction during indexing, do not use in production,
     /// see: <https://github.com/meilisearch/product/discussions/652>
@@ -491,15 +486,6 @@ pub struct Opt {
     #[clap(long, env = MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES, default_value_t = default_embedding_cache_entries())]
     #[serde(default = "default_embedding_cache_entries")]
     pub experimental_embedding_cache_entries: usize,
-
-    /// Experimental no snapshot compaction feature.
-    ///
-    /// When enabled, Meilisearch will not compact snapshots during creation.
-    ///
-    /// For more information, see <https://github.com/orgs/meilisearch/discussions/833>.
-    #[clap(long, env = MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION)]
-    #[serde(default)]
-    pub experimental_no_snapshot_compaction: bool,
 
     /// Experimental personalization API key feature.
     ///
@@ -611,18 +597,17 @@ impl Opt {
             no_analytics,
             experimental_contains_filter,
             experimental_enable_metrics,
+            experimental_legacy_search_default: experimental_legacy_search,
             experimental_search_queue_size,
             experimental_drop_search_after,
             experimental_nb_searches_per_core,
             experimental_logs_mode,
-            experimental_dumpless_upgrade,
+            upgrade_db,
             experimental_enable_logs_route,
-            experimental_replication_parameters,
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
-            experimental_no_snapshot_compaction,
             experimental_personalization_api_key,
             experimental_allowed_ip_networks,
             s3_snapshot_options,
@@ -679,6 +664,10 @@ impl Opt {
             experimental_enable_metrics.to_string(),
         );
         export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT,
+            experimental_legacy_search.to_string(),
+        );
+        export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE,
             experimental_search_queue_size.to_string(),
         );
@@ -694,14 +683,7 @@ impl Opt {
             MEILI_EXPERIMENTAL_LOGS_MODE,
             experimental_logs_mode.to_string(),
         );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE,
-            experimental_dumpless_upgrade.to_string(),
-        );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_REPLICATION_PARAMETERS,
-            experimental_replication_parameters.to_string(),
-        );
+        export_to_env_if_not_present(MEILI_UPGRADE_DB, upgrade_db.to_string());
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE,
             experimental_enable_logs_route.to_string(),
@@ -723,10 +705,6 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES,
             experimental_embedding_cache_entries.to_string(),
-        );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
-            experimental_no_snapshot_compaction.to_string(),
         );
         if let Some(experimental_personalization_api_key) = experimental_personalization_api_key {
             export_to_env_if_not_present(
@@ -805,6 +783,7 @@ impl Opt {
     pub(crate) fn to_instance_features(&self) -> InstanceTogglableFeatures {
         InstanceTogglableFeatures {
             metrics: self.experimental_enable_metrics,
+            legacy_search_as_default: self.experimental_legacy_search_default,
             logs_route: self.experimental_enable_logs_route,
             contains_filter: self.experimental_contains_filter,
         }
@@ -842,15 +821,6 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS)]
     #[serde(default)]
     pub experimental_no_edition_2024_for_settings: bool,
-
-    /// Experimental make dump imports use the old document indexer.
-    ///
-    /// When enabled, Meilisearch will use the old document indexer when importing dumps.
-    ///
-    /// For more information, see <https://github.com/orgs/meilisearch/discussions/851>.
-    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
-    #[serde(default)]
-    pub experimental_no_edition_2024_for_dumps: bool,
 }
 
 impl IndexerOpts {
@@ -861,7 +831,6 @@ impl IndexerOpts {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
-            experimental_no_edition_2024_for_dumps,
         } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
@@ -881,12 +850,6 @@ impl IndexerOpts {
                 experimental_no_edition_2024_for_settings.to_string(),
             );
         }
-        if experimental_no_edition_2024_for_dumps {
-            export_to_env_if_not_present(
-                MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS,
-                experimental_no_edition_2024_for_dumps.to_string(),
-            );
-        }
     }
 }
 
@@ -899,7 +862,6 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             max_indexing_threads,
             skip_index_budget,
             experimental_no_edition_2024_for_settings,
-            experimental_no_edition_2024_for_dumps,
         } = other;
 
         let thread_pool = ThreadPoolNoAbortBuilder::new_for_indexing()
@@ -914,7 +876,6 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             max_positions_per_attributes: None,
             skip_index_budget: *skip_index_budget,
             experimental_no_edition_2024_for_settings: *experimental_no_edition_2024_for_settings,
-            experimental_no_edition_2024_for_dumps: *experimental_no_edition_2024_for_dumps,
             chunk_compression_type: Default::default(),
             chunk_compression_level: Default::default(),
             documents_chunk_size: Default::default(),

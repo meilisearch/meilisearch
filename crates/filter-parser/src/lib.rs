@@ -42,6 +42,7 @@
 //!
 
 mod condition;
+mod constraint;
 mod error;
 mod value;
 
@@ -51,6 +52,10 @@ pub use condition::{parse_condition, parse_to, Condition};
 use condition::{
     parse_contains, parse_exists, parse_is_empty, parse_is_not_empty, parse_is_not_null,
     parse_is_null, parse_not_contains, parse_not_exists, parse_not_starts_with, parse_starts_with,
+};
+pub use constraint::{
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraintFuel,
+    FilterConstraints,
 };
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
@@ -69,108 +74,174 @@ use crate::condition::parse_vectors_exists;
 use crate::error::IResultExt;
 
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
-pub type OwnedSpan = LocatedSpan<String, String>;
 
-type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
+type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error>;
 
 const MAX_FILTER_DEPTH: usize = 150;
 
-/// Copy the Cow<str> behaviour because span doesn't support `LocatedSpan<Cow<str>, Cow<str>>`.
 #[derive(Debug, Clone)]
-pub enum CowSpan<'a> {
-    Borrowed(Span<'a>),
-    Owned(OwnedSpan),
+pub struct OwnedSpan {
+    span: LocatedSpan<String, String>,
+    utf8_column: usize,
 }
 
-impl<'a> CowSpan<'a> {
-    pub fn fragment(&self) -> &str {
-        match self {
-            CowSpan::Borrowed(span) => span.fragment(),
-            CowSpan::Owned(span) => span.fragment(),
-        }
-    }
+pub trait TokenLike {
+    /// The fragment of the token.
+    fn fragment(&self) -> &str;
+    /// Returns a new token with the modified fragment.
+    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self;
+    /// Modifies the fragment of the token.
+    fn modify_fragment(&mut self, new: String);
+    /// Returns the span of the token.
+    fn span(&self) -> OwnedSpan;
 
-    pub fn extra(&self) -> &str {
-        match self {
-            CowSpan::Borrowed(span) => span.extra,
-            CowSpan::Owned(span) => &span.extra,
-        }
-    }
-
-    pub fn into_owned(self) -> CowSpan<'static> {
-        match self {
-            CowSpan::Borrowed(span) => {
-                let fragment = span.fragment().to_string();
-                let extra = span.extra.to_string();
-
-                CowSpan::Owned(OwnedSpan::new_extra(fragment, extra))
-            }
-            CowSpan::Owned(span) => CowSpan::Owned(span),
-        }
-    }
-
-    pub fn get_utf8_column(&self) -> Option<usize> {
-        match self {
-            CowSpan::Borrowed(span) => Some(span.get_utf8_column()),
-            // When owning a span, we don't know the original column because we lost the reference to the original input.
-            CowSpan::Owned(_) => None,
-        }
+    /// The fragment with escaped double quotes.
+    fn escaped_fragment(&self) -> String {
+        serde_json::to_string(self.fragment()).unwrap()
     }
 }
 
-impl<'a> From<Span<'a>> for CowSpan<'a> {
-    fn from(span: Span<'a>) -> Self {
-        CowSpan::Borrowed(span)
-    }
-}
-
-impl From<OwnedSpan> for CowSpan<'_> {
-    fn from(span: OwnedSpan) -> Self {
-        CowSpan::Owned(span)
-    }
-}
-
-/// Allow [CowSpan] to be constructed from &[str]
-impl<'a> From<&'a str> for CowSpan<'a> {
-    fn from(s: &'a str) -> Self {
-        CowSpan::from(Span::new_extra(s, s))
-    }
-}
-
-/// Allow [CowSpan] to be constructed from String
-impl From<String> for CowSpan<'_> {
-    fn from(s: String) -> Self {
-        CowSpan::from(OwnedSpan::new_extra(s.clone(), s))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Token<'a> {
-    /// The token in the original input, it should be used when possible.
-    span: CowSpan<'a>,
+/// Light version of a token.
+/// This kind of token doesn't keep the context of the original input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LightToken {
+    fragment: String,
+    utf8_column: usize,
     /// If you need to modify the original input you can use the `modified_fragment` field
     /// to store your modified input.
     modified_fragment: Option<String>,
 }
 
-impl PartialEq for Token<'_> {
+impl From<LightToken> for Token {
+    fn from(light_token: LightToken) -> Self {
+        Token { span: light_token.span(), modified_fragment: light_token.modified_fragment }
+    }
+}
+
+impl From<&str> for LightToken {
+    fn from(fragment: &str) -> Self {
+        LightToken { fragment: fragment.to_string(), utf8_column: 0, modified_fragment: None }
+    }
+}
+
+impl TokenLike for LightToken {
+    fn fragment(&self) -> &str {
+        self.modified_fragment.as_ref().unwrap_or(&self.fragment)
+    }
+
+    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
+        Self { fragment: self.fragment, utf8_column: self.utf8_column, modified_fragment }
+    }
+
+    fn modify_fragment(&mut self, new: String) {
+        self.modified_fragment = Some(new);
+    }
+
+    fn span(&self) -> OwnedSpan {
+        let span = LocatedSpan::new_extra(self.fragment.to_string(), String::new());
+        OwnedSpan { span, utf8_column: self.utf8_column }
+    }
+}
+
+impl From<Span<'_>> for LightToken {
+    fn from(span: Span) -> Self {
+        LightToken {
+            fragment: span.fragment().to_string(),
+            utf8_column: span.get_utf8_column(),
+            modified_fragment: None,
+        }
+    }
+}
+
+impl OwnedSpan {
+    pub fn fragment(&self) -> &str {
+        self.span.fragment()
+    }
+
+    pub fn extra(&self) -> &str {
+        self.span.extra.as_str()
+    }
+
+    pub fn get_utf8_column(&self) -> usize {
+        self.utf8_column
+    }
+}
+
+impl From<Span<'_>> for OwnedSpan {
+    fn from(span: Span) -> Self {
+        let utf8_column = span.get_utf8_column();
+        let span = LocatedSpan::new_extra(span.fragment().to_string(), span.extra.to_string());
+        OwnedSpan { span, utf8_column }
+    }
+}
+
+/// Allow [CowSpan] to be constructed from &[str]
+impl From<&str> for OwnedSpan {
+    fn from(s: &str) -> Self {
+        OwnedSpan::from(Span::new_extra(s, s))
+    }
+}
+
+/// Allow [CowSpan] to be constructed from String
+impl From<String> for OwnedSpan {
+    fn from(s: String) -> Self {
+        OwnedSpan::from(Span::new_extra(&s, &s))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Token {
+    /// The token in the original input, it should be used when possible.
+    span: OwnedSpan,
+    /// If you need to modify the original input you can use the `modified_fragment` field
+    /// to store your modified input.
+    modified_fragment: Option<String>,
+}
+
+impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
         self.original_fragment() == other.original_fragment()
     }
 }
 
-impl Eq for Token<'_> {}
+impl Eq for Token {}
 
-impl<'a> Token<'a> {
+impl PartialOrd for Token {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Token {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.original_fragment().cmp(other.original_fragment())
+    }
+}
+
+impl TokenLike for Token {
+    /// Return the fragment of the token.
+    /// If the token has been modified, the modified value is returned.
+    fn fragment(&self) -> &str {
+        self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
+    }
+
+    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
+        Self { span: self.span, modified_fragment }
+    }
+
+    fn modify_fragment(&mut self, new: String) {
+        self.modified_fragment = Some(new);
+    }
+
+    fn span(&self) -> OwnedSpan {
+        self.span.clone()
+    }
+}
+
+impl Token {
     /// Returns the original fragment of the token.
     pub fn original_fragment(&self) -> &str {
         self.span.fragment()
-    }
-
-    /// Return the fragment of the token.
-    /// If the token has been modified, the modified value is returned.
-    pub fn fragment(&self) -> &str {
-        self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
     }
 
     /// Returns the extra fragment of the token.
@@ -186,19 +257,11 @@ impl<'a> Token<'a> {
         self.modified_fragment.as_deref()
     }
 
-    pub fn modify_fragment(&mut self, new: String) {
-        self.modified_fragment = Some(new);
-    }
-
-    pub fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
-        Self { span: self.span, modified_fragment }
-    }
-
-    pub fn to_external_error(&self, error: impl std::error::Error) -> Error<'a> {
+    pub fn to_external_error(&self, error: impl std::error::Error) -> Error {
         Error::new_from_external(self.span.clone(), error)
     }
 
-    pub fn parse_finite_float(&self) -> Result<f64, Error<'a>> {
+    pub fn parse_finite_float(&self) -> Result<f64, Error> {
         let value: f64 = self.fragment().parse().map_err(|e| self.to_external_error(e))?;
         if value.is_finite() {
             Ok(value)
@@ -207,34 +270,30 @@ impl<'a> Token<'a> {
         }
     }
 
-    pub fn get_utf8_column(&self) -> Option<usize> {
+    pub fn get_utf8_column(&self) -> usize {
         self.span.get_utf8_column()
-    }
-
-    pub fn into_owned(self) -> Token<'static> {
-        Token { span: self.span.into_owned(), modified_fragment: self.modified_fragment }
     }
 }
 
-impl<'a, T: Into<CowSpan<'a>>> From<T> for Token<'a> {
+impl<T: Into<OwnedSpan>> From<T> for Token {
     fn from(span: T) -> Self {
         Token { span: span.into(), modified_fragment: None }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VectorFilter<'a> {
-    Fragment(Token<'a>),
+pub enum VectorFilter {
+    Fragment(Token),
     DocumentTemplate,
     UserProvided,
     Regenerate,
     None,
 }
 
-impl<'a> VectorFilter<'a> {
-    pub fn into_owned(self) -> VectorFilter<'static> {
+impl VectorFilter {
+    pub fn into_owned(self) -> VectorFilter {
         match self {
-            Self::Fragment(token) => VectorFilter::Fragment(token.into_owned()),
+            Self::Fragment(token) => VectorFilter::Fragment(token),
             Self::DocumentTemplate => VectorFilter::DocumentTemplate,
             Self::UserProvided => VectorFilter::UserProvided,
             Self::Regenerate => VectorFilter::Regenerate,
@@ -244,94 +303,45 @@ impl<'a> VectorFilter<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IndexFilterCondition<'a> {
+pub enum IndexFilterCondition {
     Not(Box<Self>),
-    Condition { fid: Token<'a>, op: Condition<'a> },
-    In { fid: Token<'a>, els: Vec<Token<'a>> },
+    Condition { fid: Token, op: Condition },
+    In { fid: Token, els: Vec<LightToken> },
     Or(Vec<Self>),
     And(Vec<Self>),
-    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
-    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
-    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
-    GeoPolygon { points: Vec<[Token<'a>; 2]> },
+    VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
+    GeoLowerThan { point: [Token; 2], radius: Token, resolution: Option<Token> },
+    GeoBoundingBox { top_right_point: [Token; 2], bottom_left_point: [Token; 2] },
+    GeoPolygon { points: Vec<[Token; 2]> },
 }
 
-impl<'a> IndexFilterCondition<'a> {
-    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+impl IndexFilterCondition {
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token> {
         FidIter { stack: vec![(depth, self)] }
     }
 }
 
-impl IndexFilterCondition<'_> {
-    pub fn into_owned(self) -> IndexFilterCondition<'static> {
-        match self {
-            Self::Not(condition) => IndexFilterCondition::Not(Box::new((*condition).into_owned())),
-            Self::Condition { fid, op } => {
-                IndexFilterCondition::Condition { fid: fid.into_owned(), op: op.into_owned() }
-            }
-            Self::In { fid, els } => IndexFilterCondition::In {
-                fid: fid.into_owned(),
-                els: els.into_iter().map(|el| el.into_owned()).collect(),
-            },
-            Self::Or(subfilters) => IndexFilterCondition::Or(
-                subfilters.into_iter().map(|filter| filter.into_owned()).collect(),
-            ),
-            Self::And(subfilters) => IndexFilterCondition::And(
-                subfilters.into_iter().map(|filter| filter.into_owned()).collect(),
-            ),
-            Self::VectorExists { fid, embedder, filter } => IndexFilterCondition::VectorExists {
-                fid: fid.into_owned(),
-                embedder: embedder.map(|embedder| embedder.into_owned()),
-                filter: filter.into_owned(),
-            },
-            Self::GeoLowerThan { point: [point0, point1], radius, resolution } => {
-                IndexFilterCondition::GeoLowerThan {
-                    point: [point0.into_owned(), point1.into_owned()],
-                    radius: radius.into_owned(),
-                    resolution: resolution.map(|resolution| resolution.into_owned()),
-                }
-            }
-            Self::GeoBoundingBox {
-                top_right_point: [top_right_point0, top_right_point1],
-                bottom_left_point: [bottom_left_point0, bottom_left_point1],
-            } => IndexFilterCondition::GeoBoundingBox {
-                top_right_point: [top_right_point0.into_owned(), top_right_point1.into_owned()],
-                bottom_left_point: [
-                    bottom_left_point0.into_owned(),
-                    bottom_left_point1.into_owned(),
-                ],
-            },
-            Self::GeoPolygon { points } => IndexFilterCondition::GeoPolygon {
-                points: points
-                    .into_iter()
-                    .map(|[point0, point1]| [point0.into_owned(), point1.into_owned()])
-                    .collect(),
-            },
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FilterCondition<'a> {
+pub enum FilterCondition {
     Not(Box<Self>),
-    Condition { fid: Token<'a>, op: Condition<'a> },
-    In { fid: Token<'a>, els: Vec<Token<'a>> },
+    Condition { fid: Token, op: Condition },
+    In { fid: Token, els: Vec<LightToken> },
     Or(Vec<Self>),
     And(Vec<Self>),
-    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
-    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
-    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
-    GeoPolygon { points: Vec<[Token<'a>; 2]> },
-    Foreign { fid: Token<'a>, op: Box<Self> },
+    VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
+    GeoLowerThan { point: [Token; 2], radius: Token, resolution: Option<Token> },
+    GeoBoundingBox { top_right_point: [Token; 2], bottom_left_point: [Token; 2] },
+    GeoPolygon { points: Vec<[Token; 2]> },
+    Foreign { fid: Token, op: Box<Self> },
 }
 
 pub enum TraversedElement<'a> {
-    FilterCondition(&'a FilterCondition<'a>),
-    Condition(&'a Condition<'a>),
+    FilterCondition(&'a FilterCondition),
+    Condition(&'a Condition),
 }
 
-impl<'a> FilterCondition<'a> {
-    pub fn use_contains_operator(&self) -> Option<&Token<'a>> {
+impl FilterCondition {
+    pub fn use_contains_operator(&self) -> Option<&Token> {
         match self {
             FilterCondition::Condition { fid: _, op } => match op {
                 Condition::GreaterThan(_)
@@ -360,7 +370,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn use_vector_filter(&self) -> Option<&Token<'a>> {
+    pub fn use_vector_filter(&self) -> Option<&Token> {
         match self {
             FilterCondition::Condition { .. } => None,
             FilterCondition::Not(this) => this.use_vector_filter(),
@@ -376,7 +386,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn use_field(&self, field: &str) -> Option<&Token<'a>> {
+    pub fn use_field(&self, field: &str) -> Option<&Token> {
         match self {
             FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
                 (fid.fragment() == field).then_some(fid)
@@ -395,7 +405,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn use_foreign_operator(&self) -> Option<&Token<'a>> {
+    pub fn use_foreign_operator(&self) -> Option<&Token> {
         ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }.next().and_then(|filter| {
             match filter {
                 FilterCondition::Foreign { fid, .. } => Some(fid),
@@ -404,16 +414,16 @@ impl<'a> FilterCondition<'a> {
         })
     }
 
-    pub fn list_foreign_filters(&self) -> impl Iterator<Item = &FilterCondition<'a>> {
+    pub fn list_foreign_filters(&self) -> impl Iterator<Item = &FilterCondition> {
         ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }
     }
 
-    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token> {
         FidIter { stack: vec![(depth, self)] }
     }
 
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
-    pub fn token_at_depth(&self, depth: usize) -> Option<&Token<'a>> {
+    pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
         match self {
             FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
             FilterCondition::Or(subfilters) => {
@@ -439,7 +449,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn parse(input: &'a str) -> Result<Option<Self>, Error<'a>> {
+    pub fn parse(input: &str) -> Result<Option<Self>, Error> {
         if input.trim().is_empty() {
             return Ok(None);
         }
@@ -455,12 +465,12 @@ impl<'a> FilterCondition<'a> {
 }
 
 /// Iterator listing the `Foreign` filters of a filter condition.
-struct ForeignFilterIter<'a, 'b> {
-    stack: Vec<(usize, &'a FilterCondition<'b>)>,
+struct ForeignFilterIter<'a> {
+    stack: Vec<(usize, &'a FilterCondition)>,
 }
 
-impl<'a, 'b> Iterator for ForeignFilterIter<'a, 'b> {
-    type Item = &'a FilterCondition<'b>;
+impl<'a> Iterator for ForeignFilterIter<'a> {
+    type Item = &'a FilterCondition;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -488,8 +498,8 @@ struct FidIter<'a, T> {
     stack: Vec<(usize, &'a T)>,
 }
 
-impl<'a, 'b> Iterator for FidIter<'a, FilterCondition<'b>> {
-    type Item = &'a Token<'b>;
+impl<'a> Iterator for FidIter<'a, FilterCondition> {
+    type Item = &'a Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -516,8 +526,8 @@ impl<'a, 'b> Iterator for FidIter<'a, FilterCondition<'b>> {
     }
 }
 
-impl<'a, 'b> Iterator for FidIter<'a, IndexFilterCondition<'b>> {
-    type Item = &'a Token<'b>;
+impl<'a> Iterator for FidIter<'a, IndexFilterCondition> {
+    type Item = &'a Token;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -544,14 +554,15 @@ impl<'a, 'b> Iterator for FidIter<'a, IndexFilterCondition<'b>> {
 }
 
 /// remove OPTIONAL whitespaces before AND after the provided parser.
-fn ws<'a, O>(
-    inner: impl FnMut(Span<'a>) -> IResult<'a, O>,
-) -> impl FnMut(Span<'a>) -> IResult<'a, O> {
+fn ws<'a, O>(inner: impl FnMut(Span<'a>) -> IResult<O>) -> impl FnMut(Span<'a>) -> IResult<O> {
     delimited(multispace0, inner, multispace0)
 }
 
 /// value_list = (value ("," value)* ","?)?
-fn parse_value_list(input: Span) -> IResult<Vec<Token>> {
+fn parse_value_list<'a, T>(input: Span<'a>) -> IResult<'a, Vec<T>>
+where
+    T: From<Span<'a>> + TokenLike,
+{
     let (input, first_value) = opt(parse_value)(input)?;
     if let Some(first_value) = first_value {
         let value_list_el_parser = preceded(ws(tag(",")), parse_value);
@@ -567,7 +578,7 @@ fn parse_value_list(input: Span) -> IResult<Vec<Token>> {
 }
 
 /// "IN" WS* "[" value_list "]"
-fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
+fn parse_in_body(input: Span) -> IResult<Vec<LightToken>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
@@ -580,7 +591,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
         if eof::<_, ()>(input).is_ok() {
             Error::new_from_kind(input.into(), ErrorKind::InClosingBracket)
         } else {
-            let expected_value_kind = match parse_value(input) {
+            let expected_value_kind = match parse_value::<LightToken>(input) {
                 Err(nom::Err::Error(e)) => match e.kind() {
                     ErrorKind::ReservedKeyword(_) => ExpectedValueKind::ReservedKeyword,
                     _ => ExpectedValueKind::Other,
@@ -920,7 +931,7 @@ pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(|input| parse_expression(input, 0), eof)(input)
 }
 
-impl std::fmt::Display for IndexFilterCondition<'_> {
+impl std::fmt::Display for IndexFilterCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IndexFilterCondition::Not(filter) => {
@@ -996,7 +1007,7 @@ impl std::fmt::Display for IndexFilterCondition<'_> {
     }
 }
 
-impl std::fmt::Display for FilterCondition<'_> {
+impl std::fmt::Display for FilterCondition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FilterCondition::Not(filter) => {
@@ -1075,7 +1086,7 @@ impl std::fmt::Display for FilterCondition<'_> {
     }
 }
 
-impl std::fmt::Display for Condition<'_> {
+impl std::fmt::Display for Condition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Condition::GreaterThan(token) => write!(f, "> {token}"),
@@ -1094,7 +1105,13 @@ impl std::fmt::Display for Condition<'_> {
     }
 }
 
-impl std::fmt::Display for Token<'_> {
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{{}}}", self.fragment())
+    }
+}
+
+impl std::fmt::Display for LightToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{{}}}", self.fragment())
     }
@@ -1107,7 +1124,7 @@ pub mod tests {
     use super::*;
 
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
-    pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token<'a> {
+    pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token {
         // if the string is empty we still need to return 1 for the line number
         let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();

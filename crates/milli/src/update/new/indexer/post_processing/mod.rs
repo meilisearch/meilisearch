@@ -34,16 +34,13 @@ use crate::{FieldId, GlobalFieldsIdsMap, Index, Result};
 mod facet_bulk;
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
-pub(super) fn post_process<MSP>(
-    indexing_context: IndexingContext<MSP>,
+pub(super) fn post_process(
+    indexing_context: IndexingContext,
     wtxn: &mut RwTxn<'_>,
     mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
     word_delta: &WordDelta,
     facet_field_ids_delta: FacetFieldIdsDelta,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<()> {
     let index = indexing_context.index;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingFacets);
     compute_facet_level_database(

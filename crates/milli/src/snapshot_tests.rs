@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::Path;
 
+use charabia::TokenizerBuilder;
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
@@ -310,7 +311,8 @@ pub fn snap_fields_ids_map(index: &Index) -> String {
 }
 pub fn snap_fieldids_weights_map(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
-    let weights_map = index.fieldids_weights_map(&rtxn).unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let weights_map = index.fieldids_weights_map(&rtxn, &fields_ids_map).unwrap();
 
     let mut snap = String::new();
     writeln!(&mut snap, "fid weight").unwrap();
@@ -324,7 +326,8 @@ pub fn snap_fieldids_weights_map(index: &Index) -> String {
 }
 pub fn snap_searchable_fields(index: &Index) -> String {
     let rtxn = index.read_txn().unwrap();
-    let searchable_fields = index.searchable_fields(&rtxn).unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let searchable_fields = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
     format!("{searchable_fields:?}")
 }
 pub fn snap_geo_faceted_documents_ids(index: &Index) -> String {
@@ -374,6 +377,29 @@ pub fn snap_words_prefixes_fst(index: &Index) -> String {
 pub fn snap_settings(index: &Index) -> String {
     let mut snap = String::new();
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+    let mut builder = TokenizerBuilder::new();
+    let stop_words = index.stop_words(&rtxn).unwrap();
+    if let Some(ref stop_words) = stop_words {
+        builder.stop_words(stop_words);
+    }
+
+    let separators = index.allowed_separators(&rtxn).unwrap();
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref separators) = separators {
+        builder.separators(separators);
+    }
+
+    let dictionary = index.dictionary(&rtxn).unwrap();
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    if let Some(ref dictionary) = dictionary {
+        builder.words_dict(dictionary);
+    }
+
+    let tokenizer = builder.build();
 
     macro_rules! write_setting_to_snap {
         ($name:ident) => {
@@ -388,7 +414,13 @@ pub fn snap_settings(index: &Index) -> String {
     write_setting_to_snap!(distinct_field);
     write_setting_to_snap!(filterable_attributes_rules);
     write_setting_to_snap!(sortable_fields);
-    write_setting_to_snap!(synonyms);
+
+    // Synonyms are stored in a dedicated database
+    for result in index.synonyms.iter(&rtxn).unwrap() {
+        let (key, synonyms) = result.unwrap();
+        writeln!(&mut snap, "synonyms: {:?}", (key, synonyms.synonyms(&tokenizer))).unwrap();
+    }
+
     write_setting_to_snap!(authorize_typos);
     write_setting_to_snap!(min_word_len_one_typo);
     write_setting_to_snap!(min_word_len_two_typos);
@@ -396,7 +428,11 @@ pub fn snap_settings(index: &Index) -> String {
     write_setting_to_snap!(exact_attributes);
     write_setting_to_snap!(max_values_per_facet);
     write_setting_to_snap!(pagination_max_total_hits);
-    write_setting_to_snap!(searchable_fields);
+
+    // searchable_fields
+    let searchable_fields = index.searchable_fields(&rtxn, &fields_ids_map).unwrap();
+    writeln!(&mut snap, "{}: {:?}", stringify!(searchable_fields), searchable_fields).unwrap();
+
     write_setting_to_snap!(user_defined_searchable_fields);
 
     snap

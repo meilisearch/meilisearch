@@ -14,8 +14,8 @@ use crate::{Filter, FilterableAttributesRule};
 
 /// Convert a Filter to an IndexFilter
 /// this is only available for tests, in production we must ensure that the foreign filters have been preprocessed.
-impl<'a> From<Filter<'a>> for IndexFilter<'a> {
-    fn from(filter: Filter<'a>) -> Self {
+impl From<Filter> for IndexFilter {
+    fn from(filter: Filter) -> Self {
         IndexFilter { condition: condition_to_index_condition(filter.condition) }
     }
 }
@@ -61,13 +61,14 @@ fn empty_db() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     let filter = Filter::from_str("PrIcE < 1000").unwrap().unwrap();
-    let bitmap = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let bitmap = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(bitmap.is_empty());
 
     let filter = Filter::from_str("NOT PrIcE >= 1000").unwrap().unwrap();
-    let bitmap = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let bitmap = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(bitmap.is_empty());
 }
 
@@ -136,22 +137,23 @@ fn not_filterable() {
     let index = TempIndex::new();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
         12:14 _geoRadius(42, 150, 10)
         ");
 
     let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
         18:20 _geoBoundingBox([42, 150], [30, 10])
         ");
 
     let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r###"
         Attribute `dog` is not filterable. This index does not have configured filterable attributes.
         1:4 dog = "bernese mountain"
@@ -169,42 +171,42 @@ fn not_filterable() {
     let rtxn = index.read_txn().unwrap();
 
     let filter = Filter::from_str("_geoRadius(-90, 150, 10)").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
         12:15 _geoRadius(-90, 150, 10)
         ");
 
     let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
         18:20 _geoBoundingBox([42, 150], [30, 10])
         ");
 
     let filter = Filter::from_str("name = 12").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r###"
         Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         1:5 name = 12
         "###);
 
     let filter = Filter::from_str("title = \"test\" AND name = 12").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r###"
         Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         20:24 title = "test" AND name = 12
         "###);
 
     let filter = Filter::from_str("title = \"test\" AND name IN [12]").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r###"
         Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         20:24 title = "test" AND name IN [12]
         "###);
 
     let filter = Filter::from_str("title = \"test\" AND name != 12").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r###"
         Attribute `name` is not filterable. Available filterable attribute patterns are: `title`.
         20:24 title = "test" AND name != 12
@@ -241,8 +243,9 @@ fn escaped_quote_in_filter_value_2380() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     // this filter is copy pasted from #2380 with the exact same espace sequence
     let filter = Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap();
     search.filter(Some(IndexFilter::from(filter)));
@@ -305,8 +308,9 @@ fn zero_radius() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
 
     let filter = Filter::from_str("_geoRadius(45.4777599, 9.1967508, 0)").unwrap().unwrap();
     search.filter(Some(IndexFilter::from(filter)));
@@ -329,10 +333,11 @@ fn geo_radius_error() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // georadius have a bad latitude
     let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad latitude `-100`. Latitude must be contained between -90 and 90 degrees.
         12:16 _geoRadius(-100, 150, 10)
@@ -340,7 +345,7 @@ fn geo_radius_error() {
 
     // georadius have a bad latitude
     let filter = Filter::from_str("_geoRadius(-90.0000001, 150, 10)").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
         12:23 _geoRadius(-90.0000001, 150, 10)
@@ -348,7 +353,7 @@ fn geo_radius_error() {
 
     // georadius have a bad longitude
     let filter = Filter::from_str("_geoRadius(-10, 250, 10)").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad longitude `250`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-110` instead.
         17:20 _geoRadius(-10, 250, 10)
@@ -356,7 +361,7 @@ fn geo_radius_error() {
 
     // georadius have a bad longitude
     let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
         17:27 _geoRadius(-10, 180.000001, 10)
@@ -378,11 +383,12 @@ fn geo_bounding_box_error() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // geoboundingbox top left coord have a bad latitude
     let filter =
         Filter::from_str("_geoBoundingBox([-90.0000001, 150], [30, 10])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
         18:29 _geoBoundingBox([-90.0000001, 150], [30, 10])
@@ -390,7 +396,7 @@ fn geo_bounding_box_error() {
 
     // geoboundingbox top left coord have a bad latitude
     let filter = Filter::from_str("_geoBoundingBox([90.0000001, 150], [30, 10])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees.
         18:28 _geoBoundingBox([90.0000001, 150], [30, 10])
@@ -399,7 +405,7 @@ fn geo_bounding_box_error() {
     // geoboundingbox bottom right coord have a bad latitude
     let filter =
         Filter::from_str("_geoBoundingBox([30, 10], [-90.0000001, 150])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
         28:39 _geoBoundingBox([30, 10], [-90.0000001, 150])
@@ -407,7 +413,7 @@ fn geo_bounding_box_error() {
 
     // geoboundingbox bottom right coord have a bad latitude
     let filter = Filter::from_str("_geoBoundingBox([30, 10], [90.0000001, 150])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees.
         28:38 _geoBoundingBox([30, 10], [90.0000001, 150])
@@ -415,7 +421,7 @@ fn geo_bounding_box_error() {
 
     // geoboundingbox top left coord have a bad longitude
     let filter = Filter::from_str("_geoBoundingBox([-10, 180.000001], [30, 10])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
         23:33 _geoBoundingBox([-10, 180.000001], [30, 10])
@@ -424,7 +430,7 @@ fn geo_bounding_box_error() {
     // geoboundingbox top left coord have a bad longitude
     let filter =
         Filter::from_str("_geoBoundingBox([-10, -180.000001], [30, 10])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `179.999999` instead.
         23:34 _geoBoundingBox([-10, -180.000001], [30, 10])
@@ -433,7 +439,7 @@ fn geo_bounding_box_error() {
     // geoboundingbox bottom right coord have a bad longitude
     let filter =
         Filter::from_str("_geoBoundingBox([30, 10], [-10, -180.000001])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `179.999999` instead.
         33:44 _geoBoundingBox([30, 10], [-10, -180.000001])
@@ -441,7 +447,7 @@ fn geo_bounding_box_error() {
 
     // geoboundingbox bottom right coord have a bad longitude
     let filter = Filter::from_str("_geoBoundingBox([30, 10], [-10, 180.000001])").unwrap().unwrap();
-    let error = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let error = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
     snapshot!(error.to_string(), @r"
         Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
         33:43 _geoBoundingBox([30, 10], [-10, 180.000001])
@@ -501,26 +507,27 @@ fn non_finite_float() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let filter = Filter::from_str("price = inf").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(result.contains(0));
     let filter = Filter::from_str("price < inf").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     // this is allowed due to filters with strings
     assert!(result.contains(1));
 
     let filter = Filter::from_str("price = NaN").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(result.is_empty());
     let filter = Filter::from_str("price < NaN").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(result.contains(1));
 
     let filter = Filter::from_str("price = infinity").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(result.contains(2));
     let filter = Filter::from_str("price < infinity").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert!(result.contains(0));
     assert!(result.contains(1));
 }
@@ -548,57 +555,60 @@ fn filter_number() {
     index.add_documents(documents!(docs)).unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     for i in 0..100 {
         let filter_str = format!("id = {i}");
         let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-        let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+        let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
         assert_eq!(result, RoaringBitmap::from_iter([i]));
     }
     for i in 0..100 {
         let filter_str = format!("id > {i}");
         let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-        let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+        let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
         assert_eq!(result, RoaringBitmap::from_iter((i + 1)..100));
     }
     for i in 0..100 {
         let filter_str = format!("id < {i}");
         let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-        let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+        let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
         assert_eq!(result, RoaringBitmap::from_iter(0..i));
     }
     for i in 0..100 {
         let filter_str = format!("id <= {i}");
         let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-        let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+        let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
         assert_eq!(result, RoaringBitmap::from_iter(0..=i));
     }
     for i in 0..100 {
         let filter_str = format!("id >= {i}");
         let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-        let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+        let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
         assert_eq!(result, RoaringBitmap::from_iter(i..100));
     }
     for i in 0..100 {
         for j in i..100 {
             let filter_str = format!("id {i} TO {j}");
             let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-            let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+            let result =
+                IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
             assert_eq!(result, RoaringBitmap::from_iter(i..=j));
         }
     }
     let filter = Filter::from_str("one >= 0 OR one <= 0").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert_eq!(result, RoaringBitmap::default());
 
     let filter = Filter::from_str("one = 0").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert_eq!(result, RoaringBitmap::default());
 
     for i in 0..10 {
         for j in i..10 {
             let filter_str = format!("two {i} TO {j}");
             let filter = Filter::from_str(&filter_str).unwrap().unwrap();
-            let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+            let result =
+                IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
             assert_eq!(
                 result,
                 RoaringBitmap::from_iter((0..100).filter(|x| (i..=j).contains(&(x % 10))))
@@ -606,7 +616,7 @@ fn filter_number() {
         }
     }
     let filter = Filter::from_str("two != 0").unwrap().unwrap();
-    let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
+    let result = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap();
     assert_eq!(result, RoaringBitmap::from_iter((0..100).filter(|x| x % 10 != 0)));
 }
 
@@ -620,7 +630,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"'price' = '42'"#);
+    insta::assert_snapshot!(serialized, @r###""price" = "42""###);
 
     // Simple range
     let filter = Filter::from_str("id 1 TO 10").unwrap().unwrap();
@@ -628,7 +638,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"'id' '1' TO '10'"#);
+    insta::assert_snapshot!(serialized, @r###""id" "1" TO "10""###);
 
     // Not equal
     let filter = Filter::from_str("name != 'Alice'").unwrap().unwrap();
@@ -636,7 +646,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"'name' != 'Alice'"#);
+    insta::assert_snapshot!(serialized, @r###""name" != "Alice""###);
 
     // Contains
     let filter = Filter::from_str("description CONTAINS 'rust'").unwrap().unwrap();
@@ -644,7 +654,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"'description' CONTAINS 'rust'"#);
+    insta::assert_snapshot!(serialized, @r###""description" CONTAINS "rust""###);
 
     // Null
     let filter = Filter::from_str("deleted IS NULL").unwrap().unwrap();
@@ -652,7 +662,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"'deleted' IS NULL"#);
+    insta::assert_snapshot!(serialized, @r###""deleted" IS NULL"###);
 
     // Exists
     let filter = Filter::from_str("deleted EXISTS").unwrap().unwrap();
@@ -660,7 +670,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"'deleted' EXISTS"#);
+    insta::assert_snapshot!(serialized, @r###""deleted" EXISTS"###);
 
     // AND
     let filter = Filter::from_str("foo = bar AND fizz = buzz").unwrap().unwrap();
@@ -668,7 +678,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"('foo' = 'bar') AND ('fizz' = 'buzz')"#);
+    insta::assert_snapshot!(serialized, @r###"("foo" = "bar") AND ("fizz" = "buzz")"###);
 
     // OR
     let filter = Filter::from_str("foo = bar OR fizz = buzz").unwrap().unwrap();
@@ -676,7 +686,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"('foo' = 'bar') OR ('fizz' = 'buzz')"#);
+    insta::assert_snapshot!(serialized, @r###"("foo" = "bar") OR ("fizz" = "buzz")"###);
 
     // Nested AND/OR
     let filter = Filter::from_str("(foo = bar OR abc = xyz) AND count < 100").unwrap().unwrap();
@@ -684,7 +694,7 @@ fn test_serialize_index_filter_to_filter_string() {
     let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
     // ensure we can deserialize the serialized filter
     let _ = Filter::from_str(&serialized).unwrap().unwrap();
-    insta::assert_snapshot!(serialized, @r#"(('foo' = 'bar') OR ('abc' = 'xyz')) AND ('count' < '100')"#);
+    insta::assert_snapshot!(serialized, @r###"(("foo" = "bar") OR ("abc" = "xyz")) AND ("count" < "100")"###);
 
     // Vector exists
     let filter =

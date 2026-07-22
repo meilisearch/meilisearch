@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::progress::Progress;
 use crate::vector::Embeddings;
-use crate::Deadline;
+use crate::{Deadline, MustStopProcessing};
 
 const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
@@ -43,24 +43,11 @@ mod hnsw_params {
     }
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Default,
-    Serialize,
-    Deserialize,
-    deserr::Deserr,
-    utoipa::ToSchema,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum VectorStoreBackend {
     #[default]
-    #[deserr(rename = "stable")]
     #[serde(rename = "stable")]
     Arroy,
-    #[deserr(rename = "experimental")]
     #[serde(rename = "experimental")]
     Hannoy,
 }
@@ -152,21 +139,18 @@ impl VectorStore {
     /// Converts the vector store from arroy to hannoy and the other way around.
     ///
     /// Note that when changing the backend the misconfigured quantization stores are simply deleted.
-    pub fn change_backend<MSP>(
+    pub fn change_backend(
         self,
         rtxn: &RoTxn,
         wtxn: &mut RwTxn,
         progress: Progress,
-        must_stop_processing: &MSP,
+        must_stop_processing: &MustStopProcessing,
         available_memory: Option<usize>,
-    ) -> crate::Result<()>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> crate::Result<()> {
         let mut rng = rand::rngs::StdRng::from_entropy();
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
-                self._arroy_to_hannoy_bq::<arroy::distances::BinaryQuantizedCosine, hannoy::distances::Hamming, _>(rtxn, wtxn, &progress, &mut rng, &must_stop_processing)
+                self._arroy_to_hannoy_bq::<arroy::distances::BinaryQuantizedCosine, hannoy::distances::Hamming, _>(rtxn, wtxn, &progress, &mut rng, must_stop_processing)
             } else {
                 let dimensions = self
                     ._arroy_readers(wtxn, self._arroy_angular_db())
@@ -179,7 +163,7 @@ impl VectorStore {
                 for index in vector_store_range_for_embedder(self.embedder_index) {
                     let writer = hannoy::Writer::new(self._hannoy_angular_db(), index, dimensions);
                     let mut builder = writer.builder(&mut rng).progress(progress.clone());
-                    builder.cancel(must_stop_processing);
+                    builder.cancel(|| must_stop_processing.get());
                     match builder.prepare_arroy_conversion(wtxn) {
                         Ok(()) => (),
                         // When converting from arroy to hannoy we decide to delete stores
@@ -197,7 +181,7 @@ impl VectorStore {
             self._hannoy_to_arroy_bq::<
                 hannoy::distances::Hamming,
                 arroy::distances::BinaryQuantizedCosine,
-                _>(rtxn, wtxn, &progress, &mut rng, available_memory, &must_stop_processing)
+                _>(rtxn, wtxn, &progress, &mut rng, available_memory, must_stop_processing)
         } else {
             let dimensions = self
                 ._hannoy_readers(wtxn, self._hannoy_angular_db())
@@ -228,7 +212,7 @@ impl VectorStore {
         dimension: usize,
         quantizing: bool,
         available_memory: Option<usize>,
-        cancel: &(impl Fn() -> bool + Sync + Send),
+        cancel: &MustStopProcessing,
     ) -> Result<(), crate::Error> {
         for index in vector_store_range_for_embedder(self.embedder_index) {
             if self.backend == VectorStoreBackend::Arroy {
@@ -291,7 +275,7 @@ impl VectorStore {
         progress: Progress,
         rng: &mut R,
         dimension: usize,
-        cancel: &(impl Fn() -> bool + Sync + Send),
+        cancel: &MustStopProcessing,
     ) -> Result<(), crate::Error> {
         for index in vector_store_range_for_embedder(self.embedder_index) {
             if self.backend == VectorStoreBackend::Hannoy {
@@ -1130,7 +1114,7 @@ impl VectorStore {
         hannoy_wtxn: &mut RwTxn,
         progress: &Progress,
         rng: &mut R,
-        cancel: &(impl Fn() -> bool + Sync + Send),
+        cancel: &MustStopProcessing,
     ) -> crate::Result<()>
     where
         R: rand::Rng + rand::SeedableRng,
@@ -1176,7 +1160,7 @@ impl VectorStore {
         progress: &Progress,
         rng: &mut R,
         available_memory: Option<usize>,
-        cancel: &(impl Fn() -> bool + Sync + Send),
+        cancel: &MustStopProcessing,
     ) -> crate::Result<()>
     where
         R: rand::Rng + rand::SeedableRng,
@@ -1380,7 +1364,7 @@ fn arroy_build<R, D>(
     progress: &Progress,
     rng: &mut R,
     available_memory: Option<usize>,
-    cancel: &(impl Fn() -> bool + Sync + Send),
+    cancel: &MustStopProcessing,
     writer: &arroy::Writer<D>,
 ) -> Result<(), crate::Error>
 where
@@ -1389,7 +1373,10 @@ where
 {
     let mut builder = writer.builder(rng);
     let builder = builder.progress(|step| progress.update_progress_from_arroy(step));
-    builder.available_memory(available_memory.unwrap_or(usize::MAX)).cancel(cancel).build(wtxn)?;
+    builder
+        .available_memory(available_memory.unwrap_or(usize::MAX))
+        .cancel(|| cancel.get())
+        .build(wtxn)?;
     Ok(())
 }
 
@@ -1397,7 +1384,7 @@ fn hannoy_build<R, D>(
     wtxn: &mut RwTxn<'_>,
     progress: &Progress,
     rng: &mut R,
-    cancel: &(impl Fn() -> bool + Sync + Send),
+    cancel: &MustStopProcessing,
     writer: &hannoy::Writer<D>,
 ) -> Result<(), crate::Error>
 where
@@ -1406,7 +1393,7 @@ where
 {
     let mut builder = writer.builder(rng).progress(progress.clone());
     builder
-        .cancel(cancel)
+        .cancel(|| cancel.get())
         .ef_construction(HANNOY_EF_CONSTRUCTION)
         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
     Ok(())
@@ -1416,7 +1403,7 @@ fn hannoy_rebuild_graph<R, D>(
     wtxn: &mut RwTxn<'_>,
     progress: &Progress,
     rng: &mut R,
-    cancel: &(impl Fn() -> bool + Sync + Send),
+    cancel: &MustStopProcessing,
     writer: &hannoy::Writer<D>,
 ) -> Result<(), crate::Error>
 where
@@ -1425,7 +1412,7 @@ where
 {
     let mut builder = writer.builder(rng).progress(progress.clone());
     builder
-        .cancel(cancel)
+        .cancel(|| cancel.get())
         .ef_construction(HANNOY_EF_CONSTRUCTION)
         .force_rebuild::<HANNOY_M, HANNOY_M0>(wtxn)?;
     Ok(())
