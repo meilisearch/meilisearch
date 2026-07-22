@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use big_s::S;
 use milli::progress::Progress;
 use milli::Criterion::{Attribute, Exactness, Proximity, Typo, Words};
@@ -19,7 +17,7 @@ fn sort_ranking_rule_missing() {
     let mut search = Search::new(
         &rtxn,
         &index,
-        Cow::Borrowed(&fields_ids_map),
+        &fields_ids_map,
         "index_uid",
         time::OffsetDateTime::now_utc(),
         &progress,

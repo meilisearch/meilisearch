@@ -57,7 +57,8 @@ fn test_trap_basic() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("summer holiday");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);

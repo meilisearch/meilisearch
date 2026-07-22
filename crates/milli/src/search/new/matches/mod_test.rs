@@ -14,7 +14,7 @@ impl<'a> MatcherBuilder<'a> {
         let mut search = crate::Search::new(
             rtxn,
             index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,

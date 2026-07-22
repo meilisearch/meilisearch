@@ -183,7 +183,8 @@ fn test_sort() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
@@ -218,7 +219,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank")))]);
@@ -253,7 +254,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Field(S("vague")))]);
@@ -288,7 +289,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("vague")))]);
@@ -337,7 +338,8 @@ fn test_redacted() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![

@@ -243,8 +243,9 @@ fn escaped_quote_in_filter_value_2380() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     // this filter is copy pasted from #2380 with the exact same espace sequence
     let filter = Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap();
     search.filter(Some(IndexFilter::from(filter)));
@@ -307,8 +308,9 @@ fn zero_radius() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
 
     let filter = Filter::from_str("_geoRadius(45.4777599, 9.1967508, 0)").unwrap().unwrap();
     search.filter(Some(IndexFilter::from(filter)));

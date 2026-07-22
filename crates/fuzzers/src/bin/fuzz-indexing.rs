@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -165,7 +164,7 @@ fn main() {
                                 .search(
                                     &wtxn,
                                     "test",
-                                    Cow::Borrowed(&fields_ids_map),
+                                    &fields_ids_map,
                                     time::OffsetDateTime::now_utc(),
                                     &progress,
                                 )

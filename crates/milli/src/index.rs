@@ -1505,7 +1505,7 @@ impl Index {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         index_uid: &'a str,
-        fields_ids_map: Cow<'a, FieldsIdsMap>,
+        fields_ids_map: &'a FieldsIdsMap,
         before_search: time::OffsetDateTime,
         progress: &'a Progress,
     ) -> Search<'a> {

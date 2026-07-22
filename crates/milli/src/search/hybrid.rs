@@ -281,7 +281,7 @@ impl Search<'_> {
             max_total_hits: self.max_total_hits,
             rtxn: self.rtxn,
             index: self.index,
-            fields_ids_map: self.fields_ids_map.clone(),
+            fields_ids_map: self.fields_ids_map,
             index_uid: self.index_uid,
             before_search: self.before_search,
             semantic: self.semantic.clone(),
@@ -359,7 +359,7 @@ impl Search<'_> {
             search.distinct.as_deref(),
             search.index,
             search.rtxn,
-            search.fields_ids_map.as_ref(),
+            search.fields_ids_map,
         )?;
         assert!(merge_results.documents_ids.len() <= self.limit);
         Ok((merge_results, Some(semantic_hit_count)))

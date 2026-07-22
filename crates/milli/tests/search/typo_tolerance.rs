@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use bumpalo::Bump;
@@ -30,7 +29,7 @@ fn test_typo_tolerance_one_typo() {
         let mut search = Search::new(
             &txn,
             &index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -47,7 +46,7 @@ fn test_typo_tolerance_one_typo() {
         let mut search = Search::new(
             &txn,
             &index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -82,7 +81,7 @@ fn test_typo_tolerance_one_typo() {
     let mut search = Search::new(
         &txn,
         &index,
-        Cow::Borrowed(&fields_ids_map),
+        &fields_ids_map,
         "test",
         time::OffsetDateTime::now_utc(),
         &progress,
@@ -110,7 +109,7 @@ fn test_typo_tolerance_two_typo() {
         let mut search = Search::new(
             &txn,
             &index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -127,7 +126,7 @@ fn test_typo_tolerance_two_typo() {
         let mut search = Search::new(
             &txn,
             &index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -162,7 +161,7 @@ fn test_typo_tolerance_two_typo() {
     let mut search = Search::new(
         &txn,
         &index,
-        Cow::Borrowed(&fields_ids_map),
+        &fields_ids_map,
         "test",
         time::OffsetDateTime::now_utc(),
         &progress,
@@ -242,7 +241,7 @@ fn test_typo_disabled_on_word() {
         let mut search = Search::new(
             &txn,
             &index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -279,7 +278,7 @@ fn test_typo_disabled_on_word() {
     let mut search = Search::new(
         &txn,
         &index,
-        Cow::Borrowed(&fields_ids_map),
+        &fields_ids_map,
         "test",
         time::OffsetDateTime::now_utc(),
         &progress,
@@ -307,7 +306,7 @@ fn test_disable_typo_on_attribute() {
         let mut search = Search::new(
             &txn,
             &index,
-            Cow::Borrowed(&fields_ids_map),
+            &fields_ids_map,
             "test",
             time::OffsetDateTime::now_utc(),
             &progress,
@@ -343,7 +342,7 @@ fn test_disable_typo_on_attribute() {
     let mut search = Search::new(
         &txn,
         &index,
-        Cow::Borrowed(&fields_ids_map),
+        &fields_ids_map,
         "test",
         time::OffsetDateTime::now_utc(),
         &progress,

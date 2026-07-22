@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Deref;
 
@@ -24,7 +23,7 @@ use crate::update::{
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
 use crate::{
-    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index,
+    db_snap, obkv_to_json, CreateOrOpen, FieldsIdsMap, Filter, FilterableAttributesRule, Index,
     MustStopProcessing, Search, SearchResult,
 };
 
@@ -245,12 +244,15 @@ impl TempIndex {
         self.delete_documents(vec![external_document_id.to_string()])
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
-        let fields_ids_map = self.inner.fields_ids_map(rtxn).unwrap();
+    pub fn search<'a>(
+        &'a self,
+        rtxn: &'a heed::RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
+    ) -> Search<'a> {
         self.inner.search(
             rtxn,
             "test",
-            Cow::Owned(fields_ids_map),
+            fields_ids_map,
             time::OffsetDateTime::now_utc(),
             &self.progress,
         )
@@ -502,7 +504,8 @@ fn test_basic_geo_bounding_box() {
 
     // ensure we get the right real searchable fields + user defined searchable fields
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
 
     // exact match a document
     let search_result = search
@@ -631,19 +634,20 @@ fn test_contains() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let search_result = search
         .filter(Some(IndexFilter::from(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap())))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1]>");
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let search_result = search
         .filter(Some(IndexFilter::from(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap())))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2]>");
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let search_result = search
         .filter(Some(IndexFilter::from(
             Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap(),
@@ -1166,7 +1170,8 @@ fn bug_3021_fourth() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let search = index.search(&rtxn, &fields_ids_map);
     let SearchResult {
         matching_words: _,
         candidates: _,
@@ -1334,7 +1339,8 @@ fn attribute_weights_after_swapping_searchable_attributes() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = search.query("kefir").execute().unwrap();
 
     // We should find kefir the dog first
@@ -1352,7 +1358,8 @@ fn attribute_weights_after_swapping_searchable_attributes() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = search.query("kefir").execute().unwrap();
 
     // We should find tamo first
@@ -1386,7 +1393,8 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = search.query("2345").execute().unwrap();
     assert!(results.candidates.is_empty());
     drop(rtxn);
@@ -1411,11 +1419,12 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = search.query("2345").execute().unwrap();
     assert!(results.candidates.is_empty());
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = dbg!(search
         .filter(Some(IndexFilter::from(
             Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()
@@ -1445,11 +1454,12 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = search.query("2345").execute().unwrap();
     assert!(results.candidates.is_empty());
 
-    let mut search = index.search(&rtxn);
+    let mut search = index.search(&rtxn, &fields_ids_map);
     let results = search
         .filter(Some(IndexFilter::from(
             Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap(),

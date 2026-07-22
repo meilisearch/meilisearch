@@ -268,7 +268,8 @@ fn test_proximity_simple() {
     let index = create_simple_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -295,7 +296,8 @@ fn test_proximity_split_word() {
     let index = create_edge_cases_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("sunflower wilting");
@@ -315,7 +317,7 @@ fn test_proximity_split_word() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("\"sun flower\" wilting");
@@ -342,7 +344,8 @@ fn test_proximity_split_word() {
         .unwrap();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("xyz wilting");
@@ -365,7 +368,8 @@ fn test_proximity_prefix_db() {
     let index = create_edge_cases_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best s");
@@ -390,7 +394,7 @@ fn test_proximity_prefix_db() {
     "###);
 
     // Difference when using the `su` prefix, which is not in the prefix DB
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best su");
@@ -417,7 +421,7 @@ fn test_proximity_prefix_db() {
     // **proximity** prefix DB. In that case, its sprximity score will always be
     // the maximum. This happens for prefixes that are larger than 2 bytes.
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best win");
@@ -441,7 +445,7 @@ fn test_proximity_prefix_db() {
 
     // Now using `wint`, which is not in the prefix DB:
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best wint");
@@ -465,7 +469,7 @@ fn test_proximity_prefix_db() {
 
     // and using `wi` which is in the prefix DB and proximity prefix DB
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("best wi");
