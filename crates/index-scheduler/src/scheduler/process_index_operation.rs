@@ -681,6 +681,9 @@ impl IndexScheduler {
         let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
+        // 1. local enum
+        // 2. only stored on the heap => extra level of indirection not warranted
+        #[allow(clippy::large_enum_variant)]
         enum DsrPayload {
             Replace(DynamicSearchRule),
             Delete,
@@ -689,7 +692,7 @@ impl IndexScheduler {
         let mut dsr_payloads = BTreeMap::<&RuleUid, DsrPayload>::new();
         let view = DynamicSearchRulesView::new(index, &rtxn, &db_fields_ids_map);
 
-        for (update, task) in updates.into_iter().zip(tasks.iter()) {
+        for (update, task) in updates.iter().zip(tasks.iter()) {
             match update {
                 DsrUpdate::CreateOrUpdate { rule_id, update } => {
                     let last_payload = dsr_payloads
