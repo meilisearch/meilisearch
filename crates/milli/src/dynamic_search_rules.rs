@@ -284,7 +284,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         search_context: &SearchContext<'_>,
         mut fuel: DsrFuel,
     ) -> Result<(), crate::Error> {
-        // 1. exclude rules that have the a different query emptiness condition
+        // 1. exclude rules that have a different query emptiness condition
         let is_query_empty = query_terms.is_empty();
         if let Some(is_query_empty_fid) =
             self.db_fields_ids_map.id(fields::CONDITIONS_QUERY_IS_EMPTY)
