@@ -30,6 +30,11 @@ pub struct DynamicSearchRule {
     /// Human-readable description of the dynamic search rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    /// Date time of the last update of this rule.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub last_updated_at: Option<OffsetDateTime>,
+
     /// Precedence of the dynamic search rule. Lower numeric values take precedence over higher
     /// ones. If omitted, the rule is treated as having the lowest precedence. This precedence is
     /// used to resolve conflicts between matching rules:
@@ -53,6 +58,7 @@ impl DynamicSearchRule {
             uid,
             description: None,
             precedence: None,
+            last_updated_at: None,
             active: true,
             conditions: Default::default(),
             actions: vec![],
@@ -103,6 +109,16 @@ impl DynamicSearchRule {
             None => None,
         };
 
+        let last_updated_at = match doc.top_level_field(dsr_fields::LAST_UPDATED_AT)? {
+            Some(updated_at) => {
+                let last_updated_at = time::serde::rfc3339::option::deserialize(updated_at)
+                    .map_err(to_milli_error)?;
+
+                last_updated_at
+            }
+            None => Default::default(),
+        };
+
         let active = match doc.top_level_field(dsr_fields::ACTIVE)? {
             Some(active) => serde_json::from_str(active.get()).map_err(to_milli_error)?,
             // `active` defaults to true!
@@ -119,11 +135,12 @@ impl DynamicSearchRule {
             None => Default::default(),
         };
 
-        Ok(Self { uid, description, precedence, active, conditions, actions })
+        Ok(Self { uid, description, last_updated_at, precedence, active, conditions, actions })
     }
 
     pub fn into_uid_update(self) -> (RuleUid, DynamicSearchRuleUpdateRequest) {
-        let Self { uid, description, precedence, active, conditions, actions } = self;
+        let Self { uid, description, last_updated_at: _, precedence, active, conditions, actions } =
+            self;
         (
             uid,
             DynamicSearchRuleUpdateRequest {
@@ -136,8 +153,13 @@ impl DynamicSearchRule {
         )
     }
 
-    pub fn apply_update(&mut self, update: DynamicSearchRuleUpdateRequest) {
-        let Self { uid: _, description, precedence, active, conditions, actions } = self;
+    pub fn apply_update(
+        &mut self,
+        update: DynamicSearchRuleUpdateRequest,
+        updated_at: OffsetDateTime,
+    ) {
+        let Self { uid: _, description, last_updated_at, precedence, active, conditions, actions } =
+            self;
 
         let DynamicSearchRuleUpdateRequest {
             description: new_description,
@@ -163,6 +185,8 @@ impl DynamicSearchRule {
             Setting::Reset => true,
             Setting::NotSet => *active,
         };
+
+        *last_updated_at = Some(updated_at);
 
         match new_conditions {
             Setting::Set(Conditions { time: new_time, query: new_query, filter: new_filter }) => {

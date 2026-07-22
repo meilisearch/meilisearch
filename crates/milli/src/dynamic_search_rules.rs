@@ -19,7 +19,7 @@ use crate::search::facet::value_bounds::{evaluate_equal, to_str_bounds, ValueBou
 use crate::search::new::LocatedQueryTerm;
 use crate::update::new::document::DocumentFromDb;
 use crate::{
-    DocumentId, FieldId, FieldsIdsMap, Index, IndexFilter, PinDoc, Result, SearchContext,
+    AscDesc, DocumentId, FieldId, FieldsIdsMap, Index, IndexFilter, PinDoc, Result, SearchContext,
     SearchResult, UserError, MAX_COUNTED_WORDS,
 };
 
@@ -154,6 +154,9 @@ impl<'a> DynamicSearchRulesView<'a> {
         search.exhaustive_number_hits(true);
         search.limit(limit);
         search.offset(offset);
+        search.sort_criteria(vec![AscDesc::Desc(crate::Member::Field(
+            fields::LAST_UPDATED_AT.into(),
+        ))]);
         let searchable_attrs = [fields::DESCRIPTION.into(), fields::CONDITIONS_QUERY_WORDS.into()];
         search.searchable_attributes(&searchable_attrs);
 
@@ -814,6 +817,7 @@ pub mod fields {
     pub const PRECEDENCE: &str = "precedence";
     pub const DESCRIPTION: &str = "description";
     pub const ACTIONS: &str = "actions";
+    pub const LAST_UPDATED_AT: &str = "lastUpdatedAt";
 
     pub const CONDITIONS: &str = "conditions";
     pub const FILTER: &str = "filter";

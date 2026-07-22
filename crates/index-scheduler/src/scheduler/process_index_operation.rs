@@ -616,6 +616,8 @@ impl IndexScheduler {
                 let mut sortable_attributes: BTreeSet<_> = Default::default();
                 // used to sort rules by precedence in responses
                 sortable_attributes.insert(dsr_fields::PRECEDENCE.to_string());
+                // used to sort rules by last update when listing rules
+                sortable_attributes.insert(dsr_fields::LAST_UPDATED_AT.to_string());
                 Setting::Set(sortable_attributes)
             },
             foreign_keys: Setting::NotSet,
@@ -687,7 +689,7 @@ impl IndexScheduler {
         let mut dsr_payloads = BTreeMap::<&RuleUid, DsrPayload>::new();
         let view = DynamicSearchRulesView::new(index, &rtxn, &db_fields_ids_map);
 
-        for update in updates {
+        for (update, task) in updates.into_iter().zip(tasks.iter()) {
             match update {
                 DsrUpdate::CreateOrUpdate { rule_id, update } => {
                     let last_payload = dsr_payloads
@@ -711,7 +713,7 @@ impl IndexScheduler {
                         DsrPayload::Replace(dynamic_search_rule) => dynamic_search_rule,
                         DsrPayload::Delete => DynamicSearchRule::new(rule_id.clone()),
                     };
-                    existing_rule.apply_update(update.clone());
+                    existing_rule.apply_update(update.clone(), task.enqueued_at);
                     dsr_payloads.insert(rule_id, DsrPayload::Replace(existing_rule));
                 }
                 DsrUpdate::Deletion(rule_id) => {

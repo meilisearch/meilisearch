@@ -119,6 +119,7 @@ impl LegacyDynamicSearchRule {
             uid,
             description,
             precedence: priority,
+            last_updated_at: None,
             active,
             conditions,
             actions,
