@@ -658,6 +658,18 @@
         "total": 2,
         "results": [
           {
+            "actions": [],
+            "active": true,
+            "conditions": {
+              "time": {
+                "start": "2023-01-01T09:50:12Z",
+                "end": "2032-12-31T09:50:12Z"
+              }
+            },
+            "uid": "skips-action-without-selector-id",
+            "lastUpdatedAt": "[updated]"
+          },
+          {
             "actions": [
               {
                 "action": {
@@ -676,18 +688,8 @@
                 "words": "super hero"
               }
             },
-            "uid": "existing-rule-to-migrate"
-          },
-          {
-            "actions": [],
-            "active": true,
-            "conditions": {
-              "time": {
-                "start": "2023-01-01T09:50:12Z",
-                "end": "2032-12-31T09:50:12Z"
-              }
-            },
-            "uid": "skips-action-without-selector-id"
+            "uid": "existing-rule-to-migrate",
+            "lastUpdatedAt": "[updated]"
           }
         ]
       },

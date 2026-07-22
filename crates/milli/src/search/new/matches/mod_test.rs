@@ -34,7 +34,7 @@ impl<'a> MatcherBuilder<'a> {
         search.query(query);
 
         let (query_terms, _, _) =
-            search.build_located_query_terms(&mut ctx, &mut universe).unwrap();
+            search.build_located_query_terms(&mut ctx, None, &mut universe).unwrap();
 
         let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
             &mut ctx,

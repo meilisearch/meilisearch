@@ -328,7 +328,7 @@ impl<'a> Search<'a> {
         )?;
 
         let (query_terms, pins, used_negative_operator) =
-            self.build_located_query_terms(&mut ctx, &mut universe)?;
+            self.build_located_query_terms(&mut ctx, self.filter.as_ref(), &mut universe)?;
 
         let mut query_vector = None;
         let PartialSearchResult {
@@ -417,6 +417,7 @@ impl<'a> Search<'a> {
     pub fn build_located_query_terms(
         &self,
         ctx: &mut SearchContext<'_>,
+        filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
     ) -> Result<(Option<(QueryGraph, Vec<new::LocatedQueryTerm>)>, Vec<PinDoc>, bool), Error> {
         let mut used_negative_operator = false;
@@ -450,6 +451,7 @@ impl<'a> Search<'a> {
             .map(|(dsrs, fuel)| {
                 dsrs.resolve_pins(
                     query_graph_terms.as_ref().map(|(_, terms)| terms.as_slice()).unwrap_or(&[]),
+                    filter,
                     universe,
                     ctx,
                     fuel,

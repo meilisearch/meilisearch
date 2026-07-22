@@ -1,12 +1,14 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, RuleUid};
 use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::index_uid::DsrIndex;
 use meilisearch_types::milli::documents::PrimaryKey;
+use meilisearch_types::milli::dynamic_search_rules::DynamicSearchRulesView;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{
     self, IndexOperations, Payload, UpdateByFunction,
@@ -14,7 +16,7 @@ use meilisearch_types::milli::update::new::indexer::{
 use meilisearch_types::milli::update::{DocumentAdditionResult, Setting};
 use meilisearch_types::milli::vector::RuntimeEmbedders;
 use meilisearch_types::milli::{
-    self, ChannelCongestion, FilterFeatures, FilterableAttributesFeatures,
+    self, ChannelCongestion, FaultSource, FilterFeatures, FilterableAttributesFeatures,
     FilterableAttributesPatterns, FilterableAttributesRule, MustStopProcessing,
 };
 use meilisearch_types::network::Network;
@@ -586,6 +588,8 @@ impl IndexScheduler {
         must_stop_processing: &MustStopProcessing,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>> {
+        use milli::dynamic_search_rules::fields as dsr_fields;
+
         progress.update_progress(SettingsProgress::RetrievingAndMergingTheSettings);
         let indexer_config = self.index_mapper.indexer_config();
         let mut builder = milli::update::Settings::new(index_wtxn, index, indexer_config);
@@ -594,25 +598,31 @@ impl IndexScheduler {
             displayed_attributes: Setting::Set(vec!["*".to_string()]).into(),
             searchable_attributes: Setting::Set(vec![
                 // used to find query word constraints
-                "conditions.query.words".to_string(),
+                dsr_fields::CONDITIONS_QUERY_WORDS.to_string(),
                 // used in list rules
-                "description".to_string(),
+                dsr_fields::DESCRIPTION.to_string(),
             ])
             .into(),
             filterable_attributes: Setting::Set(vec![
                 // filter by active or inactive rules
-                eq_attr("active".into()),
+                eq_attr_pattern(dsr_fields::ACTIVE.into()),
                 // used to find time constraints
-                cmp_attr("conditions.time.start".into()),
+                cmp_attr_pattern(dsr_fields::CONDITIONS_TIME_START.into()),
                 // used to find time constraints
-                cmp_attr("conditions.time.end".into()),
+                cmp_attr_pattern(dsr_fields::CONDITIONS_TIME_END.into()),
                 // used to find query isEmpty constraints
-                eq_attr("conditions.query.isEmpty".into()),
+                eq_attr_pattern(dsr_fields::CONDITIONS_QUERY_IS_EMPTY.into()),
+                // used to find filter constraints
+                cmp_attr_pattern(dsr_fields::CONDITIONS_FILTER_VALUES.into()),
+                // use to count filter constraints
+                cmp_attr_pattern(dsr_fields::CONDITIONS_FILTER_NB_CONSTRAINTS.into()),
             ]),
             sortable_attributes: {
                 let mut sortable_attributes: BTreeSet<_> = Default::default();
                 // used to sort rules by precedence in responses
-                sortable_attributes.insert("precedence".to_string());
+                sortable_attributes.insert(dsr_fields::PRECEDENCE.to_string());
+                // used to sort rules by last update when listing rules
+                sortable_attributes.insert(dsr_fields::LAST_UPDATED_AT.to_string());
                 Setting::Set(sortable_attributes)
             },
             foreign_keys: Setting::NotSet,
@@ -663,6 +673,8 @@ impl IndexScheduler {
         mut tasks: Vec<Task>,
         progress: &Progress,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
+        use milli::dynamic_search_rules::fields as dsr_fields;
+
         let indexer_alloc = Bump::new();
         let from_milli = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_owned()));
         let started_processing_at = std::time::Instant::now();
@@ -674,31 +686,84 @@ impl IndexScheduler {
         let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = IndexOperations::new();
+        // 1. local enum
+        // 2. only stored on the heap => extra level of indirection not warranted
+        #[allow(clippy::large_enum_variant)]
+        enum DsrPayload {
+            Replace(DynamicSearchRule),
+            Delete,
+        }
 
-        for update in updates {
+        let mut dsr_payloads = BTreeMap::<&RuleUid, DsrPayload>::new();
+        let view = DynamicSearchRulesView::new(index, &rtxn, &db_fields_ids_map);
+
+        for (update, task) in updates.iter().zip(tasks.iter()) {
             match update {
                 DsrUpdate::CreateOrUpdate { rule_id, update } => {
-                    // unwrap: dynamic search rule always serializable
-                    let mut rule = serde_json::to_value(update).unwrap();
+                    let last_payload = dsr_payloads
+                        .remove(rule_id)
+                        .map(Ok)
+                        .unwrap_or_else(|| {
+                            let existing_rule = view
+                                .get(rule_id)?
+                                .map(|rule| {
+                                    DynamicSearchRule::try_from_meili_doc(
+                                        rule,
+                                        FaultSource::Runtime,
+                                    )
+                                })
+                                .transpose()?
+                                .unwrap_or_else(|| DynamicSearchRule::new(rule_id.clone()));
+                            Ok(DsrPayload::Replace(existing_rule))
+                        })
+                        .map_err(from_milli)?;
+                    let mut existing_rule = match last_payload {
+                        DsrPayload::Replace(dynamic_search_rule) => dynamic_search_rule,
+                        DsrPayload::Delete => DynamicSearchRule::new(rule_id.clone()),
+                    };
+                    existing_rule.apply_update(update.clone(), task.enqueued_at);
+                    dsr_payloads.insert(rule_id, DsrPayload::Replace(existing_rule));
+                }
+                DsrUpdate::Deletion(rule_id) => {
+                    dsr_payloads.insert(rule_id, DsrPayload::Delete);
+                }
+            }
+        }
 
-                    // unwrap: DynamicSearchRuleUpdateRequest always serializes as an object
-                    rule.as_object_mut().unwrap().insert(
-                        "uid".into(),
-                        serde_json::Value::String(rule_id.as_str().to_owned()),
-                    );
+        let mut indexer = IndexOperations::new();
+
+        for (rule_id, payload) in dsr_payloads {
+            match payload {
+                DsrPayload::Replace(rule) => {
+                    let nb_constraints = rule.facet_count();
+
+                    // unwrap: dynamic search rule always serializable
+                    let mut rule = serde_json::to_value(rule).unwrap();
+
+                    'inject_nb_constraints: {
+                        let Some(conditions) = rule.get_mut(dsr_fields::CONDITIONS) else {
+                            break 'inject_nb_constraints;
+                        };
+                        let Some(filter) = conditions.get_mut(dsr_fields::FILTER) else {
+                            break 'inject_nb_constraints;
+                        };
+                        filter
+                            .as_object_mut()
+                            .unwrap()
+                            .insert(dsr_fields::NB_CONSTRAINTS.into(), nb_constraints.into());
+                    }
 
                     let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
                     // unwrap: vec writing cannot fail + dynamic search rule always serializable
                     serde_json::to_writer(&mut vec, &rule).unwrap();
                     let vec = vec.into_bump_slice();
-                    indexer.push_raw_operation(Payload::Update {
+                    indexer.push_raw_operation(Payload::Replace {
                         payload: vec,
                         on_missing_document: milli::update::MissingDocumentPolicy::Create,
                     });
                 }
-                DsrUpdate::Deletion(to_delete) => {
-                    let to_delete = &*indexer_alloc.alloc_str(to_delete.as_str());
+                DsrPayload::Delete => {
+                    let to_delete = &*indexer_alloc.alloc_str(rule_id.as_str());
                     let mut vec = bumpalo::collections::Vec::new_in(&indexer_alloc);
                     vec.push(to_delete);
                     let vec = vec.into_bump_slice();
@@ -717,7 +782,7 @@ impl IndexScheduler {
                 &indexer_alloc,
                 index,
                 &rtxn,
-                Some("uid"),
+                Some(dsr_fields::UID),
                 &mut new_fields_ids_map,
                 &must_stop_processing,
                 progress.clone(),
@@ -774,9 +839,9 @@ impl IndexScheduler {
     }
 }
 
-fn eq_attr(name: String) -> FilterableAttributesRule {
+fn eq_attr_pattern(pattern: String) -> FilterableAttributesRule {
     FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
-        attribute_patterns: vec![name].into(),
+        attribute_patterns: vec![pattern].into(),
         features: FilterableAttributesFeatures {
             facet_search: false,
             filter: FilterFeatures { equality: true, comparison: false },
@@ -784,9 +849,9 @@ fn eq_attr(name: String) -> FilterableAttributesRule {
     })
 }
 
-fn cmp_attr(name: String) -> FilterableAttributesRule {
+fn cmp_attr_pattern(pattern: String) -> FilterableAttributesRule {
     FilterableAttributesRule::Pattern(FilterableAttributesPatterns {
-        attribute_patterns: vec![name].into(),
+        attribute_patterns: vec![pattern].into(),
         features: FilterableAttributesFeatures {
             facet_search: false,
             filter: FilterFeatures { equality: true, comparison: true },

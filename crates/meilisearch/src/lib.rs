@@ -49,7 +49,7 @@ use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexerConfig, MissingDocumentPolicy,
 };
-use meilisearch_types::milli::MustStopProcessing;
+use meilisearch_types::milli::{FilterConstraintFuel, MustStopProcessing};
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
@@ -263,8 +263,40 @@ pub fn setup_meilisearch(
             Err(std::env::VarError::NotPresent) => 4096,
             Err(err) => bail!(err),
         };
+        let filter_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 4096,
+            Err(err) => bail!(err),
+        };
 
-        DsrFuel::new(max_counted_words, max_active_rules, max_pin_actions, word_fuel)
+        let or_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_OR_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+
+        let and_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_AND_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 100,
+            Err(err) => bail!(err),
+        };
+
+        let depth_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_FILTER_DEPTH_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 25,
+            Err(err) => bail!(err),
+        };
+
+        let filter_constraint_fuel = FilterConstraintFuel::new(or_fuel, and_fuel, depth_fuel);
+
+        DsrFuel::new(
+            max_counted_words,
+            max_active_rules,
+            max_pin_actions,
+            word_fuel,
+            filter_fuel,
+            filter_constraint_fuel,
+        )
     };
 
     let index_scheduler_opt = IndexSchedulerOptions {

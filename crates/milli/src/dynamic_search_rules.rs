@@ -1,5 +1,10 @@
+use std::num::Saturating;
 use std::ops::{Bound, ControlFlow};
 
+use filter_parser::{
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraintFuel,
+    FilterConstraints,
+};
 use heed::{RoTxn, WithoutTls};
 use itertools::Itertools as _;
 use roaring::RoaringBitmap;
@@ -10,14 +15,15 @@ use time::OffsetDateTime;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::facet::ascending_facet_sort;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
+use crate::search::facet::value_bounds::{evaluate_equal, to_str_bounds, ValueBounds};
 use crate::search::new::LocatedQueryTerm;
 use crate::update::new::document::DocumentFromDb;
 use crate::{
-    DocumentId, FieldsIdsMap, Index, PinDoc, Result, SearchContext, SearchResult, UserError,
-    MAX_COUNTED_WORDS,
+    AscDesc, DocumentId, FieldId, FieldsIdsMap, Index, IndexFilter, PinDoc, Result, SearchContext,
+    SearchResult, UserError, MAX_COUNTED_WORDS,
 };
 
-type RuleId = u32;
+pub type RuleId = u32;
 
 /// Wrapper around the DSR index, allowing to search for active rules
 pub struct DynamicSearchRules {
@@ -66,11 +72,13 @@ impl<'a> DynamicSearchRulesView<'a> {
     pub fn resolve_pins(
         &self,
         query_terms: &[LocatedQueryTerm],
+        filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
     ) -> Result<Vec<PinDoc>> {
-        let active_rules = self.active_rules_for_query(query_terms, search_context, fuel)?;
+        let active_rules =
+            self.active_rules_for_query(query_terms, filter, search_context, fuel)?;
 
         self.find_pins(self.rule_ids_sorted_by_precedence(active_rules)?, search_context, fuel)
             .filter(
@@ -107,7 +115,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     /// If no rule contains the "active" field, then all declared rules are considered active.
     pub fn active_rule_ids(&self, is_active: bool) -> Result<RoaringBitmap> {
         let left_bound = if is_active { "true" } else { "false" };
-        let active_rules = if let Some(active_fid) = self.db_fields_ids_map.id("active") {
+        let active_rules = if let Some(active_fid) = self.db_fields_ids_map.id(fields::ACTIVE) {
             let active_key = FacetGroupKey { field_id: active_fid, level: 0, left_bound };
             let Some(FacetGroupValue { size: _, bitmap: active_rules }) =
                 self.index.facet_id_string_docids.get(self.rtxn, &active_key)?
@@ -152,7 +160,10 @@ impl<'a> DynamicSearchRulesView<'a> {
         search.exhaustive_number_hits(true);
         search.limit(limit);
         search.offset(offset);
-        let searchable_attrs = ["description".into(), "conditions.query.words".into()];
+        search.sort_criteria(vec![AscDesc::Desc(crate::Member::Field(
+            fields::LAST_UPDATED_AT.into(),
+        ))]);
+        let searchable_attrs = [fields::DESCRIPTION.into(), fields::CONDITIONS_QUERY_WORDS.into()];
         search.searchable_attributes(&searchable_attrs);
 
         search.execute()
@@ -178,7 +189,7 @@ impl<'a> DynamicSearchRulesView<'a> {
                     return Ok(None);
                 };
 
-                let Some(actions) = rule.field("actions")? else {
+                let Some(actions) = rule.field(fields::ACTIONS)? else {
                     return Ok(None);
                 };
                 let actions: Result<Vec<RuleAction>, serde_json::Error> =
@@ -214,20 +225,31 @@ impl<'a> DynamicSearchRulesView<'a> {
     fn active_rules_for_query(
         &self,
         query_terms: &[LocatedQueryTerm],
+        filter: Option<&IndexFilter>,
         search_context: &SearchContext,
-        mut fuel: DsrFuel,
+        fuel: DsrFuel,
     ) -> Result<RoaringBitmap> {
-        // 1. include rules that are active
         let mut active_rules = self.active_rule_ids(true)?;
-        // 2. exclude rules that have a time condition that is not met
         let target_time = search_context.before_search.format(&Rfc3339).unwrap();
+        self.apply_time_conditions(&mut active_rules, target_time.as_str())?;
+        self.apply_query_conditions(&mut active_rules, query_terms, search_context, fuel)?;
+        self.apply_filter_conditions(&mut active_rules, filter, fuel)?;
+
+        Ok(active_rules)
+    }
+
+    fn apply_time_conditions(
+        &self,
+        active_rules: &mut RoaringBitmap,
+        target_time: &str,
+    ) -> Result<(), crate::Error> {
         let db = self.index.facet_id_string_docids;
-        if let Some(time_start_fid) = self.db_fields_ids_map.id("conditions.time.start") {
+        if let Some(time_start_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_TIME_START) {
             let mut time_start_after_now = RoaringBitmap::new();
 
             // looking for all rules whose time.start is AFTER target_time
             // so ]target_time, ..]
-            let left = Bound::Excluded(target_time.as_str());
+            let left = Bound::Excluded(target_time);
             let right = Bound::Unbounded;
             find_docids_of_facet_within_bounds(
                 self.rtxn,
@@ -235,33 +257,44 @@ impl<'a> DynamicSearchRulesView<'a> {
                 time_start_fid,
                 &left,
                 &right,
-                Some(&active_rules),
+                Some(&*active_rules),
                 &mut time_start_after_now,
             )?;
-            active_rules -= time_start_after_now;
+            *active_rules -= time_start_after_now;
         }
-        if let Some(time_end_fid) = self.db_fields_ids_map.id("conditions.time.end") {
+        if let Some(time_end_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_TIME_END) {
             let mut time_end_before_now = RoaringBitmap::new();
 
             // looking for all rules whose time.end is BEFORE target_time
             // so ].., target_time]
             let left = Bound::Unbounded;
-            let right = Bound::Excluded(target_time.as_str());
+            let right = Bound::Excluded(target_time);
             find_docids_of_facet_within_bounds(
                 self.rtxn,
                 db,
                 time_end_fid,
                 &left,
                 &right,
-                Some(&active_rules),
+                Some(&*active_rules),
                 &mut time_end_before_now,
             )?;
-            active_rules -= time_end_before_now;
+            *active_rules -= time_end_before_now;
         }
+        Ok(())
+    }
 
-        // 3. exclude rules that have the a different query emptiness condition
+    fn apply_query_conditions(
+        &self,
+        active_rules: &mut RoaringBitmap,
+        query_terms: &[LocatedQueryTerm],
+        search_context: &SearchContext<'_>,
+        mut fuel: DsrFuel,
+    ) -> Result<(), crate::Error> {
+        // 1. exclude rules that have a different query emptiness condition
         let is_query_empty = query_terms.is_empty();
-        if let Some(is_query_empty_fid) = self.db_fields_ids_map.id("conditions.query.isEmpty") {
+        if let Some(is_query_empty_fid) =
+            self.db_fields_ids_map.id(fields::CONDITIONS_QUERY_IS_EMPTY)
+        {
             let left_bound = if is_query_empty { "false" } else { "true" };
             let is_not_query_empty_key =
                 FacetGroupKey { field_id: is_query_empty_fid, level: 0, left_bound };
@@ -269,10 +302,9 @@ impl<'a> DynamicSearchRulesView<'a> {
             if let Some(FacetGroupValue { size: _, bitmap: is_not_query_empty_rules }) =
                 self.index.facet_id_string_docids.get(self.rtxn, &is_not_query_empty_key)?
             {
-                active_rules -= is_not_query_empty_rules;
+                *active_rules -= is_not_query_empty_rules;
             }
         };
-
         let mut query_terms: Vec<&str> = query_terms
             .iter()
             .filter_map(|word| {
@@ -281,23 +313,21 @@ impl<'a> DynamicSearchRulesView<'a> {
                     .map(|word| search_context.word_interner.get(word).as_str())
             })
             .collect();
-
         query_terms.sort_unstable();
         query_terms.dedup();
-
         let words_count =
             query_terms.len().min(MAX_COUNTED_WORDS).min(fuel.max_counted_words()) as u8;
-        if let Some(query_words_fid) = self.db_fields_ids_map.id("conditions.query.words") {
+        if let Some(query_words_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_QUERY_WORDS) {
             let word_count_db = &self.index.field_id_word_count_docids;
 
-            // 4. exclude words with more word constraints than present in the query
+            // 2. exclude words with more word constraints than present in the query
             if let Some(words_count_plus_one) = words_count.checked_add(1) {
                 for res in word_count_db.range(
                     self.rtxn,
                     &((query_words_fid, words_count_plus_one)..=(query_words_fid, u8::MAX)),
                 )? {
                     let ((_, _constraint_count), more_constraints_than_query_rules) = res?;
-                    active_rules -= more_constraints_than_query_rules;
+                    *active_rules -= more_constraints_than_query_rules;
                 }
             }
 
@@ -309,7 +339,7 @@ impl<'a> DynamicSearchRulesView<'a> {
                     continue;
                 };
 
-                word_rules &= &active_rules;
+                word_rules &= &*active_rules;
 
                 if word_rules.is_empty() {
                     continue;
@@ -318,13 +348,16 @@ impl<'a> DynamicSearchRulesView<'a> {
                 words_rules.push(word_rules);
             }
 
-            // 5. check that the correct constraints are present
             for constraint_count in 0..=words_count {
                 let Some(constraint_count_rules) =
                     word_count_db.get(self.rtxn, &(query_words_fid, constraint_count))?
                 else {
                     continue;
                 };
+
+                if constraint_count_rules.is_empty() {
+                    continue;
+                }
 
                 let mut verifying_constraints_rules = RoaringBitmap::new();
 
@@ -349,18 +382,129 @@ impl<'a> DynamicSearchRulesView<'a> {
                         }
                     }
                 }
-                // remove all rules that have that number of words but don't verify the constraints
+                // 3. exclude rules that have that number of word constraints but don't verify the constraints
                 match fuel.consume_word_combination() {
                     ControlFlow::Continue(()) => {
-                        active_rules -= constraint_count_rules - verifying_constraints_rules
+                        *active_rules -= constraint_count_rules - verifying_constraints_rules
                     }
                     // no more fuel, we have to remove all rules because we couldn't complete `verifying_constraints_rules`
-                    ControlFlow::Break(()) => active_rules -= constraint_count_rules,
+                    ControlFlow::Break(()) => *active_rules -= constraint_count_rules,
                 }
             }
         }
+        Ok(())
+    }
 
-        Ok(active_rules)
+    fn apply_filter_conditions(
+        &self,
+        active_rules: &mut RoaringBitmap,
+        filter: Option<&IndexFilter>,
+        mut fuel: DsrFuel,
+    ) -> Result<(), crate::Error> {
+        let constraints = filter
+            .map(|filter| {
+                FilterConstraints::new(&filter.condition, &mut fuel.filter_constraint_fuel)
+            })
+            .unwrap_or_default();
+
+        let Some(nb_constraints_fid) =
+            self.db_fields_ids_map.id(fields::CONDITIONS_FILTER_NB_CONSTRAINTS)
+        else {
+            return Ok(());
+        };
+
+        active_rules.len();
+
+        let max_constraints = constraints.max_number_of_constraints();
+
+        // 1. exclude rules that have more constraints than max_constraints
+        let mut too_many_constraints = Default::default();
+        find_docids_of_facet_within_bounds(
+            self.rtxn,
+            self.index.facet_id_f64_docids,
+            nb_constraints_fid,
+            &Bound::Excluded(max_constraints as f64),
+            &Bound::Unbounded,
+            Some(active_rules),
+            &mut too_many_constraints,
+        )?;
+
+        *active_rules -= too_many_constraints;
+
+        if max_constraints == 0 {
+            return Ok(());
+        }
+
+        // solve all constraints
+        let mut solved_constraints = Vec::new();
+
+        for constraints in &constraints.constraints {
+            let mut solved_constraint = Vec::new();
+            for (target, constraints) in constraints {
+                let matching = match target {
+                    ConstraintTarget::Fid(fid) => {
+                        let facet_value_name = format!(
+                            "{}.{}",
+                            fields::CONDITIONS_FILTER_VALUES,
+                            fid.original_fragment()
+                        );
+                        match self.db_fields_ids_map.id(&facet_value_name) {
+                            Some(fid) => {
+                                self.resolve_constraints(fid, constraints, active_rules)?
+                            }
+                            None => RoaringBitmap::new(),
+                        }
+                    }
+                    ConstraintTarget::Vector { .. } | ConstraintTarget::Geo => {
+                        // not solving for vector or geo currently
+                        RoaringBitmap::default()
+                    }
+                };
+                if !matching.is_empty() {
+                    solved_constraint.push(matching);
+                }
+            }
+            solved_constraints.push(solved_constraint);
+        }
+
+        // exclude rules with k constraints that don't verify k constraints
+        for constraint_count in 1..=max_constraints {
+            let key = FacetGroupKey {
+                field_id: nb_constraints_fid,
+                level: 0,
+                left_bound: constraint_count as f64,
+            };
+            let Some(FacetGroupValue { size: _, bitmap: constraint_count_rules }) =
+                self.index.facet_id_f64_docids.get(self.rtxn, &key)?
+            else {
+                continue;
+            };
+            let mut verifying_constraints_rules = RoaringBitmap::new();
+
+            if constraint_count_rules.is_empty() {
+                continue;
+            }
+
+            for solved_constraint in &solved_constraints {
+                for combination in solved_constraint.iter().combinations(constraint_count) {
+                    if fuel.consume_filter_combination().is_break() {
+                        break;
+                    }
+                    verifying_constraints_rules |= roaring::MultiOps::intersection(
+                        std::iter::once(&constraint_count_rules).chain(combination.into_iter()),
+                    );
+                }
+            }
+            match fuel.consume_filter_combination() {
+                ControlFlow::Continue(()) => {
+                    *active_rules -= constraint_count_rules - verifying_constraints_rules;
+                }
+                // no more fuel, we have to remove all rules because the computation might be incomplete
+                ControlFlow::Break(()) => *active_rules -= constraint_count_rules,
+            }
+        }
+
+        Ok(())
     }
 
     fn rule_ids_sorted_by_precedence(
@@ -369,7 +513,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     ) -> Result<impl Iterator<Item = Result<RuleId>> + 'a> {
         let db = self.index.facet_id_f64_docids.remap_types();
 
-        if let Some(precedence_field_id) = self.db_fields_ids_map.id("precedence") {
+        if let Some(precedence_field_id) = self.db_fields_ids_map.id(fields::PRECEDENCE) {
             // faceted = active rules with a non-null field
             let mut faceted = self
                 .index
@@ -399,6 +543,101 @@ impl<'a> DynamicSearchRulesView<'a> {
         } else {
             Ok(either::Right(active_rules.into_iter().map(Ok)))
         }
+    }
+
+    fn resolve_constraints(
+        &self,
+        fid: FieldId,
+        constraints: &[ConstraintCondition],
+        active_rules: &RoaringBitmap,
+    ) -> Result<RoaringBitmap> {
+        let mut matching = active_rules.clone();
+
+        for constraint in constraints {
+            let mut polarity = constraint.polarity;
+            let evaluated = match &constraint.kind {
+                ConstraintConditionKind::Condition { condition } => {
+                    match ValueBounds::new(condition) {
+                        ValueBounds::Range { normalized, number } => {
+                            let mut evaluated = RoaringBitmap::new();
+
+                            {
+                                let (left, right) = to_str_bounds(&normalized);
+                                let db = self.index.facet_id_string_docids;
+                                find_docids_of_facet_within_bounds(
+                                    self.rtxn,
+                                    db,
+                                    fid,
+                                    &left,
+                                    &right,
+                                    Some(active_rules),
+                                    &mut evaluated,
+                                )?;
+                            };
+
+                            if let Some((left, right)) = number {
+                                let db = self.index.facet_id_f64_docids;
+                                find_docids_of_facet_within_bounds(
+                                    self.rtxn,
+                                    db,
+                                    fid,
+                                    &left,
+                                    &right,
+                                    Some(active_rules),
+                                    &mut evaluated,
+                                )?;
+                            }
+                            evaluated
+                        }
+                        // no effect if polarity = false, removes everything otherwise
+                        ValueBounds::FieldIsEmpty | ValueBounds::FieldIsNull => {
+                            RoaringBitmap::new()
+                        }
+                        // no effect if polarity = true, removes everything otherwise
+                        ValueBounds::FieldExists => active_rules.clone(),
+                        ValueBounds::Equal { normalized, number } => evaluate_equal(
+                            self.rtxn,
+                            fid,
+                            self.index.facet_id_f64_docids,
+                            self.index.facet_id_string_docids,
+                            normalized,
+                            number,
+                        )?,
+                        ValueBounds::NotEqual { normalized, number } => {
+                            polarity = !polarity;
+                            evaluate_equal(
+                                self.rtxn,
+                                fid,
+                                self.index.facet_id_f64_docids,
+                                self.index.facet_id_string_docids,
+                                normalized,
+                                number,
+                            )?
+                        }
+                        ValueBounds::Contains { normalized: _ }
+                        | ValueBounds::StartsWith { normalized: _ } => {
+                            return Ok(Default::default())
+                        }
+                    }
+                }
+                // always unsupported, considered unsatisfiable
+                ConstraintConditionKind::VectorExists { .. }
+                | ConstraintConditionKind::GeoLowerThan { .. }
+                | ConstraintConditionKind::GeoBoundingBox { .. }
+                | ConstraintConditionKind::GeoPolygon { .. } => return Ok(Default::default()),
+            };
+            if polarity {
+                // exclude rules that were evaluated to 0
+                matching &= evaluated;
+            } else {
+                // exclude rules that were evaluated to 1
+                matching -= evaluated;
+            }
+            if matching.is_empty() {
+                break;
+            }
+        }
+        Ok(matching)
     }
 }
 
@@ -436,11 +675,12 @@ impl DynamicSearchRules {
     pub fn resolve_pins(
         &self,
         query_terms: &[LocatedQueryTerm],
+        filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
     ) -> Result<Vec<PinDoc>> {
-        self.as_view().resolve_pins(query_terms, universe, search_context, fuel)
+        self.as_view().resolve_pins(query_terms, filter, universe, search_context, fuel)
     }
 
     pub fn rules_from_rule_ids<'t, I>(
@@ -521,20 +761,27 @@ pub struct DsrFuel {
     max_counted_words: u8,
     max_active_rules: u32,
     max_pin_actions: u32,
-    remaining_word_fuel: std::num::Saturating<u32>,
+    remaining_word_fuel: Saturating<u32>,
+    remaining_filter_fuel: Saturating<u32>,
+    filter_constraint_fuel: FilterConstraintFuel,
 }
+
 impl DsrFuel {
     pub fn new(
         max_counted_words: u8,
         max_active_rules: u32,
         max_pin_actions: u32,
         word_fuel: u32,
+        filter_fuel: u32,
+        filter_constraint_fuel: FilterConstraintFuel,
     ) -> Self {
         Self {
             max_counted_words,
             max_active_rules,
             max_pin_actions,
-            remaining_word_fuel: std::num::Saturating(word_fuel),
+            remaining_word_fuel: Saturating(word_fuel),
+            remaining_filter_fuel: Saturating(filter_fuel),
+            filter_constraint_fuel,
         }
     }
 
@@ -551,6 +798,15 @@ impl DsrFuel {
         }
     }
 
+    pub fn consume_filter_combination(&mut self) -> ControlFlow<(), ()> {
+        self.remaining_filter_fuel -= 1;
+        if self.remaining_filter_fuel.0 == 0 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+
     pub fn max_active_rules(&self) -> usize {
         self.max_active_rules as usize
     }
@@ -558,4 +814,25 @@ impl DsrFuel {
     pub fn max_pin_actions(&self) -> usize {
         self.max_pin_actions as usize
     }
+}
+
+/// Fields used in DSR documents
+pub mod fields {
+    pub const UID: &str = "uid";
+    pub const ACTIVE: &str = "active";
+    pub const PRECEDENCE: &str = "precedence";
+    pub const DESCRIPTION: &str = "description";
+    pub const ACTIONS: &str = "actions";
+    pub const LAST_UPDATED_AT: &str = "lastUpdatedAt";
+
+    pub const CONDITIONS: &str = "conditions";
+    pub const FILTER: &str = "filter";
+    pub const NB_CONSTRAINTS: &str = "nbConstraints";
+
+    pub const CONDITIONS_TIME_START: &str = "conditions.time.start";
+    pub const CONDITIONS_TIME_END: &str = "conditions.time.end";
+    pub const CONDITIONS_QUERY_IS_EMPTY: &str = "conditions.query.isEmpty";
+    pub const CONDITIONS_QUERY_WORDS: &str = "conditions.query.words";
+    pub const CONDITIONS_FILTER_NB_CONSTRAINTS: &str = "conditions.filter.nbConstraints";
+    pub const CONDITIONS_FILTER_VALUES: &str = "conditions.filter.values";
 }

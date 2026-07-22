@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::{Debug, Write as FmtWrite};
-use std::ops::Bound::{self, Excluded, Included, Unbounded};
+use std::ops::Bound::{self, Excluded, Included};
 
 pub use filter_parser::Condition;
 use filter_parser::{IndexFilterCondition, TokenLike, VectorFilter};
@@ -20,6 +20,7 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValu
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::search::facet::filter::{FilterError, MAX_FILTER_DEPTH};
+use crate::search::facet::value_bounds::{evaluate_equal, ValueBounds};
 use crate::search::facet::BadGeoError;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
@@ -82,14 +83,12 @@ impl IndexFilter {
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
-        let left_normalized_value;
-        let right_normalized_value;
 
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
         // field id and the level.
 
-        let (number_bounds, (left_str, right_str)) = match operator {
+        match operator {
             // return an error if the filter is not allowed for this field
             Condition::GreaterThan(_)
             | Condition::GreaterThanOrEqual(_)
@@ -122,93 +121,49 @@ impl IndexFilter {
                     rtxn, index, field_id, operator, features, rule_index,
                 ));
             }
-            Condition::GreaterThan(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Excluded(number), Included(f64::MAX)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Excluded(left_normalized_value.as_str()), Unbounded);
-                (number_bounds, str_bounds)
-            }
-            Condition::GreaterThanOrEqual(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Included(number), Included(f64::MAX)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Included(left_normalized_value.as_str()), Unbounded);
-                (number_bounds, str_bounds)
-            }
-            Condition::LowerThan(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Included(f64::MIN), Excluded(number)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Unbounded, Excluded(left_normalized_value.as_str()));
-                (number_bounds, str_bounds)
-            }
-            Condition::LowerThanOrEqual(val) => {
-                let number = val.parse_finite_float().ok();
-                let number_bounds = number.map(|number| (Included(f64::MIN), Included(number)));
-                left_normalized_value = crate::normalize_facet(val.fragment());
-                let str_bounds = (Unbounded, Included(left_normalized_value.as_str()));
-                (number_bounds, str_bounds)
-            }
-            Condition::Between { from, to } => {
-                let from_number = from.parse_finite_float().ok();
-                let to_number = to.parse_finite_float().ok();
+            _ => (),
+        };
 
-                let number_bounds =
-                    from_number.zip(to_number).map(|(from, to)| (Included(from), Included(to)));
-                left_normalized_value = crate::normalize_facet(from.fragment());
-                right_normalized_value = crate::normalize_facet(to.fragment());
-                let str_bounds = (
-                    Included(left_normalized_value.as_str()),
-                    Included(right_normalized_value.as_str()),
-                );
-                (number_bounds, str_bounds)
-            }
-            Condition::Null => {
-                let is_null = index.null_faceted_documents_ids(rtxn, field_id)?;
-                return Ok(is_null);
-            }
-            Condition::Empty => {
-                let is_empty = index.empty_faceted_documents_ids(rtxn, field_id)?;
-                return Ok(is_empty);
-            }
-            Condition::Exists => {
-                let exist = index.exists_faceted_documents_ids(rtxn, field_id)?;
-                return Ok(exist);
-            }
-            Condition::Equal(val) => {
-                let string_docids = strings_db
-                    .get(
+        Ok(match ValueBounds::new(operator) {
+            ValueBounds::Range { normalized, number } => {
+                let mut output = RoaringBitmap::new();
+
+                if let Some((left_number, right_number)) = number {
+                    Self::explore_facet_levels(
                         rtxn,
-                        &FacetGroupKey {
-                            field_id,
-                            level: 0,
-                            left_bound: &crate::normalize_facet(val.fragment()),
-                        },
-                    )?
-                    .map(|v| v.bitmap)
-                    .unwrap_or_default();
-                let number = val.parse_finite_float().ok();
-                let number_docids = match number {
-                    Some(n) => numbers_db
-                        .get(rtxn, &FacetGroupKey { field_id, level: 0, left_bound: n })?
-                        .map(|v| v.bitmap)
-                        .unwrap_or_default(),
-                    None => RoaringBitmap::new(),
-                };
-                return Ok(string_docids | number_docids);
-            }
-            Condition::NotEqual(val) => {
-                let operator = Condition::Equal(val.clone());
-                let docids = Self::evaluate_operator(
-                    rtxn, index, field_id, None, &operator, features, rule_index,
+                        numbers_db,
+                        field_id,
+                        &left_number,
+                        &right_number,
+                        universe_hint,
+                        &mut output,
+                    )?;
+                }
+
+                Self::explore_facet_levels(
+                    rtxn,
+                    strings_db,
+                    field_id,
+                    &normalized.0.as_ref().map(|b| b.as_str()),
+                    &normalized.1.as_ref().map(|b| b.as_str()),
+                    universe_hint,
+                    &mut output,
                 )?;
-                let all_ids = index.documents_ids(rtxn)?;
-                return Ok(all_ids - docids);
+
+                output
             }
-            Condition::Contains { keyword: _, word } => {
-                let value = crate::normalize_facet(word.fragment());
-                let finder = Finder::new(&value);
+            ValueBounds::FieldIsEmpty => index.empty_faceted_documents_ids(rtxn, field_id)?,
+            ValueBounds::FieldIsNull => index.null_faceted_documents_ids(rtxn, field_id)?,
+            ValueBounds::FieldExists => index.exists_faceted_documents_ids(rtxn, field_id)?,
+            ValueBounds::Equal { normalized, number } => {
+                evaluate_equal(rtxn, field_id, numbers_db, strings_db, normalized, number)?
+            }
+            ValueBounds::NotEqual { normalized, number } => {
+                index.documents_ids(rtxn)?
+                    - evaluate_equal(rtxn, field_id, numbers_db, strings_db, normalized, number)?
+            }
+            ValueBounds::Contains { normalized } => {
+                let finder = Finder::new(&normalized);
                 let base = FacetGroupKey { field_id, level: 0, left_bound: "" };
                 let docids = strings_db
                     .prefix_iter(rtxn, &base)?
@@ -239,15 +194,13 @@ impl IndexFilter {
                     })
                     .union()?;
 
-                return Ok(docids);
+                docids
             }
-            Condition::StartsWith { keyword: _, word } => {
+            ValueBounds::StartsWith { normalized } => {
                 // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
                 // We just incremented the last letter to find the upper bound.
                 // The upper bound may not be valid utf8, but lmdb doesn't care as it works over bytes.
-
-                let value = crate::normalize_facet(word.fragment());
-                let mut value2 = value.as_bytes().to_owned();
+                let mut value2 = normalized.as_bytes().to_owned();
 
                 let last = match value2.last_mut() {
                     Some(last) => last,
@@ -287,41 +240,15 @@ impl IndexFilter {
                     rtxn,
                     bytes_db,
                     field_id,
-                    &Included(value.as_bytes()),
+                    &Included(normalized.as_bytes()),
                     &Excluded(value2.as_slice()),
                     universe_hint,
                     &mut docids,
                 )?;
 
-                return Ok(docids);
+                docids
             }
-        };
-
-        let mut output = RoaringBitmap::new();
-
-        if let Some((left_number, right_number)) = number_bounds {
-            Self::explore_facet_levels(
-                rtxn,
-                numbers_db,
-                field_id,
-                &left_number,
-                &right_number,
-                universe_hint,
-                &mut output,
-            )?;
-        }
-
-        Self::explore_facet_levels(
-            rtxn,
-            strings_db,
-            field_id,
-            &left_str,
-            &right_str,
-            universe_hint,
-            &mut output,
-        )?;
-
-        Ok(output)
+        })
     }
 
     fn evaluate_shard_operator(

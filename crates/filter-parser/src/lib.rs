@@ -42,6 +42,7 @@
 //!
 
 mod condition;
+mod constraint;
 mod error;
 mod value;
 
@@ -51,6 +52,10 @@ pub use condition::{parse_condition, parse_to, Condition};
 use condition::{
     parse_contains, parse_exists, parse_is_empty, parse_is_not_empty, parse_is_not_null,
     parse_is_null, parse_not_contains, parse_not_exists, parse_not_starts_with, parse_starts_with,
+};
+pub use constraint::{
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraintFuel,
+    FilterConstraints,
 };
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
@@ -200,6 +205,18 @@ impl PartialEq for Token {
 }
 
 impl Eq for Token {}
+
+impl PartialOrd for Token {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Token {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.original_fragment().cmp(other.original_fragment())
+    }
+}
 
 impl TokenLike for Token {
     /// Return the fragment of the token.

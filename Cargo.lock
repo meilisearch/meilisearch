@@ -2271,6 +2271,7 @@ name = "filter-parser"
 version = "1.50.0"
 dependencies = [
  "insta",
+ "itertools 0.14.0",
  "levenshtein_automata",
  "nom",
  "nom_locate",
