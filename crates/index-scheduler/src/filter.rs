@@ -171,6 +171,7 @@ pub fn filters_into_index_filters(
     for (foreign_index_uid, filter_indices) in filters_per_foreign_index.iter() {
         let foreign_index = index_scheduler.user_index(foreign_index_uid.as_ref())?;
         let foreign_rtxn = foreign_index.read_txn()?;
+        let foreign_fields_ids_map = foreign_index.fields_ids_map(&foreign_rtxn).unwrap();
         let foreign_external_docids = foreign_index.external_documents_ids();
 
         // Gather the internal docids for each filter
@@ -179,11 +180,15 @@ pub fn filters_into_index_filters(
             let (_, foreign_index_uid, _, index_filter, _) = &foreign_filters[*filter_index];
 
             // filter the foreign index
-            let docids =
-                filtered_universe(&foreign_index, &foreign_rtxn, index_filter, None, progress)
-                    .map_err(|err| {
-                        Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string()))
-                    })?;
+            let docids = filtered_universe(
+                &foreign_index,
+                &foreign_rtxn,
+                &foreign_fields_ids_map,
+                index_filter,
+                None,
+                progress,
+            )
+            .map_err(|err| Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string())))?;
 
             filters_internal_docids.push(docids);
         }

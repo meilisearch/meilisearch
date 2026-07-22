@@ -1707,7 +1707,13 @@ impl SearchByIndex {
         let estimated_total_hits = candidates.len() as usize;
         let facets = facet_patterns_by_index
             .map(|facets_by_index| {
-                compute_facet_distribution_stats(&facets_by_index, &index, &rtxn, candidates)
+                compute_facet_distribution_stats(
+                    &facets_by_index,
+                    &index,
+                    &rtxn,
+                    &fidmap,
+                    candidates,
+                )
             })
             .transpose()
             .map_err(|mut error| {
@@ -1776,9 +1782,13 @@ impl SearchByIndex {
             }
 
             if let Some(facets) = facets {
-                if let Err(mut error) =
-                    compute_facet_distribution_stats(&facets, &index, &rtxn, Default::default())
-                {
+                if let Err(mut error) = compute_facet_distribution_stats(
+                    &facets,
+                    &index,
+                    &rtxn,
+                    &fidmap,
+                    Default::default(),
+                ) {
                     if self.show_federation_info == ShowFederationInfo::Always {
                         error.message = format!(
                             "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",

@@ -39,9 +39,13 @@ impl From<IndexFilterCondition> for IndexFilter {
 }
 
 impl IndexFilter {
-    pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
+    pub fn evaluate(
+        &self,
+        rtxn: &heed::RoTxn<'_>,
+        index: &Index,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
 
         for fid in self.condition.fids(MAX_FILTER_DEPTH) {
@@ -64,7 +68,7 @@ impl IndexFilter {
             }))?;
         }
 
-        self.inner_evaluate(rtxn, index, &fields_ids_map, &filterable_attributes_rules, None)
+        self.inner_evaluate(rtxn, index, fields_ids_map, &filterable_attributes_rules, None)
     }
 
     fn evaluate_operator(

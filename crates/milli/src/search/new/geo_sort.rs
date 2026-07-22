@@ -98,11 +98,14 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
             return Ok(());
         }
 
-        let fid_map = ctx.index.fields_ids_map(ctx.txn)?;
-        let lat =
-            fid_map.id(RESERVED_GEO_LAT_FIELD_NAME).expect("geo candidates but no fid for lat");
-        let lng =
-            fid_map.id(RESERVED_GEO_LNG_FIELD_NAME).expect("geo candidates but no fid for lng");
+        let lat = ctx
+            .fields_ids_map
+            .id(RESERVED_GEO_LAT_FIELD_NAME)
+            .expect("geo candidates but no fid for lat");
+        let lng = ctx
+            .fields_ids_map
+            .id(RESERVED_GEO_LNG_FIELD_NAME)
+            .expect("geo candidates but no fid for lng");
         self.field_ids = Some([lat, lng]);
         self.fill_buffer(ctx, &geo_candidates)?;
         Ok(())

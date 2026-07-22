@@ -845,10 +845,13 @@ impl Index {
     }
 
     /// Identical to `displayed_fields`, but returns the ids instead.
-    pub fn displayed_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<Option<Vec<FieldId>>> {
+    pub fn displayed_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<Option<Vec<FieldId>>> {
         match self.displayed_fields(rtxn)? {
             Some(fields) => {
-                let fields_ids_map = self.fields_ids_map(rtxn)?;
                 let mut fields_ids = Vec::new();
                 for name in fields.into_iter() {
                     if let Some(field_id) = fields_ids_map.id(name) {
@@ -1001,10 +1004,10 @@ impl Index {
     pub fn user_defined_searchable_fields_ids(
         &self,
         rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
     ) -> Result<Option<Vec<FieldId>>> {
         match self.user_defined_searchable_fields(rtxn)? {
             Some(fields) => {
-                let fields_ids_map = self.fields_ids_map(rtxn)?;
                 let mut fields_ids = Vec::new();
                 for name in fields {
                     if let Some(field_id) = fields_ids_map.id(name) {
@@ -1082,9 +1085,12 @@ impl Index {
     }
 
     /// Identical to `sortable_fields`, but returns ids instead.
-    pub fn sortable_fields_ids(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    pub fn sortable_fields_ids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
+    ) -> Result<HashSet<FieldId>> {
         let fields = self.sortable_fields(rtxn)?;
-        let fields_ids_map = self.fields_ids_map(rtxn)?;
         Ok(fields.into_iter().filter_map(|name| fields_ids_map.id(&name)).collect())
     }
 
@@ -1461,16 +1467,15 @@ impl Index {
     pub fn external_id_of<'a, 't: 'a>(
         &'a self,
         rtxn: &'t RoTxn<'t>,
+        fields_ids_map: &'a FieldsIdsMap,
         ids: impl IntoIterator<Item = DocumentId> + 'a,
     ) -> Result<impl IntoIterator<Item = Result<String>> + 'a> {
-        let fields = self.fields_ids_map(rtxn)?;
-
         // uses precondition "never called on an empty index"
         let primary_key = self.primary_key(rtxn)?.ok_or(InternalError::DatabaseMissingEntry {
             db_name: db_name::MAIN,
             key: Some(main_key::PRIMARY_KEY_KEY),
         })?;
-        let primary_key = PrimaryKey::new(primary_key, &fields).ok_or_else(|| {
+        let primary_key = PrimaryKey::new(primary_key, &fields_ids_map).ok_or_else(|| {
             InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldName {
                 field_name: primary_key.to_owned(),
                 process: "external_id_of",
@@ -1478,7 +1483,7 @@ impl Index {
         })?;
         Ok(self.iter_documents(rtxn, ids)?.map(move |entry| -> Result<_> {
             let (_docid, obkv) = entry?;
-            match primary_key.document_id(obkv, &fields)? {
+            match primary_key.document_id(obkv, &fields_ids_map)? {
                 Ok(document_id) => Ok(document_id),
                 Err(_) => Err(InternalError::DocumentsError(
                     crate::documents::Error::InvalidDocumentFormat,
@@ -1488,8 +1493,12 @@ impl Index {
         }))
     }
 
-    pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn<'a>) -> FacetDistribution<'a> {
-        FacetDistribution::new(rtxn, self)
+    pub fn facets_distribution<'a>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
+    ) -> FacetDistribution<'a> {
+        FacetDistribution::new(rtxn, self, fields_ids_map)
     }
 
     pub fn search<'a>(

@@ -29,7 +29,9 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{make_document, AscDesc, DocumentId, IndexFilter, Member};
+use meilisearch_types::milli::{
+    make_document, AscDesc, DocumentId, FieldsIdsMap, IndexFilter, Member,
+};
 use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
@@ -1130,6 +1132,7 @@ async fn retrieve_documents_local(
 
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let progress = Progress::default();
 
         let filter = &filter;
@@ -1159,6 +1162,7 @@ async fn retrieve_documents_local(
         let (total, documents) = retrieve_documents(
             &index,
             &rtxn,
+            &fields_ids_map,
             offset,
             limit,
             ids,
@@ -2242,6 +2246,7 @@ pub async fn clear_all_documents(
 fn some_documents<'a, 't: 'a, 'i, I1, I2, S1, S2>(
     index: &'a Index,
     rtxn: &'t RoTxn,
+    fields_ids_map: &'a FieldsIdsMap,
     doc_ids: impl IntoIterator<Item = DocumentId> + 'a,
     retrieve_vectors: RetrieveVectors,
     attributes_to_retrieve: Option<I1>,
@@ -2253,8 +2258,6 @@ where
     S1: AsRef<str> + 'i,
     S2: AsRef<str> + 'i,
 {
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
-
     let attributes_to_retrieve: BTreeSet<_> = match attributes_to_retrieve {
         Some(attributes) => attributes
             .into_iter()
@@ -2284,10 +2287,10 @@ where
 
     Ok(index.iter_documents(rtxn, doc_ids)?.map(move |ret| {
         ret.map_err(ResponseError::from).and_then(|(key, obkv)| -> Result<_, ResponseError> {
-            let mut document = make_document(obkv, &fields_ids_map, &attributes_to_retrieve)?;
+            let mut document = make_document(obkv, fields_ids_map, &attributes_to_retrieve)?;
             let extra_document = extra_attributes_to_retrieve
                 .as_ref()
-                .map(|extra_attributes| make_document(obkv, &fields_ids_map, extra_attributes))
+                .map(|extra_attributes| make_document(obkv, fields_ids_map, extra_attributes))
                 .transpose()?;
             match retrieve_vectors {
                 RetrieveVectors::Hide => {
@@ -2323,6 +2326,7 @@ where
 fn retrieve_documents<S: AsRef<str>>(
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     offset: usize,
     limit: usize,
     ids: Option<Vec<ExternalDocumentId>>,
@@ -2347,7 +2351,7 @@ fn retrieve_documents<S: AsRef<str>>(
     };
 
     if let Some(filter) = filter {
-        candidates &= filter.evaluate(rtxn, index).map_err(|err| match err {
+        candidates &= filter.evaluate(rtxn, index, fields_ids_map).map_err(|err| match err {
             milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
                 ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
             }
@@ -2357,7 +2361,7 @@ fn retrieve_documents<S: AsRef<str>>(
 
     let (it, number_of_documents) = if let Some(sort) = sort_criteria.as_ref() {
         let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, rtxn, fields_ids_map, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
@@ -2375,6 +2379,7 @@ fn retrieve_documents<S: AsRef<str>>(
             itertools::Either::Left(some_documents(
                 index,
                 rtxn,
+                fields_ids_map,
                 documents.into_iter(),
                 retrieve_vectors,
                 attributes_to_retrieve,
@@ -2389,6 +2394,7 @@ fn retrieve_documents<S: AsRef<str>>(
             itertools::Either::Right(some_documents(
                 index,
                 rtxn,
+                fields_ids_map,
                 candidates.into_iter().skip(offset).take(limit),
                 retrieve_vectors,
                 attributes_to_retrieve,
@@ -2504,6 +2510,7 @@ fn retrieve_document<S: AsRef<str>>(
     retrieve_vectors: RetrieveVectors,
 ) -> Result<Document, ResponseError> {
     let txn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&txn)?;
 
     let internal_id = index
         .external_documents_ids()
@@ -2514,6 +2521,7 @@ fn retrieve_document<S: AsRef<str>>(
     let (document, _extra_document) = some_documents(
         index,
         &txn,
+        &fields_ids_map,
         Some(internal_id),
         retrieve_vectors,
         attributes_to_retrieve,

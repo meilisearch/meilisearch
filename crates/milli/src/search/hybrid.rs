@@ -10,7 +10,8 @@ use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
 use crate::{
-    merge_positioned_hits_into_page, Index, MatchingWords, PinDoc, Result, Search, SearchResult,
+    merge_positioned_hits_into_page, FieldsIdsMap, Index, MatchingWords, PinDoc, Result, Search,
+    SearchResult,
 };
 
 struct ScoreWithRatioResult {
@@ -97,6 +98,7 @@ impl ScoreWithRatioResult {
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
+    #[allow(clippy::too_many_arguments)]
     fn merge(
         mut vector_results: Self,
         mut keyword_results: Self,
@@ -105,6 +107,7 @@ impl ScoreWithRatioResult {
         distinct: Option<&str>,
         index: &Index,
         rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
     ) -> Result<(SearchResult, u32)> {
         // Pinned documents carry ScoreDetails::Pin, which is a placement directive, not a score.
         // We extract them before the score-based merge, merge organic results normally, then
@@ -146,7 +149,7 @@ impl ScoreWithRatioResult {
             vector_results.document_scores.len() + keyword_results.document_scores.len(),
         );
 
-        let distinct_fid = distinct_fid(distinct, index, rtxn)?;
+        let distinct_fid = distinct_fid(distinct, index, rtxn, fields_ids_map)?;
         // Seed excluded_documents with pinned docids so they don't appear as organic results
         // (they'll be re-injected at their target positions after the merge).
         let mut excluded_documents = pinned_doc_ids.clone();
@@ -356,6 +359,7 @@ impl Search<'_> {
             search.distinct.as_deref(),
             search.index,
             search.rtxn,
+            search.fields_ids_map.as_ref(),
         )?;
         assert!(merge_results.documents_ids.len() <= self.limit);
         Ok((merge_results, Some(semantic_hit_count)))

@@ -27,7 +27,9 @@ impl<'a> MatcherBuilder<'a> {
             time::OffsetDateTime::now_utc(),
         )
         .unwrap();
-        let mut universe = filtered_universe(ctx.index, ctx.txn, &None, None, &progress).unwrap();
+        let mut universe =
+            filtered_universe(ctx.index, ctx.txn, ctx.fields_ids_map, &None, None, &progress)
+                .unwrap();
 
         search.query(query);
 

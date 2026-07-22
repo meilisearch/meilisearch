@@ -8,7 +8,7 @@ use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{Deadline, FieldId, Index, Result};
+use crate::{Deadline, FieldId, FieldsIdsMap, Index, Result};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -58,10 +58,10 @@ impl<'ctx, Query> Sort<'ctx, Query> {
     pub fn new(
         index: &Index,
         rtxn: &'ctx heed::RoTxn<'ctx>,
+        fields_ids_map: &'ctx FieldsIdsMap,
         field_name: String,
         is_ascending: bool,
     ) -> Result<Self> {
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
         let field_id = fields_ids_map.id(&field_name);
         let must_redact = Self::must_redact(index, rtxn, &field_name)?;
 

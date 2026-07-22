@@ -389,14 +389,26 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -467,14 +479,26 @@ fn get_ranking_rules_for_vector<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -598,14 +622,26 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             crate::Criterion::Desc(field_name) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
         }
     }
@@ -629,14 +665,26 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, true)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    true,
+                )?));
             }
             AscDesc::Desc(Member::Field(field_name)) => {
                 if sorted_fields.contains(&field_name) {
                     continue;
                 }
                 sorted_fields.insert(field_name.clone());
-                ranking_rules.push(Box::new(Sort::new(ctx.index, ctx.txn, field_name, false)?));
+                ranking_rules.push(Box::new(Sort::new(
+                    ctx.index,
+                    ctx.txn,
+                    ctx.fields_ids_map,
+                    field_name,
+                    false,
+                )?));
             }
             AscDesc::Asc(Member::Geo(point)) => {
                 if *geo_sorted {
@@ -671,6 +719,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
+    fields_ids_map: &FieldsIdsMap,
     filters: &Option<IndexFilter>,
     candidates: Option<&RoaringBitmap>,
     progress: &Progress,
@@ -680,11 +729,11 @@ pub fn filtered_universe(
         (None, Some(candidates)) => candidates.clone(),
         (Some(filters), None) => {
             let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
-            filters.evaluate(txn, index)?
+            filters.evaluate(txn, index, fields_ids_map)?
         }
         (Some(filters), Some(candidates)) => {
             let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
-            let mut filtered = filters.evaluate(txn, index)?;
+            let mut filtered = filters.evaluate(txn, index, fields_ids_map)?;
             filtered &= candidates;
             filtered
         }
@@ -907,7 +956,6 @@ pub fn extract_tokens(
         None => {
             // If no locales are specified, we use the locales specified in the localized attributes rules
             let localized_attributes_rules = ctx.index.localized_attributes_rules(ctx.txn)?;
-            let fields_ids_map = ctx.index.fields_ids_map(ctx.txn)?;
             let searchable_fields = ctx.index.searchable_fields_ids(ctx.txn, ctx.fields_ids_map)?;
 
             let localized_fields = match &ctx.restricted_fids {
@@ -919,12 +967,12 @@ pub fn extract_tokens(
                         .chain(restricted_fids.tolerant.iter())
                         .map(|(fid, _)| *fid);
 
-                    LocalizedFieldIds::new(&localized_attributes_rules, &fields_ids_map, iter)
+                    LocalizedFieldIds::new(&localized_attributes_rules, ctx.fields_ids_map, iter)
                 }
                 // Otherwise use the full list of ids coming from the index searchable fields
                 None => LocalizedFieldIds::new(
                     &localized_attributes_rules,
-                    &fields_ids_map,
+                    ctx.fields_ids_map,
                     searchable_fields.into_iter(),
                 ),
             };

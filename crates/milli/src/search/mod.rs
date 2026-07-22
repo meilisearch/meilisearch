@@ -265,7 +265,14 @@ impl<'a> Search<'a> {
                 self.index_uid,
                 self.before_search,
             )?;
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)
+            filtered_universe(
+                ctx.index,
+                ctx.txn,
+                self.fields_ids_map.as_ref(),
+                &self.filter,
+                self.candidates,
+                self.progress,
+            )
         } else {
             Ok(self.execute()?.candidates)
         }
@@ -312,8 +319,14 @@ impl<'a> Search<'a> {
             }
         }
 
-        let mut universe =
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)?;
+        let mut universe = filtered_universe(
+            ctx.index,
+            ctx.txn,
+            self.fields_ids_map.as_ref(),
+            &self.filter,
+            self.candidates,
+            self.progress,
+        )?;
 
         let (query_terms, pins, used_negative_operator) =
             self.build_located_query_terms(&mut ctx, &mut universe)?;

@@ -677,8 +677,9 @@ fn setting_not_filterable_cant_filter() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let filter = Filter::from_str("toto = 32").unwrap().unwrap();
-    let _ = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
+    let _ = IndexFilter::from(filter).evaluate(&rtxn, &index, &fields_ids_map).unwrap_err();
 }
 
 #[test]

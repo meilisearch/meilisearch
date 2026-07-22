@@ -1947,7 +1947,7 @@ pub fn perform_search(
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
             let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates)
+            compute_facet_distribution_stats(&facets, index, &rtxn, &fields_ids_map, candidates)
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -2044,9 +2044,10 @@ fn compute_facet_distribution_stats(
     facet_patterns: &AttributePatterns,
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     candidates: roaring::RoaringBitmap,
 ) -> Result<ComputedFacets, ResponseError> {
-    let mut facet_distribution = index.facets_distribution(rtxn);
+    let mut facet_distribution = index.facets_distribution(rtxn, fields_ids_map);
 
     let max_values_by_facet = index
         .max_values_per_facet(rtxn)
@@ -2095,9 +2096,8 @@ fn compute_facet_distribution_stats(
         .into());
     }
 
-    let fidmap = index.fields_ids_map(rtxn)?;
     let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
-    let fields = fidmap.iter().filter_map(|(_fid, fname)| {
+    let fields = fields_ids_map.iter().filter_map(|(_fid, fname)| {
         if facet_patterns.match_str(fname) != PatternMatch::Match {
             return None;
         }
@@ -2264,7 +2264,7 @@ impl<'a> HitMaker<'a> {
         formatter_builder.highlight_suffix(format.highlight_post_tag);
 
         let displayed_ids = index
-            .displayed_fields_ids(rtxn)?
+            .displayed_fields_ids(rtxn, fields_ids_map)?
             .map(|fields| fields.into_iter().collect::<BTreeSet<_>>());
 
         let vectors_fid = fields_ids_map.id(milli::constants::RESERVED_VECTORS_FIELD_NAME);
@@ -2652,7 +2652,8 @@ pub fn perform_similar(
         ));
     };
 
-    let docid_universe = filtered_universe(&index, &rtxn, &docid_filter, None, progress)?;
+    let docid_universe =
+        filtered_universe(&index, &rtxn, &fields_ids_map, &docid_filter, None, progress)?;
     if docid_universe.contains(internal_id).not() {
         return Err(ResponseError::from_msg(
             MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
@@ -2666,6 +2667,7 @@ pub fn perform_similar(
         limit,
         &index,
         &rtxn,
+        &fields_ids_map,
         embedder_name,
         embedder,
         quantized,
