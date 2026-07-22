@@ -46,7 +46,7 @@ pub struct Scheduler {
     pub must_stop_processing: MustStopProcessing,
 
     /// Get a signal when a batch needs to be processed.
-    pub(crate) wake_up: Arc<SignalEvent>,
+    pub wake_up: Arc<SignalEvent>,
 
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
@@ -130,7 +130,7 @@ impl Scheduler {
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-            wake_up: Arc::new(SignalEvent::auto(true)),
+            wake_up: Arc::new(SignalEvent::manual(true)),
             autobatching_enabled: *autobatching_enabled,
             max_number_of_batched_tasks: *max_number_of_batched_tasks,
             batched_tasks_size_limit: *batched_tasks_size_limit,

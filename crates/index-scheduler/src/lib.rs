@@ -501,7 +501,12 @@ impl IndexScheduler {
                     let ret = catch_unwind(AssertUnwindSafe(|| run.tick()));
                     match ret {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
-                        Ok(Ok(TickOutcome::WaitForSignal)) => run.scheduler.wake_up.wait(),
+                        Ok(Ok(TickOutcome::WaitForSignal)) => {
+                            run.scheduler.wake_up.wait();
+                            // TODO check what happens if the index scheduler is used not to process anything
+                            //      nothing will reset this signal handler.
+                            run.scheduler.wake_up.reset();
+                        },
                         Ok(Ok(TickOutcome::StopProcessingForever)) => break,
                         Ok(Err(e)) => {
                             tracing::error!("{e}");
