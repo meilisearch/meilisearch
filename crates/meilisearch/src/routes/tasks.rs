@@ -605,9 +605,8 @@ async fn get_tasks(
 /// Tasks are sent throught an SSE stream any time their status changes, i.e., enqueued, processing, succeeded, failed.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(TasksFilterQuery),
     responses(
-        (status = 200, description = "Stream of tasks changes.", body = AllTasks, content_type = "application/json", example = json!(
+        (status = 200, description = "Stream of tasks changes.", body = String, content_type = "application/json", example = json!(
             {
                 "uid": 144,
                 "indexUid": "mieli",
