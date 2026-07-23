@@ -3,10 +3,11 @@ pub mod compact;
 use std::io::ErrorKind;
 
 use actix_web::web::Data;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_web_lab::sse::{self, Event, Sse};
 use deserr::actix_web::AwebQueryParameter;
 use deserr::Deserr;
-use index_scheduler::{IndexScheduler, Query, TaskId};
+use index_scheduler::{IndexScheduler, ModifiedTasks, Query, TaskId};
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::DeserrQueryParamError;
@@ -21,6 +22,8 @@ use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::io::AsyncReadExt;
+use tokio::runtime::Handle;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use utoipa::{IntoParams, ToSchema};
 
@@ -33,6 +36,7 @@ use crate::extractors::authentication::GuardedData;
 #[routes::routes(
     routes(
         "" => [get(get_tasks), delete(delete_tasks)],
+        "/stream" => get(get_tasks_stream),
         "/cancel" => post(cancel_tasks),
         "/compact" => post(compact::compact_task_queue),
         "/{task_id}" => get(get_task),
@@ -592,6 +596,86 @@ async fn get_tasks(
     let tasks = AllTasks { results, limit: limit.saturating_sub(1), total, from, next };
 
     Ok(HttpResponse::Ok().json(tasks))
+}
+
+/// Stream tasks changes
+///
+/// The `/tasks/stream` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
+///
+/// Tasks are sent throught an SSE stream any time their status changes, i.e., enqueued, processing, succeeded, failed.
+#[routes::path(
+    security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
+    responses(
+        (status = 200, description = "Stream of tasks changes.", body = String, content_type = "application/json", example = json!(
+            {
+                "uid": 144,
+                "indexUid": "mieli",
+                "status": "succeeded",
+                "type": "indexCreation",
+                "canceledBy": null,
+                "details": null,
+                "error": null,
+                "duration": "PT0.009330S",
+                "enqueuedAt": "2024-08-08T09:01:13.348471Z",
+                "startedAt": "2024-08-08T09:01:13.349442Z",
+                "finishedAt": "2024-08-08T09:01:13.358772Z"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+async fn get_tasks_stream(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
+) -> Result<impl Responder, ResponseError> {
+    index_scheduler.features().check_tasks_streaming_route("calling the /tasks/stream route")?;
+
+    let query = Query { limit: Some(u32::MAX), ..Default::default() };
+    let filters = index_scheduler.filters().clone();
+
+    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let _join_handle = Handle::current().spawn(async move {
+        let mut wake_up = index_scheduler.as_ref().scheduler.wake_up.resubscribe();
+
+        'listener: loop {
+            // wait for new tasks to be available. Every time tasks statuses
+            // change this loop is unblocked and fetches new tasks info.
+            let query = match wake_up.recv().await {
+                // We list all the tasks that were imported by a dump
+                Ok(ModifiedTasks::DumpImported) => query.clone(),
+                Ok(ModifiedTasks::Some { ids }) => {
+                    Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
+                }
+                Err(RecvError::Closed) => break 'listener,
+                Err(RecvError::Lagged(_)) => {
+                    wake_up = wake_up.resubscribe();
+                    continue;
+                }
+            };
+
+            // TODO should I unwrap here? nooo
+            let (tasks, _total) =
+                index_scheduler.get_tasks_from_authorized_indexes(&query, &filters).unwrap();
+
+            for task in tasks.iter().map(TaskView::from_task) {
+                let data = sse::Data::new_json(task).unwrap();
+                if tx.send(Event::Data(data)).await.is_err() {
+                    break 'listener;
+                }
+            }
+        }
+    });
+
+    Ok(Sse::from_infallible_receiver(rx)
+        .with_retry_duration(std::time::Duration::from_secs(10))
+        .customize()
+        .insert_header(("X-Accel-Buffering", "no")))
 }
 
 /// Get task

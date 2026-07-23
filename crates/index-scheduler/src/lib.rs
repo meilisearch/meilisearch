@@ -87,6 +87,7 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tokio::sync::broadcast::error::RecvError;
 pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
@@ -94,6 +95,7 @@ use versioning::Versioning;
 use crate::dynamic_search_rules::DynamicSearchRules;
 use crate::index_mapper::IndexMapper;
 use crate::processing::ProcessingTasks;
+pub use crate::scheduler::ModifiedTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -280,8 +282,7 @@ impl IndexScheduler {
         from_db_version: (u32, u32, u32),
         runtime: Option<tokio::runtime::Handle>,
     ) -> Result<Self> {
-        let this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
-
+        let mut this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
         this.run();
         Ok(this)
     }
@@ -482,26 +483,35 @@ impl IndexScheduler {
     ///
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
-    fn run(&self) {
+    fn run(&mut self) {
         // If the number of batched tasks is 0, we don't need to run the scheduler at all.
         // It will never be able to process any tasks.
         if self.scheduler.max_number_of_batched_tasks == 0 {
             return;
         }
-        let run = self.private_clone();
+        let mut run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))
             .spawn(move || {
                 #[cfg(test)]
                 run.breakpoint(test_utils::Breakpoint::Init);
 
-                run.scheduler.wake_up.wait_timeout(std::time::Duration::from_secs(60));
-
                 loop {
-                    let ret = catch_unwind(AssertUnwindSafe(|| run.tick()));
-                    match ret {
+                    match catch_unwind(AssertUnwindSafe(|| run.tick())) {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
-                        Ok(Ok(TickOutcome::WaitForSignal)) => run.scheduler.wake_up.wait(),
+                        Ok(Ok(TickOutcome::WaitForSignal)) => {
+                            match run.scheduler.wake_up.blocking_recv() {
+                                Ok(_) => (),
+                                Err(RecvError::Closed) => break,
+                                Err(RecvError::Lagged(_)) => {
+                                    // The receiver has been forcibly disconnected as we were lagging
+                                    // too far behind. We reconnect the receiver to handle new messages
+                                    // and break to analyse the changes (tick).
+                                    run.scheduler.wake_up = run.scheduler.wake_up.resubscribe();
+                                    break;
+                                }
+                            }
+                        },
                         Ok(Ok(TickOutcome::StopProcessingForever)) => break,
                         Ok(Err(e)) => {
                             tracing::error!("{e}");
@@ -512,7 +522,6 @@ impl IndexScheduler {
                         }
                         Err(_panic) => {
                             tracing::error!("Internal error: Unexpected panic in the `IndexScheduler::run` method.");
-
                         }
                     }
                 }
@@ -852,7 +861,11 @@ impl IndexScheduler {
         }
 
         // notify the scheduler loop to execute a new tick
-        self.scheduler.wake_up.signal();
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task.uid]) })
+            .unwrap();
+
         Ok(task)
     }
 
@@ -863,14 +876,25 @@ impl IndexScheduler {
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
 
-        self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
-            Ok(network_topology_change.receive_remote_task(&remote_name, None, None, 0, 0, 0)?)
-        })?;
+        let (task_uid, _) =
+            self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+                Ok(network_topology_change.receive_remote_task(
+                    &remote_name,
+                    None,
+                    None,
+                    0,
+                    0,
+                    0,
+                )?)
+            })?;
 
         wtxn.commit()?;
 
         // wake up the scheduler as the task state has changed
-        self.scheduler.wake_up.signal();
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+            .unwrap();
 
         Ok(())
     }
@@ -882,7 +906,7 @@ impl IndexScheduler {
         origin: Origin,
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
-        let has_changed =
+        let (task_uid, has_changed) =
             self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
                 Ok(network_topology_change.receive_import_finished(&remote_name, successful)?)
             })?;
@@ -890,7 +914,10 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         if has_changed {
-            self.scheduler.wake_up.signal();
+            self.scheduler
+                .waker
+                .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+                .unwrap();
         }
         Ok(())
     }
@@ -906,12 +933,13 @@ impl IndexScheduler {
         }
     }
 
+    /// Updates the first processing network task and returns it's ID.
     fn update_network_task<F, O>(
         &self,
         wtxn: &mut heed::RwTxn<'_>,
         network_change: &Origin,
         update_fn: F,
-    ) -> Result<O, Error>
+    ) -> Result<(TaskId, O), Error>
     where
         F: FnOnce(&mut NetworkTopologyChange) -> Result<O, Error>,
     {
@@ -963,7 +991,8 @@ impl IndexScheduler {
         let o = update_fn(network_topology_change)?;
 
         self.queue.tasks.update_task(wtxn, &mut network_task)?;
-        Ok(o)
+
+        Ok((network_task.uid, o))
     }
 
     /// Register a new task coming from a dump in the scheduler.
