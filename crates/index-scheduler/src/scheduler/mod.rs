@@ -209,7 +209,7 @@ impl IndexScheduler {
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::BatchCreated);
 
-        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() });
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
 
         // 2. Process the tasks
         let res = {
@@ -447,7 +447,7 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
-        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() });
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
 
         if batch_made_progress {
             // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task

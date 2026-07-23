@@ -861,8 +861,10 @@ impl IndexScheduler {
         }
 
         // notify the scheduler loop to execute a new tick
-        // TODO handle error
-        self.scheduler.waker.send(ModifiedTasks::Some { ids: RoaringBitmap::from([task.uid]) });
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task.uid]) })
+            .unwrap();
 
         Ok(task)
     }
@@ -889,8 +891,10 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         // wake up the scheduler as the task state has changed
-        // TODO handle error
-        self.scheduler.waker.send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) });
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+            .unwrap();
 
         Ok(())
     }
@@ -910,8 +914,10 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         if has_changed {
-            // TODO handle the error
-            self.scheduler.waker.send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) });
+            self.scheduler
+                .waker
+                .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+                .unwrap();
         }
         Ok(())
     }
