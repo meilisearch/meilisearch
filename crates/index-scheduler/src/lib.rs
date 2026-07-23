@@ -497,23 +497,6 @@ impl IndexScheduler {
                 #[cfg(test)]
                 run.breakpoint(test_utils::Breakpoint::Init);
 
-                // Let's wait for at most 60s for a first task to be inserted in the task queue
-                let instant = Instant::now();
-                while instant.elapsed() < Duration::from_secs(60) {
-                    match run.scheduler.wake_up.try_recv() {
-                        Ok(()) => break,
-                        Err(TryRecvError::Empty) => thread::sleep(Duration::from_millis(100)),
-                        Err(TryRecvError::Closed) => todo!(),
-                        Err(TryRecvError::Lagged(_)) => {
-                            // The channel has been forcibly disconnected as it was lagging too far
-                            // behind. We reconnect the channel but stop listening for new messages (break)
-                            // for now as we are sure there is something new in the task queue.
-                            run.scheduler.wake_up = run.scheduler.wake_up.resubscribe();
-                            break;
-                        },
-                    }
-                }
-
                 loop {
                     match catch_unwind(AssertUnwindSafe(|| run.tick())) {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
