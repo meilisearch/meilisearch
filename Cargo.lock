@@ -3574,7 +3574,6 @@ dependencies = [
  "rusty-s3",
  "serde",
  "serde_json",
- "synchronoise",
  "tar",
  "tempfile",
  "thiserror 2.0.18",

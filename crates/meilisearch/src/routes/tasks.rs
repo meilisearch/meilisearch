@@ -23,6 +23,7 @@ use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Handle;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use utoipa::{IntoParams, ToSchema};
 
@@ -643,16 +644,17 @@ async fn get_tasks_stream(
 
     let (tx, rx) = tokio::sync::mpsc::channel(10);
     let _join_handle = Handle::current().spawn(async move {
+        let mut wake_up = index_scheduler.as_ref().scheduler.wake_up.resubscribe();
+
         'listener: loop {
             dbg!("waiting");
             // wait for new tasks to be available. Every time tasks statuses
             // change this loop is unblocked and fetches new tasks info.
-            tokio::task::spawn_blocking({
-                let index_scheduler = index_scheduler.clone();
-                move || dbg!(index_scheduler.as_ref().scheduler.wake_up.wait())
-            })
-            .await
-            .unwrap();
+            match wake_up.recv().await {
+                Ok(()) => (), // we should receive a list of task ids to display
+                Err(RecvError::Closed) => break 'listener,
+                Err(RecvError::Lagged(_)) => todo!("reconnect the channel"),
+            }
 
             // TODO should I unwrap here? nooo
             let (tasks, _total) =
