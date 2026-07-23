@@ -959,10 +959,16 @@ async fn documents_by_query(
     let features = index_scheduler.features();
 
     let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
-    let (_, mut queries) =
-        preprocess_filters(index_scheduler.clone(), queries, features, false, &progress)
-            .await
-            .map_err(|(err, _)| err)?;
+    let (_, mut queries) = preprocess_filters(
+        index_scheduler.clone(),
+        queries,
+        features,
+        false,
+        &progress,
+        Code::InvalidDocumentFilter,
+    )
+    .await
+    .map_err(|(err, _)| err)?;
     // we only have one query, so we can pop it
     let mut query = queries.pop().unwrap();
 

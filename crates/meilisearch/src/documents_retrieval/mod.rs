@@ -1,9 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
 use actix_web::web::Data;
-use index_scheduler::filter::{
-    filters_into_index_filters, parse_filter, retrieve_foreign_keys_settings, SourceIndexUid,
-};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
@@ -20,6 +17,13 @@ use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
     SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
+
+pub use preprocessing::{
+    preprocess_filters, retrieve_foreign_keys_settings, ForeignIndexUid, ForeignKeysPerIndex,
+    SourceIndexUid,
+};
+
+mod preprocessing;
 
 pub struct DocumentSearch {
     pub queries: Vec<SearchQueryWithIndex>,
@@ -63,6 +67,7 @@ impl DocumentSearch {
             features,
             self.is_proxy,
             progress,
+            Code::InvalidSearchFilter,
         )
         .await?;
 
@@ -253,60 +258,4 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
 pub enum DocumentSearchResult {
     Federated(Box<FederatedSearchResult>),
     Multi(Vec<SearchResultWithIndex>),
-}
-
-pub async fn preprocess_filters<Q: PreprocessableQuery>(
-    index_scheduler: Data<IndexScheduler>,
-    mut queries: Vec<Q>,
-    features: RoFeatures,
-    is_proxy: bool,
-    progress: &Progress,
-) -> Result<(Option<HydrationContext>, Vec<PreprocessedQuery<Q>>), (ResponseError, Option<usize>)> {
-    progress.update_progress(FederatingResultsStep::PreprocessFilters);
-
-    // Document join: list of indexes in the order of the queries
-    // only create the hydration cache if the foreign keys feature is enabled
-    let filter_values;
-    let (hydration_cache, precomputed_filters) = if features.runtime_features().foreign_keys
-        && !is_proxy
-    {
-        filter_values = queries.iter_mut().map(|q| q.filter_field().take()).collect::<Vec<_>>();
-        let index_uids: Vec<_> =
-            queries.iter().map(|q| SourceIndexUid(Rc::from(q.index_uid().as_str()))).collect();
-        let foreign_keys_settings =
-            retrieve_foreign_keys_settings(&index_scheduler, &index_uids).without_index()?;
-
-        // parse each query filter and bind them to their respective index
-        let filters = index_uids
-            .iter()
-            .zip(filter_values.iter())
-            .enumerate()
-            .map(|(query_index, (index_uid, filter))| match filter {
-                Some(filter) => {
-                    let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)
-                        .with_index(query_index)?;
-
-                    Ok((index_uid.clone(), filter))
-                }
-                None => Ok((index_uid.clone(), None)),
-            })
-            .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
-
-        // convert the filters to index filters by evaluating the foreign filters
-        let filters: Vec<_> =
-            filters_into_index_filters(filters, &foreign_keys_settings, &index_scheduler, progress)
-                .without_index()?;
-
-        let hydration_cache = HydrationContext::new(index_uids, foreign_keys_settings);
-        (Some(hydration_cache), filters)
-    } else {
-        return Ok((None, Vec::new()));
-    };
-
-    let preprocessed_queries = queries
-        .into_iter()
-        .zip(precomputed_filters.into_iter())
-        .map(|(query, filter)| PreprocessedQuery { query, filter })
-        .collect();
-    Ok((hydration_cache, preprocessed_queries))
 }

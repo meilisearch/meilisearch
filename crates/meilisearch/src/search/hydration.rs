@@ -1,6 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
 
-use index_scheduler::filter::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
@@ -11,6 +10,7 @@ use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
+use crate::documents_retrieval::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid};
 use crate::search::{ExternalDocumentId, SearchHit};
 
 /// Hydrate the documents based on the foreign keys

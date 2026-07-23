@@ -9,10 +9,7 @@ use std::time::Instant;
 
 use deserr::Deserr;
 pub use federated::ProxyQuery;
-use index_scheduler::filter::{
-    filter_into_index_filter, filters_into_index_filters, parse_filter,
-    retrieve_foreign_keys_settings, SourceIndexUid,
-};
+use index_scheduler::filter::{parse_filter, parse_local_index_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -48,6 +45,7 @@ mod mod_test;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::documents_retrieval::{retrieve_foreign_keys_settings, SourceIndexUid};
 use crate::error::MeilisearchHttpError;
 
 pub mod federated;
@@ -1793,199 +1791,199 @@ pub struct SearchParams {
     pub include_metadata: bool,
 }
 
-pub fn perform_search(
-    params: SearchParams,
-    index_scheduler: &IndexScheduler,
-    index: &Index,
-    progress: &Progress,
-) -> Result<(SearchResult, Deadline), ResponseError> {
-    let SearchParams {
-        index_uid,
-        query,
-        search_kind,
-        retrieve_vectors,
-        features,
-        request_uid,
-        include_metadata,
-    } = params;
-    let before_search = time::OffsetDateTime::now_utc();
-    let index_uid_for_metadata = index_uid.clone();
-    let rtxn = index.read_txn()?;
-    let deadline = index.search_deadline(&rtxn)?;
+// pub fn perform_search(
+//     params: SearchParams,
+//     index_scheduler: &IndexScheduler,
+//     index: &Index,
+//     progress: &Progress,
+// ) -> Result<(SearchResult, Deadline), ResponseError> {
+//     let SearchParams {
+//         index_uid,
+//         query,
+//         search_kind,
+//         retrieve_vectors,
+//         features,
+//         request_uid,
+//         include_metadata,
+//     } = params;
+//     let before_search = time::OffsetDateTime::now_utc();
+//     let index_uid_for_metadata = index_uid.clone();
+//     let rtxn = index.read_txn()?;
+//     let deadline = index.search_deadline(&rtxn)?;
 
-    let filter = match &query.filter {
-        Some(filter) => {
-            let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
-            filter
-                .map(|f| {
-                    filter_into_index_filter(f, index, &rtxn, index_scheduler, progress, &index_uid)
-                })
-                .transpose()?
-        }
-        None => None,
-    };
+//     let filter = match &query.filter {
+//         Some(filter) => {
+//             let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
+//             filter
+//                 .map(|f| {
+//                     filter_into_index_filter(f, index, &rtxn, index_scheduler, progress, &index_uid)
+//                 })
+//                 .transpose()?
+//         }
+//         None => None,
+//     };
 
-    let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
-        index,
-        &rtxn,
-        &index_uid,
-        before_search,
-        &query,
-        filter,
-        &search_kind,
-        deadline.clone(),
-        features,
-        progress,
-    )?;
+//     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
+//         index,
+//         &rtxn,
+//         &index_uid,
+//         before_search,
+//         &query,
+//         filter,
+//         &search_kind,
+//         deadline.clone(),
+//         features,
+//         progress,
+//     )?;
 
-    let dsrs = index_scheduler
-        .dynamic_search_rules(params.features, "")
-        // ignore error: having the feature disabled is actually allowed in search
-        .ok()
-        .and_then(|dsrs| dsrs.milli_dsrs().transpose())
-        .transpose()?;
+//     let dsrs = index_scheduler
+//         .dynamic_search_rules(params.features, "")
+//         // ignore error: having the feature disabled is actually allowed in search
+//         .ok()
+//         .and_then(|dsrs| dsrs.milli_dsrs().transpose())
+//         .transpose()?;
 
-    if let Some(dsrs) = &dsrs {
-        search.dynamic_search_rules(dsrs, index_scheduler.dsr_fuel());
-    }
+//     if let Some(dsrs) = &dsrs {
+//         search.dynamic_search_rules(dsrs, index_scheduler.dsr_fuel());
+//     }
 
-    let (
-        milli::SearchResult {
-            documents_ids,
-            matching_words,
-            candidates,
-            document_scores,
-            degraded,
-            used_negative_operator,
-            query_vector,
-        },
-        semantic_hit_count,
-    ) = search_from_kind(search_kind, search)?;
+//     let (
+//         milli::SearchResult {
+//             documents_ids,
+//             matching_words,
+//             candidates,
+//             document_scores,
+//             degraded,
+//             used_negative_operator,
+//             query_vector,
+//         },
+//         semantic_hit_count,
+//     ) = search_from_kind(search_kind, search)?;
 
-    let metadata = if include_metadata {
-        let query_uid = Uuid::now_v7();
-        let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
-        Some(SearchMetadata {
-            query: None,
-            query_uid,
-            index_uid: index_uid_for_metadata,
-            primary_key,
-            remote: None, // Local searches don't have a remote
-        })
-    } else {
-        None
-    };
+//     let metadata = if include_metadata {
+//         let query_uid = Uuid::now_v7();
+//         let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
+//         Some(SearchMetadata {
+//             query: None,
+//             query_uid,
+//             index_uid: index_uid_for_metadata,
+//             primary_key,
+//             remote: None, // Local searches don't have a remote
+//         })
+//     } else {
+//         None
+//     };
 
-    let SearchQuery {
-        q,
-        offset: _,
-        limit,
-        page,
-        hits_per_page,
-        attributes_to_retrieve,
-        attributes_to_crop,
-        crop_length,
-        crop_marker,
-        attributes_to_highlight,
-        highlight_pre_tag,
-        highlight_post_tag,
-        show_matches_position,
-        filter: _,
-        sort,
-        distinct: _,
-        facets,
-        matching_strategy: _,
-        attributes_to_search_on: _,
-        ranking_score_threshold: _,
-        locales,
-        hybrid: _,
-        vector: _,
-        retrieve_vectors: _,
-        media: _,
-        personalize: _,
-        use_network: _,
-        show_ranking_score,
-        show_ranking_score_details,
-        show_performance_details: _,
-    } = query;
+//     let SearchQuery {
+//         q,
+//         offset: _,
+//         limit,
+//         page,
+//         hits_per_page,
+//         attributes_to_retrieve,
+//         attributes_to_crop,
+//         crop_length,
+//         crop_marker,
+//         attributes_to_highlight,
+//         highlight_pre_tag,
+//         highlight_post_tag,
+//         show_matches_position,
+//         filter: _,
+//         sort,
+//         distinct: _,
+//         facets,
+//         matching_strategy: _,
+//         attributes_to_search_on: _,
+//         ranking_score_threshold: _,
+//         locales,
+//         hybrid: _,
+//         vector: _,
+//         retrieve_vectors: _,
+//         media: _,
+//         personalize: _,
+//         use_network: _,
+//         show_ranking_score,
+//         show_ranking_score_details,
+//         show_performance_details: _,
+//     } = query;
 
-    let format = AttributesFormat {
-        attributes_to_retrieve,
-        extra_attributes_to_retrieve: Default::default(),
-        retrieve_vectors,
-        attributes_to_highlight,
-        attributes_to_crop,
-        crop_length,
-        crop_marker,
-        highlight_pre_tag,
-        highlight_post_tag,
-        show_matches_position,
-        sort,
-        show_ranking_score,
-        show_ranking_score_details,
-        locales: locales.map(|l| l.iter().copied().map(Into::into).collect()),
-    };
+//     let format = AttributesFormat {
+//         attributes_to_retrieve,
+//         extra_attributes_to_retrieve: Default::default(),
+//         retrieve_vectors,
+//         attributes_to_highlight,
+//         attributes_to_crop,
+//         crop_length,
+//         crop_marker,
+//         highlight_pre_tag,
+//         highlight_post_tag,
+//         show_matches_position,
+//         sort,
+//         show_ranking_score,
+//         show_ranking_score_details,
+//         locales: locales.map(|l| l.iter().copied().map(Into::into).collect()),
+//     };
 
-    let mut documents = make_hits(
-        index,
-        &rtxn,
-        format,
-        matching_words,
-        documents_ids.iter().copied().zip(document_scores.iter()),
-        progress,
-    )?;
+//     let mut documents = make_hits(
+//         index,
+//         &rtxn,
+//         format,
+//         matching_words,
+//         documents_ids.iter().copied().zip(document_scores.iter()),
+//         progress,
+//     )?;
 
-    // Document join: hydrate documents based on the foreign keys
-    if features.runtime_features().foreign_keys {
-        let foreign_keys = index.foreign_keys(&rtxn)?;
-        hydrate_documents(&mut documents, &foreign_keys, index_scheduler)?;
-    }
+//     // Document join: hydrate documents based on the foreign keys
+//     if features.runtime_features().foreign_keys {
+//         let foreign_keys = index.foreign_keys(&rtxn)?;
+//         hydrate_documents(&mut documents, &foreign_keys, index_scheduler)?;
+//     }
 
-    let number_of_hits = min(candidates.len() as usize, max_total_hits);
-    let hits_info = if is_finite_pagination {
-        let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
-        // If hit_per_page is 0, then pages can't be computed and so we respond 0.
-        let total_pages = (number_of_hits + hits_per_page.saturating_sub(1))
-            .checked_div(hits_per_page)
-            .unwrap_or(0);
+//     let number_of_hits = min(candidates.len() as usize, max_total_hits);
+//     let hits_info = if is_finite_pagination {
+//         let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+//         // If hit_per_page is 0, then pages can't be computed and so we respond 0.
+//         let total_pages = (number_of_hits + hits_per_page.saturating_sub(1))
+//             .checked_div(hits_per_page)
+//             .unwrap_or(0);
 
-        HitsInfo::Pagination {
-            hits_per_page,
-            page: page.unwrap_or(1),
-            total_pages,
-            total_hits: number_of_hits,
-        }
-    } else {
-        HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits }
-    };
+//         HitsInfo::Pagination {
+//             hits_per_page,
+//             page: page.unwrap_or(1),
+//             total_pages,
+//             total_hits: number_of_hits,
+//         }
+//     } else {
+//         HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits }
+//     };
 
-    let (facet_distribution, facet_stats) = facets
-        .map(move |facets| {
-            let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates)
-        })
-        .transpose()?
-        .map(|ComputedFacets { distribution, stats }| (distribution, stats))
-        .unzip();
+//     let (facet_distribution, facet_stats) = facets
+//         .map(move |facets| {
+//             let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
+//             compute_facet_distribution_stats(&facets, index, &rtxn, candidates)
+//         })
+//         .transpose()?
+//         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
+//         .unzip();
 
-    let result = SearchResult {
-        hits: documents,
-        hits_info,
-        query: q.unwrap_or_default(),
-        query_vector,
-        processing_time_ms: elapsed(before_search).as_millis(),
-        facet_distribution,
-        facet_stats,
-        degraded,
-        used_negative_operator,
-        semantic_hit_count,
-        request_uid: Some(request_uid),
-        metadata,
-        remote_errors: None,
-        performance_details: None,
-    };
-    Ok((result, deadline))
-}
+//     let result = SearchResult {
+//         hits: documents,
+//         hits_info,
+//         query: q.unwrap_or_default(),
+//         query_vector,
+//         processing_time_ms: elapsed(before_search).as_millis(),
+//         facet_distribution,
+//         facet_stats,
+//         degraded,
+//         used_negative_operator,
+//         semantic_hit_count,
+//         request_uid: Some(request_uid),
+//         metadata,
+//         remote_errors: None,
+//         performance_details: None,
+//     };
+//     Ok((result, deadline))
+// }
 
 /// Computed facet data from a search
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
@@ -2626,28 +2624,11 @@ pub fn perform_similar(
     )?;
 
     let docid_filter = search_rules.and_then(|search_rules| search_rules.filter);
-    let docid_filter = docid_filter
-        .as_ref()
-        .map(|docid_filter| {
-            parse_filter(
-                docid_filter,
-                Code::InvalidSimilarFilter,
-                features,
-                Some(index_uid.as_str()),
-            )
-        })
-        .transpose()?
-        .flatten();
 
-    let candidates_filter = filter
-        .as_ref()
-        .and_then(|filter| {
-            parse_filter(filter, Code::InvalidSimilarFilter, features, None).transpose()
-        })
-        .transpose()?;
+    let candidates_filter = filter;
 
     let (docid_filter, candidates_filter) =
-        extract_filters(index_scheduler, index_uid, progress, docid_filter, candidates_filter)?;
+        extract_filters(features, index_uid, progress, docid_filter, candidates_filter)?;
 
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
@@ -2754,29 +2735,35 @@ pub fn perform_similar(
 }
 
 fn extract_filters(
-    index_scheduler: &IndexScheduler,
+    features: RoFeatures,
     index_uid: IndexUid,
     progress: &Progress,
-    docid_filter: Option<Filter>,
-    candidates_filter: Option<Filter>,
+    docid_filter: Option<Value>,
+    candidates_filter: Option<Value>,
 ) -> Result<(Option<IndexFilter>, Option<IndexFilter>), ResponseError> {
-    let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
-    let foreign_keys_settings =
-        retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;
-    let (docid_filter, candidates_filter) = match filters_into_index_filters(
-        vec![
-            (source_index_uid.clone(), docid_filter),
-            (source_index_uid.clone(), candidates_filter),
-        ],
-        &foreign_keys_settings,
-        index_scheduler,
-        progress,
-    )?
-    .as_mut_slice()
-    {
-        [docid_filter, candidates_filter] => (docid_filter.take(), candidates_filter.take()),
-        _ => unreachable!(),
-    };
+    let docid_filter = docid_filter
+        .and_then(|filter| {
+            parse_local_index_filter(
+                &filter,
+                Some(index_uid.as_str()),
+                features,
+                Code::InvalidSearchFilter,
+            )
+            .transpose()
+        })
+        .transpose()?;
+    let candidates_filter = candidates_filter
+        .and_then(|filter| {
+            parse_local_index_filter(
+                &filter,
+                Some(index_uid.as_str()),
+                features,
+                Code::InvalidSearchFilter,
+            )
+            .transpose()
+        })
+        .transpose()?;
+
     Ok((docid_filter, candidates_filter))
 }
 

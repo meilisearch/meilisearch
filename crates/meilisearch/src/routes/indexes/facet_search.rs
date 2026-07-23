@@ -6,8 +6,8 @@ use deserr::actix_web::AwebJson;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools as _;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
@@ -327,10 +327,16 @@ pub async fn search(
     let network = index_scheduler.network();
 
     let queries = vec![(index_uid.clone(), query)];
-    let (_, mut queries) =
-        preprocess_filters(index_scheduler.clone(), queries, features, false, &progress)
-            .await
-            .map_err(|(err, _)| err)?;
+    let (_, mut queries) = preprocess_filters(
+        index_scheduler.clone(),
+        queries,
+        features,
+        false,
+        &progress,
+        Code::InvalidSearchFilter,
+    )
+    .await
+    .map_err(|(err, _)| err)?;
     // we only have one query, so we can pop it
     let mut query = queries.pop().unwrap();
 
