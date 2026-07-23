@@ -13,6 +13,7 @@ use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
+use crate::scheduler::ModifiedTasks;
 use crate::{utils, Error, IndexScheduler, Result};
 
 pub struct Dump<'a> {
@@ -330,7 +331,8 @@ impl<'a> Dump<'a> {
         }
 
         self.wtxn.commit()?;
-        self.index_scheduler.scheduler.waker.send(());
+
+        self.index_scheduler.scheduler.waker.send(ModifiedTasks::DumpImported);
 
         Ok(())
     }

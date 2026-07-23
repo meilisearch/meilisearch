@@ -96,6 +96,7 @@ use versioning::Versioning;
 use crate::dynamic_search_rules::DynamicSearchRules;
 use crate::index_mapper::IndexMapper;
 use crate::processing::ProcessingTasks;
+pub use crate::scheduler::ModifiedTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -518,7 +519,7 @@ impl IndexScheduler {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
                         Ok(Ok(TickOutcome::WaitForSignal)) => {
                             match run.scheduler.wake_up.blocking_recv() {
-                                Ok(()) => (),
+                                Ok(_) => (),
                                 Err(RecvError::Closed) => todo!(),
                                 Err(RecvError::Lagged(_)) => {
                                     // The receiver has been forcibly disconnected as we were lagging
@@ -879,7 +880,8 @@ impl IndexScheduler {
 
         // notify the scheduler loop to execute a new tick
         // TODO handle error
-        self.scheduler.waker.send(());
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: RoaringBitmap::from([task.uid]) });
+
         Ok(task)
     }
 
@@ -890,15 +892,23 @@ impl IndexScheduler {
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
 
-        self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
-            Ok(network_topology_change.receive_remote_task(&remote_name, None, None, 0, 0, 0)?)
-        })?;
+        let (task_uid, _) =
+            self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+                Ok(network_topology_change.receive_remote_task(
+                    &remote_name,
+                    None,
+                    None,
+                    0,
+                    0,
+                    0,
+                )?)
+            })?;
 
         wtxn.commit()?;
 
         // wake up the scheduler as the task state has changed
         // TODO handle error
-        self.scheduler.waker.send(());
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) });
 
         Ok(())
     }
@@ -910,7 +920,7 @@ impl IndexScheduler {
         origin: Origin,
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
-        let has_changed =
+        let (task_uid, has_changed) =
             self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
                 Ok(network_topology_change.receive_import_finished(&remote_name, successful)?)
             })?;
@@ -919,7 +929,7 @@ impl IndexScheduler {
 
         if has_changed {
             // TODO handle the error
-            self.scheduler.waker.send(());
+            self.scheduler.waker.send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) });
         }
         Ok(())
     }
@@ -935,12 +945,13 @@ impl IndexScheduler {
         }
     }
 
+    /// Updates the first processing network task and returns it's ID.
     fn update_network_task<F, O>(
         &self,
         wtxn: &mut heed::RwTxn<'_>,
         network_change: &Origin,
         update_fn: F,
-    ) -> Result<O, Error>
+    ) -> Result<(TaskId, O), Error>
     where
         F: FnOnce(&mut NetworkTopologyChange) -> Result<O, Error>,
     {
@@ -992,7 +1003,8 @@ impl IndexScheduler {
         let o = update_fn(network_topology_change)?;
 
         self.queue.tasks.update_task(wtxn, &mut network_task)?;
-        Ok(o)
+
+        Ok((network_task.uid, o))
     }
 
     /// Register a new task coming from a dump in the scheduler.

@@ -44,10 +44,10 @@ pub struct Scheduler {
     pub must_stop_processing: MustStopProcessing,
 
     /// Receive signals for when to process tasks or when anything changes in the tasks queue.
-    pub wake_up: tokio::sync::broadcast::Receiver<()>, // TODO change the type
+    pub wake_up: tokio::sync::broadcast::Receiver<ModifiedTasks>,
 
     /// Send signals to wake up the listening part and react to tasks changes.
-    pub waker: tokio::sync::broadcast::Sender<()>, // TODO change the type
+    pub waker: tokio::sync::broadcast::Sender<ModifiedTasks>,
 
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
@@ -129,11 +129,10 @@ impl Scheduler {
             dsr_fuel: _,
         } = options;
 
-        // TODO what capacity do we actually want
+        // TODO what capacity do we actually want?
         let (waker, wake_up) = tokio::sync::broadcast::channel(32);
-
         // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-        let _ = waker.send(()).unwrap();
+        let _ = waker.send(ModifiedTasks::DumpImported).unwrap();
 
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
@@ -210,9 +209,7 @@ impl IndexScheduler {
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::BatchCreated);
 
-        // TODO should we send a specific message telling the scheduler
-        //      that it's just to tell that it's finished?
-        self.scheduler.waker.send(());
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() });
 
         // 2. Process the tasks
         let res = {
@@ -450,9 +447,7 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
-        // TODO should we send a specific message telling the scheduler
-        //      that it's just to tell that it's finished?
-        self.scheduler.waker.send(());
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() });
 
         if batch_made_progress {
             // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
@@ -494,4 +489,10 @@ impl IndexScheduler {
             Ok(TickOutcome::TickAgain(processed_tasks))
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum ModifiedTasks {
+    DumpImported,
+    Some { ids: RoaringBitmap },
 }

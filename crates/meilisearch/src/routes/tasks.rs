@@ -7,7 +7,7 @@ use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use actix_web_lab::sse::{self, Event, Sse};
 use deserr::actix_web::AwebQueryParameter;
 use deserr::Deserr;
-use index_scheduler::{IndexScheduler, Query, TaskId};
+use index_scheduler::{IndexScheduler, ModifiedTasks, Query, TaskId};
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::DeserrQueryParamError;
@@ -647,20 +647,24 @@ async fn get_tasks_stream(
         let mut wake_up = index_scheduler.as_ref().scheduler.wake_up.resubscribe();
 
         'listener: loop {
-            dbg!("waiting");
             // wait for new tasks to be available. Every time tasks statuses
             // change this loop is unblocked and fetches new tasks info.
-            match wake_up.recv().await {
-                Ok(()) => (), // we should receive a list of task ids to display
+            let query = match wake_up.recv().await {
+                // We list all the tasks that were imported by a dump
+                Ok(ModifiedTasks::DumpImported) => query.clone(),
+                Ok(ModifiedTasks::Some { ids }) => {
+                    Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
+                }
                 Err(RecvError::Closed) => break 'listener,
-                Err(RecvError::Lagged(_)) => todo!("reconnect the channel"),
-            }
+                Err(RecvError::Lagged(_)) => {
+                    wake_up = wake_up.resubscribe();
+                    continue;
+                }
+            };
 
             // TODO should I unwrap here? nooo
             let (tasks, _total) =
                 index_scheduler.get_tasks_from_authorized_indexes(&query, &filters).unwrap();
-
-            dbg!(&tasks);
 
             for task in tasks.iter().map(TaskView::from_task) {
                 let data = sse::Data::new_json(task).unwrap();
