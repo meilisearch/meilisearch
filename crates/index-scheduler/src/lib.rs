@@ -502,7 +502,7 @@ impl IndexScheduler {
                         Ok(Ok(TickOutcome::WaitForSignal)) => {
                             match run.scheduler.wake_up.blocking_recv() {
                                 Ok(_) => (),
-                                Err(RecvError::Closed) => todo!(),
+                                Err(RecvError::Closed) => break,
                                 Err(RecvError::Lagged(_)) => {
                                     // The receiver has been forcibly disconnected as we were lagging
                                     // too far behind. We reconnect the receiver to handle new messages
