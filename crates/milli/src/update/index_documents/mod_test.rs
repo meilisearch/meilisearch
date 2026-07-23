@@ -840,6 +840,7 @@ fn test_meilisearch_1714() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     // Only the first document should match.
     let count = index.word_docids.get(&rtxn, "huàzhuāng").unwrap().unwrap().len();
@@ -849,8 +850,14 @@ fn test_meilisearch_1714() {
     let count = index.word_docids.get(&rtxn, "bāo").unwrap().unwrap().len();
     assert_eq!(count, 2);
 
-    let mut search =
-        crate::Search::new(&rtxn, &index, "test", OffsetDateTime::now_utc(), &progress);
+    let mut search = crate::Search::new(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        "test",
+        OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.query("化妆包");
     search.terms_matching_strategy(TermsMatchingStrategy::default());
 
