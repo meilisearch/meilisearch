@@ -634,12 +634,10 @@ async fn get_tasks(
 )]
 async fn get_tasks_stream(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
-    // TODO use another struct than the TasksFilterQuery with less parameters
-    params: AwebQueryParameter<TasksFilterQuery, DeserrQueryParamError>,
 ) -> Result<impl Responder, ResponseError> {
-    let mut params = params.into_inner();
-    params.limit.0 = u32::MAX;
-    let query = params.into_query();
+    index_scheduler.features().check_tasks_streaming_route("calling the /tasks/stream route")?;
+
+    let query = Query { limit: Some(u32::MAX), ..Default::default() };
     let filters = index_scheduler.filters().clone();
 
     let (tx, rx) = tokio::sync::mpsc::channel(10);

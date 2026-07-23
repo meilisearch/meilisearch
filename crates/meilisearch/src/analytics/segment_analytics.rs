@@ -215,6 +215,7 @@ struct Infos {
     experimental_personalization: bool,
     experimental_allowed_ip_networks: bool,
     experimental_render_route: bool,
+    experimental_tasks_streaming_route: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -325,6 +326,7 @@ impl Infos {
             disable_documents_fetch_queue,
             legacy_search,
             render_route,
+            tasks_streaming_route,
         } = features;
 
         // We're going to override every sensible information.
@@ -354,6 +356,7 @@ impl Infos {
             experimental_queue_documents_fetch: !disable_documents_fetch_queue,
             experimental_legacy_search: legacy_search.unwrap_or(experimental_legacy_search_default),
             experimental_render_route: render_route,
+            experimental_tasks_streaming_route: tasks_streaming_route,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),

@@ -48,8 +48,7 @@ use std::io::{self, BufReader, Read};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use byte_unit::Byte;
 use dump::Dump;
@@ -88,7 +87,7 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+use tokio::sync::broadcast::error::RecvError;
 pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
