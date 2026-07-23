@@ -1831,6 +1831,646 @@ async fn search_pumps_pins_when_organic_results_run_out() {
 }
 
 #[actix_web::test]
+async fn filter_conditions() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) =
+        index.update_settings(json!({ "searchableAttributes": ["title"], "filterableAttributes": ["series", "genres"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "pin-on-matrix", "title": "Batman Returns", "series": "batman", "genres": ["Action", "Superhero"] },
+                { "id": "organic-on-matrix", "title": "The Matrix", "series": "batman", "genres": ["Action", "SciFi"] },
+                { "id": "organic-in-batman", "title": "Batman Forever", "series": "forever", "genres":["Action", "Superhero"] },
+                { "id": "pin-on-multi", "title": "Batman the animation", "series": "batman", "genres":["Action", "Superhero", "Animation"] }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "pin-on-matrix-action",
+            json!({
+                "conditions": {
+                  "query": {
+                    "words": "Matrix"
+                  },
+                  "filter": {
+                    "values": {
+                      "genres": "action",
+                    }
+                  }
+                },
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "pin-on-matrix" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // only query matches, no filter
+    let (value, code) =
+        index.search_post(json!({ "q": "Matrix", "showRankingScoreDetails": true })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "organic-on-matrix",
+        "title": "The Matrix",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "SciFi"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+
+    // pin on query + filter
+    let (value, code) = index
+        .search_post(
+            json!({ "q": "Matrix", "filter": "genres = action", "showRankingScoreDetails": true }),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 0
+          }
+        }
+      },
+      {
+        "id": "organic-on-matrix",
+        "title": "The Matrix",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "SciFi"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+
+    // pin on query + filter still works if overconstrained
+    let (value, code) = index
+        .search_post(json!({ "q": "Matrix", "filter": "series = batman AND genres = action", "showRankingScoreDetails": true }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 0
+          }
+        }
+      },
+      {
+        "id": "organic-on-matrix",
+        "title": "The Matrix",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "SciFi"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+
+    // pin on query + filter still works if overconstrained 2
+    let (value, code) = index
+        .search_post(json!({ "q": "Matrix", "filter": "series = batman OR genres = action", "showRankingScoreDetails": true }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 0
+          }
+        }
+      },
+      {
+        "id": "organic-on-matrix",
+        "title": "The Matrix",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "SciFi"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+
+    // pin on filter alone doesn't work
+    let (value, code) = index
+        .search_post(
+            json!({ "q": "", "filter": "series = batman", "showRankingScoreDetails": true }),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {}
+      },
+      {
+        "id": "organic-on-matrix",
+        "title": "The Matrix",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "SciFi"
+        ],
+        "_rankingScoreDetails": {}
+      },
+      {
+        "id": "pin-on-multi",
+        "title": "Batman the animation",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero",
+          "Animation"
+        ],
+        "_rankingScoreDetails": {}
+      }
+    ]
+    "###);
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "pin-on-genres-series",
+            json!({
+                "conditions": {
+                  "filter": {
+                    "values": {
+                      "genres": "Action",
+                      "series": "batman",
+                    }
+                  }
+                },
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "pin-on-multi" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // only first rule triggers
+    let (value, code) = index
+        .search_post(
+            json!({ "q": "Matrix", "filter": "genres = action", "showRankingScoreDetails": true }),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 0
+          }
+        }
+      },
+      {
+        "id": "organic-on-matrix",
+        "title": "The Matrix",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "SciFi"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+
+    // only second rule
+    let (value, code) = index
+        .search_post(json!({ "q": "Batman", "filter": "genres = Action AND series = Batman", "showRankingScoreDetails": true }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 1.0
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "matchesStart",
+            "score": 0.6666666666666666
+          }
+        }
+      },
+      {
+        "id": "pin-on-multi",
+        "title": "Batman the animation",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero",
+          "Animation"
+        ],
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 1
+          }
+        }
+      }
+    ]
+    "###);
+
+    // no rule
+    let (value, code) = index
+        .search_post(json!({ "q": "Batman", "filter": "genres = action OR series = batman", "showRankingScoreDetails": true }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "pin-on-matrix",
+        "title": "Batman Returns",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 1.0
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "matchesStart",
+            "score": 0.6666666666666666
+          }
+        }
+      },
+      {
+        "id": "organic-in-batman",
+        "title": "Batman Forever",
+        "series": "forever",
+        "genres": [
+          "Action",
+          "Superhero"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 1.0
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "matchesStart",
+            "score": 0.6666666666666666
+          }
+        }
+      },
+      {
+        "id": "pin-on-multi",
+        "title": "Batman the animation",
+        "series": "batman",
+        "genres": [
+          "Action",
+          "Superhero",
+          "Animation"
+        ],
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 1.0
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "matchesStart",
+            "score": 0.6666666666666666
+          }
+        }
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
 async fn duplicated_word_constraints() {
     let server = dynamic_search_rules_server().await;
 

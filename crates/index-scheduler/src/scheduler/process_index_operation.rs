@@ -613,7 +613,7 @@ impl IndexScheduler {
                 // used to find query isEmpty constraints
                 eq_attr_pattern(dsr_fields::CONDITIONS_QUERY_IS_EMPTY.into()),
                 // used to find filter constraints
-                cmp_attr_pattern(dsr_fields::CONDITIONS_FILTER_VALUES.into()),
+                cmp_attr_pattern(format!("{}.*", dsr_fields::CONDITIONS_FILTER_VALUES)),
                 // use to count filter constraints
                 cmp_attr_pattern(dsr_fields::CONDITIONS_FILTER_NB_CONSTRAINTS.into()),
             ]),
