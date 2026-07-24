@@ -111,7 +111,7 @@ pub struct ListApiKeys {
     pub offset: Param<usize>,
     /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
-    #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
+    #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN, example = 3)]
     pub limit: Param<usize>,
 }
 
@@ -137,22 +137,52 @@ impl ListApiKeys {
                     {
                         "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                         "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
-                        "name": "An API Key",
+                        "name": "Indexing Products API key",
                         "description": null,
                         "actions": [
                             "documents.add"
                         ],
                         "indexes": [
-                            "movies"
+                            "products"
                         ],
-                        "expiresAt": "2022-11-12T10:00:00Z",
+                        "expiresAt": "2021-11-13T00:00:00Z",
+                        "createdAt": "2021-11-12T10:00:00Z",
+                        "updatedAt": "2021-11-12T10:00:00Z"
+                    },
+                    {
+                        "uid": "5e66e370-f57d-4a30-8ab8-59dc8cd39b51",
+                        "key": "a38b92a5a7e7dbcf9e8a3a71d62b0d15e2e1f3c4d6a7b8c9d0e1f2a3b4c5d6e7",
+                        "name": "Search Products API key",
+                        "description": "Read-only key for searching the products index",
+                        "actions": [
+                            "search"
+                        ],
+                        "indexes": [
+                            "products"
+                        ],
+                        "expiresAt": null,
+                        "createdAt": "2021-11-12T10:00:00Z",
+                        "updatedAt": "2021-11-12T10:00:00Z"
+                    },
+                    {
+                        "uid": "b73d3e5a-4d32-4f1e-bba3-0123456789ab",
+                        "key": "f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
+                        "name": "Admin API key",
+                        "description": "Full access key for administration",
+                        "actions": [
+                            "*"
+                        ],
+                        "indexes": [
+                            "*"
+                        ],
+                        "expiresAt": null,
                         "createdAt": "2021-11-12T10:00:00Z",
                         "updatedAt": "2021-11-12T10:00:00Z"
                     }
                 ],
-                "limit": 20,
+                "limit": 3,
                 "offset": 0,
-                "total": 1
+                "total": 3
             }
         )),
         (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
