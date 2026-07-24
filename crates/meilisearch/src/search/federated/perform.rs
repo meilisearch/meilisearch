@@ -7,10 +7,7 @@ use std::vec::{IntoIter, Vec};
 
 use actix_http::StatusCode;
 use actix_web::web::Data;
-use index_scheduler::filter::{
-    filters_into_index_filters, parse_local_index_filter, retrieve_foreign_keys_settings,
-    SourceIndexUid,
-};
+use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
 use meilisearch_types::error::{Code, ResponseError};
@@ -19,9 +16,9 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
-    AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, AttributePatterns, Deadline, DocumentId,
+    FederatingResultsStep, FieldsIdsMap, MetadataBuilder, OrderBy, PatternMatch,
+    DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -47,18 +44,20 @@ use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{
-    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
+    PreprocessedQuery, FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION,
+    WEIGHTED_RANKING_SCORE,
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
-    parse_filter, NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues,
-    DEFAULT_SEARCH_LIMIT,
+    NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues, DEFAULT_SEARCH_LIMIT,
 };
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
     index_scheduler: Data<IndexScheduler>,
-    mut queries: Vec<SearchQueryWithIndex>,
+    network: Network,
+    queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
+    mut hydration_cache: Option<HydrationContext>,
     federation: Federation,
     features: RoFeatures,
     is_proxy: bool,
@@ -89,9 +88,7 @@ pub async fn perform_federated_search(
         (Some(page), Some(hits_per_page)) => hits_per_page * page,
     };
 
-    let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
-
-    let network = index_scheduler.network();
+    let retrieve_vectors = queries.iter().any(|q| q.query.retrieve_vectors);
 
     // Preconstruct metadata keeping the original queries order for later metadata building
     let precomputed_query_metadata: Vec<_> = {
@@ -99,64 +96,12 @@ pub async fn perform_federated_search(
             .iter()
             .map(|q| {
                 (
-                    q.q.clone(),
-                    q.index_uid.to_string(),
-                    q.federation_options.as_ref().and_then(|o| o.remote.clone()),
+                    q.query.q.clone(),
+                    q.query.index_uid.to_string(),
+                    q.query.federation_options.as_ref().and_then(|o| o.remote.clone()),
                 )
             })
             .collect()
-    };
-
-    // Document join: list of indexes in the order of the queries
-    // only create the hydration cache if the foreign keys feature is enabled
-    let filter_values = queries.iter_mut().map(|q| q.filter.take()).collect::<Vec<_>>();
-    let (mut hydration_cache, precomputed_filters) = if features.runtime_features().foreign_keys
-        && !is_proxy
-    {
-        let index_uids: Vec<_> =
-            queries.iter().map(|q| SourceIndexUid(Rc::from(q.index_uid.as_str()))).collect();
-        let foreign_keys_settings =
-            retrieve_foreign_keys_settings(&index_scheduler, &index_uids).without_index()?;
-
-        // parse each query filter and bind them to their respective index
-        let filters = index_uids
-            .iter()
-            .zip(filter_values.iter())
-            .enumerate()
-            .map(|(query_index, (index_uid, filter))| match filter {
-                Some(filter) => {
-                    let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)
-                        .with_index(query_index)?;
-
-                    Ok((index_uid.clone(), filter))
-                }
-                None => Ok((index_uid.clone(), None)),
-            })
-            .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
-
-        // convert the filters to index filters by evaluating the foreign filters
-        let filters: Vec<_> =
-            filters_into_index_filters(filters, &foreign_keys_settings, &index_scheduler, progress)
-                .without_index()?;
-
-        let hydration_cache = HydrationContext::new(index_uids, foreign_keys_settings);
-        (Some(hydration_cache), filters)
-    } else {
-        let filters = filter_values
-            .iter()
-            .enumerate()
-            .map(|(query_index, f)| {
-                f.as_ref()
-                    .and_then(|f| {
-                        parse_local_index_filter(f, None, features, Code::InvalidSearchFilter)
-                            .with_index(query_index)
-                            .transpose()
-                    })
-                    .transpose()
-            })
-            .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
-
-        (None, filters)
     };
 
     // this implementation partition the queries by index to guarantee an important property:
@@ -169,13 +114,7 @@ pub async fn perform_federated_search(
 
     let mut federation = federation;
     let mut partition = None;
-    for (query_index, (mut federated_query, filter)) in
-        queries.into_iter().zip(precomputed_filters.into_iter()).enumerate()
-    {
-        // Insert back the filter into the query as a string before sending it to the remote
-        federated_query.filter = filter.as_ref().map(|f| {
-            serde_json::Value::String(serialize_index_filter_to_filter_string(f).unwrap())
-        });
+    for (query_index, federated_query) in queries.into_iter().enumerate() {
         partitioned_queries
             .partition(
                 &mut federation,
@@ -1036,39 +975,39 @@ impl PartitionedQueries {
     fn partition(
         &mut self,
         federation: &mut Federation,
-        mut federated_query: SearchQueryWithIndex,
+        mut federated_query: PreprocessedQuery<SearchQueryWithIndex>,
         partition: &mut Option<Partition>,
         query_index: usize,
         network: &Network,
         features: RoFeatures,
         remote_availability: &RemoteAvailability,
     ) -> Result<(), ResponseError> {
-        if let Some(pagination_field) = federated_query.has_pagination() {
+        if let Some(pagination_field) = federated_query.query.has_pagination() {
             return Err(MeilisearchHttpError::PaginationInFederatedQuery(pagination_field).into());
         }
 
-        if let Some(facets) = federated_query.has_facets() {
+        if let Some(facets) = federated_query.query.has_facets() {
             let facets = facets.to_owned();
             return Err(MeilisearchHttpError::FacetsInFederatedQuery(
-                federated_query.index_uid.into_inner(),
+                federated_query.query.index_uid.into_inner(),
                 facets,
             )
             .into());
         }
 
-        if federated_query.has_personalize() {
+        if federated_query.query.has_personalize() {
             return Err(MeilisearchHttpError::PersonalizationInFederatedQuery.into());
         }
 
-        if federated_query.has_remote_and_use_network() {
+        if federated_query.query.has_remote_and_use_network() {
             return Err(MeilisearchHttpError::RemoteAndUseNetwork.into());
         }
 
-        if federated_query.has_show_performance_details() {
+        if federated_query.query.has_show_performance_details() {
             return Err(MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery.into());
         }
 
-        if federated_query.has_distinct() && federation.distinct.is_some() {
+        if federated_query.query.has_distinct() && federation.distinct.is_some() {
             return Err(MeilisearchHttpError::DistinctInFederatedQueryAndFederation.into());
         }
 
@@ -1083,7 +1022,7 @@ impl PartitionedQueries {
 
         for federated_query in queries {
             let (index_uid, query, federation_options) =
-                federated_query.into_index_query_federation();
+                federated_query.into_inner_preprocessed().into_index_query_federation();
 
             let federation_options = federation_options.unwrap_or_default();
 

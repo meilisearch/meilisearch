@@ -1,6 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
 
-use index_scheduler::filter::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
@@ -11,6 +10,7 @@ use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
+use crate::documents_retrieval::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid};
 use crate::search::{ExternalDocumentId, SearchHit};
 
 /// Hydrate the documents based on the foreign keys
@@ -24,7 +24,7 @@ pub fn hydrate_documents(
 ) -> Result<(), ResponseError> {
     // Group the foreign keys by index uid
     let mut foreign_keys_by_index_uid: HashMap<_, Vec<_>> = HashMap::new();
-    for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
+    for ForeignKey { foreign_index_uid, field_name, foreign_primary_key } in foreign_keys {
         foreign_keys_by_index_uid.entry(foreign_index_uid).or_default().push(field_name.as_str());
     }
 
@@ -135,6 +135,7 @@ impl<'a> IndexDocumentMaker<'a> {
 }
 
 pub type ForeignExternalDocumentId = ExternalDocumentId;
+#[derive(Clone)]
 pub struct HydrationContext {
     // list of indexes in the order of the queries
     index_by_query_index: Vec<SourceIndexUid>,
@@ -147,10 +148,14 @@ pub struct HydrationContext {
 
 impl HydrationContext {
     pub fn new(
-        index_by_query_index: Vec<SourceIndexUid>,
+        index_by_query_index: impl IntoIterator<Item = SourceIndexUid>,
         hydration_settings: ForeignKeysPerIndex,
     ) -> Self {
-        Self { index_by_query_index, hydration_settings, hydration_docids: HashMap::new() }
+        Self {
+            index_by_query_index: index_by_query_index.into_iter().collect(),
+            hydration_settings,
+            hydration_docids: HashMap::new(),
+        }
     }
 
     pub fn register_foreign_docids(&mut self, hit: &SearchHit, query_index: usize) {
@@ -160,7 +165,7 @@ impl HydrationContext {
             return;
         };
 
-        for (foreign_index_uid, field_name) in foreign_keys {
+        for (foreign_index_uid, field_name, foreign_primary_key) in foreign_keys {
             visit_leaf_values(&hit.document, field_name.as_ref(), &mut |value| match value {
                 Value::Array(values) => {
                     for value in values {
@@ -241,7 +246,7 @@ impl FederatedHydrationFormatter {
             };
 
             // Hydrate the document
-            for (foreign_index_uid, field_name) in foreign_keys {
+            for (foreign_index_uid, field_name, foreign_primary_key) in foreign_keys {
                 map_leaf_values(
                     &mut document.document,
                     [field_name.as_ref()],
@@ -252,7 +257,7 @@ impl FederatedHydrationFormatter {
             }
 
             // Hydrate the formatted document
-            for (foreign_index_uid, field_name) in foreign_keys {
+            for (foreign_index_uid, field_name, foreign_primary_key) in foreign_keys {
                 map_leaf_values(
                     &mut document.formatted,
                     [field_name.as_ref()],

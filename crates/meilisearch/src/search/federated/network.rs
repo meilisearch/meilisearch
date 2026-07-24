@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::IndexFilter;
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
-use serde_json::Value;
 
 use crate::routes::indexes::facet_search::FacetSearchQuery;
-use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
+use crate::search::federated::types::PreprocessedQuery;
+use crate::search::SearchQueryWithIndex;
 
 #[cfg(not(feature = "enterprise"))]
 mod community_edition;
@@ -36,33 +37,33 @@ pub trait ProxyQuery {
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery;
 
     /// Provide an exclusive reference to the `filter` field of a proxied query
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value>;
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter>;
 }
 
-impl ProxyQuery for SearchQueryWithIndex {
+impl ProxyQuery for PreprocessedQuery<SearchQueryWithIndex> {
     /// Output type is the same, as SearchQueryWithIndex already allows for specifying a remote
-    type ProxiedQuery = SearchQueryWithIndex;
+    type ProxiedQuery = PreprocessedQuery<SearchQueryWithIndex>;
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         let mut query = (*self).clone();
-        query.federation_options.get_or_insert_default().remote = Some(remote);
+        query.query.federation_options.get_or_insert_default().remote = Some(remote);
         query
     }
 
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.filter
     }
 }
 
-impl ProxyQuery for &FacetSearchQuery {
+impl ProxyQuery for &PreprocessedQuery<(IndexUid, FacetSearchQuery)> {
     /// The only things that can change are the filter on shard and the remote, so recover this
-    type ProxiedQuery = (String, Option<serde_json::Value>);
+    type ProxiedQuery = (String, Option<IndexFilter>);
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         (remote, None)
     }
 
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.1
     }
 }
@@ -108,115 +109,4 @@ impl Partition {
             ),
         })
     }
-
-    pub fn into_query_partition(
-        self,
-        federation: &mut Federation,
-        query: &SearchQuery,
-        federation_options: Option<FederationOptions>,
-        index_uid: &IndexUid,
-    ) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
-        let query = fixup_query_federation(federation, query, federation_options, index_uid);
-
-        self.into_partition(query)
-    }
-}
-
-fn fixup_query_federation(
-    federation: &mut Federation,
-    query: &SearchQuery,
-    federation_options: Option<FederationOptions>,
-    index_uid: &IndexUid,
-) -> SearchQueryWithIndex {
-    let federation_options = federation_options.unwrap_or_default();
-    let mut query = SearchQueryWithIndex::from_index_query_federation(
-        index_uid.clone(),
-        query.clone(),
-        Some(federation_options),
-    );
-
-    // Move query parameters that make sense at the federation level
-    // from the `SearchQueryWithIndex` to the `Federation`
-    let SearchQueryWithIndex {
-        index_uid,
-        q: _,
-        vector: _,
-        media: _,
-        hybrid: _,
-        offset,
-        limit,
-        page,
-        hits_per_page,
-        attributes_to_retrieve: _,
-        retrieve_vectors: _,
-        attributes_to_crop: _,
-        crop_length: _,
-        attributes_to_highlight: _,
-        show_ranking_score: _,
-        show_ranking_score_details: _,
-        show_performance_details,
-        use_network: _,
-        show_matches_position: _,
-        filter: _,
-        sort: _,
-        distinct,
-        facets,
-        highlight_pre_tag: _,
-        highlight_post_tag: _,
-        crop_marker: _,
-        matching_strategy: _,
-        attributes_to_search_on: _,
-        ranking_score_threshold: _,
-        locales: _,
-        personalize,
-        federation_options: _,
-    } = &mut query;
-
-    let Federation {
-        limit: federation_limit,
-        offset: federation_offset,
-        page: federation_page,
-        hits_per_page: federation_hits_per_page,
-        facets_by_index: _,
-        merge_facets: _,
-        show_performance_details: federation_show_performance_details,
-        distinct: federation_distinct,
-        personalize: federation_personalize,
-    } = federation;
-
-    if let Some(limit) = limit.take() {
-        *federation_limit = limit;
-    }
-    if let Some(offset) = offset.take() {
-        *federation_offset = offset;
-    }
-    if let Some(page) = page.take() {
-        *federation_page = Some(page);
-    }
-    if let Some(hits_per_page) = hits_per_page.take() {
-        *federation_hits_per_page = Some(hits_per_page);
-    }
-    if let Some(distinct) = distinct.take() {
-        *federation_distinct = Some(distinct);
-    }
-
-    if let Some(show_performance_details) = show_performance_details.take() {
-        *federation_show_performance_details = show_performance_details;
-    }
-
-    if let Some(personalize) = personalize.take() {
-        *federation_personalize = Some(personalize);
-    }
-
-    'facets: {
-        if let Some(facets) = facets.take() {
-            if facets.is_empty() {
-                break 'facets;
-            }
-            let facets_by_index = federation.facets_by_index.entry(index_uid.clone()).or_default();
-            *facets_by_index = Some(facets);
-        }
-    }
-
-    query
 }

@@ -732,7 +732,7 @@ async fn filter_invalid_attribute_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n2:6 \"many\" = \"Glass\"",
+              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1287,14 +1287,14 @@ async fn search_with_contains_without_enabling_the_feature() {
     index
         .search(json!({ "filter": "doggo != echo AND doggo CONTAINS kefir" }), |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(json_string!(response), @r#"
+            snapshot!(json_string!(response), @r###"
             {
-              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
+              "message": "Index `[uuid]`: Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
             }
-            "#);
+            "###);
         })
         .await;
 

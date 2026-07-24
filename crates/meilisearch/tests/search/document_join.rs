@@ -699,7 +699,7 @@ async fn federated_search_with_foreign_filter_on_author_profile() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Inside `.queries[0]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n30:36 _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
+      "message": "Inside `.queries[0]`: Index `[uuid]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n30:36 _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -772,7 +772,7 @@ async fn multi_search_with_foreign_filter_on_author_profile() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Inside `.queries[0]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n30:36 _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
+      "message": "Inside `.queries[0]`: Index `[uuid]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n30:36 _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"

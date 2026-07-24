@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Debug, Write as FmtWrite};
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
+use std::ops::{BitAnd, BitOr};
 
 pub use filter_parser::Condition;
 use filter_parser::{IndexFilterCondition, TokenLike, VectorFilter};
@@ -38,6 +39,21 @@ impl From<IndexFilterCondition> for IndexFilter {
     }
 }
 
+impl BitAnd for IndexFilter {
+    type Output = IndexFilter;
+
+    fn bitand(self, other: Self) -> Self::Output {
+        IndexFilter { condition: IndexFilterCondition::And(vec![self.condition, other.condition]) }
+    }
+}
+
+impl BitOr for IndexFilter {
+    type Output = IndexFilter;
+
+    fn bitor(self, other: Self) -> Self::Output {
+        IndexFilter { condition: IndexFilterCondition::Or(vec![self.condition, other.condition]) }
+    }
+}
 impl IndexFilter {
     pub fn evaluate(&self, rtxn: &heed::RoTxn<'_>, index: &Index) -> Result<RoaringBitmap> {
         // to avoid doing this for each recursive call we're going to do it ONCE ahead of time

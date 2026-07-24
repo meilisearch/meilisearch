@@ -1,19 +1,33 @@
-use std::sync::Arc;
+use std::collections::{BTreeMap, VecDeque};
+use std::{rc::Rc, sync::Arc};
 
 use actix_web::web::Data;
-use index_scheduler::IndexScheduler;
-use meilisearch_types::error::ResponseError;
+use index_scheduler::{IndexScheduler, RoFeatures};
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::FederatingResultsStep;
+use meilisearch_types::network::Network;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::personalization::PersonalizationService;
+use crate::routes::indexes::documents::{BrowseQueryWithIndex, DocumentsResult};
+use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::hydration::HydrationContext;
+use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
     SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
+
+pub use preprocessing::{
+    preprocess_filters, retrieve_foreign_keys_settings, ForeignIndexUid, ForeignKeysPerIndex,
+    SourceIndexUid,
+};
+
+mod preprocessing;
 
 pub struct DocumentSearch {
     pub queries: Vec<SearchQueryWithIndex>,
@@ -50,11 +64,26 @@ impl DocumentSearch {
 
         let index_scheduler = guarded_index_scheduler.clone();
         let features = index_scheduler.features();
+
+        let network = index_scheduler.network();
+        let (hydration_cache, preprocessed_queries) = preprocess_filters(
+            index_scheduler.clone(),
+            network.clone(),
+            self.queries,
+            features,
+            self.is_proxy,
+            progress,
+            Code::InvalidSearchFilter,
+        )
+        .await?;
+
         // Federated search
         if let Some(federation) = self.federation.take() {
             let (search_result, _) = perform_federated_search(
                 index_scheduler,
-                self.queries,
+                network,
+                preprocessed_queries,
+                hydration_cache,
                 federation,
                 features,
                 self.is_proxy,
@@ -71,20 +100,29 @@ impl DocumentSearch {
 
         // Multi-search
         let search_results: Result<_, (ResponseError, _)> = async {
-            let mut search_results = Vec::with_capacity(self.queries.len());
-            for (query_index, query) in self.queries.iter().enumerate() {
-                if query.federation_options.is_some() {
+            let mut search_results = Vec::with_capacity(preprocessed_queries.len());
+            for (query_index, query) in preprocessed_queries.into_iter().enumerate() {
+                if query.query.federation_options.is_some() {
                     return Err((
                         MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
                         Some(query_index),
                     ));
                 }
 
-                let (fixed_query, federation) = fixup_query_federation(query);
+                let (q, index_uid, fixed_query, federation) = {
+                    let PreprocessedQuery { query, filter } = query;
+                    let q = query.q.clone();
+                    let index_uid = query.index_uid.to_string();
+                    let (fixed_query, federation) = fixup_query_federation(&query);
+
+                    (q, index_uid, PreprocessedQuery { query: fixed_query, filter }, federation)
+                };
 
                 let (search_result, _) = perform_federated_search(
                     index_scheduler.clone(),
+                    network.clone(),
                     vec![fixed_query],
+                    hydration_cache.clone(),
                     federation,
                     features,
                     self.is_proxy,
@@ -99,11 +137,9 @@ impl DocumentSearch {
                 .map_err(|(err, _)| (err, Some(query_index)))?;
 
                 search_results.push(SearchResultWithIndex {
-                    index_uid: query.index_uid.to_string(),
-                    result: search_result.into_search_result(
-                        query.q.clone().unwrap_or_default(),
-                        query.index_uid.as_str(),
-                    ),
+                    result: search_result
+                        .into_search_result(q.unwrap_or_default(), index_uid.as_str()),
+                    index_uid,
                 });
             }
 
@@ -230,4 +266,107 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
 pub enum DocumentSearchResult {
     Federated(Box<FederatedSearchResult>),
     Multi(Vec<SearchResultWithIndex>),
+}
+
+const MAX_IN_FLIGHT_REQUESTS: usize = 40;
+
+pub struct RemoteRetrieveDocuments {
+    errors: BTreeMap<String, ResponseError>,
+    results: Vec<(DocumentsResult, usize)>,
+    in_flight_requests: VecDeque<
+        tokio::task::JoinHandle<(Result<DocumentsResult, ProxySearchError>, String, usize)>,
+    >,
+}
+
+impl RemoteRetrieveDocuments {
+    pub async fn start(
+        network: Network,
+        params: ProxySearchParams,
+        remote_queries: Vec<(usize, PreprocessedQuery<BrowseQueryWithIndex>)>,
+    ) -> Result<Self, ResponseError> {
+        let mut errors = BTreeMap::new();
+        let mut results = Vec::with_capacity(remote_queries.len());
+        let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
+
+        for (query_id, query) in remote_queries {
+            let BrowseQueryWithIndex { query, remote: Some(remote_name), index_uid } =
+                query.into_inner_preprocessed()
+            else {
+                unreachable!("remote query must have a remote name");
+            };
+
+            let Some(remote) = network.remotes.get(&remote_name) else {
+                errors.insert(
+                    remote_name.clone(),
+                    ProxySearchError::UnknownRemote { remote: remote_name.clone() }
+                        .as_response_error(),
+                );
+                continue;
+            };
+
+            let path_and_query =
+                match meilisearch_types::network::route::documents_fetch_path(&index_uid) {
+                    Ok(path_and_query) => path_and_query,
+                    Err(err) => {
+                        errors.insert(
+                            remote_name.clone(),
+                            ProxySearchError::InvalidRemoteUrl { cause: err.to_string() }
+                                .as_response_error(),
+                        );
+                        continue;
+                    }
+                };
+
+            let request = match json_proxy(
+                path_and_query,
+                http_client::reqwest::Method::POST,
+                remote,
+                &query,
+                &params,
+                false, // no metadata on documents-fetch
+            ) {
+                Ok(request) => request,
+                Err(err) => {
+                    errors.insert(remote_name.clone(), err.as_response_error());
+                    continue;
+                }
+            };
+
+            if in_flight_requests.len() == in_flight_requests.capacity() {
+                // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
+                let task: tokio::task::JoinHandle<(
+                    Result<DocumentsResult, ProxySearchError>,
+                    String,
+                    usize,
+                )> = in_flight_requests.pop_front().unwrap();
+                match task.await.unwrap() {
+                    (Ok(result), _, query_id) => results.push((result, query_id)),
+                    (Err(err), remote_name, _) => {
+                        errors.insert(remote_name, err.as_response_error());
+                        continue;
+                    }
+                }
+            }
+            in_flight_requests.push_back(tokio::spawn(async move {
+                (request.await, remote_name.clone(), query_id)
+            }));
+        }
+
+        Ok(Self { errors, results, in_flight_requests })
+    }
+
+    pub async fn wait(self) -> (Vec<(DocumentsResult, usize)>, BTreeMap<String, ResponseError>) {
+        let Self { mut results, mut errors, in_flight_requests } = self;
+        // Retrieve remote results
+        for task in in_flight_requests {
+            match task.await.unwrap() {
+                (Ok(result), _, query_id) => results.push((result, query_id)),
+                (Err(err), remote_name, _) => {
+                    errors.insert(remote_name, err.as_response_error());
+                }
+            }
+        }
+
+        (results, errors)
+    }
 }
