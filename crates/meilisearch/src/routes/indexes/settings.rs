@@ -41,6 +41,7 @@ macro_rules! make_setting_routes {
         #[routes::routes(
             routes(
                 "" => [patch(update_all), get(get_all), delete(delete_all)],
+                "target" =>  [get(get_all_target)],
                 $( $route => [get($attr::get), $update_verb($attr::update), delete($attr::delete)]),*
             ),
             tag = "Settings",
@@ -743,6 +744,137 @@ pub async fn get_all(
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
+
+#[routes::path(
+    security(("Bearer" = ["settings.get", "settings.*", "*"])),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    responses(
+        (status = 200, description = "Returns the current and target settings.", body = SettingsTarget, content_type = "application/json", example = json!({
+            "current": {
+                "displayedAttributes": [
+                    "*"
+                ],
+                "searchableAttributes": [
+                    "*"
+                ],
+                "filterableAttributes": [],
+                "sortableAttributes": [],
+                "rankingRules": [
+                    "words",
+                    "typo",
+                    "proximity",
+                    "attributeRank",
+                    "sort",
+                    "wordPosition",
+                    "exactness"
+                    ],
+                    "stopWords": [],
+                    "nonSeparatorTokens": [],
+                    "separatorTokens": [],
+                    "dictionary": [],
+                    "synonyms": {},
+                    "distinctAttribute": null,
+                    "proximityPrecision": "byWord",
+                    "typoTolerance": {
+                        "enabled": true,
+                        "minWordSizeForTypos": {
+                            "oneTypo": 5,
+                            "twoTypos": 9
+                        },
+                        "disableOnWords": [],
+                        "disableOnAttributes": [],
+                        "disableOnNumbers": false
+                    },
+                    "faceting": {
+                        "maxValuesPerFacet": 100,
+                        "sortFacetValuesBy": {
+                            "*": "alpha"
+                        }
+                    },
+                    "pagination": {
+                        "maxTotalHits": 1000
+                    },
+                    "embedders": {},
+                    "searchCutoffMs": null,
+                    "localizedAttributes": null,
+                    "facetSearch": true,
+                    "prefixSearch": "indexingTime"
+                },
+                "target": {
+                    "searchableAttributes": [
+                        "title",
+                        "overview"
+                        ],
+                    "filterableAttributes": [
+                        "release_date"
+                        ],
+                    "sortableAttributes": [
+                        "release_date"
+                        ],
+                    "facetSearch": false
+                },
+                "taskIds": [
+                    10,
+                    11
+                ],
+                "needsProcessing": true
+        })),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
+    )
+)]
+/// Compare current and target settings
+///
+/// Retrieve all settings of an index in a single request. Returns every configurable option and its current or default value, as
+/// well as the values that will be set after processing all pending tasks.
+pub async fn get_all_target(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+    let mut target =
+        index_scheduler.user_index_settings_target(&index_uid, SecretPolicy::HideSecrets)?;
+
+    let features = index_scheduler.features();
+
+    if features.check_chat_completions("showing index `chat` settings").is_err() {
+        if let Some(setting) = target.current.as_mut() {
+            setting.chat = Setting::NotSet;
+        }
+        if let Some(setting) = target.target.as_mut() {
+            setting.chat = Setting::NotSet;
+        }
+    }
+
+    if features.check_foreign_keys_setting("showing index `foreignKeys` settings").is_err() {
+        if let Some(setting) = target.current.as_mut() {
+            setting.foreign_keys = Setting::NotSet;
+        }
+        if let Some(setting) = target.target.as_mut() {
+            setting.foreign_keys = Setting::NotSet;
+        }
+    }
+
+    debug!(returns = ?target, "Get all settings target");
+    Ok(HttpResponse::Ok().json(target))
+}
+
+use meilisearch_types::settings::SettingsTarget;
 
 #[routes::path(
     summary = "Reset all settings",
