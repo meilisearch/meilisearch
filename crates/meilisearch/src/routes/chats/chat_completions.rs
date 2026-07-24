@@ -369,19 +369,20 @@ async fn process_search_request(
         add_search_rules(&mut query.filter, search_rules);
     }
 
-    let (_, mut preprocessed_queries) = preprocess_filters(
-        (*index_scheduler).clone(),
-        vec![query],
-        features,
-        false,
-        // TODO progress
-        &Default::default(),
-        Code::InvalidSearchFilter,
-    )
-    .await
-    .map_err(|(e, _)| e)?;
-    let PreprocessedQuery { query: SearchInIndexParameters { index_uid, q, filter: _ }, filter } =
-        preprocessed_queries.pop().unwrap();
+    // TODO support foreign filters
+    let SearchInIndexParameters { index_uid, q, filter } = query;
+    let filter = filter
+        .as_ref()
+        .and_then(|filter| {
+            parse_local_index_filter(
+                filter,
+                Some(index_uid.as_str()),
+                features,
+                Code::InvalidSearchFilter,
+            )
+            .transpose()
+        })
+        .transpose()?;
 
     let index = index_scheduler.user_index(&index_uid)?;
     let progress = Progress::default();
@@ -406,7 +407,7 @@ async fn process_search_request(
         let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
             &index_cloned,
             &rtxn,
-            &index_uid,
+            &index_uid.as_str(),
             start_time,
             &query,
             filter,

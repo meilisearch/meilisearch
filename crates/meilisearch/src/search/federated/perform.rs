@@ -55,6 +55,7 @@ use crate::search::{
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
     index_scheduler: Data<IndexScheduler>,
+    network: Network,
     queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
     mut hydration_cache: Option<HydrationContext>,
     federation: Federation,
@@ -88,8 +89,6 @@ pub async fn perform_federated_search(
     };
 
     let retrieve_vectors = queries.iter().any(|q| q.query.retrieve_vectors);
-
-    let network = index_scheduler.network();
 
     // Preconstruct metadata keeping the original queries order for later metadata building
     let precomputed_query_metadata: Vec<_> = {

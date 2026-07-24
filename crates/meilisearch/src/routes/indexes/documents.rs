@@ -48,7 +48,7 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
-use crate::documents_retrieval::preprocess_filters;
+use crate::documents_retrieval::{preprocess_filters, RemoteRetrieveDocuments};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -538,44 +538,44 @@ pub struct BrowseQuery {
     /// for pagination through large document sets. For example, to get
     /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
     #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
-    offset: usize,
+    pub offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time and memory usage. Defaults to
     /// `20`.
     #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
-    limit: usize,
+    pub limit: usize,
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
     /// fields you need. Example: `["title", "description", "price"]`.
     #[request(default, error = DeserrJsonError<InvalidDocumentFields>, example = json!(["title, description"]))]
-    fields: Option<Vec<String>>,
+    pub fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
     /// size. Defaults to `false`.
     #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
-    retrieve_vectors: bool,
+    pub retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
     /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
     /// documents matching other criteria are returned. This is useful for
     /// fetching specific known documents.
     #[request(default, error = DeserrJsonError<InvalidDocumentIds>, schema_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
-    ids: Option<Vec<serde_json::Value>>,
+    pub ids: Option<Vec<serde_json::Value>>,
     /// Filter expression to select which documents to return. Attributes must be added to the
     /// `filterableAttributes` index setting before they can be used in filters. Accepts a string
     /// or an array of arrays of strings for AND/OR combinations.
     /// Example string: `"genres = action AND rating > 4"`.
     /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
-    filter: Option<Value>,
+    pub filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
     /// (ascending) or `desc` (descending). Example: `["price:asc",
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
     #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
-    sort: Option<Vec<String>>,
+    pub sort: Option<Vec<String>>,
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -595,10 +595,10 @@ pub struct BrowseQuery {
 }
 
 #[derive(Clone, Debug)]
-struct BrowseQueryWithIndex {
-    index_uid: IndexUid,
-    remote: Option<String>,
-    query: BrowseQuery,
+pub struct BrowseQueryWithIndex {
+    pub index_uid: IndexUid,
+    pub remote: Option<String>,
+    pub query: BrowseQuery,
 }
 
 impl NetworkableQuery for BrowseQueryWithIndex {
@@ -961,6 +961,7 @@ async fn documents_by_query(
     let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
     let (_, mut queries) = preprocess_filters(
         index_scheduler.clone(),
+        network.clone(),
         queries,
         features,
         false,
@@ -997,89 +998,20 @@ async fn retrieve_documents_federated(
             |(_, query)| query.query.remote.as_ref() == network.local.as_ref(),
         );
 
-    let mut results: Vec<_> = Vec::with_capacity(remote_queries.len() + local_queries.len());
-    let mut errors: BTreeMap<String, ResponseError> = BTreeMap::new();
-
-    const MAX_IN_FLIGHT_REQUESTS: usize = 40;
-    let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
-
-    for (query_id, query) in remote_queries {
-        let BrowseQueryWithIndex { query, remote: Some(remote_name), index_uid } =
-            query.into_inner_preprocessed()
-        else {
-            unreachable!("remote query must have a remote name");
-        };
-
-        let Some(remote) = network.remotes.get(&remote_name) else {
-            errors.insert(
-                remote_name.clone(),
-                ProxySearchError::UnknownRemote { remote: remote_name.clone() }.as_response_error(),
-            );
-            continue;
-        };
-
-        let path_and_query =
-            match meilisearch_types::network::route::documents_fetch_path(&index_uid) {
-                Ok(path_and_query) => path_and_query,
-                Err(err) => {
-                    errors.insert(
-                        remote_name.clone(),
-                        ProxySearchError::InvalidRemoteUrl { cause: err.to_string() }
-                            .as_response_error(),
-                    );
-                    continue;
-                }
-            };
-
-        let request = match json_proxy(
-            path_and_query,
-            http_client::reqwest::Method::POST,
-            remote,
-            &query,
-            &params,
-            false, // no metadata on documents-fetch
-        ) {
-            Ok(request) => request,
-            Err(err) => {
-                errors.insert(remote_name.clone(), err.as_response_error());
-                continue;
-            }
-        };
-
-        if in_flight_requests.len() == MAX_IN_FLIGHT_REQUESTS {
-            // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
-            let task: tokio::task::JoinHandle<(
-                Result<DocumentsResult, ProxySearchError>,
-                String,
-                usize,
-            )> = in_flight_requests.pop_front().unwrap();
-            match task.await.unwrap() {
-                (Ok(result), _, query_id) => results.push((result, query_id)),
-                (Err(err), remote_name, _) => {
-                    errors.insert(remote_name, err.as_response_error());
-                    continue;
-                }
-            }
-        }
-        in_flight_requests
-            .push_back(tokio::spawn(async move { (request.await, remote_name.clone(), query_id) }));
-    }
+    //remote
+    let remote_retrieve_documents =
+        RemoteRetrieveDocuments::start(network, params, remote_queries).await?;
 
     // Perform local search
+    let mut results = Vec::with_capacity(local_queries.len());
     for (query_id, query) in local_queries {
         let result = retrieve_documents_local(index_scheduler.clone(), query, true).await?;
         results.push((result, query_id));
     }
 
-    // Retrieve remote results
-    for task in in_flight_requests {
-        match task.await.unwrap() {
-            (Ok(result), _, query_id) => results.push((result, query_id)),
-            (Err(err), remote_name, _) => {
-                errors.insert(remote_name, err.as_response_error());
-            }
-        }
-    }
+    // wait
+    let (remote_results, errors) = remote_retrieve_documents.wait().await;
+    results.extend(remote_results);
 
     // merge metadata
     let (total, mut remote_errors) = merge_metadata(&mut results);

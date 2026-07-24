@@ -24,7 +24,7 @@ pub fn hydrate_documents(
 ) -> Result<(), ResponseError> {
     // Group the foreign keys by index uid
     let mut foreign_keys_by_index_uid: HashMap<_, Vec<_>> = HashMap::new();
-    for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
+    for ForeignKey { foreign_index_uid, field_name, foreign_primary_key } in foreign_keys {
         foreign_keys_by_index_uid.entry(foreign_index_uid).or_default().push(field_name.as_str());
     }
 
@@ -148,10 +148,14 @@ pub struct HydrationContext {
 
 impl HydrationContext {
     pub fn new(
-        index_by_query_index: Vec<SourceIndexUid>,
+        index_by_query_index: impl IntoIterator<Item = SourceIndexUid>,
         hydration_settings: ForeignKeysPerIndex,
     ) -> Self {
-        Self { index_by_query_index, hydration_settings, hydration_docids: HashMap::new() }
+        Self {
+            index_by_query_index: index_by_query_index.into_iter().collect(),
+            hydration_settings,
+            hydration_docids: HashMap::new(),
+        }
     }
 
     pub fn register_foreign_docids(&mut self, hit: &SearchHit, query_index: usize) {
@@ -161,7 +165,7 @@ impl HydrationContext {
             return;
         };
 
-        for (foreign_index_uid, field_name) in foreign_keys {
+        for (foreign_index_uid, field_name, foreign_primary_key) in foreign_keys {
             visit_leaf_values(&hit.document, field_name.as_ref(), &mut |value| match value {
                 Value::Array(values) => {
                     for value in values {
@@ -242,7 +246,7 @@ impl FederatedHydrationFormatter {
             };
 
             // Hydrate the document
-            for (foreign_index_uid, field_name) in foreign_keys {
+            for (foreign_index_uid, field_name, foreign_primary_key) in foreign_keys {
                 map_leaf_values(
                     &mut document.document,
                     [field_name.as_ref()],
@@ -253,7 +257,7 @@ impl FederatedHydrationFormatter {
             }
 
             // Hydrate the formatted document
-            for (foreign_index_uid, field_name) in foreign_keys {
+            for (foreign_index_uid, field_name, foreign_primary_key) in foreign_keys {
                 map_leaf_values(
                     &mut document.formatted,
                     [field_name.as_ref()],

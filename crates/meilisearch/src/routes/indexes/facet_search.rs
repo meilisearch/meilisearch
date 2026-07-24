@@ -329,6 +329,7 @@ pub async fn search(
     let queries = vec![(index_uid.clone(), query)];
     let (_, mut queries) = preprocess_filters(
         index_scheduler.clone(),
+        network.clone(),
         queries,
         features,
         false,

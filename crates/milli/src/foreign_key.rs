@@ -13,6 +13,9 @@ pub struct ForeignKey {
     // Field name of the current index documents containing document ids of the foreign index
     #[request(required)]
     pub field_name: String,
+    // Primary key of the foreign index
+    #[request(required)]
+    pub foreign_primary_key: String,
 }
 
 impl Index {
