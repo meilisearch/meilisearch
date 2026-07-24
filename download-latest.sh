@@ -116,6 +116,27 @@ fetch_release_failure_usage() {
     echo 'In the meantime, you can manually download the appropriate binary from the GitHub release assets here: https://github.com/meilisearch/meilisearch/releases/latest'
 }
 
+musl_failure_usage() {
+    printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch does not provide a musl-compatible binary (e.g. Alpine Linux).'
+    echo ''
+    echo 'You can either run Meilisearch via Docker, or compile the binary from source:'
+    echo 'https://www.meilisearch.com/docs/learn/getting_started/installation#compile-meilisearch-from-source'
+}
+
+# Detects whether the system uses the musl C library (e.g. Alpine Linux).
+# Meilisearch does not ship a musl-compatible binary, so we fail early with
+# a clear message instead of letting the download succeed and the binary
+# fail to start later.
+is_musl() {
+    if [ "$os" != 'linux' ]; then
+        return 1
+    fi
+    # On musl systems, getconf returns an empty GNU_LIBC_VERSION; on glibc
+    # systems it returns something like "2.31". A missing or empty value is
+    # the canonical musl signal.
+    [ -z "$(getconf GNU_LIBC_VERSION 2>/dev/null)" ]
+}
+
 fill_release_variables() {
     # Fill $latest variable.
     if ! get_latest; then
