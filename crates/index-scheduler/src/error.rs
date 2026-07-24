@@ -133,6 +133,11 @@ pub enum Error {
     TaskCancelationWithEmptyQuery,
     #[error("Aborted task")]
     AbortedTask,
+    #[error(
+        "Cannot export several indexes to the same target name `{target}`. The following source indexes all resolve to it: {}.",
+        .sources.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")
+    )]
+    ExportSameTargetIndexName { target: String, sources: Vec<String> },
 
     #[error("S3 error: status: {status}, body: {body}")]
     S3Error { status: StatusCode, body: String },
@@ -256,6 +261,7 @@ impl Error {
             | Error::TaskCancelationWithEmptyQuery
             | Error::FromRemoteWhenExporting { .. }
             | Error::AbortedTask
+            | Error::ExportSameTargetIndexName { .. }
             | Error::S3Error { .. }
             | Error::S3HttpError(_)
             | Error::S3XmlError(_)
@@ -328,6 +334,7 @@ impl ErrorCode for Error {
             Error::InvalidTaskTypes { .. } => Code::InvalidTaskTypes,
             Error::InvalidTaskCanceledBy { .. } => Code::InvalidTaskCanceledBy,
             Error::InvalidIndexUid { .. } | Error::ExpectedDsrUid { .. } => Code::InvalidIndexUid,
+            Error::ExportSameTargetIndexName { .. } => Code::ExportSameTargetIndexName,
             Error::TaskNotFound(_) => Code::TaskNotFound,
             Error::TaskFileNotFound(_) => Code::TaskFileNotFound,
             Error::BatchNotFound(_) => Code::BatchNotFound,
