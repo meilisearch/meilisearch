@@ -1704,7 +1704,7 @@ impl SearchByIndex {
                 .into_iter()
                 .map(|(_, hit)| hit)
                 .collect();
-        let estimated_total_hits = candidates.len() as usize;
+        let estimated_total_hits = (candidates.len() as usize).min(max_total_hits);
         let facets = facet_patterns_by_index
             .map(|facets_by_index| {
                 compute_facet_distribution_stats(
