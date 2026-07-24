@@ -768,7 +768,13 @@ async fn run_conversation<C: async_openai::config::Config>(
                 }
                 let choice = match resp.choices.first() {
                     Some(choice) => choice,
-                    None => break,
+                    // Some providers (notably Azure OpenAI) bracket the stream with
+                    // metadata-only chunks that carry an empty `choices` array: a
+                    // leading chunk with the prompt content-filter results, and,
+                    // when `include_usage` is set, a trailing usage-only chunk.
+                    // Neither marks the end of the response, so skip them instead of
+                    // aborting the whole stream on the first one (issue #6341).
+                    None => continue,
                 };
                 finish_reason = choice.finish_reason;
 
