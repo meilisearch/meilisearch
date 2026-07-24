@@ -1,5 +1,5 @@
 # Compile
-FROM    rust:1.89-alpine3.22 AS compiler
+FROM    rust:1.96.1-alpine3.22 AS compiler
 
 RUN     apk add -q --no-cache build-base openssl-dev
 
