@@ -876,9 +876,17 @@ impl IndexScheduler {
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
 
-        self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
-            Ok(network_topology_change.receive_remote_task(&remote_name, None, None, 0, 0, 0)?)
-        })?;
+        let (task_uid, _) =
+            self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+                Ok(network_topology_change.receive_remote_task(
+                    &remote_name,
+                    None,
+                    None,
+                    0,
+                    0,
+                    0,
+                )?)
+            })?;
 
         wtxn.commit()?;
 
@@ -898,7 +906,7 @@ impl IndexScheduler {
         origin: Origin,
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
-        let has_changed =
+        let (task_uid, has_changed) =
             self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
                 Ok(network_topology_change.receive_import_finished(&remote_name, successful)?)
             })?;
@@ -925,12 +933,13 @@ impl IndexScheduler {
         }
     }
 
+    /// Updates the first processing network task and returns it's ID.
     fn update_network_task<F, O>(
         &self,
         wtxn: &mut heed::RwTxn<'_>,
         network_change: &Origin,
         update_fn: F,
-    ) -> Result<O, Error>
+    ) -> Result<(TaskId, O), Error>
     where
         F: FnOnce(&mut NetworkTopologyChange) -> Result<O, Error>,
     {
@@ -982,7 +991,8 @@ impl IndexScheduler {
         let o = update_fn(network_topology_change)?;
 
         self.queue.tasks.update_task(wtxn, &mut network_task)?;
-        Ok(o)
+
+        Ok((network_task.uid, o))
     }
 
     /// Register a new task coming from a dump in the scheduler.
