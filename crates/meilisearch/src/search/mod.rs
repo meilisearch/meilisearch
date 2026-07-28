@@ -29,7 +29,7 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
     filtered_matching_patterns, filtered_universe, make_document, AttributePatterns,
-    AttributeState, Deadline, Error, FacetValueHit, Filter, IndexFilter, InternalError,
+    AttributeState, Deadline, DocumentId, Error, FacetValueHit, Filter, IndexFilter, InternalError,
     MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
 };
 use meilisearch_types::network::Network;
@@ -2367,7 +2367,7 @@ impl<'a> HitMaker<'a> {
 
     pub fn make_hit(
         &self,
-        id: u32,
+        id: DocumentId,
         score: &[ScoreDetails],
         progress: &Progress,
     ) -> milli::Result<SearchHit> {
