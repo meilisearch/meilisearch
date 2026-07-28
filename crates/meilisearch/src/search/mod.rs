@@ -2220,6 +2220,7 @@ struct HitMaker<'a> {
     show_matches_position: bool,
     locales: Option<Vec<Language>>,
     attribute_state: AttributeState,
+    localized_attributes: Vec<LocalizedAttributesRule>,
 }
 
 impl<'a> HitMaker<'a> {
@@ -2345,6 +2346,8 @@ impl<'a> HitMaker<'a> {
 
         let attribute_state = AttributeState::from_criteria(index.criteria(rtxn)?);
 
+        let localized_attributes = index.localized_attributes_rules(rtxn)?.unwrap_or_default();
+
         Ok(Self {
             index,
             rtxn,
@@ -2362,6 +2365,7 @@ impl<'a> HitMaker<'a> {
             sort: format.sort,
             locales: format.locales,
             attribute_state,
+            localized_attributes,
         })
     }
 
@@ -2426,9 +2430,6 @@ impl<'a> HitMaker<'a> {
             document.insert("_vectors".into(), vectors.into());
         }
 
-        let localized_attributes =
-            self.index.localized_attributes_rules(self.rtxn)?.unwrap_or_default();
-
         // If you need to format fields, pay the cost create the document from the displayed fields
         // TODO make the format field use the obkv and only format necessary fields
         let (matches_position, formatted) = if !self.show_matches_position
@@ -2453,7 +2454,7 @@ impl<'a> HitMaker<'a> {
                 self.show_matches_position,
                 &self.displayed_ids,
                 self.locales.as_deref(),
-                &localized_attributes,
+                &self.localized_attributes,
             )?
         };
 
