@@ -1952,7 +1952,8 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0
+            "position": 0,
+            "precedence": null
           }
         }
       },
@@ -2019,7 +2020,8 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0
+            "position": 0,
+            "precedence": null
           }
         }
       },
@@ -2086,7 +2088,8 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0
+            "position": 0,
+            "precedence": null
           }
         }
       },
@@ -2223,7 +2226,8 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0
+            "position": 0,
+            "precedence": null
           }
         }
       },
@@ -2331,7 +2335,8 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 1
+            "position": 1,
+            "precedence": null
           }
         }
       }
@@ -2756,7 +2761,8 @@ async fn search_applies_precedenceless_rules() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0
+            "position": 0,
+            "precedence": 10
           }
         }
       },
@@ -2766,7 +2772,8 @@ async fn search_applies_precedenceless_rules() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 1
+            "position": 1,
+            "precedence": null
           }
         }
       }
