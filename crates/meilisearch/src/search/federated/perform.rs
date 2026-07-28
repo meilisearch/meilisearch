@@ -1607,6 +1607,8 @@ impl SearchByIndex {
         let mut documents_seen = RoaringBitmap::new();
         let mut local_pinned_hits = Vec::new();
         for result_by_query in &mut results_by_query {
+            let _step = progress.update_progress_scoped(SearchStep::Format);
+
             let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
@@ -1614,7 +1616,7 @@ impl SearchByIndex {
                 if let Some(ScoreDetails::Pin { position }) = score.first() {
                     let mut hit = result_by_query
                         .hit_maker
-                        .make_hit(doc_id, &score, progress)
+                        .make_hit(doc_id, &score)
                         .with_index(result_by_query.query_index)?;
                     let _federation = build_federation_hit(
                         params,
@@ -1663,7 +1665,10 @@ impl SearchByIndex {
                     }
 
                     let hit: Result<_, ResponseError> = (|| {
-                        let mut hit = hit_maker.make_hit(docid, &score, progress)?;
+                        let mut hit = {
+                            let _step = progress.update_progress_scoped(SearchStep::Format);
+                            hit_maker.make_hit(docid, &score)?
+                        };
 
                         if let Some(distinct) = self.federation.distinct.as_deref() {
                             let mut facet_values = Vec::new();

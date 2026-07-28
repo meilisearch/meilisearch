@@ -1792,8 +1792,10 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
-    let fields_ids_map = index.fields_ids_map(&rtxn)?;
-
+    let fields_ids_map = {
+        let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
+        index.fields_ids_map(&rtxn)?
+    };
     let filter = match &query.filter {
         Some(filter) => {
             let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
@@ -2208,9 +2210,7 @@ struct HitMaker<'a> {
     rtxn: &'a RoTxn<'a>,
     fields_ids_map: &'a FieldsIdsMap,
     displayed_ids: BTreeSet<FieldId>,
-    vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
-    to_retrieve_ids: BTreeSet<FieldId>,
     extra_ids: Vec<String>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
@@ -2221,6 +2221,7 @@ struct HitMaker<'a> {
     locales: Option<Vec<Language>>,
     attribute_state: AttributeState,
     localized_attributes: Vec<LocalizedAttributesRule>,
+    attributes_to_retrieve: Vec<&'a str>,
 }
 
 impl<'a> HitMaker<'a> {
@@ -2348,15 +2349,32 @@ impl<'a> HitMaker<'a> {
 
         let localized_attributes = index.localized_attributes_rules(rtxn)?.unwrap_or_default();
 
+        let add_vectors_fid =
+            vectors_fid.filter(|_fid| retrieve_vectors == RetrieveVectors::Retrieve);
+
+        // Select the attributes to retrieve
+        // Note that to_retrieve_ids is already an intersection with the displayed attributes
+        let attributes_to_retrieve = to_retrieve_ids
+            .iter()
+            // skip the vectors_fid if RetrieveVectors::Hide
+            .filter(|fid| match vectors_fid {
+                Some(vectors_fid) => {
+                    !(retrieve_vectors == RetrieveVectors::Hide && **fid == vectors_fid)
+                }
+                None => true,
+            })
+            // need to retrieve the existing `_vectors` field if the `RetrieveVectors::Retrieve`
+            .chain(add_vectors_fid.iter())
+            // Convert the field into their names
+            .map(|&fid| fields_ids_map.name(fid).expect("Missing field name"))
+            .collect();
         Ok(Self {
             index,
             rtxn,
             fields_ids_map,
             displayed_ids,
             extra_ids,
-            vectors_fid,
             retrieve_vectors,
-            to_retrieve_ids,
             formatter_builder,
             formatted_options,
             show_ranking_score: format.show_ranking_score,
@@ -2366,41 +2384,15 @@ impl<'a> HitMaker<'a> {
             locales: format.locales,
             attribute_state,
             localized_attributes,
+            attributes_to_retrieve,
         })
     }
 
-    pub fn make_hit(
-        &self,
-        id: DocumentId,
-        score: &[ScoreDetails],
-        progress: &Progress,
-    ) -> milli::Result<SearchHit> {
-        let _step = progress.update_progress_scoped(SearchStep::Format);
+    pub fn make_hit(&self, id: DocumentId, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
         let obkv = self.index.document(self.rtxn, id)?;
 
-        let add_vectors_fid =
-            self.vectors_fid.filter(|_fid| self.retrieve_vectors == RetrieveVectors::Retrieve);
-
-        // Select the attributes to retrieve
-        // Note that to_retrieve_ids is already an intersection with the displayed attributes
-        let attributes_to_retrieve: Vec<_> = self
-            .to_retrieve_ids
-            .iter()
-            // skip the vectors_fid if RetrieveVectors::Hide
-            .filter(|fid| match self.vectors_fid {
-                Some(vectors_fid) => {
-                    !(self.retrieve_vectors == RetrieveVectors::Hide && **fid == vectors_fid)
-                }
-                None => true,
-            })
-            // need to retrieve the existing `_vectors` field if the `RetrieveVectors::Retrieve`
-            .chain(add_vectors_fid.iter())
-            // Convert the field into their names
-            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"))
-            .collect();
-
         // Generate a document with all the attributes to retrieve
-        let mut document = make_document(obkv, self.fields_ids_map, &attributes_to_retrieve)?;
+        let mut document = make_document(obkv, self.fields_ids_map, &self.attributes_to_retrieve)?;
 
         let extra_document = self
             .extra_ids
@@ -2490,6 +2482,7 @@ fn make_hits<'a>(
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
     progress: &Progress,
 ) -> milli::Result<Vec<SearchHit>> {
+    let _step = progress.update_progress_scoped(SearchStep::Format);
     let mut documents = Vec::new();
 
     let dictionary = index.dictionary(rtxn)?;
@@ -2506,7 +2499,7 @@ fn make_hits<'a>(
     let hit_maker = HitMaker::new(index, rtxn, fields_ids_map, format, formatter_builder)?;
 
     for (id, score) in documents_ids_scores {
-        documents.push(hit_maker.make_hit(id, score, progress)?);
+        documents.push(hit_maker.make_hit(id, score)?);
     }
     Ok(documents)
 }
