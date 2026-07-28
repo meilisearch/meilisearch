@@ -789,7 +789,9 @@ async fn run_conversation<C: async_openai::config::Config>(
                                 .entry(*index)
                                 .and_modify(|call| {
                                     if call.is_internal() {
-                                        call.append(arguments.as_ref().unwrap())
+                                        if let Some(arguments) = arguments.as_ref() {
+                                            call.append(arguments);
+                                        }
                                     }
                                 })
                                 .or_insert_with(|| {
@@ -798,7 +800,7 @@ async fn run_conversation<C: async_openai::config::Config>(
                                         Call::Internal {
                                             id: id.as_ref().unwrap().clone(),
                                             function_name: name.as_ref().unwrap().clone(),
-                                            arguments: arguments.as_ref().unwrap().clone(),
+                                            arguments: arguments.clone().unwrap_or_default(),
                                         }
                                     } else {
                                         Call::External
