@@ -1,1 +1,1 @@
-<PATCH_ADD_EXPORT_AND_MINIMAL_USAGE>
+pub mod memory_guard;
