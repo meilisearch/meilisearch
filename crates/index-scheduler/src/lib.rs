@@ -87,6 +87,7 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tokio::sync::broadcast::error::RecvError;
 pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
@@ -281,8 +282,7 @@ impl IndexScheduler {
         from_db_version: (u32, u32, u32),
         runtime: Option<tokio::runtime::Handle>,
     ) -> Result<Self> {
-        let this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
-
+        let mut this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
         this.run();
         Ok(this)
     }
@@ -483,26 +483,35 @@ impl IndexScheduler {
     ///
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
-    fn run(&self) {
+    fn run(&mut self) {
         // If the number of batched tasks is 0, we don't need to run the scheduler at all.
         // It will never be able to process any tasks.
         if self.scheduler.max_number_of_batched_tasks == 0 {
             return;
         }
-        let run = self.private_clone();
+        let mut run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))
             .spawn(move || {
                 #[cfg(test)]
                 run.breakpoint(test_utils::Breakpoint::Init);
 
-                run.scheduler.wake_up.wait_timeout(std::time::Duration::from_secs(60));
-
                 loop {
-                    let ret = catch_unwind(AssertUnwindSafe(|| run.tick()));
-                    match ret {
+                    match catch_unwind(AssertUnwindSafe(|| run.tick())) {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
-                        Ok(Ok(TickOutcome::WaitForSignal)) => run.scheduler.wake_up.wait(),
+                        Ok(Ok(TickOutcome::WaitForSignal)) => {
+                            match run.scheduler.wake_up.blocking_recv() {
+                                Ok(_) => (),
+                                Err(RecvError::Closed) => break,
+                                Err(RecvError::Lagged(_)) => {
+                                    // The receiver has been forcibly disconnected as we were lagging
+                                    // too far behind. We reconnect the receiver to handle new messages
+                                    // and break to analyse the changes (tick).
+                                    run.scheduler.wake_up = run.scheduler.wake_up.resubscribe();
+                                    continue;
+                                }
+                            }
+                        },
                         Ok(Ok(TickOutcome::StopProcessingForever)) => break,
                         Ok(Err(e)) => {
                             tracing::error!("{e}");
@@ -513,7 +522,6 @@ impl IndexScheduler {
                         }
                         Err(_panic) => {
                             tracing::error!("Internal error: Unexpected panic in the `IndexScheduler::run` method.");
-
                         }
                     }
                 }
