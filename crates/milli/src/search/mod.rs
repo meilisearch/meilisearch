@@ -648,7 +648,8 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
 }
 
 pub fn merge_positioned_hits_into_page<P, T, FPos, FMap>(
-    pins: Vec<P>,
+    pin_count: usize,
+    pins: impl IntoIterator<Item = P>,
     skip: usize,
     take: usize,
     organic_hits: Vec<T>,
@@ -659,12 +660,12 @@ where
     FPos: Fn(&P) -> Position,
     FMap: FnMut(P) -> T,
 {
-    if pins.is_empty() {
+    if pin_count == 0 {
         return organic_hits;
     }
 
     let page_end = skip.saturating_add(take);
-    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
+    let capacity = take.min(organic_hits.len().saturating_add(pin_count));
     let mut merged_hits = Vec::with_capacity(capacity);
     let mut organic_hits = organic_hits.into_iter();
     let mut pins = pins.into_iter().peekable();
