@@ -11,7 +11,7 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 use time::{Duration, OffsetDateTime};
-use utoipa::{schema, ToSchema};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::batches::BatchId;

@@ -3,10 +3,11 @@ pub mod compact;
 use std::io::ErrorKind;
 
 use actix_web::web::Data;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_web_lab::sse::{self, Event, Sse};
 use deserr::actix_web::AwebQueryParameter;
 use deserr::Deserr;
-use index_scheduler::{IndexScheduler, Query, TaskId};
+use index_scheduler::{IndexScheduler, ModifiedTasks, Query, TaskId};
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::DeserrQueryParamError;
@@ -21,6 +22,8 @@ use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::io::AsyncReadExt;
+use tokio::runtime::Handle;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use utoipa::{IntoParams, ToSchema};
 

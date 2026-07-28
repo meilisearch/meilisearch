@@ -1,13 +1,19 @@
+use std::time::Duration;
+
 use actix_web::web::{self, Data};
-use actix_web::HttpResponse;
+use actix_web::{HttpResponse, Responder};
+use actix_web_lab::sse::{self, Event, Sse};
 use deserr::actix_web::AwebQueryParameter;
-use index_scheduler::{IndexScheduler, Query};
+use index_scheduler::{IndexScheduler, ModifiedTasks, Query};
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::tasks::Status;
 use serde::Serialize;
+use tokio::runtime::Handle;
+use tokio::sync::broadcast::error::RecvError;
 use utoipa::ToSchema;
 
 use super::tasks::TasksFilterQuery;
