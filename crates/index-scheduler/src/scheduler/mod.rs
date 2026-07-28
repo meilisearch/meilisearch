@@ -208,6 +208,8 @@ impl IndexScheduler {
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::BatchCreated);
 
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
+
         // 2. Process the tasks
         let res = {
             let cloned_index_scheduler = self.private_clone();
@@ -444,6 +446,8 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
+
         if batch_made_progress {
             // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
             // and then become « not found » for some time until the commit everything is written and the final commit is made.
@@ -484,4 +488,10 @@ impl IndexScheduler {
             Ok(TickOutcome::TickAgain(processed_tasks))
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum ModifiedTasks {
+    DumpImported,
+    Some { ids: RoaringBitmap },
 }

@@ -94,6 +94,7 @@ use versioning::Versioning;
 use crate::dynamic_search_rules::DynamicSearchRules;
 use crate::index_mapper::IndexMapper;
 use crate::processing::ProcessingTasks;
+pub use crate::scheduler::ModifiedTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -852,7 +853,11 @@ impl IndexScheduler {
         }
 
         // notify the scheduler loop to execute a new tick
-        self.scheduler.wake_up.signal();
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task.uid]) })
+            .unwrap();
+
         Ok(task)
     }
 
@@ -870,7 +875,10 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         // wake up the scheduler as the task state has changed
-        self.scheduler.wake_up.signal();
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+            .unwrap();
 
         Ok(())
     }
@@ -890,7 +898,10 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         if has_changed {
-            self.scheduler.wake_up.signal();
+            self.scheduler
+                .waker
+                .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+                .unwrap();
         }
         Ok(())
     }
