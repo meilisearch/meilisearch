@@ -224,6 +224,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_tasks_streaming_route(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.tasks_streaming_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "tasks_streaming_route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/889",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
