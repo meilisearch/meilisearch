@@ -98,13 +98,13 @@ async fn get_all_documents_bad_filter() {
     "###);
 
     let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
-    snapshot!(code, @"404 Not Found");
+    snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Index `DOES_NOT_EXISTS` not found.",
-      "code": "index_not_found",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1:6 doggo",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 
