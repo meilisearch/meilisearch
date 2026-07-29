@@ -2,17 +2,13 @@ use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Not as _;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
 pub use federated::ProxyQuery;
-use index_scheduler::filter::{
-    filter_into_index_filter, filters_into_index_filters, parse_filter,
-    retrieve_foreign_keys_settings, SourceIndexUid,
-};
+use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -48,6 +44,7 @@ mod mod_test;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::documents_retrieval::hydrate_documents;
 use crate::error::MeilisearchHttpError;
 
 pub mod federated;
@@ -56,8 +53,6 @@ pub use federated::{
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
-mod hydration;
-use hydration::hydrate_documents;
 mod ranking_rules;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
@@ -1802,7 +1797,7 @@ pub fn perform_search(
 ) -> Result<(SearchResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
-        query,
+        mut query,
         search_kind,
         retrieve_vectors,
         features,
@@ -1818,17 +1813,14 @@ pub fn perform_search(
         let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
         index.fields_ids_map(&rtxn)?
     };
-    let filter = match &query.filter {
-        Some(filter) => {
-            let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
-            filter
-                .map(|f| {
-                    filter_into_index_filter(f, index, &rtxn, index_scheduler, progress, &index_uid)
-                })
-                .transpose()?
-        }
-        None => None,
-    };
+    let filter = query
+        .filter
+        .take()
+        .and_then(|filter| {
+            parse_local_index_filter(&filter, Some(&index_uid), features, Code::InvalidSearchFilter)
+                .transpose()
+        })
+        .transpose()?;
 
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,
@@ -2629,28 +2621,11 @@ pub fn perform_similar(
     )?;
 
     let docid_filter = search_rules.and_then(|search_rules| search_rules.filter);
-    let docid_filter = docid_filter
-        .as_ref()
-        .map(|docid_filter| {
-            parse_filter(
-                docid_filter,
-                Code::InvalidSimilarFilter,
-                features,
-                Some(index_uid.as_str()),
-            )
-        })
-        .transpose()?
-        .flatten();
 
-    let candidates_filter = filter
-        .as_ref()
-        .and_then(|filter| {
-            parse_filter(filter, Code::InvalidSimilarFilter, features, None).transpose()
-        })
-        .transpose()?;
+    let candidates_filter = filter;
 
     let (docid_filter, candidates_filter) =
-        extract_filters(index_scheduler, index_uid, progress, docid_filter, candidates_filter)?;
+        extract_filters(features, index_uid, docid_filter, candidates_filter)?;
 
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
@@ -2760,29 +2735,34 @@ pub fn perform_similar(
 }
 
 fn extract_filters(
-    index_scheduler: &IndexScheduler,
+    features: RoFeatures,
     index_uid: IndexUid,
-    progress: &Progress,
-    docid_filter: Option<Filter>,
-    candidates_filter: Option<Filter>,
+    docid_filter: Option<Value>,
+    candidates_filter: Option<Value>,
 ) -> Result<(Option<IndexFilter>, Option<IndexFilter>), ResponseError> {
-    let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
-    let foreign_keys_settings =
-        retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;
-    let (docid_filter, candidates_filter) = match filters_into_index_filters(
-        vec![
-            (source_index_uid.clone(), docid_filter),
-            (source_index_uid.clone(), candidates_filter),
-        ],
-        &foreign_keys_settings,
-        index_scheduler,
-        progress,
-    )?
-    .as_mut_slice()
-    {
-        [docid_filter, candidates_filter] => (docid_filter.take(), candidates_filter.take()),
-        _ => unreachable!(),
-    };
+    let docid_filter = docid_filter
+        .and_then(|filter| {
+            parse_local_index_filter(
+                &filter,
+                Some(index_uid.as_str()),
+                features,
+                Code::InvalidSimilarFilter,
+            )
+            .transpose()
+        })
+        .transpose()?;
+    let candidates_filter = candidates_filter
+        .and_then(|filter| {
+            parse_local_index_filter(
+                &filter,
+                Some(index_uid.as_str()),
+                features,
+                Code::InvalidSimilarFilter,
+            )
+            .transpose()
+        })
+        .transpose()?;
+
     Ok((docid_filter, candidates_filter))
 }
 

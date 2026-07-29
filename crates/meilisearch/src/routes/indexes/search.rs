@@ -5,8 +5,8 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
@@ -18,20 +18,23 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
-use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
+use crate::documents_retrieval::{
+    fixup_query_federation, preprocess_filters, DocumentSearch, DocumentSearchResult,
+};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
+use crate::search::federated::types::PreprocessedQuery;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
-    MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult,
-    SemanticRatio, ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, perform_federated_search, perform_search,
+    HybridQuery, MatchingStrategy, NetworkableQuery as _, Partition, Personalize,
+    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery,
+    SearchQueryWithIndex, SearchResult, SemanticRatio, ShowFederationInfo, DEFAULT_CROP_LENGTH,
+    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -651,7 +654,7 @@ pub async fn legacy_search_with_url_query(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let search_result = search(
+    let search_result = legacy_search(
         query,
         index_scheduler.clone(),
         index_uid,
@@ -678,7 +681,7 @@ pub async fn legacy_search_with_url_query(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn search(
+pub(crate) async fn legacy_search(
     mut query: SearchQuery,
     index_scheduler: Data<IndexScheduler>,
     index_uid: IndexUid,
@@ -697,15 +700,41 @@ pub(crate) async fn search(
     let network = index_scheduler.network();
     let remote_availability = index_scheduler.remote_availability();
 
+    let queries = vec![SearchQueryWithIndex::from_index_query_federation(
+        index_uid.clone(),
+        query.clone(),
+        None,
+    )];
+    let (hydration_cache, mut preprocessed_queries) = preprocess_filters(
+        index_scheduler.clone(),
+        network.clone(),
+        queries,
+        features,
+        false,
+        progress,
+        Code::InvalidSearchFilter,
+    )
+    .await
+    .map_err(|(err, _)| err)?;
+    let mut query = preprocessed_queries.pop().unwrap();
+
     if query.must_use_network(&network, &features)? {
-        let mut federation = Federation::default();
-        let queries = Partition::new(network, remote_availability)
-            .into_query_partition(&mut federation, &query, None, &index_uid)?
+        let (q, fixed_query, federation) = {
+            let PreprocessedQuery { query, filter } = query;
+            let q = query.q.clone();
+            let (fixed_query, federation) = fixup_query_federation(&query);
+
+            (q, PreprocessedQuery { query: fixed_query, filter }, federation)
+        };
+        let queries = Partition::new(network.clone(), remote_availability)
+            .into_partition(fixed_query)?
             .collect();
 
         let search_result = perform_federated_search(
             index_scheduler,
+            network,
             queries,
+            hydration_cache,
             federation,
             features,
             false,
@@ -720,7 +749,7 @@ pub(crate) async fn search(
 
         let (search_result, _deadline) = search_result?;
         let search_result =
-            search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
+            search_result.into_search_result(q.unwrap_or_default(), index_uid.as_str());
 
         Ok(search_result)
     } else {
@@ -732,7 +761,7 @@ pub(crate) async fn search(
             }
             _ => ResponseError::from(err),
         })?;
-
+        let (index_uid, query, _) = query.into_inner_preprocessed().into_index_query_federation();
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
@@ -952,7 +981,7 @@ pub async fn legacy_search_with_post(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let search_result = search(
+    let search_result = legacy_search(
         query,
         index_scheduler.clone(),
         index_uid,
