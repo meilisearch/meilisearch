@@ -500,6 +500,8 @@ impl IndexScheduler {
                     match catch_unwind(AssertUnwindSafe(|| run.tick())) {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
                         Ok(Ok(TickOutcome::WaitForSignal)) => {
+                            // no panic: this function is called in a freshly spawned thread and so
+                            // is not within an asynchronous execution context.
                             match run.scheduler.wake_up.blocking_recv() {
                                 Ok(_) => (),
                                 Err(RecvError::Closed) => break,
