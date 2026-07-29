@@ -25,6 +25,9 @@ pub use preprocessing::{
     SourceIndexUid,
 };
 
+pub use hydration::{hydrate_documents, FederatedHydrationFormatter, HydrationContext};
+
+mod hydration;
 mod preprocessing;
 
 pub struct DocumentSearch {
