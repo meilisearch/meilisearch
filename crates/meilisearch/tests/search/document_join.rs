@@ -803,7 +803,7 @@ async fn foreign_filter_rejects_field_not_in_foreign_keys() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Field `title` is not a foreign key",
+      "message": "Index `[uuid]`: Field `title` is not a foreign key\n10:15 _foreign(title, id = a1)",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -814,7 +814,7 @@ async fn foreign_filter_rejects_field_not_in_foreign_keys() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Field `title` is not a foreign key",
+      "message": "Index `[uuid]`: Field `title` is not a foreign key\n10:15 _foreign(title, id = a1)",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -845,7 +845,7 @@ async fn foreign_filter_rejects_when_index_has_no_foreign_keys_configured() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Field `author` is not a foreign key",
+      "message": "Index `[uuid]`: Field `author` is not a foreign key\n10:16 _foreign(author, id = a1)",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -856,7 +856,7 @@ async fn foreign_filter_rejects_when_index_has_no_foreign_keys_configured() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Field `author` is not a foreign key",
+      "message": "Index `[uuid]`: Field `author` is not a foreign key\n10:16 _foreign(author, id = a1)",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -887,7 +887,7 @@ async fn foreign_filter_rejects_nested_foreign() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Nested foreign filters are not supported",
+      "message": "Nested foreign filters are not supported\n10:16 _foreign(author, id = a1 AND _foreign(related_authors, id = a2))",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -898,7 +898,7 @@ async fn foreign_filter_rejects_nested_foreign() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Index `[uuid]`: Nested foreign filters are not supported",
+      "message": "Nested foreign filters are not supported\n10:16 _foreign(author, id = a1 AND _foreign(related_authors, id = a2))",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -931,9 +931,9 @@ async fn foreign_filter_propagates_inner_filter_error_on_foreign_index() {
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
       "message": "Index `[uuid]`: Attribute `birthday` is not filterable. Available filterable attribute patterns are: `id`.\n18:26 _foreign(author, birthday = \"1958-06-15\")",
-      "code": "invalid_document_filter",
+      "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "###);
 
@@ -942,9 +942,9 @@ async fn foreign_filter_propagates_inner_filter_error_on_foreign_index() {
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
       "message": "Index `[uuid]`: Attribute `birthday` is not filterable. Available filterable attribute patterns are: `id`.\n18:26 _foreign(author, birthday = \"1958-06-15\")",
-      "code": "invalid_document_filter",
+      "code": "invalid_search_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "###);
 }
