@@ -114,6 +114,9 @@ impl PartialOrd for Precedence {
     }
 }
 
+/// Overrides the natural order of Option such that None is considered greater than Some rather than Less
+/// 
+/// When both options are Some, use the regular order.
 impl Ord for Precedence {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         use std::cmp::Ordering::*;
