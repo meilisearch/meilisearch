@@ -219,7 +219,7 @@ async fn get_batches(
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     responses(
-        (status = 200, description = "Stream of batches changes.", body = String, content_type = "application/json", example = json!(
+        (status = 200, description = "Stream of batches changes.", body = BatchView, content_type = "application/x-ndjson", example = json!(
             {
                 "uid": 0,
                 "details": {

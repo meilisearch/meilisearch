@@ -606,7 +606,7 @@ async fn get_tasks(
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     responses(
-        (status = 200, description = "Stream of tasks changes.", body = String, content_type = "application/json", example = json!(
+        (status = 200, description = "Stream of tasks changes.", body = TaskView, content_type = "application/x-ndjson", example = json!(
             {
                 "uid": 144,
                 "indexUid": "mieli",
