@@ -1615,7 +1615,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             settings_update_only,
         );
 
-        if self.index.number_of_documents(self.wtxn)? > 0 {
+        if self.index.number_of_documents(self.wtxn)? > 0
+            && inner_settings_diff.any_reindexing_needed()
+        {
             reindex(
                 self.wtxn,
                 self.index,
