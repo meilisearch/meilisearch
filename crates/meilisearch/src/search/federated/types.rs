@@ -15,14 +15,17 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::order_by_map::OrderByMap;
-use meilisearch_types::milli::{AttributePatterns, OrderBy};
+use meilisearch_types::milli::{
+    serialize_index_filter_to_filter_string, AttributePatterns, IndexFilter, OrderBy,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
-use crate::search::{Personalize, SearchMetadata, SearchResult};
+use crate::search::{NetworkableQuery, Personalize, SearchMetadata, SearchResult};
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -482,4 +485,49 @@ impl FederatedFacets {
 pub enum ShowFederationInfo {
     OnNetworkOnly,
     Always,
+}
+
+/// A trait for queries that can be preprocessed
+pub trait PreprocessableQuery {
+    fn index_uid(&self) -> &IndexUid;
+
+    fn filter_field(&mut self) -> &mut Option<Value>;
+}
+
+impl PreprocessableQuery for SearchQueryWithIndex {
+    fn index_uid(&self) -> &IndexUid {
+        &self.index_uid
+    }
+
+    fn filter_field(&mut self) -> &mut Option<Value> {
+        &mut self.filter
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreprocessedQuery<Q: PreprocessableQuery> {
+    pub query: Q,
+    pub filter: Option<IndexFilter>,
+}
+
+impl<Q: PreprocessableQuery> PreprocessedQuery<Q> {
+    pub fn into_inner_preprocessed(self) -> Q {
+        let Self { mut query, filter } = self;
+
+        *query.filter_field() = filter.map(|f| {
+            serde_json::Value::String(serialize_index_filter_to_filter_string(&f).unwrap())
+        });
+
+        query
+    }
+}
+
+impl<Q: NetworkableQuery + PreprocessableQuery> NetworkableQuery for PreprocessedQuery<Q> {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        self.query.use_network_field()
+    }
+
+    fn has_remote(&self) -> bool {
+        self.query.has_remote()
+    }
 }
