@@ -503,13 +503,10 @@ impl IndexScheduler {
                             match run.scheduler.wake_up.blocking_recv() {
                                 Ok(_) => (),
                                 Err(RecvError::Closed) => break,
-                                Err(RecvError::Lagged(_)) => {
-                                    // The receiver has been forcibly disconnected as we were lagging
-                                    // too far behind. We reconnect the receiver to handle new messages
-                                    // and break to analyse the changes (tick).
-                                    run.scheduler.wake_up = run.scheduler.wake_up.resubscribe();
-                                    continue;
-                                }
+                                // The receiver lost messages as it was lagging behind the senders. We definitely
+                                // received a message in this case, so we will tick again. As the tick will catch
+                                // up with any newly received tasks, it is fair to skip older messages by resubscribing.
+                                Err(RecvError::Lagged(_)) => continue,
                             }
                         },
                         Ok(Ok(TickOutcome::StopProcessingForever)) => break,

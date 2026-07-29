@@ -280,10 +280,7 @@ async fn get_batches_stream(
                     Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
                 }
                 Ok(Err(RecvError::Closed)) => break 'listener,
-                Ok(Err(RecvError::Lagged(_))) => {
-                    wake_up = wake_up.resubscribe();
-                    continue;
-                }
+                Ok(Err(RecvError::Lagged(_))) => continue,
                 Err(_timeout) => {
                     Query { statuses: Some(vec![Status::Processing]), ..query.clone() }
                 }

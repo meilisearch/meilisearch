@@ -653,10 +653,7 @@ async fn get_tasks_stream(
                     Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
                 }
                 Err(RecvError::Closed) => break 'listener,
-                Err(RecvError::Lagged(_)) => {
-                    wake_up = wake_up.resubscribe();
-                    continue;
-                }
+                Err(RecvError::Lagged(_)) => continue,
             };
 
             let tasks = match index_scheduler.get_tasks_from_authorized_indexes(&query, &filters) {
