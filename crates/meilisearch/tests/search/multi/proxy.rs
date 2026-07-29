@@ -9421,3 +9421,292 @@ async fn remote_auto_sharding_auto_documents_fetch() {
     }
     "###);
 }
+
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_auto_sharding_auto_search_documents_join() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true, "foreignKeys": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    snapshot!(json_string!(response["foreignKeys"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true, "foreignKeys": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    snapshot!(json_string!(response["foreignKeys"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true, "foreignKeys": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    snapshot!(json_string!(response["foreignKeys"]), @"true");
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          }
+        },
+        "shards": {
+            "ms0": {
+              "remotes": ["ms0"]
+            },
+            "ms1": {
+              "remotes": ["ms1"]
+            },
+            "ms2": {
+              "remotes": ["ms2"]
+            }
+        }
+      }
+    );
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (response, status_code) = ms0.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms1.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms2.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    // add documents
+    let documents = crate::search::document_join::authors_documents_with_author_profile();
+    let documents = documents.as_array().unwrap();
+    let authors0 = ms0.index("authors");
+    let _authors1 = ms1.index("authors");
+    let _authors2 = ms2.index("authors");
+
+    let (_task, _code) = authors0
+        .update_settings(json!({ "filterableAttributes": ["id", "birthday", "popularity"] }))
+        .await;
+
+    let (_task, _status_code) = authors0.add_documents(json!(documents), None).await;
+
+    let documents = crate::search::document_join::books_documents_with_genres();
+    let documents = documents.as_array().unwrap();
+    let books0 = ms0.index("books");
+    let _books1 = ms1.index("books");
+    let _books2 = ms2.index("books");
+
+    let (_task, _code) = books0
+        .update_settings(json!({
+            "foreignKeys": [
+                { "foreignIndexUid": "authors", "fieldName": "author", "foreignPrimaryKey": "id" },
+                { "foreignIndexUid": "authors", "fieldName": "related_authors", "foreignPrimaryKey": "id" }
+            ],
+            "filterableAttributes": ["id", "genres", "author", "related_authors"]
+        }))
+        .await;
+
+    let (task, _status_code) = books0.add_documents(json!(documents), None).await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    // perform search with network
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "indexUid": "books",
+                "q": "",
+                "filter": "genres = action AND _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
+                "attributesToRetrieve": ["title", "author", "related_authors", "genres"]
+            },
+            {
+                "indexUid": "books",
+                "q": "",
+                "filter": "genres = classic AND (_foreign(author, birthday STARTS WITH \"198\") OR _foreign(related_authors, birthday STARTS WITH \"198\"))",
+                "attributesToRetrieve": ["title", "author", "related_authors", "genres"]
+            }
+        ]
+    });
+
+    let (response, code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" })
+    );
+
+    let (response, code) = ms1.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(
+        json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" })
+    );
+}

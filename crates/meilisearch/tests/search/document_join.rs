@@ -52,7 +52,7 @@ fn books_documents() -> Value {
 
 /// Same authors as [`authors_documents`], with `birthday` and `popularity` for `_foreign` filters.
 /// Only `a2` matches `birthday STARTS WITH "1958-"` with `popularity >= 3.5`.
-fn authors_documents_with_author_profile() -> Value {
+pub fn authors_documents_with_author_profile() -> Value {
     json!([
         { "id": "a1", "name": "Alice", "birthday": "1990-01-01", "popularity": 2.0 },
         { "id": "a2", "name": "Bob", "birthday": "1958-06-15", "popularity": 4.5 },
@@ -72,7 +72,7 @@ fn authors_documents_with_author_profile() -> Value {
 
 /// Same books as [`books_documents`], with a `genres` array for local filters.
 /// Several books include `action` so the `_foreign` clause must still narrow results to `b2`.
-fn books_documents_with_genres() -> Value {
+pub fn books_documents_with_genres() -> Value {
     json!([
         { "id": "b1", "title": "Rust in action", "author": "a1", "related_authors": ["a2", "a3"], "genres": ["tech", "programming"] },
         { "id": "b2", "title": "Captain Marvel story", "author": "a2", "related_authors": ["a3", "a4"], "genres": ["action", "fiction"] },
