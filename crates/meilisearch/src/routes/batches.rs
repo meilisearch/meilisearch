@@ -295,7 +295,7 @@ async fn get_batches_stream(
                     }
                 };
 
-            if batches.iter().any(|b| b.finished_at.is_some()) {
+            if batches.iter().all(|b| b.finished_at.is_some()) {
                 // If we find only finished batches let's wait
                 // for another event to wake us up.
                 refresh_rate = Duration::MAX;
