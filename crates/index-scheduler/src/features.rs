@@ -82,6 +82,19 @@ impl RoFeatures {
         }
     }
 
+    pub fn check_tasks_streaming_route(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.tasks_streaming_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "tasks_streaming_route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/889",
+            }
+            .into())
+        }
+    }
+
     pub fn check_edit_documents_by_function(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.edit_documents_by_function {
             Ok(())
@@ -224,19 +237,6 @@ impl RoFeatures {
             .into())
         }
     }
-
-    pub fn check_tasks_streaming_route(&self, disabled_action: &'static str) -> Result<()> {
-        if self.runtime.tasks_streaming_route {
-            Ok(())
-        } else {
-            Err(FeatureNotEnabledError {
-                disabled_action,
-                feature: "tasks_streaming_route",
-                issue_link: "https://github.com/orgs/meilisearch/discussions/889",
-            }
-            .into())
-        }
-    }
 }
 
 impl FeatureData {
@@ -257,12 +257,15 @@ impl FeatureData {
         let InstanceTogglableFeatures {
             metrics,
             logs_route,
+            tasks_streaming_route,
             contains_filter,
             legacy_search_as_default: legacy_search,
         } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
             logs_route: logs_route || persisted_features.logs_route,
+            tasks_streaming_route: tasks_streaming_route
+                || persisted_features.tasks_streaming_route,
             contains_filter: contains_filter || persisted_features.contains_filter,
             legacy_search: persisted_features.legacy_search.or(Some(legacy_search)),
             ..persisted_features
