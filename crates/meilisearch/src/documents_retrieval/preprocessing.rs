@@ -159,7 +159,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
         .enumerate()
         .map(|(query_index, query)| match query.filter_field().take() {
             Some(filter) => {
-                let filter = parse_filter(&filter, code, features, None).with_index(query_index)?;
+                let filter = parse_filter(&filter, code, features).with_index(query_index)?;
 
                 Ok((SourceIndexUid(query.index_uid().to_string()), filter))
             }

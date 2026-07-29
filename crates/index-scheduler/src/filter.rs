@@ -64,7 +64,6 @@ pub fn parse_filter(
     facets: &Value,
     filter_parsing_error_code: Code,
     features: RoFeatures,
-    index_uid: Option<&str>,
 ) -> Result<Option<Filter>> {
     let filter = match facets {
         Value::String(expr) => Filter::from_str(expr).map_err(|e| {
@@ -75,13 +74,12 @@ pub fn parse_filter(
         v => Err(invalid_filter_syntax_error(&["String", "Array"], v, filter_parsing_error_code)),
     }?;
 
-    check_filter_experimental_features(filter, features, index_uid)
+    check_filter_experimental_features(filter, features)
 }
 
 fn check_filter_experimental_features(
     filter: Option<Filter>,
     features: RoFeatures,
-    index_uid: Option<&str>,
 ) -> Result<Option<Filter>> {
     if let Some(ref filter) = filter {
         // If the contains operator is used while the contains filter feature is not enabled, errors out
@@ -90,7 +88,7 @@ fn check_filter_experimental_features(
         {
             return Err(Error::Milli {
                 error: token.to_external_error(error).into(),
-                index_uid: index_uid.map(String::from),
+                index_uid: None,
             }
             .with_custom_error_code(Code::FeatureNotEnabled));
         }
@@ -102,7 +100,7 @@ fn check_filter_experimental_features(
         {
             return Err(Error::Milli {
                 error: token.to_external_error(error).into(),
-                index_uid: index_uid.map(String::from),
+                index_uid: None,
             }
             .with_custom_error_code(Code::FeatureNotEnabled));
         }
@@ -113,7 +111,7 @@ fn check_filter_experimental_features(
         {
             return Err(Error::Milli {
                 error: token.to_external_error(error).into(),
-                index_uid: index_uid.map(String::from),
+                index_uid: None,
             }
             .with_custom_error_code(Code::FeatureNotEnabled));
         }
@@ -124,7 +122,7 @@ fn check_filter_experimental_features(
         {
             return Err(Error::Milli {
                 error: token.to_external_error(error).into(),
-                index_uid: index_uid.map(String::from),
+                index_uid: None,
             }
             .with_custom_error_code(Code::FeatureNotEnabled));
         }
@@ -182,7 +180,7 @@ pub fn parse_local_index_filter(
     features: RoFeatures,
     code: Code,
 ) -> Result<Option<IndexFilter>> {
-    let Some(Filter { condition }) = parse_filter(filter, code, features, index_uid)? else {
+    let Some(Filter { condition }) = parse_filter(filter, code, features)? else {
         return Ok(None);
     };
     let condition = condition_to_index_condition(condition, &mut |filter| {
