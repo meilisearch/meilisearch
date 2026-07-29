@@ -2183,6 +2183,7 @@ async fn import_dump_v6_containing_experimental_features() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -2316,6 +2317,7 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -2429,6 +2431,7 @@ async fn generate_and_import_dump_containing_vectors() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,

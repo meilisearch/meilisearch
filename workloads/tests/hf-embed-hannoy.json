@@ -30,6 +30,7 @@
         "editDocumentsByFunction": false,
         "getTaskDocumentsRoute": false,
         "logsRoute": true,
+        "tasksStreamingRoute": false,
         "metrics": false,
         "multimodal": false,
         "network": false,
