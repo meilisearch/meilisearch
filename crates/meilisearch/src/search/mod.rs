@@ -25,7 +25,7 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
     filtered_matching_patterns, filtered_universe, make_document, AttributePatterns,
-    AttributeState, Deadline, DocumentId, Error, FacetValueHit, Filter, IndexFilter, InternalError,
+    AttributeState, Deadline, DocumentId, Error, FacetValueHit, IndexFilter, InternalError,
     MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
 };
 use meilisearch_types::network::Network;
@@ -2625,7 +2625,7 @@ pub fn perform_similar(
     let candidates_filter = filter;
 
     let (docid_filter, candidates_filter) =
-        extract_filters(features, index_uid, docid_filter, candidates_filter)?;
+        extract_filters(features, &index_uid, docid_filter, candidates_filter)?;
 
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
@@ -2642,7 +2642,8 @@ pub fn perform_similar(
     };
 
     let docid_universe =
-        filtered_universe(&index, &rtxn, &fields_ids_map, &docid_filter, None, progress)?;
+        filtered_universe(&index, &rtxn, &fields_ids_map, &docid_filter, None, progress)
+            .map_err(|err| MeilisearchHttpError::from_milli(err, Some(index_uid.to_string())))?;
     if docid_universe.contains(internal_id).not() {
         return Err(ResponseError::from_msg(
             MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
@@ -2736,30 +2737,20 @@ pub fn perform_similar(
 
 fn extract_filters(
     features: RoFeatures,
-    index_uid: IndexUid,
+    index_uid: &IndexUid,
     docid_filter: Option<Value>,
     candidates_filter: Option<Value>,
 ) -> Result<(Option<IndexFilter>, Option<IndexFilter>), ResponseError> {
     let docid_filter = docid_filter
         .and_then(|filter| {
-            parse_local_index_filter(
-                &filter,
-                Some(index_uid.as_str()),
-                features,
-                Code::InvalidSimilarFilter,
-            )
-            .transpose()
+            parse_local_index_filter(&filter, Some(index_uid), features, Code::InvalidSimilarFilter)
+                .transpose()
         })
         .transpose()?;
     let candidates_filter = candidates_filter
         .and_then(|filter| {
-            parse_local_index_filter(
-                &filter,
-                Some(index_uid.as_str()),
-                features,
-                Code::InvalidSimilarFilter,
-            )
-            .transpose()
+            parse_local_index_filter(&filter, Some(index_uid), features, Code::InvalidSimilarFilter)
+                .transpose()
         })
         .transpose()?;
 

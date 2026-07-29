@@ -16,6 +16,7 @@ use meilisearch_types::Document;
 
 use crate::documents_retrieval::HydrationContext;
 use crate::documents_retrieval::{RemoteRetrieveDocuments, WithIndex};
+use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex, DocumentsResult};
 use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
 use crate::search::proxy::ProxySearchParams;
@@ -277,7 +278,8 @@ async fn local_process_foreign_filters(
 
             // filter the foreign index
             let docids =
-                filtered_universe(&foreign_index, &foreign_rtxn, &fields_ids_map, index_filter, None, &progress)?;
+                filtered_universe(&foreign_index, &foreign_rtxn, &fields_ids_map, index_filter, None, &progress)
+                .map_err(|err| MeilisearchHttpError::from_milli(err, Some(foreign_index_uid.as_ref().to_string())))?;
 
             filters_internal_docids.push(docids);
         }
