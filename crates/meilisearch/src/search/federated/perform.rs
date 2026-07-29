@@ -21,7 +21,7 @@ use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
     AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, SearchStep, DEFAULT_VALUES_PER_FACET,
+    OrderBy, PatternMatch, Pin, Precedence, SearchStep, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -47,7 +47,8 @@ use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{
-    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
+    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, PINNED_PRECEDENCE, QUERIES_POSITION,
+    WEIGHTED_RANKING_SCORE,
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{
@@ -304,15 +305,20 @@ pub async fn perform_federated_search(
     for result_by_index in &mut results_by_index {
         let prev_hits = std::mem::take(&mut result_by_index.hits);
         for hit in prev_hits {
-            if let Some(ScoreDetails::Pin { position }) = hit.score.first() {
-                pins.push((*position, hit.query_index, hit.hit));
+            if let Some(ScoreDetails::Pin { position, precedence }) = hit.score.first() {
+                pins.push(GlobalPin {
+                    position: *position,
+                    precedence: *precedence,
+                    query_index: hit.query_index,
+                    hit: hit.hit,
+                });
             } else {
                 result_by_index.hits.push(hit);
             }
         }
     }
     extract_remote_pin_hits(&mut remote_results, &mut pins);
-    pins.sort_by_key(|&(pos, _, _)| pos);
+    Pin::sort(&mut pins);
 
     // store remote rejected hits to fixup the facet distributions
     // ideally could fixup in the iterator,
@@ -400,7 +406,13 @@ pub async fn perform_federated_search(
         }
     }
 
-    merged_hits = merge_pinned_hits_into_page(pins, skip, take, merged_hits);
+    merged_hits = merge_pinned_hits_into_page(
+        pins.len(),
+        pins.into_iter().map(|pin| (pin.position, pin.query_index, pin.hit)),
+        skip,
+        take,
+        merged_hits,
+    );
 
     // 3.3.1. hydrate documents based on the hydration points
     progress.update_progress(FederatingResultsStep::HydrateDocuments);
@@ -502,6 +514,53 @@ pub async fn perform_federated_search(
         },
         deadline,
     ))
+}
+
+struct GlobalPin {
+    position: u32,
+    precedence: Option<u64>,
+    query_index: usize,
+    hit: SearchHit,
+}
+
+impl Pin for GlobalPin {
+    type Id = SearchHit;
+
+    fn position(&self) -> u32 {
+        self.position
+    }
+
+    fn precedence(&self) -> Precedence {
+        Precedence(self.precedence)
+    }
+
+    fn id(&self) -> Self::Id {
+        self.hit.clone()
+    }
+}
+
+struct LocalPin {
+    position: u32,
+    precedence: Precedence,
+    query_index: usize,
+    hit: SearchHitByIndex,
+    doc_id: DocumentId,
+}
+
+impl Pin for LocalPin {
+    type Id = DocumentId;
+
+    fn id(&self) -> Self::Id {
+        self.doc_id
+    }
+
+    fn position(&self) -> u32 {
+        self.position
+    }
+
+    fn precedence(&self) -> Precedence {
+        self.precedence
+    }
 }
 
 struct QueryByIndex {
@@ -778,12 +837,14 @@ fn iter_remote_hits(
 }
 
 fn merge_pinned_hits_into_page<T>(
-    pins: Vec<(u32, usize, T)>,
+    pin_count: usize,
+    pins: impl IntoIterator<Item = (u32, usize, T)>,
     skip: usize,
     take: usize,
     organic_hits: Vec<(usize, T)>,
 ) -> Vec<(usize, T)> {
     merge_positioned_hits_into_page(
+        pin_count,
         pins,
         skip,
         take,
@@ -795,17 +856,18 @@ fn merge_pinned_hits_into_page<T>(
 
 fn extract_remote_pin_hits(
     remote_results: &mut [FederatedSearchResult],
-    pins: &mut Vec<(u32, usize, SearchHit)>,
+    pins: &mut Vec<GlobalPin>,
 ) {
     fn parse_pin_pos_and_query_idx(
         federation: &mut serde_json::Map<String, serde_json::Value>,
-    ) -> Option<(u32, usize)> {
+    ) -> Option<(u32, Option<u64>, usize)> {
         let pin_pos: u32 = federation.remove(PINNED_POSITION)?.as_u64()?.try_into().ok()?;
+        let pin_precedence: Option<u64> = federation.remove(PINNED_PRECEDENCE)?.as_u64();
         let _ = federation.remove(WEIGHTED_SCORE_VALUES);
         let _ = federation.remove(FEDERATION_EXTRA_DOCUMENT);
         let query_idx: usize = federation.get(QUERIES_POSITION)?.as_u64()?.try_into().ok()?;
 
-        Some((pin_pos, query_idx))
+        Some((pin_pos, pin_precedence, query_idx))
     }
 
     for remote_result in remote_results {
@@ -817,8 +879,8 @@ fn extract_remote_pin_hits(
                 .and_then(|federation| federation.as_object_mut())
                 .and_then(parse_pin_pos_and_query_idx);
 
-            if let Some((position, query_index)) = pair {
-                pins.push((position, query_index, hit));
+            if let Some((position, precedence, query_index)) = pair {
+                pins.push(GlobalPin { position, precedence, query_index, hit });
             } else {
                 remote_result.hits.push(hit);
             }
@@ -861,8 +923,9 @@ fn build_federation_hit(
             serde_json::Value::Object(std::mem::take(extra_document)),
         );
 
-        if let Some(ScoreDetails::Pin { position }) = score.first() {
+        if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
             federation.insert(PINNED_POSITION.to_string(), serde_json::json!(position));
+            federation.insert(PINNED_PRECEDENCE.to_string(), serde_json::json!(precedence));
         }
     }
 
@@ -1613,7 +1676,7 @@ impl SearchByIndex {
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
             for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
-                if let Some(ScoreDetails::Pin { position }) = score.first() {
+                if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
                     let mut hit = result_by_query
                         .hit_maker
                         .make_hit(doc_id, &score)
@@ -1628,16 +1691,18 @@ impl SearchByIndex {
                     );
 
                     hit.document.insert(FEDERATION_HIT.to_string(), _federation);
-                    local_pinned_hits.push((
-                        *position,
-                        result_by_query.query_index,
-                        SearchHitByIndex {
+                    local_pinned_hits.push(LocalPin {
+                        position: *position,
+                        precedence: Precedence(*precedence),
+                        query_index: result_by_query.query_index,
+                        hit: SearchHitByIndex {
                             hit,
                             score,
                             weight: result_by_query.weight,
                             query_index: result_by_query.query_index,
                         },
-                    ));
+                        doc_id,
+                    });
                 } else {
                     result_by_query.documents_ids.push(doc_id);
                     result_by_query.document_scores.push(score);
@@ -1645,7 +1710,7 @@ impl SearchByIndex {
             }
         }
 
-        local_pinned_hits.sort_by_key(|&(pos, _, _)| pos);
+        Pin::dedup_and_sort(&mut local_pinned_hits);
 
         // A set of the seen values for the facet.
         // Whenever we consider a document, we check that its value for the distinct fid has not already been seen.
@@ -1704,11 +1769,16 @@ impl SearchByIndex {
             .take(required_hit_count)
             .map_ok(|hit| (hit.query_index, hit))
             .collect::<Result<Vec<_>, (ResponseError, Option<usize>)>>()?;
-        let merged_result =
-            merge_pinned_hits_into_page(local_pinned_hits, 0, required_hit_count, organic_hits)
-                .into_iter()
-                .map(|(_, hit)| hit)
-                .collect();
+        let merged_result = merge_pinned_hits_into_page(
+            local_pinned_hits.len(),
+            local_pinned_hits.into_iter().map(|pin| (pin.position, pin.query_index, pin.hit)),
+            0,
+            required_hit_count,
+            organic_hits,
+        )
+        .into_iter()
+        .map(|(_, hit)| hit)
+        .collect();
         let estimated_total_hits = candidates.len() as usize;
         let facets = facet_patterns_by_index
             .map(|facets_by_index| {

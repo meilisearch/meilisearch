@@ -359,17 +359,23 @@ fn inject_pins(
     let BucketSortOutput { docids, scores, mut all_candidates, degraded } = output;
 
     for pin in &pins {
-        all_candidates.insert(pin.doc_id);
+        all_candidates.insert(pin.id);
     }
 
     let organic_hits = docids.into_iter().zip(scores).collect();
     let merged_hits = merge_positioned_hits_into_page(
+        pins.len(),
         pins,
         from,
         length,
         organic_hits,
-        |pin| pin.pos,
-        |pin| (pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]),
+        |pin| pin.position,
+        |pin| {
+            (
+                pin.id,
+                vec![ScoreDetails::Pin { position: pin.position, precedence: pin.precedence.0 }],
+            )
+        },
     );
     let (merged_docids, merged_scores): (Vec<_>, Vec<_>) = merged_hits.into_iter().unzip();
 

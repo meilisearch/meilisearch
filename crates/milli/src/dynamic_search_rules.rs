@@ -17,6 +17,7 @@ use crate::search::facet::ascending_facet_sort;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::search::facet::value_bounds::{evaluate_equal, to_str_bounds, ValueBounds};
 use crate::search::new::LocatedQueryTerm;
+use crate::search::{Pin, Precedence};
 use crate::update::new::document::DocumentFromDb;
 use crate::{
     AscDesc, DocumentId, FieldId, FieldsIdsMap, Index, IndexFilter, PinDoc, Result, SearchContext,
@@ -80,18 +81,17 @@ impl<'a> DynamicSearchRulesView<'a> {
         let active_rules =
             self.active_rules_for_query(query_terms, filter, search_context, fuel)?;
 
-        self.find_pins(self.rule_ids_sorted_by_precedence(active_rules)?, search_context, fuel)
-            .filter(
-                |pin| {
-                    if let Ok(pin) = pin.as_ref() {
-                        universe.remove(pin.doc_id)
-                    } else {
-                        true
-                    }
-                },
-            )
+        let pins: Result<Vec<PinDoc>> = self
+            .find_pins(self.rule_ids_sorted_by_precedence(active_rules)?, search_context, fuel)
+            .filter(|pin| if let Ok(pin) = pin.as_ref() { universe.remove(pin.id) } else { true })
             .take(fuel.max_pin_actions())
-            .collect()
+            .collect();
+
+        let mut pins = pins?;
+
+        Pin::dedup_and_sort(&mut pins);
+
+        Ok(pins)
     }
 
     pub fn rules_from_rule_ids<I>(
@@ -192,10 +192,26 @@ impl<'a> DynamicSearchRulesView<'a> {
                 let Some(actions) = rule.field(fields::ACTIONS)? else {
                     return Ok(None);
                 };
+
+                let precedence: Result<Option<u64>, _> = match rule.field(fields::PRECEDENCE)? {
+                    Some(precedence) => serde_json::from_str(precedence.get()),
+                    None => Ok(None),
+                };
+
+                let precedence = match precedence {
+                    Ok(precedence) => precedence,
+                    Err(err) => {
+                        tracing::warn!(
+                        "could not deserialize actions of rule with internal id `{rule_id}`: {err}"
+                    );
+                        return Ok(None);
+                    }
+                };
+
                 let actions: Result<Vec<RuleAction>, serde_json::Error> =
                     serde_json::from_str(actions.get());
                 match actions {
-                    Ok(actions) => Ok(Some(actions.into_iter())),
+                    Ok(actions) => Ok(Some(actions.into_iter().zip(std::iter::repeat(precedence)))),
                     Err(err) => {
                         tracing::warn!(
                         "could not deserialize actions of rule with internal id `{rule_id}`: {err}"
@@ -206,7 +222,8 @@ impl<'a> DynamicSearchRulesView<'a> {
             })
             .filter_map(|x| x.transpose())
             .flatten_ok()
-            .filter_map_ok(|action| {
+            .filter_map_ok(|(action, precedence)| {
+                let precedence = Precedence(precedence);
                 let doc_id = action.active_document(search_context).transpose()?;
 
                 let doc_id = match doc_id {
@@ -215,7 +232,7 @@ impl<'a> DynamicSearchRulesView<'a> {
                 };
                 match action.action {
                     DynamicSearchRuleAction::Pin { position } => {
-                        Some(Ok(PinDoc { pos: position, doc_id }))
+                        Some(Ok(PinDoc { position, precedence, id: doc_id }))
                     }
                 }
             })
