@@ -1618,6 +1618,28 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
     }
 }
 
+pub fn intersect_index_filters(
+    left: Option<IndexFilter>,
+    right: Option<IndexFilter>,
+) -> Option<IndexFilter> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => Some(left & right),
+    }
+}
+
+pub fn union_index_filters(
+    left: Option<IndexFilter>,
+    right: Option<IndexFilter>,
+) -> Option<IndexFilter> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => Some(left | right),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_search<'t>(
     index: &'t Index,
