@@ -54,15 +54,15 @@ impl ProxyQuery for SearchQueryWithIndex {
     }
 }
 
-impl ProxyQuery for &FacetSearchQuery {
+impl ProxyQuery for &PreprocessedQuery<(IndexUid, FacetSearchQuery)> {
     /// The only things that can change are the filter on shard and the remote, so recover this
-    type ProxiedQuery = (String, Option<serde_json::Value>);
+    type ProxiedQuery = (String, Option<IndexFilter>);
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
         (remote, None)
     }
 
-    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {
+    fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<IndexFilter> {
         &mut query.1
     }
 }
