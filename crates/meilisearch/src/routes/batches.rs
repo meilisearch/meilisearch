@@ -257,10 +257,11 @@ async fn get_batches(
 )]
 async fn get_batches_stream(
     index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
+    params: AwebQueryParameter<TasksFilterQuery, DeserrQueryParamError>,
 ) -> Result<impl Responder, ResponseError> {
     index_scheduler.features().check_tasks_streaming_route("calling the /batches/stream route")?;
 
-    let query = Query { limit: Some(u32::MAX), ..Default::default() };
+    let query = Query { limit: Some(u32::MAX), ..params.into_inner().into_query() };
     let filters = index_scheduler.filters().clone();
 
     const PROCESSING_BATCH_REFRESH_RATE: Duration = Duration::from_secs(1);
