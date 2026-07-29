@@ -109,8 +109,8 @@ async fn setup_indexes_with_foreign_key(server: &Server) -> (Index<'_>, Index<'_
     let (task, code) = books_index
         .update_settings(json!({
             "foreignKeys": [
-                { "foreignIndexUid": authors_index.uid, "fieldName": "author" },
-                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors" }
+                { "foreignIndexUid": authors_index.uid, "fieldName": "author", "foreignPrimaryKey": "id" },
+                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors", "foreignPrimaryKey": "id" }
             ]
         }))
         .await;
@@ -154,8 +154,8 @@ async fn setup_indexes_with_foreign_key_and_filterable_profile(
     let (task, code) = books_index
         .update_settings(json!({
             "foreignKeys": [
-                { "foreignIndexUid": authors_index.uid, "fieldName": "author" },
-                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors" }
+                { "foreignIndexUid": authors_index.uid, "fieldName": "author", "foreignPrimaryKey": "id" },
+                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors", "foreignPrimaryKey": "id" }
             ],
             "filterableAttributes": ["id", "genres", "author", "related_authors"]
         }))
@@ -222,8 +222,8 @@ async fn setup_indexes_foreign_key_foreign_author_filterable_id_only(
     let (task, code) = books_index
         .update_settings(json!({
             "foreignKeys": [
-                { "foreignIndexUid": authors_index.uid, "fieldName": "author" },
-                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors" }
+                { "foreignIndexUid": authors_index.uid, "fieldName": "author", "foreignPrimaryKey": "id" },
+                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors", "foreignPrimaryKey": "id" }
             ],
             "filterableAttributes": ["id", "genres", "author", "related_authors", "title"]
         }))
@@ -961,7 +961,7 @@ async fn foreign_filter_on_non_filterable_attribute() {
     assert_eq!(code, 202, "{task}");
     server.wait_task(task.uid()).await.succeeded();
 
-    let (task, code) = books_index.update_settings(json!({ "foreignKeys": [{ "foreignIndexUid": authors_index.uid, "fieldName": "author" }] })).await;
+    let (task, code) = books_index.update_settings(json!({ "foreignKeys": [{ "foreignIndexUid": authors_index.uid, "fieldName": "author", "foreignPrimaryKey": "id" }] })).await;
     assert_eq!(code, 202, "{task}");
     server.wait_task(task.uid()).await.succeeded();
 
