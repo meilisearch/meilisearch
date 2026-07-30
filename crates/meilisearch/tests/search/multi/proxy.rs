@@ -9661,8 +9661,8 @@ async fn remote_auto_sharding_auto_search_documents_join() {
     let (_task, _code) = books0
         .update_settings(json!({
             "foreignKeys": [
-                { "foreignIndexUid": "authors", "fieldName": "author", "foreignPrimaryKey": "id" },
-                { "foreignIndexUid": "authors", "fieldName": "related_authors", "foreignPrimaryKey": "id" }
+                { "foreignIndexUid": "authors", "fieldName": "author"},
+                { "foreignIndexUid": "authors", "fieldName": "related_authors"}
             ],
             "filterableAttributes": ["id", "genres", "author", "related_authors"]
         }))

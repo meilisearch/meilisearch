@@ -124,6 +124,12 @@ impl From<&str> for LightToken {
     }
 }
 
+impl From<String> for LightToken {
+    fn from(fragment: String) -> Self {
+        LightToken { fragment, utf8_column: 0, modified_fragment: None }
+    }
+}
+
 impl TokenLike for LightToken {
     fn fragment(&self) -> &str {
         self.modified_fragment.as_ref().unwrap_or(&self.fragment)

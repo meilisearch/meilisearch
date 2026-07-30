@@ -13,14 +13,17 @@ use meilisearch_types::milli::{
     IndexFilterCondition, LightToken, Token, TokenLike,
 };
 use meilisearch_types::Document;
+use serde_json::{Map, Value};
 
 use crate::documents_retrieval::HydrationContext;
 use crate::documents_retrieval::{RemoteRetrieveDocuments, WithIndex};
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex, DocumentsResult};
-use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::federated::types::{
+    PreprocessableQuery, PreprocessedQuery, FEDERATION_EXTERNAL_DOCUMENT_ID, FEDERATION_HIT,
+};
 use crate::search::proxy::ProxySearchParams;
-use crate::search::Partition;
+use crate::search::{ExternalDocumentId, Partition};
 use meilisearch_types::network::Network;
 
 /// The maximum number of documents a foreign filter can retrieve per index
@@ -54,15 +57,6 @@ impl AsRef<str> for SourceFieldName {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ForeignPrimaryKey(pub String);
-
-impl AsRef<str> for ForeignPrimaryKey {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SourceIndexUid(pub String);
 
 impl std::borrow::Borrow<str> for SourceIndexUid {
@@ -77,8 +71,7 @@ impl AsRef<str> for SourceIndexUid {
     }
 }
 
-pub type ForeignKeysPerIndex =
-    HashMap<SourceIndexUid, Vec<(ForeignIndexUid, SourceFieldName, ForeignPrimaryKey)>>;
+pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, SourceFieldName)>>;
 
 pub async fn preprocess_filters<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
@@ -208,9 +201,9 @@ fn extract_foreign_filters(
             )?;
 
             // get the foreign index uid for the foreign key
-            let (foreign_index_uid, _, _) = foreign_keys
+            let (foreign_index_uid, _) = foreign_keys
                 .iter()
-                .find(|(_f_index, s_fname, _f_primary_key)| s_fname.as_ref() == fid.fragment())
+                .find(|(_f_index, s_fname)| s_fname.as_ref() == fid.fragment())
                 .ok_or_else(|| {
                     let error = milli::Error::UserError(milli::UserError::InvalidFilter(format!(
                         "Index `{}`: Field `{}` is not a foreign key",
@@ -321,25 +314,10 @@ async fn local_process_foreign_filters(
     Ok(foreign_filters_external_docids) }).await.map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal)).flatten()
 }
 
-pub fn get_foreign_primary_key<'a>(
-    foreign_keys_per_index: &'a ForeignKeysPerIndex,
-    index_uid: &SourceIndexUid,
-    foreign_index_uid: &ForeignIndexUid,
-) -> &'a ForeignPrimaryKey {
-    let (_, _, foreign_primary_key) = foreign_keys_per_index
-        .get(index_uid)
-        .unwrap()
-        .iter()
-        .find(|(f_index, _, _)| f_index == foreign_index_uid)
-        .unwrap();
-    foreign_primary_key
-}
-
 async fn federated_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
     network: Network,
     foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
-    foreign_keys_per_index: &ForeignKeysPerIndex,
     progress: &Progress,
 ) -> Result<Vec<Vec<LightToken>>, ResponseError> {
     let params =
@@ -348,11 +326,9 @@ async fn federated_process_foreign_filters(
     let partition = Partition::new(network.clone(), remote_availability);
 
     let mut remote_queries = Vec::new();
-    for (query_index, (index_uid, foreign_index_uid, _, index_filter)) in
+    for (query_index, (_index_uid, foreign_index_uid, _, index_filter)) in
         foreign_filters.iter().enumerate()
     {
-        let foreign_primary_key =
-            get_foreign_primary_key(foreign_keys_per_index, index_uid, foreign_index_uid);
         let query = PreprocessedQuery {
             query: BrowseQueryWithIndex {
                 index_uid: IndexUid::new_unchecked(foreign_index_uid),
@@ -361,7 +337,7 @@ async fn federated_process_foreign_filters(
                     offset: 0,
                     limit: MAX_FOREIGN_FILTER_DOCIDS as usize,
                     filter: None,
-                    fields: Some(vec![foreign_primary_key.as_ref().to_string()]),
+                    fields: Some(vec![]),
                     retrieve_vectors: false,
                     ids: None,
                     sort: None,
@@ -398,19 +374,34 @@ async fn federated_process_foreign_filters(
 
     // Merge results
     for (documents, query_id) in merge_remote_documents(remote_results) {
-        let (local_index_uid, foreign_index_uid, _, _) = &foreign_filters[query_id];
-        let foreign_primary_key =
-            get_foreign_primary_key(foreign_keys_per_index, local_index_uid, foreign_index_uid);
-
-        for document in documents {
-            let external_docid = document[foreign_primary_key.as_ref()]
-                .as_str()
-                .expect("Foreign primary key is not a string");
-            foreign_filters_external_docids[query_id].push(external_docid.into());
+        for mut document in documents {
+            let mut federation_hit = take_federation_hit(&mut document);
+            let external_docid = take_document_id_from_federation_hit(&mut federation_hit);
+            foreign_filters_external_docids[query_id]
+                .push(LightToken::from(external_docid.into_inner()));
         }
     }
 
     Ok(foreign_filters_external_docids)
+}
+
+pub fn take_federation_hit(document: &mut Document) -> Map<String, Value> {
+    let Value::Object(federation_hit) =
+        document.remove(FEDERATION_HIT).expect("Federation hit must be present")
+    else {
+        unreachable!()
+    };
+
+    federation_hit
+}
+
+pub fn take_document_id_from_federation_hit(
+    federation_hit: &mut Map<String, Value>,
+) -> ExternalDocumentId {
+    let external_docid = federation_hit
+        .remove(FEDERATION_EXTERNAL_DOCUMENT_ID)
+        .expect("External document id must be present");
+    ExternalDocumentId::try_from(external_docid).expect("External document id must be a valid")
 }
 
 fn merge_remote_documents(
@@ -447,14 +438,8 @@ async fn filters_into_index_filters(
     // retrieve the external docids executing each foreign filter
     let foreign_filters_external_docids = if network.sharding() {
         // network + local
-        federated_process_foreign_filters(
-            index_scheduler,
-            network,
-            &foreign_filters,
-            foreign_keys_per_index,
-            progress,
-        )
-        .await?
+        federated_process_foreign_filters(index_scheduler, network, &foreign_filters, progress)
+            .await?
     } else {
         // local
         local_process_foreign_filters(index_scheduler, &foreign_filters, progress).await?
@@ -494,13 +479,7 @@ pub fn retrieve_foreign_keys_settings(
         let foreign_keys = index
             .foreign_keys(&rtxn)?
             .into_iter()
-            .map(|fk| {
-                (
-                    ForeignIndexUid(fk.foreign_index_uid),
-                    SourceFieldName(fk.field_name),
-                    ForeignPrimaryKey(fk.foreign_primary_key),
-                )
-            })
+            .map(|fk| (ForeignIndexUid(fk.foreign_index_uid), SourceFieldName(fk.field_name)))
             .collect();
         foreign_keys_settings.insert(index_uid.clone(), foreign_keys);
     }

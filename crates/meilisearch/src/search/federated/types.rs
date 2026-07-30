@@ -38,6 +38,7 @@ pub const WEIGHTED_SCORE_VALUES: &str = "weightedScoreValues";
 pub const PINNED_POSITION: &str = "pinnedPosition";
 pub const FEDERATION_REMOTE: &str = "remote";
 pub const FEDERATION_EXTRA_DOCUMENT: &str = "extra_document";
+pub const FEDERATION_EXTERNAL_DOCUMENT_ID: &str = "id";
 
 /// Options for federated multi-search queries
 #[routes::request(proxied)]

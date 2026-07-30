@@ -12,11 +12,14 @@ use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
+use crate::documents_retrieval::preprocessing::{
+    take_document_id_from_federation_hit, take_federation_hit,
+};
 use crate::documents_retrieval::{
     ForeignIndexUid, ForeignKeysPerIndex, RemoteRetrieveDocuments, SourceIndexUid,
 };
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex};
-use crate::search::federated::types::{PreprocessedQuery, FEDERATION_HIT};
+use crate::search::federated::types::PreprocessedQuery;
 use crate::search::proxy::ProxySearchParams;
 use crate::search::{ExternalDocumentId, Partition, SearchHit};
 
@@ -31,7 +34,7 @@ pub fn hydrate_documents(
 ) -> Result<(), ResponseError> {
     // Group the foreign keys by index uid
     let mut foreign_keys_by_index_uid: HashMap<_, Vec<_>> = HashMap::new();
-    for ForeignKey { foreign_index_uid, field_name, foreign_primary_key: _ } in foreign_keys {
+    for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
         foreign_keys_by_index_uid.entry(foreign_index_uid).or_default().push(field_name.as_str());
     }
 
@@ -178,7 +181,7 @@ impl HydrationContext {
             return;
         };
 
-        for (foreign_index_uid, field_name, _foreign_primary_key) in foreign_keys {
+        for (foreign_index_uid, field_name) in foreign_keys {
             visit_leaf_values(&hit.document, field_name.as_ref(), &mut |value| match value {
                 Value::Array(values) => {
                     for value in values {
@@ -257,20 +260,10 @@ async fn federated_fetch_hydration_documents(
 ) -> Result<(), ResponseError> {
     let index = index_scheduler.user_index(index_uid.as_ref())?;
     let rtxn = index.read_txn()?;
-    let Some(primary_key) = index.primary_key(&rtxn)? else {
-        // Index has no primary key, it must be empty, skip
-        tracing::warn!("Index `{}` has no primary key", index_uid.as_ref());
-        return Ok(());
-    };
 
     let displayed_fields = index.displayed_fields(&rtxn)?;
-    let fields = displayed_fields.map(|fields| {
-        fields
-            .into_iter()
-            .map(|field| field.to_string())
-            .chain(Some(primary_key.to_string()))
-            .collect()
-    });
+    let fields =
+        displayed_fields.map(|fields| fields.into_iter().map(|field| field.to_string()).collect());
     let ids = docids.iter().map(|docid| Value::String(docid.as_ref().to_string())).collect();
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -318,9 +311,8 @@ async fn federated_fetch_hydration_documents(
     // Merge results
     for (documents_result, _) in remote_results {
         for mut document in documents_result.results {
-            let external_docid =
-                ExternalDocumentId::try_from(document[primary_key].clone()).unwrap();
-            document.remove(FEDERATION_HIT);
+            let mut federation_hit = take_federation_hit(&mut document);
+            let external_docid = take_document_id_from_federation_hit(&mut federation_hit);
             hydration_documents.insert((index_uid.clone(), external_docid), document);
         }
     }
@@ -374,7 +366,7 @@ impl FederatedHydrationFormatter {
             };
 
             // Hydrate the document
-            for (foreign_index_uid, field_name, _foreign_primary_key) in foreign_keys {
+            for (foreign_index_uid, field_name) in foreign_keys {
                 map_leaf_values(
                     &mut document.document,
                     [field_name.as_ref()],
@@ -385,7 +377,7 @@ impl FederatedHydrationFormatter {
             }
 
             // Hydrate the formatted document
-            for (foreign_index_uid, field_name, _foreign_primary_key) in foreign_keys {
+            for (foreign_index_uid, field_name) in foreign_keys {
                 map_leaf_values(
                     &mut document.formatted,
                     [field_name.as_ref()],

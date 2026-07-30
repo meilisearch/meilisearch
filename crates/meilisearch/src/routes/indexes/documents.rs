@@ -74,7 +74,8 @@ static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
 use crate::search::federated::types::{
-    PreprocessableQuery, PreprocessedQuery, FEDERATION_HIT, WEIGHTED_SCORE_VALUES,
+    PreprocessableQuery, PreprocessedQuery, FEDERATION_EXTERNAL_DOCUMENT_ID, FEDERATION_HIT,
+    WEIGHTED_SCORE_VALUES,
 };
 
 /// Extracts the mime type from the content type and return
@@ -2273,6 +2274,8 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
+    let primary_key = index.primary_key(rtxn)?;
+
     let (it, number_of_documents) = if let Some(sort) = sort_criteria.as_ref() {
         let number_of_documents = candidates.len();
         let facet_sort = recursive_sort(index, rtxn, fields_ids_map, sort, &candidates)?;
@@ -2283,11 +2286,11 @@ fn retrieve_documents<S: AsRef<str>>(
         }
 
         // retrieve each facet values for the documents if is_proxy is true
-        let extra_attributes_to_retrieve: Option<_> = if is_proxy {
-            Some(sort.iter().map(|asc_desc| asc_desc.field().unwrap_or(RESERVED_GEO_FIELD_NAME)))
-        } else {
-            None
-        };
+        let extra_attributes_to_retrieve: Option<_> = is_proxy.then_some(
+            sort.iter()
+                .map(|asc_desc| asc_desc.field().unwrap_or(RESERVED_GEO_FIELD_NAME))
+                .chain(primary_key.iter().map(|key| key.as_ref())),
+        );
 
         (
             itertools::Either::Left(some_documents(
@@ -2303,7 +2306,7 @@ fn retrieve_documents<S: AsRef<str>>(
         )
     } else {
         let number_of_documents = candidates.len();
-        let extra_attributes_to_retrieve: Option<Vec<String>> = None;
+        let extra_attributes_to_retrieve: Option<_> = is_proxy.then_some(primary_key.iter());
         (
             itertools::Either::Right(some_documents(
                 index,
@@ -2334,10 +2337,20 @@ fn retrieve_documents<S: AsRef<str>>(
                     }
                 }
 
+                // retrieve the external document id
+                let mut external_document_id = None;
+                if let Some(primary_key) = primary_key {
+                    (&document, &extra_document).facet_values(primary_key, |facet_value| {
+                        external_document_id = Some(facet_value.into_value());
+                    })
+                }
+                let external_document_id =
+                    external_document_id.expect("External document id must be present");
+
                 // insert the federation hit
                 document.insert(
                     FEDERATION_HIT.to_string(),
-                    build_federation_hit(weighted_score_values),
+                    build_federation_hit(weighted_score_values, external_document_id),
                 );
             }
             Ok(document)
@@ -2408,11 +2421,17 @@ fn build_weighted_score_value<D: VisitFacetValues>(
 }
 
 // TODO: factorize with build_federation_hit in search/federated/perform.rs by using a serializable struct?
-fn build_federation_hit(scores: Vec<WeightedScoreValue>) -> serde_json::Value {
+fn build_federation_hit(
+    scores: Vec<WeightedScoreValue>,
+    external_document_id: Value,
+) -> serde_json::Value {
     let mut federation = serde_json::Map::new();
 
     // insert the weighted score values
     federation.insert(WEIGHTED_SCORE_VALUES.to_string(), serde_json::json!(scores));
+
+    // insert the external document id
+    federation.insert(FEDERATION_EXTERNAL_DOCUMENT_ID.to_string(), external_document_id);
 
     serde_json::Value::Object(federation)
 }
