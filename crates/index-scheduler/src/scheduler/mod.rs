@@ -131,7 +131,7 @@ impl Scheduler {
 
         let (waker, wake_up) = tokio::sync::broadcast::channel(32);
         // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-        let _ = waker.send(ModifiedTasks::DumpImported).unwrap();
+        let _ = waker.send(ModifiedTasks::StartProcessing).unwrap();
 
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
@@ -492,6 +492,6 @@ impl IndexScheduler {
 
 #[derive(Debug, Clone)]
 pub enum ModifiedTasks {
-    DumpImported,
+    StartProcessing,
     Some { ids: RoaringBitmap },
 }

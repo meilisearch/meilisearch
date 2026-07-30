@@ -649,7 +649,7 @@ async fn get_tasks_stream(
             // change this loop is unblocked and fetches new tasks info.
             let query = match wake_up.recv().await {
                 // We skip all the tasks when they come from a dump import
-                Ok(ModifiedTasks::DumpImported) => continue,
+                Ok(ModifiedTasks::StartProcessing) => continue,
                 Ok(ModifiedTasks::Some { ids }) => {
                     Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
                 }

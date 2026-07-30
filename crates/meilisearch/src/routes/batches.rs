@@ -276,7 +276,7 @@ async fn get_batches_stream(
             // change this loop is unblocked and fetches new tasks info.
             let query = match tokio::time::timeout(refresh_rate, wake_up.recv()).await {
                 // We skip all the batches/tasks when they come from a dump import
-                Ok(Ok(ModifiedTasks::DumpImported)) => continue,
+                Ok(Ok(ModifiedTasks::StartProcessing)) => continue,
                 Ok(Ok(ModifiedTasks::Some { ids })) => {
                     Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
                 }

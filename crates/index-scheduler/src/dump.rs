@@ -332,7 +332,7 @@ impl<'a> Dump<'a> {
 
         self.wtxn.commit()?;
 
-        self.index_scheduler.scheduler.waker.send(ModifiedTasks::DumpImported).unwrap();
+        self.index_scheduler.scheduler.waker.send(ModifiedTasks::StartProcessing).unwrap();
 
         Ok(())
     }
