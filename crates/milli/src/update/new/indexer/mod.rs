@@ -20,8 +20,8 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
 pub use word_delta::WordDelta;
-pub use write::ChannelCongestion;
-use write::{build_vectors, update_index, write_to_db};
+use write::{build_vectors, write_to_db};
+pub use write::{update_index, ChannelCongestion};
 
 use super::channel::*;
 use super::steps::IndexingStep;
