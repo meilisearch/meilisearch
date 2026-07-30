@@ -2279,6 +2279,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "filter-parser2"
+version = "1.50.0"
+dependencies = [
+ "insta",
+ "levenshtein_automata",
+ "nom",
+ "nom_locate",
+ "serde_json",
+ "unescaper",
+ "wip",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4532,6 +4545,7 @@ dependencies = [
  "either",
  "enum-iterator",
  "filter-parser",
+ "filter-parser2",
  "flatten-serde-json",
  "flume",
  "fst",
@@ -8529,6 +8543,12 @@ checksum = "0592e1c9d151f854e6fd382574c3a0855250e1d9b2f99d9281c6e6391af352f1"
 dependencies = [
  "memchr",
 ]
+
+[[package]]
+name = "wip"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff02b25445065187bf23eedf9920e033c371b7fafce801e4443448d6e1f31242"
 
 [[package]]
 name = "wiremock"

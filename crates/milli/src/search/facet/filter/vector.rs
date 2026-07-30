@@ -19,6 +19,17 @@ pub enum VectorFilterError<'a> {
         }
     })]
     EmbedderDoesNotExist { embedder: &'a Token, available: Vec<String> },
+    #[error("The embedder `{}` does not exist. {}", embedder.unquote(), {
+        if available.is_empty() {
+            String::from("This index does not have any configured embedders.")
+        } else {
+            let mut available = available.clone();
+            available.sort_unstable();
+            let did_you_mean = DidYouMean::new(embedder.unquote(), &available);
+            format!("Available embedders are: {}.{did_you_mean}", available.iter().map(|e| format!("`{e}`")).collect::<Vec<_>>().join(", "))
+        }
+    })]
+    EmbedderDoesNotExist2 { embedder: filter_parser2::TokenView<'a>, available: Vec<String> },
 
     #[error("The fragment `{}` does not exist on embedder `{}`. {}", fragment.fragment(), embedder.fragment(), {
         if available.is_empty() {
@@ -31,6 +42,18 @@ pub enum VectorFilterError<'a> {
         }
     })]
     FragmentDoesNotExist { embedder: &'a Token, fragment: &'a Token, available: Vec<String> },
+
+    #[error("The fragment `{}` does not exist on embedder `{}`. {}", fragment.unquote(), embedder.unquote(), {
+        if available.is_empty() {
+            String::from("This embedder does not have any configured fragments.")
+        } else {
+            let mut available = available.clone();
+            available.sort_unstable();
+            let did_you_mean = DidYouMean::new(fragment.unquote(), &available);
+            format!("Available fragments on this embedder are: {}.{did_you_mean}", available.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "))
+        }
+    })]
+    FragmentDoesNotExist2 { embedder: filter_parser2::TokenView<'a>, fragment: filter_parser2::TokenView<'a>, available: Vec<String> },
 }
 
 use VectorFilterError::*;
@@ -42,6 +65,8 @@ impl<'a> From<VectorFilterError<'a>> for Error {
             | FragmentDoesNotExist { fragment: token, .. } => {
                 (*token).to_external_error(err).into()
             }
+            EmbedderDoesNotExist2 { embedder, available } => wip::wip!("add error"),
+            FragmentDoesNotExist2 { embedder, fragment, available } => wip::wip!("add error"),
         }
     }
 }
@@ -69,6 +94,29 @@ pub(super) fn evaluate(
     if let Some(universe) = universe {
         docids &= universe;
     }
+
+    Ok(docids)
+}
+
+pub(super) fn evaluate_2(
+    rtxn: &heed::RoTxn<'_>,
+    index: &Index,
+    embedder: Option<filter_parser2::TokenView<'_>>,
+    filter: filter_parser2::VectorFilterView<'_>,
+) -> crate::Result<RoaringBitmap> {
+    let index_embedding_configs = index.embedding_configs();
+    let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
+
+    let embedders = match embedder {
+        Some(embedder) => vec![embedder],
+        None => embedding_configs.iter().map(|config| Token::from(config.name.as_str())).collect(),
+    };
+
+    let mut docids = embedders
+        .iter()
+        .copied()
+        .map(|e| evaluate_inner_2(rtxn, index, e, &embedding_configs, filter))
+        .union()?;
 
     Ok(docids)
 }
@@ -147,6 +195,89 @@ fn evaluate_inner(
             stats.documents - skip_regenerate
         }
         VectorFilter::None => {
+            let mut stats = VectorStoreStats::default();
+            vector_store.aggregate_stats(rtxn, &mut stats)?;
+            stats.documents
+        }
+    };
+
+    Ok(docids)
+}
+
+fn evaluate_inner_2(
+    rtxn: &heed::RoTxn<'_>,
+    index: &Index,
+    embedder: filter_parser2::TokenView<'_>,
+    embedding_configs: &[IndexEmbeddingConfig],
+    filter: filter_parser2::VectorFilterView<'_>,
+) -> crate::Result<RoaringBitmap> {
+    let backend = index.get_vector_store(rtxn)?.unwrap_or_default();
+    let embedder_name = embedder.fragment();
+    let available_embedders =
+        || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+
+    let embedding_config = embedding_configs
+        .iter()
+        .find(|config| config.name == embedder_name)
+        .ok_or_else(|| EmbedderDoesNotExist2 { embedder, available: available_embedders() })?;
+
+    let embedder_info = index
+        .embedding_configs()
+        .embedder_info(rtxn, embedder_name)?
+        .ok_or_else(|| EmbedderDoesNotExist2 { embedder, available: available_embedders() })?;
+
+    let vector_store = VectorStore::new(
+        backend,
+        index.vector_store,
+        embedder_info.embedder_id,
+        embedding_config.config.quantized(),
+    );
+
+    let docids = match filter {
+        filter_parser2::VectorFilterView::Fragment(fragment) => {
+            let fragment_name = fragment.fragment();
+            let fragment_config = embedding_config
+                .fragments
+                .as_slice()
+                .iter()
+                .find(|fragment| fragment.name == fragment_name)
+                .ok_or_else(|| FragmentDoesNotExist2 {
+                    embedder,
+                    fragment,
+                    available: embedding_config
+                        .fragments
+                        .as_slice()
+                        .iter()
+                        .map(|f| f.name.clone())
+                        .collect(),
+                })?;
+
+            let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
+            vector_store.items_in_store(rtxn, fragment_config.id, |bitmap| {
+                bitmap.clone() - user_provided_docids
+            })?
+        }
+        filter_parser2::VectorFilterView::DocumentTemplate => {
+            if !embedding_config.fragments.as_slice().is_empty() {
+                return Ok(RoaringBitmap::new());
+            }
+
+            let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
+            let mut stats = VectorStoreStats::default();
+            vector_store.aggregate_stats(rtxn, &mut stats)?;
+            stats.documents - user_provided_docids.clone()
+        }
+        filter_parser2::VectorFilterView::UserProvided => {
+            let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
+            user_provided_docids.clone()
+        }
+        filter_parser2::VectorFilterView::Regenerate => {
+            let mut stats = VectorStoreStats::default();
+            vector_store.aggregate_stats(rtxn, &mut stats)?;
+            let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
+            stats.documents - skip_regenerate
+        }
+        filter_parser2::VectorFilterView::None => {
             let mut stats = VectorStoreStats::default();
             vector_store.aggregate_stats(rtxn, &mut stats)?;
             stats.documents

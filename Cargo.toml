@@ -12,6 +12,7 @@ members = [
     "crates/permissive-json-pointer",
     "crates/milli",
     "crates/filter-parser",
+    "crates/filter-parser2",
     "crates/flatten-serde-json",
     "crates/json-depth-checker",
     "crates/fuzzers",
