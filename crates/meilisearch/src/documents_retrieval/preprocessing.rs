@@ -9,8 +9,8 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    self, filtered_universe, FederatingResultsStep, Filter, FilterCondition, IndexFilter,
-    IndexFilterCondition, LightToken, Token, TokenLike,
+    self, filtered_universe, FederatingResultsStep, Filter, IndexFilter, IndexFilterCondition,
+    LightToken, Token, TokenLike,
 };
 use meilisearch_types::Document;
 use serde_json::{Map, Value};
@@ -187,11 +187,7 @@ fn extract_foreign_filters(
     let mut foreign_filters = Vec::new();
     for (index_uid, filter) in filters.iter() {
         let Some(filter) = filter else { continue };
-        for foreign_filter in filter.condition.list_foreign_filters() {
-            let FilterCondition::Foreign { fid, op } = foreign_filter.clone() else {
-                unreachable!()
-            };
-
+        for (fid, op) in filter.condition.list_foreign_filters() {
             // get the foreign keys settings for the index
             let foreign_keys = foreign_keys_per_index.get(index_uid).ok_or(
                 milli::Error::UserError(milli::UserError::InvalidFilter(format!(
@@ -214,18 +210,19 @@ fn extract_foreign_filters(
                 })?;
 
             // convert inner foreign filter into an index filter, throw an error if there is a nested foreign filter
-            let index_filter = IndexFilter::from(condition_to_index_condition(*op, &mut |_| {
-                let error = milli::Error::UserError(milli::UserError::InvalidFilter(
-                    "Nested foreign filters are not supported".to_string(),
-                ));
-                Err(fid.to_external_error(error).into())
-            })?);
+            let index_filter =
+                IndexFilter::from(condition_to_index_condition(op.clone(), &mut |_| {
+                    let error = milli::Error::UserError(milli::UserError::InvalidFilter(
+                        "Nested foreign filters are not supported".to_string(),
+                    ));
+                    Err(fid.to_external_error(error).into())
+                })?);
 
             // index_uid and foreign_index_uid are RCs and can be cloned safely
             foreign_filters.push((
                 index_uid.clone(),
                 foreign_index_uid.clone(),
-                fid,
+                fid.clone(),
                 Some(index_filter),
             ));
         }
