@@ -507,7 +507,7 @@ impl IndexScheduler {
                                 Err(RecvError::Closed) => break,
                                 // The receiver lost messages as it was lagging behind the senders. We definitely
                                 // received a message in this case, so we will tick again. As the tick will catch
-                                // up with any newly received tasks, it is fair to skip older messages by resubscribing.
+                                // up with any newly received tasks, it is fair to skip older messages.
                                 Err(RecvError::Lagged(_)) => continue,
                             }
                         },
