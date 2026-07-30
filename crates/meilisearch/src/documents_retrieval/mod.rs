@@ -272,25 +272,24 @@ pub enum DocumentSearchResult {
 
 const MAX_IN_FLIGHT_REQUESTS: usize = 40;
 
-pub struct RemoteRetrieveDocuments {
+pub struct RemoteRetrieveDocuments<T> {
     errors: BTreeMap<String, ResponseError>,
-    results: Vec<(DocumentsResult, usize)>,
-    in_flight_requests: VecDeque<
-        tokio::task::JoinHandle<(Result<DocumentsResult, ProxySearchError>, String, usize)>,
-    >,
+    results: Vec<(T, DocumentsResult)>,
+    in_flight_requests:
+        VecDeque<(tokio::task::JoinHandle<Result<DocumentsResult, ProxySearchError>>, String, T)>,
 }
 
-impl RemoteRetrieveDocuments {
+impl<T: Clone> RemoteRetrieveDocuments<T> {
     pub async fn start(
         network: Network,
         params: ProxySearchParams,
-        remote_queries: Vec<(usize, PreprocessedQuery<BrowseQueryWithIndex>)>,
+        remote_queries: Vec<(T, PreprocessedQuery<BrowseQueryWithIndex>)>,
     ) -> Result<Self, ResponseError> {
         let mut errors = BTreeMap::new();
         let mut results = Vec::with_capacity(remote_queries.len());
         let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
 
-        for (query_id, query) in remote_queries {
+        for (metadata, query) in remote_queries {
             let BrowseQueryWithIndex { query, remote: Some(remote_name), index_uid } =
                 query.into_inner_preprocessed()
             else {
@@ -336,34 +335,36 @@ impl RemoteRetrieveDocuments {
 
             if in_flight_requests.len() == in_flight_requests.capacity() {
                 // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
-                let task: tokio::task::JoinHandle<(
-                    Result<DocumentsResult, ProxySearchError>,
-                    String,
-                    usize,
-                )> = in_flight_requests.pop_front().unwrap();
+                let (task, remote_name, metadata): (
+                    tokio::task::JoinHandle<Result<DocumentsResult, ProxySearchError>>,
+                    _,
+                    _,
+                ) = in_flight_requests.pop_front().unwrap();
                 match task.await.unwrap() {
-                    (Ok(result), _, query_id) => results.push((result, query_id)),
-                    (Err(err), remote_name, _) => {
+                    Ok(result) => results.push((metadata, result)),
+                    Err(err) => {
                         errors.insert(remote_name, err.as_response_error());
                         continue;
                     }
                 }
             }
-            in_flight_requests.push_back(tokio::spawn(async move {
-                (request.await, remote_name.clone(), query_id)
-            }));
+            in_flight_requests.push_back((
+                tokio::spawn(request),
+                remote_name.clone(),
+                metadata.clone(),
+            ));
         }
 
         Ok(Self { errors, results, in_flight_requests })
     }
 
-    pub async fn finish(self) -> (Vec<(DocumentsResult, usize)>, BTreeMap<String, ResponseError>) {
+    pub async fn finish(self) -> (Vec<(T, DocumentsResult)>, BTreeMap<String, ResponseError>) {
         let Self { mut results, mut errors, in_flight_requests } = self;
         // Retrieve remote results
-        for task in in_flight_requests {
+        for (task, remote_name, metadata) in in_flight_requests {
             match task.await.unwrap() {
-                (Ok(result), _, query_id) => results.push((result, query_id)),
-                (Err(err), remote_name, _) => {
+                Ok(result) => results.push((metadata, result)),
+                Err(err) => {
                     errors.insert(remote_name, err.as_response_error());
                 }
             }

@@ -999,7 +999,7 @@ async fn retrieve_documents_federated(
     let mut results = Vec::with_capacity(local_queries.len());
     for (query_id, query) in local_queries {
         let result = retrieve_documents_local(index_scheduler.clone(), query, true).await?;
-        results.push((result, query_id));
+        results.push((query_id, result));
     }
 
     // wait
@@ -1028,10 +1028,10 @@ async fn retrieve_documents_federated(
 }
 
 fn merge_documents_results(
-    results: Vec<(DocumentsResult, usize)>,
+    results: Vec<(usize, DocumentsResult)>,
 ) -> impl Iterator<Item = Result<Document, ResponseError>> {
     itertools::kmerge_by(
-        results.into_iter().map(|(results, query_id)| {
+        results.into_iter().map(|(query_id, results)| {
             results
                 .results
                 .into_iter()
@@ -1063,11 +1063,11 @@ fn compare_documents(left: &MergedDocument, right: &MergedDocument) -> Ordering 
 }
 
 fn merge_metadata(
-    results: &mut [(DocumentsResult, usize)],
+    results: &mut [(usize, DocumentsResult)],
 ) -> (usize, Option<BTreeMap<String, ResponseError>>) {
     let mut errors = None;
     let mut total = 0;
-    for (result, _query_id) in results {
+    for (_query_id, result) in results {
         total += result.total;
         if let Some(remote_errors) = result.remote_errors.take() {
             errors.get_or_insert_with(BTreeMap::new).extend(remote_errors);

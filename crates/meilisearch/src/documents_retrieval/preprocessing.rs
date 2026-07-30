@@ -32,7 +32,7 @@ use meilisearch_types::network::Network;
 /// If the foreign filter is retrieving too many documents, it will return an error.
 const MAX_FOREIGN_FILTER_DOCIDS: u64 = 1000;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ForeignIndexUid(pub String);
 
 impl std::borrow::Borrow<str> for ForeignIndexUid {
@@ -370,7 +370,7 @@ async fn federated_process_foreign_filters(
     }
 
     // Merge results
-    for (documents, query_id) in merge_remote_documents(remote_results) {
+    for (query_id, documents) in fuse_remote_documents(remote_results) {
         for mut document in documents {
             let mut federation_hit = take_federation_hit(&mut document);
             let external_docid = take_document_id_from_federation_hit(&mut federation_hit);
@@ -401,19 +401,17 @@ pub fn take_document_id_from_federation_hit(
     ExternalDocumentId::try_from(external_docid).expect("External document id must be a valid")
 }
 
-fn merge_remote_documents(
-    mut results: Vec<(DocumentsResult, usize)>,
-) -> impl Iterator<Item = (Vec<Document>, usize)> {
-    results.sort_by_key(|(_, query_id)| *query_id);
+pub fn fuse_remote_documents<T: Ord + Eq>(
+    mut results: Vec<(T, DocumentsResult)>,
+) -> impl Iterator<Item = (T, Vec<Document>)> {
+    results.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut merged_results = Vec::new();
-    let mut current_query_id = None;
-    for (results, query_id) in results {
-        if current_query_id != Some(query_id) {
-            current_query_id = Some(query_id);
-            merged_results.push((results.results, query_id));
+    for (fuse_by, results) in results {
+        if merged_results.last().is_none_or(|(last_fuse_by, _)| *last_fuse_by != fuse_by) {
+            merged_results.push((fuse_by, results.results));
         } else {
-            merged_results.last_mut().unwrap().0.extend(results.results);
+            merged_results.last_mut().unwrap().1.extend(results.results);
         }
     }
 

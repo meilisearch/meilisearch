@@ -13,7 +13,7 @@ use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_
 use serde_json::{Map, Value};
 
 use crate::documents_retrieval::preprocessing::{
-    take_document_id_from_federation_hit, take_federation_hit,
+    fuse_remote_documents, take_document_id_from_federation_hit, take_federation_hit,
 };
 use crate::documents_retrieval::{
     ForeignIndexUid, ForeignKeysPerIndex, RemoteRetrieveDocuments, SourceIndexUid,
@@ -158,7 +158,6 @@ pub struct HydrationContext {
     // map from index uid to foreign keys
     hydration_settings: ForeignKeysPerIndex,
     // map from foreign index uid to foreign document ids
-    // TODO Document join: add remote name to the key when implementing network support
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
 }
 
@@ -251,53 +250,60 @@ fn local_fetch_hydration_documents(
 async fn federated_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
     network: Network,
-    index_uid: &ForeignIndexUid,
-    docids: &[ForeignExternalDocumentId],
+    hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     hydration_documents: &mut HashMap<
         (ForeignIndexUid, ForeignExternalDocumentId),
         Map<String, Value>,
     >,
 ) -> Result<(), ResponseError> {
-    let index = index_scheduler.user_index(index_uid.as_ref())?;
-    let rtxn = index.read_txn()?;
-
-    let displayed_fields = index.displayed_fields(&rtxn)?;
-    let fields =
-        displayed_fields.map(|fields| fields.into_iter().map(|field| field.to_string()).collect());
-    let ids = docids.iter().map(|docid| Value::String(docid.as_ref().to_string())).collect();
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
     let remote_availability = index_scheduler.remote_availability();
     let partition = Partition::new(network.clone(), remote_availability);
 
-    let query = PreprocessedQuery {
-        query: BrowseQueryWithIndex {
-            index_uid: IndexUid::new_unchecked(index_uid),
-            remote: None,
-            query: BrowseQuery {
-                offset: 0,
-                limit: docids.len(),
-                filter: None,
-                fields,
-                retrieve_vectors: false,
-                ids: Some(ids),
-                sort: None,
-                use_network: Some(false),
+    let mut remote_queries = Vec::new();
+    for (index_uid, docids) in hydration_docids.iter() {
+        let index = index_scheduler.user_index(index_uid.as_ref())?;
+        let rtxn = index.read_txn()?;
+
+        let displayed_fields = index.displayed_fields(&rtxn)?;
+        let fields = displayed_fields
+            .map(|fields| fields.into_iter().map(|field| field.to_string()).collect());
+        let ids = docids.iter().map(|docid| Value::String(docid.as_ref().to_string())).collect();
+        let query = PreprocessedQuery {
+            query: BrowseQueryWithIndex {
+                index_uid: IndexUid::new_unchecked(index_uid),
+                remote: None,
+                query: BrowseQuery {
+                    offset: 0,
+                    limit: docids.len(),
+                    filter: None,
+                    fields,
+                    retrieve_vectors: false,
+                    ids: Some(ids),
+                    sort: None,
+                    use_network: Some(false),
+                },
             },
-        },
-        filter: None,
-    };
-    let (_, queries): (Vec<_>, Vec<_>) = partition.to_partition(&query)?.enumerate().partition(
-        // true is left, false is right
-        |(_query_index, query)| query.query.remote.as_ref() == network.local.as_ref(),
-    );
+            filter: None,
+        };
+        let (_, queries): (Vec<_>, Vec<_>) =
+            partition.to_partition(&query)?.map(|query| (index_uid, query)).partition(
+                // true is left, false is right
+                |(_, query)| query.query.remote.as_ref() == network.local.as_ref(),
+            );
+
+        remote_queries.extend(queries);
+    }
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network.clone(), params, queries).await?;
+        RemoteRetrieveDocuments::start(network.clone(), params, remote_queries).await?;
 
     // Perform local search
-    local_fetch_hydration_documents(index_scheduler, index_uid, docids, hydration_documents)?;
+    for (index_uid, docids) in hydration_docids.iter() {
+        local_fetch_hydration_documents(index_scheduler, index_uid, docids, hydration_documents)?;
+    }
 
     // wait
     let (remote_results, errors) = remote_retrieve_documents.finish().await;
@@ -309,8 +315,8 @@ async fn federated_fetch_hydration_documents(
     }
 
     // Merge results
-    for (documents_result, _) in remote_results {
-        for mut document in documents_result.results {
+    for (index_uid, documents) in fuse_remote_documents(remote_results) {
+        for mut document in documents {
             let mut federation_hit = take_federation_hit(&mut document);
             let external_docid = take_document_id_from_federation_hit(&mut federation_hit);
             hydration_documents.insert((index_uid.clone(), external_docid), document);
@@ -331,17 +337,16 @@ impl FederatedHydrationFormatter {
 
         // Fetch the documents from the foreign indexes
         let mut hydration_documents = HashMap::new();
-        for (index_uid, docids) in hydration_docids {
-            if network.sharding() {
-                federated_fetch_hydration_documents(
-                    index_scheduler,
-                    network.clone(),
-                    &index_uid,
-                    &docids,
-                    &mut hydration_documents,
-                )
-                .await?;
-            } else {
+        if network.sharding() {
+            federated_fetch_hydration_documents(
+                index_scheduler,
+                network.clone(),
+                hydration_docids,
+                &mut hydration_documents,
+            )
+            .await?;
+        } else {
+            for (index_uid, docids) in hydration_docids {
                 local_fetch_hydration_documents(
                     index_scheduler,
                     &index_uid,
