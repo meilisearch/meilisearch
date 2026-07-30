@@ -4,7 +4,7 @@ use std::ops::Bound::{self, Excluded, Included};
 use std::ops::{BitAnd, BitOr};
 
 pub use filter_parser::Condition;
-use filter_parser::{IndexFilterCondition, TokenLike, VectorFilter};
+use filter_parser::{FilterCondition, IndexFilterCondition, Token, TokenLike, VectorFilter};
 use heed::types::LazyDecode;
 use heed::BytesEncode;
 use memchr::memmem::Finder;
@@ -56,6 +56,24 @@ impl BitOr for IndexFilter {
     }
 }
 impl IndexFilter {
+    pub fn from_filter<E, F>(filter: crate::Filter, on_foreign_filter: &mut F) -> Result<Self, E>
+    where
+        F: FnMut(Token, Box<FilterCondition>) -> Result<IndexFilterCondition, E>,
+    {
+        Ok(Self {
+            condition: IndexFilterCondition::from_filter_condition(
+                filter.condition,
+                on_foreign_filter,
+            )?,
+        })
+    }
+
+    pub fn from_filter_without_foreign(
+        filter: crate::Filter,
+    ) -> Result<Self, (Token, Box<FilterCondition>)> {
+        Self::from_filter(filter, &mut |token, op| Err((token, op)))
+    }
+
     pub fn evaluate(
         &self,
         rtxn: &heed::RoTxn<'_>,

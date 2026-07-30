@@ -40,8 +40,9 @@ use super::types::{
     FEDERATION_HIT, FEDERATION_REMOTE, PINNED_POSITION, WEIGHTED_SCORE_VALUES,
 };
 use super::weighted_scores;
-use crate::documents_retrieval::{FederatedHydrationFormatter, HydrationContext};
-use crate::documents_retrieval::{RemoteErrors, WithIndex};
+use crate::documents_retrieval::{
+    FederatedHydrationFormatter, HydrationContext, RemoteErrors, WithIndex,
+};
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search::search_kind;
@@ -245,7 +246,8 @@ pub async fn perform_federated_search(
     for result_by_index in &mut results_by_index {
         let prev_hits = std::mem::take(&mut result_by_index.hits);
         for hit in prev_hits {
-            if let Some(ScoreDetails::Pin { position, precedence }) = hit.score.first() {
+            if let Some(ScoreDetails::Pin { position, precedence, rule_uid: _ }) = hit.score.first()
+            {
                 pins.push(GlobalPin {
                     position: *position,
                     precedence: *precedence,
@@ -870,7 +872,7 @@ fn build_federation_hit(
             serde_json::Value::Object(std::mem::take(extra_document)),
         );
 
-        if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
+        if let Some(ScoreDetails::Pin { position, precedence, rule_uid: _ }) = score.first() {
             federation.insert(PINNED_POSITION.to_string(), serde_json::json!(position));
             federation.insert(PINNED_PRECEDENCE.to_string(), serde_json::json!(precedence));
         }
@@ -1625,7 +1627,8 @@ impl SearchByIndex {
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
             for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores) {
-                if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
+                if let Some(ScoreDetails::Pin { position, precedence, rule_uid: _ }) = score.first()
+                {
                     let mut hit = result_by_query
                         .hit_maker
                         .make_hit(doc_id, &score)

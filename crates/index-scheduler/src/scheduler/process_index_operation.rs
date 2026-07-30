@@ -8,7 +8,9 @@ use meilisearch_types::error::Code;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::index_uid::DsrIndex;
 use meilisearch_types::milli::documents::PrimaryKey;
-use meilisearch_types::milli::dynamic_search_rules::DynamicSearchRulesView;
+use meilisearch_types::milli::dynamic_search_rules::{
+    fields as dsr_fields, DynamicSearchRulesView,
+};
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{
     self, IndexOperations, Payload, UpdateByFunction,
@@ -673,8 +675,6 @@ impl IndexScheduler {
         mut tasks: Vec<Task>,
         progress: &Progress,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
-        use milli::dynamic_search_rules::fields as dsr_fields;
-
         let indexer_alloc = Bump::new();
         let from_milli = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_owned()));
         let started_processing_at = std::time::Instant::now();

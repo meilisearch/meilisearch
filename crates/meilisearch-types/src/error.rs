@@ -1153,6 +1153,9 @@ ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQU
 ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST,
 "You tried to manually set a webhook's `isEditable` field. Meilisearch automatically sets `isEditable` for all webhooks. Only reserved webhooks have `isEditable` set to `false`." ;
 
+InvalidDynamicSearchRuleUid                    , InvalidRequest       , BAD_REQUEST,
+"The [`uid`](/reference/api/search-rules/create-or-update-a-search-rule#parameter-uid) path parameter is invalid.";
+
 InvalidDynamicSearchRuleOffset                 , InvalidRequest       , BAD_REQUEST,
 "The [`offset`](/reference/api/search-rules/list-search-rules#body-offset) parameter is invalid. It should be a positive integer." ;
 

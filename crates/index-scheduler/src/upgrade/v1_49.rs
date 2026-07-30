@@ -1,10 +1,10 @@
 use meilisearch_types::dynamic_search_rules::{
-    Conditions as NewConditions, DynamicSearchRule as NewDynamicSearchRule,
-    DynamicSearchRuleAction as NewDynamicSearchRuleAction, QueryCondition,
-    RuleAction as NewRuleAction, RuleUid, Selector as NewSelector, TimeCondition,
+    Conditions as NewConditions, DynamicSearchRule as NewDynamicSearchRule, QueryCondition,
+    RuleUid, TimeCondition,
 };
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::milli::dynamic_search_rules::{PinAction as NewRuleAction, RuleActions};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -53,12 +53,6 @@ pub struct LegacyDynamicSearchRule {
 impl LegacyDynamicSearchRule {
     pub fn into_dynamic_search_rule(self) -> Option<NewDynamicSearchRule> {
         let Self { uid, description, priority, active, conditions, actions } = self;
-
-        let actions = actions
-            .into_iter()
-            // filter out actions that don't cleanly convert
-            .filter_map(|action| action.into_new_action())
-            .collect();
 
         let mut time = None;
         let mut query = None;
@@ -115,6 +109,12 @@ impl LegacyDynamicSearchRule {
 
         let conditions = NewConditions { time, query, filter: None };
 
+        let pin = actions
+            .into_iter()
+            // filter out actions that don't cleanly convert
+            .filter_map(|action| action.into_new_action())
+            .collect();
+
         Some(NewDynamicSearchRule {
             uid,
             description,
@@ -122,7 +122,7 @@ impl LegacyDynamicSearchRule {
             last_updated_at: None,
             active,
             conditions,
-            actions,
+            actions: RuleActions { pin, scale: Default::default() },
         })
     }
 }
@@ -177,14 +177,15 @@ impl RuleAction {
         let Selector { index_uid, id } = selector;
         let id = id?;
 
-        let selector = NewSelector { index_uid, id };
-        let action = match action {
-            DynamicSearchRuleAction::Pin { position } => {
-                NewDynamicSearchRuleAction::Pin { position }
-            }
+        let position = match action {
+            DynamicSearchRuleAction::Pin { position } => position,
         };
 
-        Some(NewRuleAction { selector, action })
+        Some(NewRuleAction {
+            index_uid: index_uid.map(|index_uid| index_uid.into_inner()),
+            id,
+            position,
+        })
     }
 }
 
