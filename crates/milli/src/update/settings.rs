@@ -33,7 +33,7 @@ use crate::progress::{EmbedderStats, Progress};
 use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
-use crate::update::new::indexer::reindex;
+use crate::update::new::indexer::{reindex, update_index};
 use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
@@ -1631,6 +1631,16 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             )
             .map(Some)
         } else {
+            update_index(
+                self.index,
+                self.wtxn,
+                inner_settings_diff.new.fields_ids_map.clone(),
+                None,
+                inner_settings_diff.new_embedders().clone(),
+                ip_policy,
+                self.index.field_distribution(self.wtxn)?,
+                self.index.documents_ids(self.wtxn)?,
+            )?;
             Ok(None)
         }
     }
