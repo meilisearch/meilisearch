@@ -783,29 +783,21 @@ async fn run_conversation<C: async_openai::config::Config>(
                                 r#type: _,
                                 function,
                             } = chunk;
-                            let FunctionCallStream { name, arguments } = function.as_ref().unwrap();
+                            let call = global_tool_calls.entry(*index).or_default();
 
-                            global_tool_calls
-                                .entry(*index)
-                                .and_modify(|call| {
-                                    if call.is_internal() {
-                                        if let Some(arguments) = arguments.as_ref() {
-                                            call.append(arguments);
+                            if let Some(id) = id {
+                                call.id = Some(id.clone());
+                            }
+
+                            if let Some(FunctionCallStream { name, arguments }) = function {
+                                if let Some(name) = name {
+                                    call.function_name = Some(name.clone());
+                                }
+
+                                if let Some(arguments) = arguments {
+                                    call.arguments.push_str(arguments);
                                         }
-                                    }
-                                })
-                                .or_insert_with(|| {
-                                    if name.as_deref() == Some(MEILI_SEARCH_IN_INDEX_FUNCTION_NAME)
-                                    {
-                                        Call::Internal {
-                                            id: id.as_ref().unwrap().clone(),
-                                            function_name: name.as_ref().unwrap().clone(),
-                                            arguments: arguments.clone().unwrap_or_default(),
-                                        }
-                                    } else {
-                                        Call::External
-                                    }
-                                });
+                            }
                         }
                     }
                     None => {
@@ -813,15 +805,18 @@ async fn run_conversation<C: async_openai::config::Config>(
                             let (meili_calls, _other_calls): (Vec<_>, Vec<_>) =
                                 mem::take(global_tool_calls)
                                     .into_values()
-                                    .flat_map(|call| match call {
-                                        Call::Internal { id, function_name: name, arguments } => {
+                                    .filter_map(|call| {
+                                        let id = call.id?;
+                                        let name = call.function_name?;
+
                                             Some(ChatCompletionMessageToolCall {
                                                 id,
                                                 r#type: Some(ChatCompletionToolType::Function),
-                                                function: FunctionCall { name, arguments },
+                                            function: FunctionCall {
+                                                name,
+                                                arguments: call.arguments,
+                                            },
                                             })
-                                        }
-                                        Call::External => None,
                                     })
                                     .partition(|call| {
                                         call.function.name == MEILI_SEARCH_IN_INDEX_FUNCTION_NAME
@@ -966,31 +961,12 @@ async fn handle_meili_tools(
     Ok(())
 }
 
-/// The structure used to aggregate the function calls to make.
-#[derive(Debug)]
-enum Call {
-    /// Tool calls to tools that must be managed by Meilisearch internally.
-    /// Typically the search functions.
-    Internal { id: String, function_name: String, arguments: String },
-    /// Tool calls that we track but only to know that its not our functions.
-    /// We return the function calls as-is to the end-user.
-    External,
-}
-
-impl Call {
-    fn is_internal(&self) -> bool {
-        matches!(self, Call::Internal { .. })
-    }
-
-    /// # Panics
-    ///
-    /// - if called on external calls
-    fn append(&mut self, more: &str) {
-        match self {
-            Call::Internal { arguments, .. } => arguments.push_str(more),
-            Call::External => panic!("Cannot append argument chunks to an external function"),
-        }
-    }
+/// The structure used to aggregate streamed function-call chunks.
+#[derive(Debug, Default)]
+struct Call {
+    id: Option<String>,
+    function_name: Option<String>,
+    arguments: String,
 }
 
 #[derive(Deserialize)]
