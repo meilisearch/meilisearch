@@ -20,6 +20,7 @@ async fn experimental_features() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -43,6 +44,7 @@ async fn experimental_features() {
     {
       "metrics": true,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -66,6 +68,7 @@ async fn experimental_features() {
     {
       "metrics": true,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -90,6 +93,7 @@ async fn experimental_features() {
     {
       "metrics": true,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -114,6 +118,7 @@ async fn experimental_features() {
     {
       "metrics": true,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -145,6 +150,7 @@ async fn experimental_feature_metrics() {
     {
       "metrics": true,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -204,7 +210,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `disableDocumentsFetchQueue`, `legacySearch`, `renderRoute`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `tasksStreamingRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`, `disableDocumentsFetchQueue`, `legacySearch`, `renderRoute`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"

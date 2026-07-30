@@ -27,7 +27,7 @@ use crate::processing::{
     TaskDeletionProgress, UpdateIndexProgress,
 };
 use crate::utils::{consecutive_ranges, swap_index_uid_in_task, ProcessingBatch};
-use crate::{Error, IndexScheduler, IndexUid, Result, TaskId, BEI128};
+use crate::{Error, IndexScheduler, IndexUid, ModifiedTasks, Result, TaskId, BEI128};
 
 /// The name of the copy of the data.mdb file used during compaction.
 const DATA_MDB_COPY_NAME: &str = "data.mdb.cpy";
@@ -63,6 +63,8 @@ impl IndexScheduler {
             self.maybe_fail(crate::test_utils::FailureLocation::PanicInsideProcessBatch)?;
             self.breakpoint(crate::test_utils::Breakpoint::InsideProcessBatch);
         }
+
+        let ids = batch.ids().clone();
 
         match batch {
             Batch::TaskCancelation { mut task } => {
@@ -174,6 +176,8 @@ impl IndexScheduler {
                 // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
                 self.index_mapper
                     .set_currently_updating_index(Some((index_name.clone(), index.clone())));
+
+                self.scheduler.waker.send(ModifiedTasks::Some { ids }).unwrap();
 
                 let pre_commit_dabases_sizes = index.database_sizes(&index_wtxn)?;
                 let (tasks, congestion) = self.apply_index_operation(
