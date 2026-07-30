@@ -63,7 +63,7 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, PinDoc, Result,
+    AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, Result,
     TermsMatchingStrategy, UserError, Weight,
 };
 
@@ -759,7 +759,6 @@ pub fn execute_vector_search(
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     progress: &Progress,
-    pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -795,14 +794,12 @@ pub fn execute_vector_search(
         ranking_score_threshold,
         exhaustive_number_hits,
         max_total_hits,
-        pins,
     )?;
 
     Ok(PartialSearchResult {
         candidates: all_candidates,
         document_scores: scores,
         documents_ids: docids,
-        located_query_terms: None,
         degraded,
     })
 }
@@ -811,7 +808,7 @@ pub fn execute_vector_search(
 #[tracing::instrument(level = "trace", skip_all, target = "search::main")]
 pub fn execute_search(
     ctx: &mut SearchContext<'_>,
-    query_graph_terms: Option<(QueryGraph, Vec<LocatedQueryTerm>)>,
+    query_graph: Option<&QueryGraph>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
@@ -827,11 +824,8 @@ pub fn execute_search(
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     progress: &Progress,
-    pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
-
-    let (query_graph, located_query_terms) = query_graph_terms.unzip();
 
     let bucket_sort_output = if let Some(query_graph) = query_graph {
         let ranking_rules = get_ranking_rules_for_query_graph_search(
@@ -865,7 +859,6 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
-            pins,
         )?
     } else {
         let ranking_rules =
@@ -885,7 +878,6 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
-            pins,
         )?
     };
 
@@ -910,7 +902,6 @@ pub fn execute_search(
         candidates: all_candidates,
         document_scores: scores,
         documents_ids: docids,
-        located_query_terms,
         degraded,
     })
 }
@@ -1051,7 +1042,6 @@ pub(crate) fn check_sort_criteria(
 }
 
 pub struct PartialSearchResult {
-    pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,

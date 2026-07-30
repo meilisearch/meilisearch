@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, ValuePointerRef};
+use milli::dynamic_search_rules::RuleActions;
 use milli::update::new::document::Document;
 use milli::update::Setting;
 use milli::FaultSource;
@@ -49,7 +50,8 @@ pub struct DynamicSearchRule {
     #[serde(default)]
     pub conditions: Conditions,
     /// Actions to apply when the dynamic search rule matches.
-    pub actions: Vec<RuleAction>,
+    #[serde(default)]
+    pub actions: RuleActions,
 }
 
 impl DynamicSearchRule {
@@ -61,7 +63,7 @@ impl DynamicSearchRule {
             last_updated_at: None,
             active: true,
             conditions: Default::default(),
-            actions: vec![],
+            actions: Default::default(),
         }
     }
 
@@ -199,9 +201,13 @@ impl DynamicSearchRule {
             Setting::NotSet => (),
         }
 
+        // for consistency with conditions, we are not allowing partial updates of actions.
+        // Any action update rewrites the entire action subobject.
+        // this is not consistent with how we usually do things in Meilisearch API,
+        // but should not be an issue for use from the UI which tends to send back the entire rule object anyway.
         *actions = match new_actions {
             Setting::Set(new_actions) => new_actions,
-            Setting::Reset => vec![],
+            Setting::Reset => Default::default(),
             Setting::NotSet => std::mem::take(actions),
         };
     }
@@ -264,8 +270,8 @@ pub struct DynamicSearchRuleUpdateRequest {
     #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>, schema_type = Option<Conditions>, skip_serializing_if = "Setting::is_not_set")]
     pub conditions: Setting<Conditions>,
     /// Actions to apply when the dynamic search rule matches.
-    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleActions>, schema_type = Option<Vec<RuleAction>>, skip_serializing_if = "Setting::is_not_set")]
-    pub actions: Setting<Vec<RuleAction>>,
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleActions>, schema_type = Option<RuleActions>, skip_serializing_if = "Setting::is_not_set")]
+    pub actions: Setting<RuleActions>,
 }
 
 #[routes::request(db, validate = validate_condition -> DeserrJsonError, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
@@ -369,44 +375,6 @@ fn validate_condition<E: DeserializeError>(
     }
 
     Ok(conditions)
-}
-
-#[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, ToSchema)]
-#[deserr(
-    rename_all = camelCase,
-    deny_unknown_fields,
-    where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>
-)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-pub struct RuleAction {
-    /// Target document selector for this action.
-    pub selector: Selector,
-    // Use Object here because utoipa's tagged-enum schema generation combines
-    // allOf with additionalProperties: false in a way that Spectral rejects.
-    #[schema(value_type = Object)]
-    /// Action payload to apply to the selected document.
-    pub action: DynamicSearchRuleAction,
-}
-
-// manual impl: no support for schema_type = Object and tag in DynamicSearchRuleAction
-impl routes::RequestBody for RuleAction {}
-
-#[routes::request(db, where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>, no_error)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Selector {
-    #[request(default, skip_serializing_if = "Option::is_none")]
-    pub index_uid: Option<IndexUid>,
-    #[request(required)]
-    pub id: String,
-}
-
-#[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(tag = "type", rename_all = camelCase, deny_unknown_fields)]
-#[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
-#[schema(rename_all = "camelCase")]
-pub enum DynamicSearchRuleAction {
-    Pin { position: u32 },
 }
 
 fn parse_optional_rfc3339_datetime(

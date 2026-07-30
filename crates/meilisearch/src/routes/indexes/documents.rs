@@ -23,7 +23,6 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::constants::{
     RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
 };
-
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::Progress;
@@ -61,7 +60,7 @@ use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::federated::{weighted_scores, NetworkPartitioner};
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{
     ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
@@ -1067,7 +1066,7 @@ fn merge_documents_results(
 }
 
 fn compare_documents(left: &MergedDocument, right: &MergedDocument) -> Ordering {
-    weighted_scores::compare_partial(left.score.iter().cloned(), right.score.iter().cloned())
+    WeightedScoreValue::compare_partial(left.score.iter().cloned(), right.score.iter().cloned())
         // unwrap: comparison should be always possible because all documents use the same sorting strategy
         .unwrap()
 }

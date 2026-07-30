@@ -4,7 +4,8 @@ use matching_words::tests::temp_index_with_documents;
 use super::*;
 use crate::index::tests::TempIndex;
 use crate::progress::Progress;
-use crate::{execute_search, filtered_universe, Deadline, SearchContext};
+use crate::search::ResolvedQuery;
+use crate::{filtered_universe, SearchContext};
 
 impl<'a> MatcherBuilder<'a> {
     fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
@@ -33,30 +34,10 @@ impl<'a> MatcherBuilder<'a> {
 
         search.query(query);
 
-        let (query_terms, _, _) =
-            search.build_located_query_terms(&mut ctx, None, &mut universe).unwrap();
+        let ResolvedQuery { query_graph_terms, .. } =
+            search.resolve_query(&mut ctx, None, &mut universe).unwrap();
 
-        let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
-            &mut ctx,
-            query_terms,
-            crate::TermsMatchingStrategy::default(),
-            crate::score_details::ScoringStrategy::Skip,
-            false,
-            None,
-            universe,
-            &None,
-            &None,
-            crate::search::new::GeoSortParameter::default(),
-            0,
-            100,
-            &mut crate::DefaultSearchLogger,
-            &mut crate::DefaultSearchLogger,
-            Deadline::never(),
-            None,
-            &progress,
-            vec![],
-        )
-        .unwrap();
+        let (_, located_query_terms) = query_graph_terms.unzip();
 
         // consume context and located_query_terms to build MatchingWords.
         let matching_words = match located_query_terms {

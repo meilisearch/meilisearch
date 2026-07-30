@@ -31,6 +31,11 @@ pub enum ScoreDetails {
         position: u32,
         precedence: Option<u64>,
     },
+
+    /// A document that was scaled by a given factor (weight) in the results.
+    Scale {
+        weight: f64,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -54,6 +59,40 @@ pub enum WeightedScoreValue {
     Sort { asc: bool, value: serde_json::Value },
     GeoSort { asc: bool, distance: Option<f64> },
     VectorSort(f64),
+}
+
+impl WeightedScoreValue {
+    pub fn compare_partial(
+        mut left_it: impl Iterator<Item = Self>,
+        mut right_it: impl Iterator<Item = Self>,
+    ) -> Option<Ordering> {
+        loop {
+            let left = left_it.next();
+            let right = right_it.next();
+
+            match (left, right) {
+                (None, None) => return Some(Ordering::Equal),
+                (None, Some(_)) => return Some(Ordering::Less),
+                (Some(_), None) => return Some(Ordering::Greater),
+                (Some(left), Some(right)) => match left.partial_cmp(&right) {
+                    Some(Ordering::Equal) => continue,
+                    Some(order) => return Some(order),
+                    None => {
+                        let left_count = left_it.count();
+                        let right_count = right_it.count();
+                        // compare how many remaining groups of rules each side has.
+                        // the group with the most remaining groups wins.
+                        let count_nb = left_count.cmp(&right_count);
+                        if count_nb.is_eq() {
+                            return None;
+                        } else {
+                            return Some(count_nb);
+                        }
+                    }
+                },
+            }
+        }
+    }
 }
 
 impl PartialOrd for WeightedScoreValue {
@@ -123,6 +162,7 @@ impl ScoreDetails {
             ScoreDetails::Vector(_) => None,
             ScoreDetails::Skipped => Some(Rank { rank: 0, max_rank: 1 }),
             ScoreDetails::Pin { .. } => None,
+            ScoreDetails::Scale { .. } => None,
         }
     }
 
@@ -156,48 +196,72 @@ impl ScoreDetails {
     }
 
     pub fn score_values<'a>(
-        details: impl Iterator<Item = &'a Self> + 'a,
+        mut details: impl Iterator<Item = &'a Self> + 'a,
     ) -> impl Iterator<Item = ScoreValue<'a>> + 'a {
-        // Pin is a placement directive, not a score — filter it out before entering
-        // the rank_or_value pipeline.
-        details
-            .filter_map(ScoreDetails::rank_or_value)
-            .coalesce(|left, right| match (left, right) {
-                (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
-                    Ok(RankOrValue::Rank(Rank::merge(left, right)))
-                }
-                (left, right) => Err((left, right)),
-            })
-            .map(|rank_or_value| match rank_or_value {
-                RankOrValue::Rank(r) => ScoreValue::Score(r.local_score()),
-                RankOrValue::Sort(s) => ScoreValue::Sort(s),
-                RankOrValue::GeoSort(g) => ScoreValue::GeoSort(g),
-                RankOrValue::Score(s) => ScoreValue::Score(s),
-            })
+        let weight = std::cell::Cell::new(1.0f64);
+
+        std::iter::from_fn(move || {
+            details
+                .by_ref()
+                .inspect(|detail| {
+                    if let ScoreDetails::Scale { weight: scale } = detail {
+                        weight.update(|weight| weight * scale);
+                    }
+                })
+                .filter_map(ScoreDetails::rank_or_value)
+                .coalesce(|left, right| match (left, right) {
+                    (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
+                        Ok(RankOrValue::Rank(Rank::merge(left, right)))
+                    }
+                    (left, right) => Err((left, right)),
+                })
+                .map(|rank_or_value| match rank_or_value {
+                    RankOrValue::Rank(r) => ScoreValue::Score(r.local_score() * weight.get()),
+                    RankOrValue::Sort(s) => ScoreValue::Sort(s),
+                    RankOrValue::GeoSort(g) => ScoreValue::GeoSort(g),
+                    RankOrValue::Score(s) => ScoreValue::Score(s * weight.get()),
+                })
+                .next()
+        })
     }
 
     pub fn weighted_score_values<'a>(
-        details: impl Iterator<Item = &'a Self> + 'a,
+        mut details: impl Iterator<Item = &'a Self> + 'a,
         weight: f64,
     ) -> impl Iterator<Item = WeightedScoreValue> + 'a {
-        details
-            .filter_map(ScoreDetails::rank_or_value)
-            .coalesce(|left, right| match (left, right) {
-                (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
-                    Ok(RankOrValue::Rank(Rank::merge(left, right)))
-                }
-                (left, right) => Err((left, right)),
-            })
-            .map(move |rank_or_value| match rank_or_value {
-                RankOrValue::Rank(r) => WeightedScoreValue::WeightedScore(r.local_score() * weight),
-                RankOrValue::Sort(s) => {
-                    WeightedScoreValue::Sort { asc: s.ascending, value: s.value.clone() }
-                }
-                RankOrValue::GeoSort(g) => {
-                    WeightedScoreValue::GeoSort { asc: g.ascending, distance: g.distance() }
-                }
-                RankOrValue::Score(s) => WeightedScoreValue::VectorSort(s * weight),
-            })
+        // define a cell that will keep the current weight, and capture it in a from_fn closure to keep the state
+        // throughout the entire iteration
+        let weight = std::cell::Cell::new(weight);
+
+        std::iter::from_fn(move || {
+            details
+                .by_ref()
+                .inspect(|detail| {
+                    if let ScoreDetails::Scale { weight: scale } = detail {
+                        weight.update(|weight| weight * scale);
+                    }
+                })
+                .filter_map(ScoreDetails::rank_or_value)
+                .coalesce(|left, right| match (left, right) {
+                    (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
+                        Ok(RankOrValue::Rank(Rank::merge(left, right)))
+                    }
+                    (left, right) => Err((left, right)),
+                })
+                .map(|rank_or_value| match rank_or_value {
+                    RankOrValue::Rank(r) => {
+                        WeightedScoreValue::WeightedScore(r.local_score() * weight.get())
+                    }
+                    RankOrValue::Sort(s) => {
+                        WeightedScoreValue::Sort { asc: s.ascending, value: s.value.clone() }
+                    }
+                    RankOrValue::GeoSort(g) => {
+                        WeightedScoreValue::GeoSort { asc: g.ascending, distance: g.distance() }
+                    }
+                    RankOrValue::Score(s) => WeightedScoreValue::VectorSort(s * weight.get()),
+                })
+                .next()
+        })
     }
 
     fn rank_or_value(&self) -> Option<RankOrValue<'_>> {
@@ -218,6 +282,12 @@ impl ScoreDetails {
             // Pin is filtered out before reaching rank_or_value() — see global_score(),
             // score_values(), and weighted_score_values().
             ScoreDetails::Pin { .. } => None,
+            // The weight of the scale is to be extracted for multiplication with the ambient weight
+            // in `score_values` and `weighted_score_values`.
+            //
+            // Extracting the score rather than turning it into a `RankOrValue::Score` limits side-effects
+            // such as Meilisearch counting hits with a `Scale` as semantic hits
+            ScoreDetails::Scale { .. } => None,
         }
     }
 
@@ -414,6 +484,14 @@ impl ScoreDetails {
                         "precedence": precedence,
                     });
                     details_map.insert("pin".into(), pin_details);
+                    order += 1;
+                }
+                ScoreDetails::Scale { weight } => {
+                    let scale_details = serde_json::json!({
+                        "order": order,
+                        "weight": weight
+                    });
+                    details_map.insert("scale".into(), scale_details);
                     order += 1;
                 }
             }
