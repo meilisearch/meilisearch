@@ -784,6 +784,9 @@ pub async fn documents_by_query_post(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    // TODO: https://linear.app/meilisearch/issue/ENGPROD-2703
+    let progress = Progress::default();
+
     let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
@@ -814,7 +817,8 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, body, is_proxy).await;
+    let ret =
+        documents_by_query(index_scheduler.clone(), index_uid, body, is_proxy, &progress).await;
     if let Some(permit) = permit {
         permit.drop().await;
     }
@@ -886,6 +890,9 @@ pub async fn get_documents(
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?params, "Get documents GET");
 
+    // TODO: https://linear.app/meilisearch/issue/ENGPROD-2703
+    let progress = Progress::default();
+
     let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
 
@@ -929,7 +936,7 @@ pub async fn get_documents(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, query, false).await;
+    let ret = documents_by_query(index_scheduler.clone(), index_uid, query, false, &progress).await;
 
     if let Some(permit) = permit {
         permit.drop().await;
@@ -943,21 +950,20 @@ async fn documents_by_query(
     index_uid: web::Path<String>,
     query: BrowseQuery,
     is_proxy: bool,
+    progress: &Progress,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    // TODO: maybe use the progress result?
-    let progress = Progress::default();
     let network = index_scheduler.network();
     let features = index_scheduler.features();
 
     let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
     let (_, mut queries) = preprocess_filters(
         index_scheduler.clone(),
-        network.clone(),
+        &network,
         queries,
         features,
-        false,
+        is_proxy,
         &progress,
         Code::InvalidDocumentFilter,
     )
@@ -993,7 +999,7 @@ async fn retrieve_documents_federated(
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(&network, params, remote_queries).await?;
 
     // Perform local search
     let mut results = Vec::with_capacity(local_queries.len());
@@ -1003,7 +1009,7 @@ async fn retrieve_documents_federated(
     }
 
     // wait
-    let (remote_results, errors) = remote_retrieve_documents.finish().await;
+    let (remote_results, errors) = remote_retrieve_documents.finish(&index_scheduler).await?;
     results.extend(remote_results);
 
     // merge metadata

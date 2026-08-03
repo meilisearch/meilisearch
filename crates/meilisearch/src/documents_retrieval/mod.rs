@@ -69,7 +69,7 @@ impl DocumentSearch {
         let network = index_scheduler.network();
         let (hydration_cache, preprocessed_queries) = preprocess_filters(
             index_scheduler.clone(),
-            network.clone(),
+            &network,
             self.queries,
             features,
             self.is_proxy,
@@ -281,7 +281,7 @@ pub struct RemoteRetrieveDocuments<T> {
 
 impl<T: Clone> RemoteRetrieveDocuments<T> {
     pub async fn start(
-        network: Network,
+        network: &Network,
         params: ProxySearchParams,
         remote_queries: Vec<(T, PreprocessedQuery<BrowseQueryWithIndex>)>,
     ) -> Result<Self, ResponseError> {
@@ -358,7 +358,10 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
         Ok(Self { errors, results, in_flight_requests })
     }
 
-    pub async fn finish(self) -> (Vec<(T, DocumentsResult)>, BTreeMap<String, ResponseError>) {
+    pub async fn finish(
+        self,
+        index_scheduler: &IndexScheduler,
+    ) -> Result<(Vec<(T, DocumentsResult)>, BTreeMap<String, ResponseError>), ResponseError> {
         let Self { mut results, mut errors, in_flight_requests } = self;
         // Retrieve remote results
         for (task, remote_name, metadata) in in_flight_requests {
@@ -370,6 +373,13 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
             }
         }
 
-        (results, errors)
+        // Mark remote as unavailable if error is server error
+        for (remote_name, error) in errors.iter() {
+            if error.code.is_server_error() {
+                index_scheduler.mark_remote_unavailable(remote_name.clone())?;
+            }
+        }
+
+        Ok((results, errors))
     }
 }

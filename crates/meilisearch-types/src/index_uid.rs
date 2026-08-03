@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 use crate::error::{Code, ErrorCode};
 
 #[derive(
-    Debug, Clone, Deserialize, PartialEq, Eq, Deserr, PartialOrd, Ord, Serialize, ToSchema,
+    Debug, Clone, Deserialize, PartialEq, Eq, Deserr, PartialOrd, Ord, Serialize, ToSchema, Hash,
 )]
 #[deserr(try_from(String) = IndexUid::try_from -> IndexUidFormatError)]
 #[serde(try_from = "String")]

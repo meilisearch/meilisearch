@@ -33,7 +33,7 @@ use meilisearch_types::network::Network;
 const MAX_FOREIGN_FILTER_DOCIDS: u64 = 1000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ForeignIndexUid(pub String);
+pub struct ForeignIndexUid(pub IndexUid);
 
 impl std::borrow::Borrow<str> for ForeignIndexUid {
     fn borrow(&self) -> &str {
@@ -57,7 +57,7 @@ impl AsRef<str> for SourceFieldName {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SourceIndexUid(pub String);
+pub struct SourceIndexUid(pub IndexUid);
 
 impl std::borrow::Borrow<str> for SourceIndexUid {
     fn borrow(&self) -> &str {
@@ -75,7 +75,7 @@ pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, Sou
 
 pub async fn preprocess_filters<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
-    network: Network,
+    network: &Network,
     queries: Vec<Q>,
     features: RoFeatures,
     is_proxy: bool,
@@ -89,12 +89,12 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
     if features.runtime_features().foreign_keys && !is_proxy {
         let foreign_keys_settings = retrieve_foreign_keys_settings(
             &index_scheduler,
-            queries.iter().map(|q| SourceIndexUid(q.index_uid().to_string())),
+            queries.iter().map(|q| SourceIndexUid(q.index_uid().clone())),
         )
         .without_index()?;
 
         let source_index_uids =
-            queries.iter().map(|q| SourceIndexUid(q.index_uid().to_string())).collect::<Vec<_>>();
+            queries.iter().map(|q| SourceIndexUid(q.index_uid().clone())).collect::<Vec<_>>();
 
         let queries = preprocess_filters_allowing_foreign_keys(
             index_scheduler,
@@ -140,7 +140,7 @@ fn preprocess_filters_forbidding_foreign_keys<Q: PreprocessableQuery>(
 
 async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
-    network: Network,
+    network: &Network,
     foreign_keys_settings: &ForeignKeysPerIndex,
     mut queries: Vec<Q>,
     features: RoFeatures,
@@ -155,9 +155,9 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
             Some(filter) => {
                 let filter = parse_filter(&filter, code, features).with_index(query_index)?;
 
-                Ok((SourceIndexUid(query.index_uid().to_string()), filter))
+                Ok((SourceIndexUid(query.index_uid().clone()), filter))
             }
-            None => Ok((SourceIndexUid(query.index_uid().to_string()), None)),
+            None => Ok((SourceIndexUid(query.index_uid().clone()), None)),
         })
         .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
 
@@ -218,7 +218,6 @@ fn extract_foreign_filters(
                     Err(fid.to_external_error(error).into())
                 })?);
 
-            // index_uid and foreign_index_uid are RCs and can be cloned safely
             foreign_filters.push((
                 index_uid.clone(),
                 foreign_index_uid.clone(),
@@ -264,6 +263,7 @@ async fn local_process_foreign_filters(
         // Gather the internal docids for each filter
         let mut filters_internal_docids = Vec::new();
         for filter_index in filter_indices.iter() {
+            // Safety (Data oriented): `filter_index` is an index into the `foreign_filters` vector, so it's safe to dereference it
             let (_, _, _, index_filter) = &foreign_filters[*filter_index];
 
             // filter the foreign index
@@ -297,14 +297,10 @@ async fn local_process_foreign_filters(
         // Build the In filter for each filter
         for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids.into_iter())
         {
-            let mut inner = Vec::new();
-            for internal in docids.iter() {
-                if let Some(external) = internal_to_external_docids.get(&internal) {
-                    inner.push(external.as_str().into());
-                }
-            }
+            let inner: Result<Vec<_>, _> = foreign_index.external_id_of(&foreign_rtxn, &fields_ids_map, docids)?.into_iter().map(|id| id.map(|id| id.into())).collect();
 
-            foreign_filters_external_docids[*filter_index] = inner;
+            // Safety (Data oriented): `filter_index` is an index into the `foreign_filters_external_docids` vector, so it's safe to dereference it
+            foreign_filters_external_docids[*filter_index] = inner?;
         }
     }
 
@@ -313,7 +309,7 @@ async fn local_process_foreign_filters(
 
 async fn federated_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
-    network: Network,
+    network: &Network,
     foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
     progress: &Progress,
 ) -> Result<Vec<Vec<LightToken>>, ResponseError> {
@@ -343,31 +339,24 @@ async fn federated_process_foreign_filters(
             },
             filter: index_filter.clone(),
         };
-        let (_, queries): (Vec<_>, Vec<_>) =
-            partition.to_partition(&query)?.map(|query| (query_index, query)).partition(
-                // true is left, false is right
-                |(_, query)| query.query.remote.as_ref() == network.local.as_ref(),
-            );
+        let queries = partition
+            .to_partition(&query)?
+            .filter(|query| query.query.remote.as_ref() != network.local.as_ref())
+            .map(|query| (query_index, query));
 
         remote_queries.extend(queries);
     }
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network.clone(), params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(&network, params, remote_queries).await?;
 
     // Perform local search
     let mut foreign_filters_external_docids =
         local_process_foreign_filters(index_scheduler, foreign_filters, progress).await?;
 
     // wait
-    let (remote_results, errors) = remote_retrieve_documents.finish().await;
-
-    for (remote_name, error) in errors.iter() {
-        if error.code.is_server_error() {
-            index_scheduler.mark_remote_unavailable(remote_name.clone())?;
-        }
-    }
+    let (remote_results, errors) = remote_retrieve_documents.finish(index_scheduler).await?;
 
     // Merge results
     for (query_id, documents) in fuse_remote_documents(remote_results) {
@@ -423,7 +412,7 @@ pub fn fuse_remote_documents<T: Ord + Eq>(
 /// This function will open each foreign index once and process the filters.
 async fn filters_into_index_filters(
     index_scheduler: &Data<IndexScheduler>,
-    network: Network,
+    network: &Network,
     filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     progress: &Progress,
@@ -474,7 +463,12 @@ pub fn retrieve_foreign_keys_settings(
         let foreign_keys = index
             .foreign_keys(&rtxn)?
             .into_iter()
-            .map(|fk| (ForeignIndexUid(fk.foreign_index_uid), SourceFieldName(fk.field_name)))
+            .map(|fk| {
+                (
+                    ForeignIndexUid(IndexUid::new_unchecked(fk.foreign_index_uid)),
+                    SourceFieldName(fk.field_name),
+                )
+            })
             .collect();
         foreign_keys_settings.insert(index_uid.clone(), foreign_keys);
     }

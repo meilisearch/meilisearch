@@ -16,9 +16,9 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page,
-    AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, SearchStep, DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, AttributePatterns, Deadline, DocumentId,
+    FederatingResultsStep, FieldsIdsMap, MetadataBuilder, OrderBy, PatternMatch, SearchStep,
+    DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -350,7 +350,7 @@ pub async fn perform_federated_search(
     }
     if let Some(hydration_cache) = hydration_cache {
         let hydration_formatter =
-            FederatedHydrationFormatter::new(hydration_cache, &index_scheduler, network.clone())
+            FederatedHydrationFormatter::new(hydration_cache, &index_scheduler, &network)
                 .await
                 .without_index()?;
         hydration_formatter.hydrate_documents(&mut merged_hits).without_index()?;

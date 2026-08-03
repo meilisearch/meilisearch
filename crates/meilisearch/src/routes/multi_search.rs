@@ -304,7 +304,7 @@ pub async fn legacy_multi_search_with_post(
 
     let (hydration_cache, preprocessed_queries) = preprocess_filters(
         index_scheduler.clone(),
-        network.clone(),
+        &network,
         queries,
         features,
         is_proxy,

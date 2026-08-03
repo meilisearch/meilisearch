@@ -377,7 +377,7 @@ async fn process_search_request(
     let network = index_scheduler.network();
     let (_, mut preprocessed_queries) = preprocess_filters(
         (*index_scheduler).clone(),
-        network,
+        &network,
         vec![query],
         features,
         false,

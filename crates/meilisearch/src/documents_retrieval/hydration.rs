@@ -163,14 +163,10 @@ pub struct HydrationContext {
 
 impl HydrationContext {
     pub fn new(
-        index_by_query_index: impl IntoIterator<Item = SourceIndexUid>,
+        index_by_query_index: Vec<SourceIndexUid>,
         hydration_settings: ForeignKeysPerIndex,
     ) -> Self {
-        Self {
-            index_by_query_index: index_by_query_index.into_iter().collect(),
-            hydration_settings,
-            hydration_docids: HashMap::new(),
-        }
+        Self { index_by_query_index, hydration_settings, hydration_docids: HashMap::new() }
     }
 
     pub fn register_foreign_docids(&mut self, hit: &SearchHit, query_index: usize) {
@@ -249,7 +245,7 @@ fn local_fetch_hydration_documents(
 
 async fn federated_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
-    network: Network,
+    network: &Network,
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     hydration_documents: &mut HashMap<
         (ForeignIndexUid, ForeignExternalDocumentId),
@@ -287,18 +283,17 @@ async fn federated_fetch_hydration_documents(
             },
             filter: None,
         };
-        let (_, queries): (Vec<_>, Vec<_>) =
-            partition.to_partition(&query)?.map(|query| (index_uid, query)).partition(
-                // true is left, false is right
-                |(_, query)| query.query.remote.as_ref() == network.local.as_ref(),
-            );
+        let queries = partition
+            .to_partition(&query)?
+            .filter(|query| query.query.remote.as_ref() != network.local.as_ref())
+            .map(|query| (index_uid, query));
 
         remote_queries.extend(queries);
     }
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network.clone(), params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(&network, params, remote_queries).await?;
 
     // Perform local search
     for (index_uid, docids) in hydration_docids.iter() {
@@ -306,13 +301,7 @@ async fn federated_fetch_hydration_documents(
     }
 
     // wait
-    let (remote_results, errors) = remote_retrieve_documents.finish().await;
-
-    for (remote_name, error) in errors.iter() {
-        if error.code.is_server_error() {
-            index_scheduler.mark_remote_unavailable(remote_name.clone())?;
-        }
-    }
+    let (remote_results, errors) = remote_retrieve_documents.finish(&index_scheduler).await?;
 
     // Merge results
     for (index_uid, documents) in fuse_remote_documents(remote_results) {
@@ -330,7 +319,7 @@ impl FederatedHydrationFormatter {
     pub async fn new(
         hydration_cache: HydrationContext,
         index_scheduler: &IndexScheduler,
-        network: Network,
+        network: &Network,
     ) -> Result<Self, ResponseError> {
         let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
@@ -340,7 +329,7 @@ impl FederatedHydrationFormatter {
         if network.sharding() {
             federated_fetch_hydration_documents(
                 index_scheduler,
-                network.clone(),
+                network,
                 hydration_docids,
                 &mut hydration_documents,
             )

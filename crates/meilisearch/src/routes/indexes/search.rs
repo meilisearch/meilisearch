@@ -29,12 +29,11 @@ use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, Sear
 use crate::routes::parse_include_metadata_header;
 use crate::search::federated::types::PreprocessedQuery;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search,
-    HybridQuery, MatchingStrategy, NetworkableQuery as _, Partition, Personalize,
-    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery,
-    SearchQueryWithIndex, SearchResult, SemanticRatio, ShowFederationInfo, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, perform_federated_search, perform_search, HybridQuery, MatchingStrategy,
+    NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold, RetrieveVectors,
+    SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult, SemanticRatio,
+    ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -707,7 +706,7 @@ pub(crate) async fn legacy_search(
     )];
     let (hydration_cache, mut preprocessed_queries) = preprocess_filters(
         index_scheduler.clone(),
-        network.clone(),
+        &network,
         queries,
         features,
         false,
