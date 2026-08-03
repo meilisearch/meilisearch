@@ -95,6 +95,19 @@ impl RoFeatures {
         }
     }
 
+    pub fn check_mcp_route(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.mcp_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "mcp_route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/892",
+            }
+            .into())
+        }
+    }
+
     pub fn check_edit_documents_by_function(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.edit_documents_by_function {
             Ok(())
