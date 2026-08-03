@@ -39,8 +39,8 @@ use super::types::{
     FEDERATION_HIT, FEDERATION_REMOTE, PINNED_POSITION, WEIGHTED_SCORE_VALUES,
 };
 use super::weighted_scores;
-use crate::documents_retrieval::WithIndex;
 use crate::documents_retrieval::{FederatedHydrationFormatter, HydrationContext};
+use crate::documents_retrieval::{RemoteErrors, WithIndex};
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search::search_kind;
@@ -58,6 +58,7 @@ pub async fn perform_federated_search(
     network: Network,
     queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
     mut hydration_cache: Option<HydrationContext>,
+    mut remote_errors: RemoteErrors,
     federation: Federation,
     features: RoFeatures,
     is_proxy: bool,
@@ -200,7 +201,8 @@ pub async fn perform_federated_search(
     let before_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 2.3. Wait for proxy search requests to complete
-    let (mut remote_results, remote_errors) = remote_search.finish().await;
+    let (mut remote_results, remote_search_errors) = remote_search.finish().await;
+    remote_errors.extend(remote_search_errors);
 
     let after_waiting_remote_results = time::OffsetDateTime::now_utc();
 
@@ -349,10 +351,11 @@ pub async fn perform_federated_search(
         }
     }
     if let Some(hydration_cache) = hydration_cache {
-        let hydration_formatter =
+        let (hydration_formatter, hydration_remote_errors) =
             FederatedHydrationFormatter::new(hydration_cache, &index_scheduler, &network)
                 .await
                 .without_index()?;
+        remote_errors.extend(hydration_remote_errors);
         hydration_formatter.hydrate_documents(&mut merged_hits).without_index()?;
     }
 

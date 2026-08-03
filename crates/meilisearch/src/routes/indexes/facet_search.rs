@@ -19,7 +19,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use crate::analytics::{Aggregate, Analytics};
-use crate::documents_retrieval::preprocess_filters;
+use crate::documents_retrieval::{preprocess_filters, RemoteErrors};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
@@ -327,7 +327,7 @@ pub async fn search(
     let network = index_scheduler.network();
 
     let queries = vec![(index_uid.clone(), query)];
-    let (_, mut queries) = preprocess_filters(
+    let (_, mut queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
         &network,
         queries,
@@ -345,6 +345,7 @@ pub async fn search(
         search_federated(
             index_scheduler.clone(),
             query,
+            remote_errors,
             index_uid,
             before_search,
             progress,
@@ -374,6 +375,7 @@ pub async fn search(
 async fn search_federated(
     index_scheduler: Data<IndexScheduler>,
     query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
+    mut remote_errors: RemoteErrors,
     index_uid: IndexUid,
     before_search: time::OffsetDateTime,
     progress: Progress,
@@ -475,7 +477,7 @@ async fn search_federated(
         match task.await.unwrap() {
             (Ok(result), _) => results.push(result),
             (Err(err), remote_name) => {
-                errors.insert(remote_name, err.as_response_error());
+                remote_errors.insert(remote_name, err.as_response_error());
             }
         }
     }
@@ -493,7 +495,7 @@ async fn search_federated(
         facet_hits,
         facet_query,
         processing_time_ms,
-        remote_errors: Some(errors),
+        remote_errors: Some(remote_errors),
     })
 }
 

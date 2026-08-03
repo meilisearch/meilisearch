@@ -15,7 +15,7 @@ use meilisearch_types::milli::{
 use meilisearch_types::Document;
 use serde_json::{Map, Value};
 
-use crate::documents_retrieval::HydrationContext;
+use crate::documents_retrieval::{HydrationContext, RemoteErrors};
 use crate::documents_retrieval::{RemoteRetrieveDocuments, WithIndex};
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex, DocumentsResult};
@@ -81,7 +81,10 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
     is_proxy: bool,
     progress: &Progress,
     code: Code,
-) -> Result<(Option<HydrationContext>, Vec<PreprocessedQuery<Q>>), (ResponseError, Option<usize>)> {
+) -> Result<
+    (Option<HydrationContext>, Vec<PreprocessedQuery<Q>>, RemoteErrors),
+    (ResponseError, Option<usize>),
+> {
     progress.update_progress(FederatingResultsStep::PreprocessFilters);
 
     // Document join: list of indexes in the order of the queries
@@ -96,7 +99,7 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
         let source_index_uids =
             queries.iter().map(|q| SourceIndexUid(q.index_uid().clone())).collect::<Vec<_>>();
 
-        let queries = preprocess_filters_allowing_foreign_keys(
+        let (queries, remote_errors) = preprocess_filters_allowing_foreign_keys(
             index_scheduler,
             network,
             &foreign_keys_settings,
@@ -108,10 +111,10 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
         .await?;
 
         let hydration_cache = HydrationContext::new(source_index_uids, foreign_keys_settings);
-        Ok((Some(hydration_cache), queries))
+        Ok((Some(hydration_cache), queries, remote_errors))
     } else {
         preprocess_filters_forbidding_foreign_keys(queries, features, code)
-            .map(|queries| (None, queries))
+            .map(|queries| (None, queries, Default::default()))
     }
 }
 
@@ -146,7 +149,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     features: RoFeatures,
     progress: &Progress,
     code: Code,
-) -> Result<Vec<PreprocessedQuery<Q>>, (ResponseError, Option<usize>)> {
+) -> Result<(Vec<PreprocessedQuery<Q>>, RemoteErrors), (ResponseError, Option<usize>)> {
     // parse each query filter and bind them to their respective index
     let filters = queries
         .iter_mut()
@@ -162,7 +165,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
         .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
 
     // convert the filters to index filters by evaluating the foreign filters
-    let filters = filters_into_index_filters(
+    let (filters, remote_errors) = filters_into_index_filters(
         &index_scheduler,
         network,
         filters,
@@ -172,11 +175,14 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     .await
     .without_index()?;
 
-    Ok(queries
-        .into_iter()
-        .zip(filters.into_iter())
-        .map(|(query, filter)| PreprocessedQuery { query, filter })
-        .collect())
+    Ok((
+        queries
+            .into_iter()
+            .zip(filters.into_iter())
+            .map(|(query, filter)| PreprocessedQuery { query, filter })
+            .collect(),
+        remote_errors,
+    ))
 }
 
 fn extract_foreign_filters(
@@ -312,7 +318,7 @@ async fn federated_process_foreign_filters(
     network: &Network,
     foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
     progress: &Progress,
-) -> Result<Vec<Vec<LightToken>>, ResponseError> {
+) -> Result<(Vec<Vec<LightToken>>, RemoteErrors), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
     let remote_availability = index_scheduler.remote_availability();
@@ -349,7 +355,7 @@ async fn federated_process_foreign_filters(
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(&network, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(network, params, remote_queries).await?;
 
     // Perform local search
     let mut foreign_filters_external_docids =
@@ -368,7 +374,17 @@ async fn federated_process_foreign_filters(
         }
     }
 
-    Ok(foreign_filters_external_docids)
+    Ok((
+        foreign_filters_external_docids,
+        errors
+            .into_iter()
+            .map(|(index_uid, mut error)| {
+                // Add a context to the error message
+                error.message = format!("During Foreign Filters Processing: {}", error.message);
+                (index_uid, error)
+            })
+            .collect(),
+    ))
 }
 
 pub fn take_federation_hit(document: &mut Document) -> Map<String, Value> {
@@ -416,17 +432,20 @@ async fn filters_into_index_filters(
     filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     progress: &Progress,
-) -> Result<Vec<Option<IndexFilter>>, ResponseError> {
+) -> Result<(Vec<Option<IndexFilter>>, RemoteErrors), ResponseError> {
     let foreign_filters = extract_foreign_filters(&filters, foreign_keys_per_index)?;
 
     // retrieve the external docids executing each foreign filter
-    let foreign_filters_external_docids = if network.sharding() {
+    let (foreign_filters_external_docids, remote_errors) = if network.sharding() {
         // network + local
         federated_process_foreign_filters(index_scheduler, network, &foreign_filters, progress)
             .await?
     } else {
         // local
-        local_process_foreign_filters(index_scheduler, &foreign_filters, progress).await?
+        (
+            local_process_foreign_filters(index_scheduler, &foreign_filters, progress).await?,
+            Default::default(),
+        )
     };
 
     // build the index filters replacing the foreign filters with a IN filter containing the retrieved external docids
@@ -443,6 +462,7 @@ async fn filters_into_index_filters(
         })
         .collect::<milli::Result<_>>()
         .map_err(|e| e.into())
+        .map(|index_filters| (index_filters, remote_errors))
 }
 
 /// Retrieve the foreign keys settings for a list of indexes

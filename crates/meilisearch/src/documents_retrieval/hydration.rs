@@ -16,7 +16,7 @@ use crate::documents_retrieval::preprocessing::{
     fuse_remote_documents, take_document_id_from_federation_hit, take_federation_hit,
 };
 use crate::documents_retrieval::{
-    ForeignIndexUid, ForeignKeysPerIndex, RemoteRetrieveDocuments, SourceIndexUid,
+    ForeignIndexUid, ForeignKeysPerIndex, RemoteErrors, RemoteRetrieveDocuments, SourceIndexUid,
 };
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex};
 use crate::search::federated::types::PreprocessedQuery;
@@ -251,7 +251,7 @@ async fn federated_fetch_hydration_documents(
         (ForeignIndexUid, ForeignExternalDocumentId),
         Map<String, Value>,
     >,
-) -> Result<(), ResponseError> {
+) -> Result<RemoteErrors, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
     let remote_availability = index_scheduler.remote_availability();
@@ -293,7 +293,7 @@ async fn federated_fetch_hydration_documents(
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(&network, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(network, params, remote_queries).await?;
 
     // Perform local search
     for (index_uid, docids) in hydration_docids.iter() {
@@ -301,7 +301,7 @@ async fn federated_fetch_hydration_documents(
     }
 
     // wait
-    let (remote_results, errors) = remote_retrieve_documents.finish(&index_scheduler).await?;
+    let (remote_results, errors) = remote_retrieve_documents.finish(index_scheduler).await?;
 
     // Merge results
     for (index_uid, documents) in fuse_remote_documents(remote_results) {
@@ -312,7 +312,14 @@ async fn federated_fetch_hydration_documents(
         }
     }
 
-    Ok(())
+    Ok(errors
+        .into_iter()
+        .map(|(index_uid, mut error)| {
+            // Add a context to the error message
+            error.message = format!("During Hydration: {}", error.message);
+            (index_uid, error)
+        })
+        .collect())
 }
 
 impl FederatedHydrationFormatter {
@@ -320,20 +327,23 @@ impl FederatedHydrationFormatter {
         hydration_cache: HydrationContext,
         index_scheduler: &IndexScheduler,
         network: &Network,
-    ) -> Result<Self, ResponseError> {
+    ) -> Result<(Self, RemoteErrors), ResponseError> {
         let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
 
         // Fetch the documents from the foreign indexes
         let mut hydration_documents = HashMap::new();
+        let mut remote_errors = None;
         if network.sharding() {
-            federated_fetch_hydration_documents(
-                index_scheduler,
-                network,
-                hydration_docids,
-                &mut hydration_documents,
-            )
-            .await?;
+            remote_errors = Some(
+                federated_fetch_hydration_documents(
+                    index_scheduler,
+                    network,
+                    hydration_docids.clone(),
+                    &mut hydration_documents,
+                )
+                .await?,
+            );
         } else {
             for (index_uid, docids) in hydration_docids {
                 local_fetch_hydration_documents(
@@ -345,7 +355,10 @@ impl FederatedHydrationFormatter {
             }
         }
 
-        Ok(Self { index_by_query_index, hydration_settings, hydration_documents })
+        Ok((
+            Self { index_by_query_index, hydration_settings, hydration_documents },
+            remote_errors.unwrap_or_default(),
+        ))
     }
 
     pub fn hydrate_documents(

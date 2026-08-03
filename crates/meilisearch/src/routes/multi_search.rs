@@ -302,7 +302,7 @@ pub async fn legacy_multi_search_with_post(
         .get(PROXY_SEARCH_HEADER)
         .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
 
-    let (hydration_cache, preprocessed_queries) = preprocess_filters(
+    let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
         &network,
         queries,
@@ -330,6 +330,7 @@ pub async fn legacy_multi_search_with_post(
                 network,
                 preprocessed_queries,
                 hydration_cache,
+                remote_errors,
                 federation,
                 features,
                 is_proxy,

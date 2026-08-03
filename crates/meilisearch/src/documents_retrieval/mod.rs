@@ -30,6 +30,8 @@ pub use hydration::{hydrate_documents, FederatedHydrationFormatter, HydrationCon
 mod hydration;
 mod preprocessing;
 
+pub type RemoteErrors = BTreeMap<String, ResponseError>;
+
 pub struct DocumentSearch {
     pub queries: Vec<SearchQueryWithIndex>,
     pub federation: Option<Federation>,
@@ -67,7 +69,7 @@ impl DocumentSearch {
         let features = index_scheduler.features();
 
         let network = index_scheduler.network();
-        let (hydration_cache, preprocessed_queries) = preprocess_filters(
+        let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
             index_scheduler.clone(),
             &network,
             self.queries,
@@ -85,6 +87,7 @@ impl DocumentSearch {
                 network,
                 preprocessed_queries,
                 hydration_cache,
+                remote_errors,
                 federation,
                 features,
                 self.is_proxy,
@@ -124,6 +127,7 @@ impl DocumentSearch {
                     network.clone(),
                     vec![fixed_query],
                     hydration_cache.clone(),
+                    remote_errors.clone(),
                     federation,
                     features,
                     self.is_proxy,
@@ -361,7 +365,7 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
     pub async fn finish(
         self,
         index_scheduler: &IndexScheduler,
-    ) -> Result<(Vec<(T, DocumentsResult)>, BTreeMap<String, ResponseError>), ResponseError> {
+    ) -> Result<(Vec<(T, DocumentsResult)>, RemoteErrors), ResponseError> {
         let Self { mut results, mut errors, in_flight_requests } = self;
         // Retrieve remote results
         for (task, remote_name, metadata) in in_flight_requests {

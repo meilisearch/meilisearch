@@ -375,7 +375,7 @@ async fn process_search_request(
     }
 
     let network = index_scheduler.network();
-    let (_, mut preprocessed_queries) = preprocess_filters(
+    let (_, mut preprocessed_queries, remote_errors) = preprocess_filters(
         (*index_scheduler).clone(),
         &network,
         vec![query],
@@ -386,6 +386,10 @@ async fn process_search_request(
     )
     .await
     .map_err(|(e, _)| e)?;
+
+    // TODO: Handle remote errors when implementing network support in chat completions
+    let _remote_errors = remote_errors;
+
     let PreprocessedQuery { query: SearchInIndexParameters { index_uid, q, filter: _ }, filter } =
         preprocessed_queries.pop().unwrap();
 

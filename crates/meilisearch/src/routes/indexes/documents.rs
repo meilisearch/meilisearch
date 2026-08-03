@@ -51,7 +51,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
-use crate::documents_retrieval::{preprocess_filters, RemoteRetrieveDocuments};
+use crate::documents_retrieval::{preprocess_filters, RemoteErrors, RemoteRetrieveDocuments};
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -335,7 +335,14 @@ pub async fn get_document(
             },
         };
 
-        let mut ret = retrieve_documents_federated(index_scheduler.clone(), query, network).await?;
+        let mut ret = retrieve_documents_federated(
+            index_scheduler.clone(),
+            query,
+            // no preprocessing phase so no remote errors yet
+            Default::default(),
+            network,
+        )
+        .await?;
         ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
     } else {
         local_result?
@@ -958,13 +965,13 @@ async fn documents_by_query(
     let features = index_scheduler.features();
 
     let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
-    let (_, mut queries) = preprocess_filters(
+    let (_, mut queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
         &network,
         queries,
         features,
         is_proxy,
-        &progress,
+        progress,
         Code::InvalidDocumentFilter,
     )
     .await
@@ -973,7 +980,7 @@ async fn documents_by_query(
     let mut query = queries.pop().unwrap();
 
     let ret = if query.query.must_use_network(&network, &features)? {
-        retrieve_documents_federated(index_scheduler, query, network).await
+        retrieve_documents_federated(index_scheduler, query, remote_errors, network).await
     } else {
         retrieve_documents_local(index_scheduler, query, is_proxy).await
     };
@@ -984,6 +991,7 @@ async fn documents_by_query(
 async fn retrieve_documents_federated(
     index_scheduler: Data<IndexScheduler>,
     query: PreprocessedQuery<BrowseQueryWithIndex>,
+    mut remote_errors: RemoteErrors,
     network: Network,
 ) -> Result<DocumentsResult, ResponseError> {
     let params =
@@ -1010,13 +1018,11 @@ async fn retrieve_documents_federated(
 
     // wait
     let (remote_results, errors) = remote_retrieve_documents.finish(&index_scheduler).await?;
+    remote_errors.extend(errors);
     results.extend(remote_results);
 
     // merge metadata
-    let (total, mut remote_errors) = merge_metadata(&mut results);
-    if !errors.is_empty() {
-        remote_errors.get_or_insert_with(BTreeMap::new).extend(errors);
-    }
+    let total = merge_metadata(&mut results);
 
     // Merge results
     let merged_results: Result<_, ResponseError> = merge_documents_results(results)
@@ -1029,7 +1035,7 @@ async fn retrieve_documents_federated(
         offset: query.query.query.offset,
         limit: query.query.query.limit,
         total,
-        remote_errors,
+        remote_errors: Some(remote_errors),
     })
 }
 
@@ -1068,19 +1074,13 @@ fn compare_documents(left: &MergedDocument, right: &MergedDocument) -> Ordering 
         .unwrap()
 }
 
-fn merge_metadata(
-    results: &mut [(usize, DocumentsResult)],
-) -> (usize, Option<BTreeMap<String, ResponseError>>) {
-    let mut errors = None;
+fn merge_metadata(results: &mut [(usize, DocumentsResult)]) -> usize {
     let mut total = 0;
     for (_query_id, result) in results {
         total += result.total;
-        if let Some(remote_errors) = result.remote_errors.take() {
-            errors.get_or_insert_with(BTreeMap::new).extend(remote_errors);
-        }
     }
 
-    (total, errors)
+    total
 }
 
 async fn retrieve_documents_local(

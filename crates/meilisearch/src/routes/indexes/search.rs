@@ -704,7 +704,7 @@ pub(crate) async fn legacy_search(
         query.clone(),
         None,
     )];
-    let (hydration_cache, mut preprocessed_queries) = preprocess_filters(
+    let (hydration_cache, mut preprocessed_queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
         &network,
         queries,
@@ -734,6 +734,7 @@ pub(crate) async fn legacy_search(
             network,
             queries,
             hydration_cache,
+            remote_errors,
             federation,
             features,
             false,
