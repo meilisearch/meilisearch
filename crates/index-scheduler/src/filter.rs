@@ -172,8 +172,6 @@ pub fn filters_into_index_filters(
         let foreign_index = index_scheduler.user_index(foreign_index_uid.as_ref())?;
         let foreign_rtxn = foreign_index.read_txn()?;
         let foreign_fields_ids_map = foreign_index.fields_ids_map(&foreign_rtxn).unwrap();
-        let foreign_external_docids = foreign_index.external_documents_ids();
-
         // Gather the internal docids for each filter
         let mut filters_internal_docids = Vec::new();
         for filter_index in filter_indices.iter() {
@@ -207,12 +205,21 @@ pub fn filters_into_index_filters(
                 index_uid: Some(foreign_index_uid.as_ref().to_string()),
             });
         }
-        let mut internal_to_external_docids = HashMap::new();
-        // TODO: optimize DB scan (linear: EXP-1117)
-        for result in foreign_external_docids.iter(&foreign_rtxn)? {
-            let (external, internal) = result?;
-            if docids_to_fetch.contains(internal) {
-                internal_to_external_docids.insert(internal, external.to_string());
+        let mut internal_to_external_docids =
+            HashMap::with_capacity(docids_to_fetch.len() as usize);
+
+        if let Some(pk_name) = foreign_index.primary_key(&foreign_rtxn)? {
+            let fields_ids_map = foreign_index.fields_ids_map(&foreign_rtxn)?;
+            if let Some(pk_id) = fields_ids_map.id(pk_name) {
+                // 2. Point-lookup ONLY the matching internal docids (O(M log N))
+                let docs = foreign_index.documents(&foreign_rtxn, docids_to_fetch.iter()).unwrap();
+                for (internal, doc) in docs {
+                    if let Some(external_val) = doc.get(pk_id) {
+                        if let Ok(external_id) = serde_json::from_slice::<String>(external_val) {
+                            internal_to_external_docids.insert(internal, external_id);
+                        }
+                    }
+                }
             }
         }
 
