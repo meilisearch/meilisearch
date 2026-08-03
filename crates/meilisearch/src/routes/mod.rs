@@ -70,6 +70,7 @@ mod export_analytics;
 pub mod features;
 pub mod indexes;
 mod logs;
+mod mcp;
 mod metrics;
 mod multi_search;
 mod multi_search_analytics;
@@ -90,6 +91,7 @@ mod webhooks;
         "/version" => get(get_version),
         "/stats" => get(get_stats),
         "/chats" => sub(chats::ChatsApi),
+        "/mcp" => sub(mcp::McpApi),
         "/tasks" => sub(tasks::TaskApi),
         "/batches"=>sub(batches::BatchesApi),
         "/indexes" => sub(indexes::IndexesApi),
