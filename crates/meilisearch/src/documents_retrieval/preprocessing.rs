@@ -22,9 +22,9 @@ use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex, Docum
 use crate::search::federated::types::{
     PreprocessableQuery, PreprocessedQuery, FEDERATION_EXTERNAL_DOCUMENT_ID, FEDERATION_HIT,
 };
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::ProxySearchParams;
-use crate::search::{ExternalDocumentId, Partition};
-use meilisearch_types::network::Network;
+use crate::search::ExternalDocumentId;
 
 /// The maximum number of documents a foreign filter can retrieve per index
 ///
@@ -75,7 +75,7 @@ pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, Sou
 
 pub async fn preprocess_filters<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
-    network: &Network,
+    network_partitioner: &NetworkPartitioner,
     queries: Vec<Q>,
     features: RoFeatures,
     is_proxy: bool,
@@ -101,7 +101,7 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
 
         let (queries, remote_errors) = preprocess_filters_allowing_foreign_keys(
             index_scheduler,
-            network,
+            network_partitioner,
             &foreign_keys_settings,
             queries,
             features,
@@ -143,7 +143,7 @@ fn preprocess_filters_forbidding_foreign_keys<Q: PreprocessableQuery>(
 
 async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
-    network: &Network,
+    network_partitioner: &NetworkPartitioner,
     foreign_keys_settings: &ForeignKeysPerIndex,
     mut queries: Vec<Q>,
     features: RoFeatures,
@@ -167,7 +167,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     // convert the filters to index filters by evaluating the foreign filters
     let (filters, remote_errors) = filters_into_index_filters(
         &index_scheduler,
-        network,
+        network_partitioner,
         filters,
         foreign_keys_settings,
         progress,
@@ -315,14 +315,12 @@ async fn local_process_foreign_filters(
 
 async fn federated_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
-    network: &Network,
+    partitioner: &NetworkPartitioner,
     foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
     progress: &Progress,
 ) -> Result<(Vec<Vec<LightToken>>, RemoteErrors), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
-    let remote_availability = index_scheduler.remote_availability();
-    let partition = Partition::new(network.clone(), remote_availability);
 
     let mut remote_queries = Vec::new();
     for (query_index, (_index_uid, foreign_index_uid, _, index_filter)) in
@@ -345,9 +343,9 @@ async fn federated_process_foreign_filters(
             },
             filter: index_filter.clone(),
         };
-        let queries = partition
+        let queries = partitioner
             .to_partition(&query)?
-            .filter(|query| query.query.remote.as_ref() != network.local.as_ref())
+            .filter(|query| query.query.remote.as_deref() != partitioner.local())
             .map(|query| (query_index, query));
 
         remote_queries.extend(queries);
@@ -355,7 +353,7 @@ async fn federated_process_foreign_filters(
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(partitioner, params, remote_queries).await?;
 
     // Perform local search
     let mut foreign_filters_external_docids =
@@ -428,7 +426,7 @@ pub fn fuse_remote_documents<T: Ord + Eq>(
 /// This function will open each foreign index once and process the filters.
 async fn filters_into_index_filters(
     index_scheduler: &Data<IndexScheduler>,
-    network: &Network,
+    network_partitioner: &NetworkPartitioner,
     filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     progress: &Progress,
@@ -436,10 +434,15 @@ async fn filters_into_index_filters(
     let foreign_filters = extract_foreign_filters(&filters, foreign_keys_per_index)?;
 
     // retrieve the external docids executing each foreign filter
-    let (foreign_filters_external_docids, remote_errors) = if network.sharding() {
+    let (foreign_filters_external_docids, remote_errors) = if network_partitioner.sharding() {
         // network + local
-        federated_process_foreign_filters(index_scheduler, network, &foreign_filters, progress)
-            .await?
+        federated_process_foreign_filters(
+            index_scheduler,
+            network_partitioner,
+            &foreign_filters,
+            progress,
+        )
+        .await?
     } else {
         // local
         (

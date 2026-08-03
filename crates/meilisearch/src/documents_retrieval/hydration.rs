@@ -7,7 +7,6 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{
     self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
 };
-use meilisearch_types::network::Network;
 use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
@@ -20,8 +19,9 @@ use crate::documents_retrieval::{
 };
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex};
 use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::ProxySearchParams;
-use crate::search::{ExternalDocumentId, Partition, SearchHit};
+use crate::search::{ExternalDocumentId, SearchHit};
 
 /// Hydrate the documents based on the foreign keys
 ///
@@ -245,7 +245,7 @@ fn local_fetch_hydration_documents(
 
 async fn federated_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
-    network: &Network,
+    network_partitioner: &NetworkPartitioner,
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     hydration_documents: &mut HashMap<
         (ForeignIndexUid, ForeignExternalDocumentId),
@@ -254,8 +254,6 @@ async fn federated_fetch_hydration_documents(
 ) -> Result<RemoteErrors, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
-    let remote_availability = index_scheduler.remote_availability();
-    let partition = Partition::new(network.clone(), remote_availability);
 
     let mut remote_queries = Vec::new();
     for (index_uid, docids) in hydration_docids.iter() {
@@ -283,9 +281,9 @@ async fn federated_fetch_hydration_documents(
             },
             filter: None,
         };
-        let queries = partition
+        let queries = network_partitioner
             .to_partition(&query)?
-            .filter(|query| query.query.remote.as_ref() != network.local.as_ref())
+            .filter(|query| query.query.remote.as_deref() != network_partitioner.local())
             .map(|query| (index_uid, query));
 
         remote_queries.extend(queries);
@@ -293,7 +291,7 @@ async fn federated_fetch_hydration_documents(
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(network_partitioner, params, remote_queries).await?;
 
     // Perform local search
     for (index_uid, docids) in hydration_docids.iter() {
@@ -326,7 +324,7 @@ impl FederatedHydrationFormatter {
     pub async fn new(
         hydration_cache: HydrationContext,
         index_scheduler: &IndexScheduler,
-        network: &Network,
+        network_partitioner: &NetworkPartitioner,
     ) -> Result<(Self, RemoteErrors), ResponseError> {
         let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
@@ -334,11 +332,11 @@ impl FederatedHydrationFormatter {
         // Fetch the documents from the foreign indexes
         let mut hydration_documents = HashMap::new();
         let mut remote_errors = None;
-        if network.sharding() {
+        if network_partitioner.sharding() {
             remote_errors = Some(
                 federated_fetch_hydration_documents(
                     index_scheduler,
-                    network,
+                    network_partitioner,
                     hydration_docids.clone(),
                     &mut hydration_documents,
                 )

@@ -28,9 +28,10 @@ use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
 use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, HybridQuery, MatchingStrategy,
-    NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold, RetrieveVectors,
+    NetworkableQuery as _, Personalize, RankingScoreThreshold, RetrieveVectors,
     SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult, SemanticRatio,
     ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
@@ -696,8 +697,7 @@ pub(crate) async fn legacy_search(
     let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let features = index_scheduler.features();
-    let network = index_scheduler.network();
-    let remote_availability = index_scheduler.remote_availability();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
     let queries = vec![SearchQueryWithIndex::from_index_query_federation(
         index_uid.clone(),
@@ -706,7 +706,7 @@ pub(crate) async fn legacy_search(
     )];
     let (hydration_cache, mut preprocessed_queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
-        &network,
+        &network_partitioner,
         queries,
         features,
         false,
@@ -717,7 +717,7 @@ pub(crate) async fn legacy_search(
     .map_err(|(err, _)| err)?;
     let mut query = preprocessed_queries.pop().unwrap();
 
-    if query.must_use_network(&network, &features)? {
+    if query.must_use_network(&network_partitioner, &features)? {
         let (q, fixed_query, federation) = {
             let PreprocessedQuery { query, filter } = query;
             let q = query.q.clone();
@@ -725,13 +725,11 @@ pub(crate) async fn legacy_search(
 
             (q, PreprocessedQuery { query: fixed_query, filter }, federation)
         };
-        let queries = Partition::new(network.clone(), remote_availability)
-            .into_partition(fixed_query)?
-            .collect();
+        let queries = network_partitioner.to_partition(fixed_query)?.collect();
 
         let search_result = perform_federated_search(
             index_scheduler,
-            network,
+            &network_partitioner,
             queries,
             hydration_cache,
             remote_errors,

@@ -22,6 +22,7 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::personalization::PersonalizationService;
 use crate::routes::parse_include_metadata_header;
 use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
@@ -268,7 +269,7 @@ pub async fn legacy_multi_search_with_post(
     );
 
     let features = index_scheduler.features();
-    let network = index_scheduler.network();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
     // regardless of federation, check authorization and apply search rules
     let auth = 'check_authorization: {
@@ -304,7 +305,7 @@ pub async fn legacy_multi_search_with_post(
 
     let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
-        &network,
+        &network_partitioner,
         queries,
         features,
         is_proxy,
@@ -327,7 +328,7 @@ pub async fn legacy_multi_search_with_post(
         Some(federation) => {
             let search_result = perform_federated_search(
                 index_scheduler.clone(),
-                network,
+                &network_partitioner,
                 preprocessed_queries,
                 hydration_cache,
                 remote_errors,

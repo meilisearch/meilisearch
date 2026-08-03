@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::IndexFilter;
@@ -70,7 +71,7 @@ impl ProxyQuery for &PreprocessedQuery<(IndexUid, FacetSearchQuery)> {
 
 impl Partition {
     pub fn new(network: Network, remote_availability: &RemoteAvailability) -> Self {
-        if network.leader.is_some() {
+        if network.sharding() {
             Partition::ByShard {
                 remote_for_shard: current_edition::remote_for_shard(network, remote_availability),
             }
@@ -108,5 +109,39 @@ impl Partition {
                 current_edition::partition_shards(query, remote_for_shard.into_iter())?,
             ),
         })
+    }
+}
+
+pub struct NetworkPartitioner {
+    network: Network,
+    partition: Partition,
+}
+
+impl NetworkPartitioner {
+    pub fn new(index_scheduler: &IndexScheduler) -> Self {
+        let network = index_scheduler.network();
+        let remote_availability = index_scheduler.remote_availability();
+        let partition = Partition::new(network.clone(), remote_availability);
+
+        Self { network, partition }
+    }
+
+    pub fn to_partition<'a, Q: ProxyQuery + 'a>(
+        &'a self,
+        query: Q,
+    ) -> Result<impl Iterator<Item = Q::ProxiedQuery> + 'a, ResponseError> {
+        self.partition.to_partition(query)
+    }
+
+    pub fn sharding(&self) -> bool {
+        self.network.sharding()
+    }
+
+    pub fn get_remote(&self, remote: &str) -> Option<&Remote> {
+        self.network.remotes.get(remote)
+    }
+
+    pub fn local(&self) -> Option<&str> {
+        self.network.local.as_deref()
     }
 }

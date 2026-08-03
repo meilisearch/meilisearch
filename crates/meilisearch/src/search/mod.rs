@@ -28,7 +28,6 @@ use meilisearch_types::milli::{
     AttributeState, Deadline, DocumentId, Error, FacetValueHit, IndexFilter, InternalError,
     MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
 };
-use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
@@ -46,6 +45,7 @@ use uuid::Uuid;
 
 use crate::documents_retrieval::hydrate_documents;
 use crate::error::MeilisearchHttpError;
+use crate::search::federated::NetworkPartitioner;
 
 pub mod federated;
 pub use federated::{
@@ -358,7 +358,7 @@ pub trait NetworkableQuery {
     /// Factor some logic so that callers don't have to reimplement for federated and single search.
     fn must_use_network(
         &mut self,
-        network: &Network,
+        network_partitioner: &NetworkPartitioner,
         features: &RoFeatures,
     ) -> Result<bool, ResponseError> {
         // as `useNetwork` is going to default to `true` if missing in some cases,
@@ -373,7 +373,7 @@ pub trait NetworkableQuery {
         // fixup value for the use network field to prevent recursion,
         // and we have a different default value.
 
-        let default = if network.sharding() {
+        let default = if network_partitioner.sharding() {
             *self.use_network_field() = Some(false);
             true
         } else {

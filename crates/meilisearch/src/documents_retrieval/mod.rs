@@ -5,7 +5,6 @@ use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::network::Network;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
@@ -14,6 +13,7 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::documents::{BrowseQueryWithIndex, DocumentsResult};
 use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
@@ -68,10 +68,10 @@ impl DocumentSearch {
         let index_scheduler = guarded_index_scheduler.clone();
         let features = index_scheduler.features();
 
-        let network = index_scheduler.network();
+        let network_partitioner = NetworkPartitioner::new(&index_scheduler);
         let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
             index_scheduler.clone(),
-            &network,
+            &network_partitioner,
             self.queries,
             features,
             self.is_proxy,
@@ -84,7 +84,7 @@ impl DocumentSearch {
         if let Some(federation) = self.federation.take() {
             let (search_result, _) = perform_federated_search(
                 index_scheduler,
-                network,
+                &network_partitioner,
                 preprocessed_queries,
                 hydration_cache,
                 remote_errors,
@@ -124,7 +124,7 @@ impl DocumentSearch {
 
                 let (search_result, _) = perform_federated_search(
                     index_scheduler.clone(),
-                    network.clone(),
+                    &network_partitioner,
                     vec![fixed_query],
                     hydration_cache.clone(),
                     remote_errors.clone(),
@@ -285,7 +285,7 @@ pub struct RemoteRetrieveDocuments<T> {
 
 impl<T: Clone> RemoteRetrieveDocuments<T> {
     pub async fn start(
-        network: &Network,
+        network_partitioner: &NetworkPartitioner,
         params: ProxySearchParams,
         remote_queries: Vec<(T, PreprocessedQuery<BrowseQueryWithIndex>)>,
     ) -> Result<Self, ResponseError> {
@@ -300,7 +300,7 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
                 unreachable!("remote query must have a remote name");
             };
 
-            let Some(remote) = network.remotes.get(&remote_name) else {
+            let Some(remote) = network_partitioner.get_remote(&remote_name) else {
                 errors.insert(
                     remote_name.clone(),
                     ProxySearchError::UnknownRemote { remote: remote_name.clone() }

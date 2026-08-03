@@ -20,7 +20,7 @@ use meilisearch_types::milli::{
     FederatingResultsStep, FieldsIdsMap, MetadataBuilder, OrderBy, PatternMatch, SearchStep,
     DEFAULT_VALUES_PER_FACET,
 };
-use meilisearch_types::network::{Network, Remote, RemoteAvailability};
+use meilisearch_types::network::Remote;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::Document;
 use roaring::RoaringBitmap;
@@ -48,14 +48,15 @@ use crate::search::federated::types::{
     PreprocessedQuery, FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION,
     WEIGHTED_RANKING_SCORE,
 };
+use crate::search::federated::NetworkPartitioner;
 use crate::search::{
-    NetworkableQuery as _, Partition, ShowFederationInfo, VisitFacetValues, DEFAULT_SEARCH_LIMIT,
+    NetworkableQuery as _, ShowFederationInfo, VisitFacetValues, DEFAULT_SEARCH_LIMIT,
 };
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
     index_scheduler: Data<IndexScheduler>,
-    network: Network,
+    network_partitioner: &NetworkPartitioner,
     queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
     mut hydration_cache: Option<HydrationContext>,
     mut remote_errors: RemoteErrors,
@@ -114,17 +115,14 @@ pub async fn perform_federated_search(
     let mut partitioned_queries = PartitionedQueries::new();
 
     let mut federation = federation;
-    let mut partition = None;
     for (query_index, federated_query) in queries.into_iter().enumerate() {
         partitioned_queries
             .partition(
                 &mut federation,
                 federated_query,
-                &mut partition,
                 query_index,
-                &network,
+                network_partitioner,
                 features,
-                index_scheduler.remote_availability(),
             )
             // partition already returns an error tied to the query index
             .with_index(query_index)?;
@@ -145,9 +143,9 @@ pub async fn perform_federated_search(
     progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
     let params = SearchByIndexParams {
         index_scheduler,
+        local_name: network_partitioner.local().map(|local| local.to_string()),
         features,
         is_proxy,
-        network,
         has_remote: partitioned_queries.has_remote,
         is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
@@ -185,7 +183,7 @@ pub async fn perform_federated_search(
     .await
     .without_index()??;
 
-    let SearchByIndexParams { network, index_scheduler, .. } = params;
+    let SearchByIndexParams { index_scheduler, .. } = params;
 
     let SearchByIndex {
         federation,
@@ -211,7 +209,10 @@ pub async fn perform_federated_search(
     // 3.1. Build metadata in the same order as the original queries
     let query_metadata = {
         // If a remote is present, set the local remote name
-        let local_remote_name = network.local.clone().filter(|_| partitioned_queries.has_remote);
+        let local_remote_name = network_partitioner
+            .local()
+            .map(|local| local.to_string())
+            .filter(|_| partitioned_queries.has_remote);
 
         build_query_metadata(
             precomputed_query_metadata,
@@ -351,10 +352,13 @@ pub async fn perform_federated_search(
         }
     }
     if let Some(hydration_cache) = hydration_cache {
-        let (hydration_formatter, hydration_remote_errors) =
-            FederatedHydrationFormatter::new(hydration_cache, &index_scheduler, &network)
-                .await
-                .without_index()?;
+        let (hydration_formatter, hydration_remote_errors) = FederatedHydrationFormatter::new(
+            hydration_cache,
+            &index_scheduler,
+            network_partitioner,
+        )
+        .await
+        .without_index()?;
         remote_errors.extend(hydration_remote_errors);
         hydration_formatter.hydrate_documents(&mut merged_hits).without_index()?;
     }
@@ -419,7 +423,7 @@ pub async fn perform_federated_search(
     let performance_details =
         federation.show_performance_details.then(|| progress.accumulated_durations());
 
-    if !network.shards.is_empty() {
+    if network_partitioner.sharding() {
         for (remote_name, error) in remote_errors.iter().flatten() {
             if error.code.is_server_error() {
                 index_scheduler.mark_remote_unavailable(remote_name.clone()).without_index()?;
@@ -789,7 +793,7 @@ fn build_federation_hit(
         federation
             .as_object_mut()
             .unwrap()
-            .insert(FEDERATION_REMOTE.to_string(), params.network.local.clone().into());
+            .insert(FEDERATION_REMOTE.to_string(), params.local_name.clone().into());
     }
 
     if params.is_proxy {
@@ -981,11 +985,9 @@ impl PartitionedQueries {
         &mut self,
         federation: &mut Federation,
         mut federated_query: PreprocessedQuery<SearchQueryWithIndex>,
-        partition: &mut Option<Partition>,
         query_index: usize,
-        network: &Network,
+        network_partitioner: &NetworkPartitioner,
         features: RoFeatures,
-        remote_availability: &RemoteAvailability,
     ) -> Result<(), ResponseError> {
         if let Some(pagination_field) = federated_query.query.has_pagination() {
             return Err(MeilisearchHttpError::PaginationInFederatedQuery(pagination_field).into());
@@ -1016,11 +1018,8 @@ impl PartitionedQueries {
             return Err(MeilisearchHttpError::DistinctInFederatedQueryAndFederation.into());
         }
 
-        let queries = if federated_query.must_use_network(network, &features)? {
-            let partition = partition
-                .get_or_insert_with(|| super::Partition::new(network.clone(), remote_availability));
-
-            either::Left(partition.to_partition(federated_query)?)
+        let queries = if federated_query.must_use_network(network_partitioner, &features)? {
+            either::Left(network_partitioner.to_partition(federated_query)?)
         } else {
             either::Right(std::iter::once(federated_query))
         };
@@ -1039,14 +1038,15 @@ impl PartitionedQueries {
                         self.has_remote = true;
                         features.check_network("Performing a remote federated search")?;
 
-                        match &network.local {
-                            Some(local) if local == &remote_name => self
+                        match network_partitioner.local() {
+                            Some(local) if local == remote_name => self
                                 .local_queries_by_index
                                 .entry(index_uid.into_inner())
                                 .or_default(),
                             _ => {
                                 // node from the network
-                                let Some(remote) = network.remotes.get(&remote_name) else {
+                                let Some(remote) = network_partitioner.get_remote(&remote_name)
+                                else {
                                     return Err(ResponseError::from_msg(
                                         format!(
                                             "Invalid `.federation_options.remote`: remote `{remote_name}` is not registered"
@@ -1232,12 +1232,12 @@ impl RemoteSearch {
 
 struct SearchByIndexParams {
     index_scheduler: Data<IndexScheduler>,
+    local_name: Option<String>,
     required_hit_count: usize,
     is_exhaustive: bool,
     features: RoFeatures,
     is_proxy: bool,
     has_remote: bool,
-    network: Network,
 }
 
 struct SearchByIndex {

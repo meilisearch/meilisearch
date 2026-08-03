@@ -33,7 +33,6 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{
     make_document, AscDesc, DocumentId, FieldsIdsMap, IndexFilter, Member,
 };
-use meilisearch_types::network::Network;
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -62,12 +61,12 @@ use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN,
 };
-use crate::search::federated::weighted_scores;
+use crate::search::federated::{weighted_scores, NetworkPartitioner};
 use crate::search::proxy::{
     ProxySearchError, ProxySearchParams, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search::{
-    ExternalDocumentId, NetworkableQuery, Partition, ProxyQuery, RetrieveVectors, VisitFacetValues,
+    ExternalDocumentId, NetworkableQuery, ProxyQuery, RetrieveVectors, VisitFacetValues,
 };
 
 static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
@@ -282,9 +281,9 @@ pub async fn get_document(
     let index_uid = IndexUid::try_from(index_uid)?;
 
     let features = index_scheduler.features();
-    let network = index_scheduler.network();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
     let mut query = params.into_inner();
-    let must_use_network = query.must_use_network(&network, &features)?;
+    let must_use_network = query.must_use_network(&network_partitioner, &features)?;
     let GetDocument { fields, retrieve_vectors: param_retrieve_vectors, use_network: _ } = query;
     let attributes_to_retrieve = fields.merge_star_and_none();
 
@@ -340,7 +339,7 @@ pub async fn get_document(
             query,
             // no preprocessing phase so no remote errors yet
             Default::default(),
-            network,
+            &network_partitioner,
         )
         .await?;
         ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
@@ -961,13 +960,13 @@ async fn documents_by_query(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let network = index_scheduler.network();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
     let features = index_scheduler.features();
 
     let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
     let (_, mut queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
-        &network,
+        &network_partitioner,
         queries,
         features,
         is_proxy,
@@ -979,8 +978,9 @@ async fn documents_by_query(
     // we only have one query, so we can pop it
     let mut query = queries.pop().unwrap();
 
-    let ret = if query.query.must_use_network(&network, &features)? {
-        retrieve_documents_federated(index_scheduler, query, remote_errors, network).await
+    let ret = if query.query.must_use_network(&network_partitioner, &features)? {
+        retrieve_documents_federated(index_scheduler, query, remote_errors, &network_partitioner)
+            .await
     } else {
         retrieve_documents_local(index_scheduler, query, is_proxy).await
     };
@@ -992,22 +992,20 @@ async fn retrieve_documents_federated(
     index_scheduler: Data<IndexScheduler>,
     query: PreprocessedQuery<BrowseQueryWithIndex>,
     mut remote_errors: RemoteErrors,
-    network: Network,
+    network_partitioner: &NetworkPartitioner,
 ) -> Result<DocumentsResult, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
-    let remote_availability = index_scheduler.remote_availability();
-    let partition = Partition::new(network.clone(), remote_availability);
 
     let (local_queries, remote_queries): (Vec<_>, Vec<_>) =
-        partition.into_partition(&query)?.enumerate().partition(
+        network_partitioner.to_partition(&query)?.enumerate().partition(
             // true is left, false is right
-            |(_, query)| query.query.remote.as_ref() == network.local.as_ref(),
+            |(_, query)| query.query.remote.as_deref() == network_partitioner.local(),
         );
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(&network, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(network_partitioner, params, remote_queries).await?;
 
     // Perform local search
     let mut results = Vec::with_capacity(local_queries.len());

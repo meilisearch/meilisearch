@@ -63,6 +63,7 @@ use crate::metrics::{
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::federated::NetworkPartitioner;
 use crate::search::{add_search_rules, elapsed, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
@@ -374,10 +375,10 @@ async fn process_search_request(
         add_search_rules(&mut query.filter, search_rules);
     }
 
-    let network = index_scheduler.network();
+    let network_partitioner = NetworkPartitioner::new(index_scheduler);
     let (_, mut preprocessed_queries, remote_errors) = preprocess_filters(
         (*index_scheduler).clone(),
-        &network,
+        &network_partitioner,
         vec![query],
         features,
         false,

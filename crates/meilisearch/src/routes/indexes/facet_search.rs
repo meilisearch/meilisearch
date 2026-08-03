@@ -14,7 +14,6 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
     serialize_index_filter_to_filter_string, FacetValueHit, IndexFilter, OrderBy,
 };
-use meilisearch_types::network::Network;
 use serde_json::Value;
 use tracing::debug;
 
@@ -24,11 +23,11 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, intersect_index_filters, perform_facet_search, prepare_search,
-    union_index_filters, FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery,
-    Partition, RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    union_index_filters, FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery, RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEARCH_OFFSET,
 };
@@ -324,12 +323,12 @@ pub async fn search(
 
     let mut aggregate = FacetSearchAggregator::from_query(&query);
     let features = index_scheduler.features();
-    let network = index_scheduler.network();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
     let queries = vec![(index_uid.clone(), query)];
     let (_, mut queries, remote_errors) = preprocess_filters(
         index_scheduler.clone(),
-        &network,
+        &network_partitioner,
         queries,
         features,
         false,
@@ -341,7 +340,7 @@ pub async fn search(
     // we only have one query, so we can pop it
     let mut query = queries.pop().unwrap();
 
-    let search_result = if query.must_use_network(&network, &features)? {
+    let search_result = if query.must_use_network(&network_partitioner, &features)? {
         search_federated(
             index_scheduler.clone(),
             query,
@@ -350,7 +349,7 @@ pub async fn search(
             before_search,
             progress,
             features,
-            network,
+            &network_partitioner,
         )
         .await
     } else {
@@ -380,17 +379,15 @@ async fn search_federated(
     before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
-    network: Network,
+    network_partitioner: &NetworkPartitioner,
 ) -> Result<FacetSearchResult, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
-    let remote_availability = index_scheduler.remote_availability();
-    let partition = Partition::new(network.clone(), remote_availability);
 
     let (local_queries, remote_queries): (Vec<_>, Vec<_>) =
-        partition.into_partition(&query)?.partition(
+        network_partitioner.to_partition(&query)?.partition(
             // true is left, false is right
-            |(remote, _)| Some(remote) == network.local.as_ref(),
+            |(remote, _)| Some(remote.as_str()) == network_partitioner.local(),
         );
 
     let mut results: Vec<FacetSearchResult> = Vec::with_capacity(remote_queries.len() + 1);
@@ -403,7 +400,7 @@ async fn search_federated(
     let PreprocessedQuery { query: (_, mut query), filter: original_filter } = query;
 
     for (remote_name, shard_filter) in remote_queries {
-        let Some(remote) = network.remotes.get(&remote_name) else {
+        let Some(remote) = network_partitioner.get_remote(&remote_name) else {
             errors.insert(
                 remote_name.clone(),
                 ProxySearchError::UnknownRemote { remote: remote_name }.as_response_error(),
