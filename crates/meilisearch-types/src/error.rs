@@ -44,6 +44,26 @@ impl ResponseError {
             error_link: code.url(),
         }
     }
+
+    pub fn status_code(&self) -> StatusCode {
+        self.code
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub fn error_name(&self) -> &str {
+        &self.error_code
+    }
+
+    pub fn error_type(&self) -> &str {
+        &self.error_type
+    }
+
+    pub fn error_link(&self) -> &str {
+        &self.error_link
+    }
 }
 
 impl fmt::Display for ResponseError {
