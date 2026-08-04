@@ -4,8 +4,10 @@ use std::ops::Bound::{self, Excluded, Included};
 
 pub use filter_parser::Condition;
 use filter_parser::{IndexFilterCondition, TokenLike, VectorFilter};
+use filter_parser2::Link;
 use heed::types::LazyDecode;
-use heed::BytesEncode;
+use heed::{BytesEncode, RoTxn};
+use itertools::Itertools;
 use memchr::memmem::Finder;
 use roaring::{MultiOps, RoaringBitmap};
 
@@ -23,7 +25,7 @@ use crate::search::facet::filter::{FilterError, MAX_FILTER_DEPTH};
 use crate::search::facet::value_bounds::{evaluate_equal, ValueBounds};
 use crate::search::facet::BadGeoError;
 use crate::{
-    distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
+    distance_between_two_points, fields_ids_map, lat_lng_to_xyz, FieldId, FieldsIdsMap,
     FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
     SerializationError, SHARD_FIELD,
 };
@@ -36,6 +38,182 @@ pub struct IndexFilter {
 impl From<IndexFilterCondition> for IndexFilter {
     fn from(condition: IndexFilterCondition) -> Self {
         IndexFilter { condition }
+    }
+}
+
+pub struct FilterEvaluation<'a> {
+    index: &'a Index,
+    rtxn: &'a RoTxn,
+    fields_ids_map: &'a FieldsIdsMap,
+    universe: &'a RoaringBitmap,
+    left: RoaringBitmap,
+    right: RoaringBitmap,
+    stack: Vec<(Link, RoaringBitmap)>,
+}
+
+impl<'a> FilterEvaluation<'a> {
+    pub fn new(
+        index: &'a Index,
+        rtxn: &'a RoTxn,
+        fields_ids_map: &'a FieldsIdsMap,
+        universe: &'a RoaringBitmap,
+    ) -> Self {
+        Self {
+            index,
+            rtxn,
+            fields_ids_map,
+            universe,
+            left: universe.clone(),
+            right: Default::default(),
+            stack: Default::default(),
+        }
+    }
+}
+
+impl filter_parser2::Semantics for FilterEvaluation {
+    fn push_from_left(&mut self, previous_link: Link) {
+        self.stack.push((previous_link, std::mem::replace(&mut self.left, self.universe.clone())))
+    }
+
+    fn pop_to_left(&mut self, count: u16) {
+        for _i in 0..count {
+            let Some((link, right)) = self.stack.pop() else {
+                return;
+            };
+            if link.is_not() {
+                self.left = self.universe - self.left;
+            }
+            // the following works because & and | are commutative for Roarings
+            if link.is_and() {
+                self.left &= right;
+            }
+            if link.is_or() {
+                self.left |= right;
+            }
+        }
+    }
+
+    fn not_right(&mut self) {
+        self.right = self.universe - self.right;
+    }
+
+    fn and(&mut self) {
+        self.left &= std::mem::take(&mut self.right);
+    }
+
+    fn or(&mut self) {
+        self.left |= std::mem::take(&mut self.right);
+    }
+
+    fn vector_exists(
+        &mut self,
+        embedder: Option<filter_parser2::TokenView<'_>>,
+        filter: filter_parser2::VectorFilterView<'_>,
+    ) {
+        self.right =
+            super::vector::evaluate_2(self.rtxn, self.index, embedder, filter).unwrap_wip();
+    }
+
+    fn geo_lower_than(
+        &mut self,
+        point: [filter_parser2::TokenView<'_>; 2],
+        radius: filter_parser2::TokenView<'_>,
+        resolution: Option<filter_parser2::TokenView<'_>>,
+    ) {
+        _
+    }
+
+    fn geo_bounding_box(
+        &mut self,
+        top_right_point: [filter_parser2::TokenView<'_>; 2],
+        bottom_left_point: [filter_parser2::TokenView<'_>; 2],
+    ) {
+        _
+    }
+
+    fn geo_polygon<'a>(
+        &mut self,
+        points: impl Iterator<Item = [filter_parser2::TokenView<'a>; 2]>,
+        point_count: usize,
+    ) {
+        _
+    }
+
+    fn greater_than(
+        &mut self,
+        left: filter_parser2::TokenView<'_>,
+        right: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn greater_than_or_equal(
+        &mut self,
+        left: filter_parser2::TokenView<'_>,
+        right: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn lower_than(
+        &mut self,
+        left: filter_parser2::TokenView<'_>,
+        right: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn lower_than_or_equal(
+        &mut self,
+        left: filter_parser2::TokenView<'_>,
+        right: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn equal(&mut self, left: filter_parser2::TokenView<'_>, right: filter_parser2::TokenView<'_>) {
+        _
+    }
+
+    fn null(&mut self, operand: filter_parser2::TokenView<'_>) {
+        _
+    }
+
+    fn empty(&mut self, operand: filter_parser2::TokenView<'_>) {
+        _
+    }
+
+    fn exists(&mut self, operand: filter_parser2::TokenView<'_>) {
+        _
+    }
+
+    fn between(
+        &mut self,
+        operand: filter_parser2::TokenView<'_>,
+        lower: filter_parser2::TokenView<'_>,
+        upper: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn contains(
+        &mut self,
+        left: filter_parser2::TokenView<'_>,
+        right: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn starts_with(
+        &mut self,
+        left: filter_parser2::TokenView<'_>,
+        right: filter_parser2::TokenView<'_>,
+    ) {
+        _
+    }
+
+    fn foreign(&mut self, id: filter_parser2::TokenView<'_>) {
+        _
     }
 }
 
