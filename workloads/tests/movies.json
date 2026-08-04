@@ -232,6 +232,7 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "avgDocumentSize": 0,
+        "databaseSize": "[size]",
         "fieldDistribution": {
           "genres": 31944,
           "id": 31944,
@@ -242,7 +243,8 @@
         },
         "isIndexing": false,
         "numberOfDocuments": 31944,
-        "rawDocumentDbSize": 0
+        "rawDocumentDbSize": 0,
+        "usedDatabaseSize": "[size]"
       },
       "synchronous": "DontWait"
     },
@@ -418,6 +420,7 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "avgDocumentSize": "[avgDocSize]",
+        "databaseSize": "[size]",
         "fieldDistribution": {
           "genres": 31944,
           "id": 31944,
@@ -430,7 +433,8 @@
         "numberOfDocuments": 31944,
         "numberOfEmbeddedDocuments": 0,
         "numberOfEmbeddings": 0,
-        "rawDocumentDbSize": "[rawDbSize]"
+        "rawDocumentDbSize": "[rawDbSize]",
+        "usedDatabaseSize": "[size]"
       },
       "synchronous": "DontWait"
     },
