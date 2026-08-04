@@ -51,8 +51,82 @@ pub struct SemanticSearch {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PinDoc {
-    pub pos: Position,
-    pub doc_id: DocumentId,
+    pub position: Position,
+    pub precedence: Precedence,
+    pub id: DocumentId,
+}
+
+impl Pin for PinDoc {
+    type Id = DocumentId;
+
+    fn id(&self) -> Self::Id {
+        self.id
+    }
+
+    fn position(&self) -> u32 {
+        self.position
+    }
+
+    fn precedence(&self) -> Precedence {
+        self.precedence
+    }
+}
+
+pub trait Pin {
+    type Id;
+    fn id(&self) -> Self::Id;
+
+    fn position(&self) -> u32;
+    fn precedence(&self) -> Precedence;
+
+    fn sort(pins: &mut Vec<Self>)
+    where
+        Self: Sized,
+    {
+        pins.sort_unstable_by_key(|item| (item.position(), item.precedence()));
+    }
+
+    fn dedup(pins: &mut Vec<Self>)
+    where
+        Self: Sized,
+        Self::Id: PartialEq + PartialOrd + Ord,
+    {
+        pins.sort_unstable_by_key(|item| (item.id(), item.precedence(), item.position()));
+        pins.dedup_by_key(|item| item.id());
+    }
+
+    fn dedup_and_sort(pins: &mut Vec<Self>)
+    where
+        Self: Sized,
+        Self::Id: PartialEq + PartialOrd + Ord,
+    {
+        Self::dedup(pins);
+        Self::sort(pins);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Precedence(pub Option<u64>);
+
+impl PartialOrd for Precedence {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Overrides the natural order of Option such that None is considered greater than Some rather than Less
+///
+/// When both options are Some, use the regular order.
+impl Ord for Precedence {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering::*;
+        match (self.0, other.0) {
+            (None, None) => Equal,
+            (None, Some(_)) => Greater,
+            (Some(_), None) => Less,
+            (Some(left), Some(right)) => left.cmp(&right),
+        }
+    }
 }
 
 pub struct Search<'a> {
@@ -577,7 +651,8 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
 }
 
 pub fn merge_positioned_hits_into_page<P, T, FPos, FMap>(
-    pins: Vec<P>,
+    pin_count: usize,
+    pins: impl IntoIterator<Item = P>,
     skip: usize,
     take: usize,
     organic_hits: Vec<T>,
@@ -588,12 +663,12 @@ where
     FPos: Fn(&P) -> Position,
     FMap: FnMut(P) -> T,
 {
-    if pins.is_empty() {
+    if pin_count == 0 {
         return organic_hits;
     }
 
     let page_end = skip.saturating_add(take);
-    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
+    let capacity = take.min(organic_hits.len().saturating_add(pin_count));
     let mut merged_hits = Vec::with_capacity(capacity);
     let mut organic_hits = organic_hits.into_iter();
     let mut pins = pins.into_iter().peekable();

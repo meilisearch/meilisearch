@@ -36,6 +36,7 @@ pub const QUERIES_POSITION: &str = "queriesPosition";
 pub const WEIGHTED_RANKING_SCORE: &str = "weightedRankingScore";
 pub const WEIGHTED_SCORE_VALUES: &str = "weightedScoreValues";
 pub const PINNED_POSITION: &str = "pinnedPosition";
+pub const PINNED_PRECEDENCE: &str = "pinnedPrecedence";
 pub const FEDERATION_REMOTE: &str = "remote";
 pub const FEDERATION_EXTRA_DOCUMENT: &str = "extra_document";
 pub const FEDERATION_EXTERNAL_DOCUMENT_ID: &str = "id";

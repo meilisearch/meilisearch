@@ -13,6 +13,7 @@ pub const DEFAULT_CHAT_SEARCH_INDEX_UID_PARAM_PROMPT: &str = "The name of the in
 pub struct RuntimeTogglableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
+    pub tasks_streaming_route: bool,
     pub edit_documents_by_function: bool,
     pub contains_filter: bool,
     pub dynamic_search_rules: bool,
@@ -32,6 +33,7 @@ pub struct RuntimeTogglableFeatures {
 pub struct InstanceTogglableFeatures {
     pub metrics: bool,
     pub logs_route: bool,
+    pub tasks_streaming_route: bool,
     pub contains_filter: bool,
     pub legacy_search_as_default: bool,
 }
