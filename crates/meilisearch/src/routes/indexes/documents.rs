@@ -1033,7 +1033,7 @@ async fn retrieve_documents_federated(
         offset: query.query.query.offset,
         limit: query.query.query.limit,
         total,
-        remote_errors: Some(remote_errors),
+        remote_errors: Some(remote_errors).filter(|errors| !errors.is_empty()),
     })
 }
 
