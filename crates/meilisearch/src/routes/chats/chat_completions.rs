@@ -273,8 +273,7 @@ fn setup_search_tool(
             search_rules,
             name.uid(),
             progress,
-        )
-        .unwrap(); // TODO do not unwrap
+        )?;
         let _ = writeln!(
             &mut filter_description,
             "\n## Facet distributions of the {name} index",
