@@ -3,20 +3,18 @@ use std::collections::{BTreeSet, HashMap};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
-use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceIndexUid};
 use meilisearch_types::milli::{
     self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
 };
-use meilisearch_types::Index;
+use meilisearch_types::{ForeignKeysPerIndex, Index};
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
 use crate::documents_retrieval::preprocessing::{
     fuse_remote_documents, take_document_id_from_federation_hit, take_federation_hit,
 };
-use crate::documents_retrieval::{
-    ForeignIndexUid, ForeignKeysPerIndex, RemoteErrors, RemoteRetrieveDocuments, SourceIndexUid,
-};
+use crate::documents_retrieval::{RemoteErrors, RemoteRetrieveDocuments};
 use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex};
 use crate::search::federated::types::PreprocessedQuery;
 use crate::search::federated::NetworkPartitioner;

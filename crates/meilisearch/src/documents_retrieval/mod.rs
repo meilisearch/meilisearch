@@ -20,10 +20,7 @@ use crate::search::{
     SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
 
-pub use preprocessing::{
-    preprocess_filters, retrieve_foreign_keys_settings, ForeignIndexUid, ForeignKeysPerIndex,
-    SourceIndexUid,
-};
+pub use preprocessing::{preprocess_filters, retrieve_foreign_keys_settings};
 
 pub use hydration::{hydrate_documents, FederatedHydrationFormatter, HydrationContext};
 
@@ -279,6 +276,7 @@ const MAX_IN_FLIGHT_REQUESTS: usize = 40;
 pub struct RemoteRetrieveDocuments<T> {
     errors: BTreeMap<String, ResponseError>,
     results: Vec<(T, DocumentsResult)>,
+    #[allow(clippy::type_complexity)]
     in_flight_requests:
         VecDeque<(tokio::task::JoinHandle<Result<DocumentsResult, ProxySearchError>>, String, T)>,
 }

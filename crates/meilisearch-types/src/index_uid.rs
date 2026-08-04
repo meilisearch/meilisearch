@@ -150,3 +150,42 @@ impl DsrIndex {
         ".meili_dsr"
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ForeignIndexUid(pub IndexUid);
+
+impl std::borrow::Borrow<str> for ForeignIndexUid {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for ForeignIndexUid {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SourceFieldName(pub String);
+
+impl AsRef<str> for SourceFieldName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SourceIndexUid(pub IndexUid);
+
+impl std::borrow::Borrow<str> for SourceIndexUid {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for SourceIndexUid {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}

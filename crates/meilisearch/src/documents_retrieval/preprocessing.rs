@@ -6,13 +6,13 @@ use index_scheduler::filter::{
 };
 use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceFieldName, SourceIndexUid};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
     self, filtered_universe, FederatingResultsStep, Filter, IndexFilter, IndexFilterCondition,
     LightToken, Token, TokenLike,
 };
-use meilisearch_types::Document;
+use meilisearch_types::{Document, ForeignKeysPerIndex};
 use serde_json::{Map, Value};
 
 use crate::documents_retrieval::{HydrationContext, RemoteErrors};
@@ -32,46 +32,12 @@ use crate::search::ExternalDocumentId;
 /// If the foreign filter is retrieving too many documents, it will return an error.
 const MAX_FOREIGN_FILTER_DOCIDS: u64 = 1000;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ForeignIndexUid(pub IndexUid);
-
-impl std::borrow::Borrow<str> for ForeignIndexUid {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
+#[derive(Clone)]
+struct ForeignFilterWithContext {
+    foreign_index_uid: ForeignIndexUid,
+    fid: Token,
+    index_filter: Option<IndexFilter>,
 }
-
-impl AsRef<str> for ForeignIndexUid {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SourceFieldName(pub String);
-
-impl AsRef<str> for SourceFieldName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SourceIndexUid(pub IndexUid);
-
-impl std::borrow::Borrow<str> for SourceIndexUid {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl AsRef<str> for SourceIndexUid {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, SourceFieldName)>>;
 
 pub async fn preprocess_filters<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
@@ -188,7 +154,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
 fn extract_foreign_filters(
     filters: &[(SourceIndexUid, Option<Filter>)],
     foreign_keys_per_index: &ForeignKeysPerIndex,
-) -> Result<Vec<(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)>, ResponseError> {
+) -> Result<Vec<ForeignFilterWithContext>, ResponseError> {
     // list all the foreign filters and check their validity
     let mut foreign_filters = Vec::new();
     for (index_uid, filter) in filters.iter() {
@@ -224,12 +190,11 @@ fn extract_foreign_filters(
                     Err(fid.to_external_error(error).into())
                 })?);
 
-            foreign_filters.push((
-                index_uid.clone(),
-                foreign_index_uid.clone(),
-                fid.clone(),
-                Some(index_filter),
-            ));
+            foreign_filters.push(ForeignFilterWithContext {
+                foreign_index_uid: foreign_index_uid.clone(),
+                fid: fid.clone(),
+                index_filter: Some(index_filter),
+            });
         }
     }
 
@@ -237,10 +202,12 @@ fn extract_foreign_filters(
 }
 
 fn group_foreign_filters_by_foreign_index(
-    foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
+    foreign_filters: &[ForeignFilterWithContext],
 ) -> HashMap<ForeignIndexUid, Vec<usize>> {
     let mut filters_per_foreign_index: HashMap<ForeignIndexUid, Vec<usize>> = HashMap::new();
-    for (i, (_, foreign_index_uid, _, _)) in foreign_filters.iter().enumerate() {
+    for (i, ForeignFilterWithContext { foreign_index_uid, .. }) in
+        foreign_filters.iter().enumerate()
+    {
         filters_per_foreign_index.entry(foreign_index_uid.clone()).or_default().push(i);
     }
     filters_per_foreign_index
@@ -248,7 +215,7 @@ fn group_foreign_filters_by_foreign_index(
 
 async fn local_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
-    foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
+    foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
 ) -> Result<Vec<Vec<LightToken>>, ResponseError> {
     let index_scheduler = index_scheduler.clone();
@@ -270,7 +237,7 @@ async fn local_process_foreign_filters(
         let mut filters_internal_docids = Vec::new();
         for filter_index in filter_indices.iter() {
             // Safety (Data oriented): `filter_index` is an index into the `foreign_filters` vector, so it's safe to dereference it
-            let (_, _, _, index_filter) = &foreign_filters[*filter_index];
+            let ForeignFilterWithContext { index_filter, .. } = &foreign_filters[*filter_index];
 
             // filter the foreign index
             let docids =
@@ -316,14 +283,14 @@ async fn local_process_foreign_filters(
 async fn federated_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
     partitioner: &NetworkPartitioner,
-    foreign_filters: &[(SourceIndexUid, ForeignIndexUid, Token, Option<IndexFilter>)],
+    foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
 ) -> Result<(Vec<Vec<LightToken>>, RemoteErrors), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
     let mut remote_queries = Vec::new();
-    for (query_index, (_index_uid, foreign_index_uid, _, index_filter)) in
+    for (query_index, ForeignFilterWithContext { foreign_index_uid, index_filter, .. }) in
         foreign_filters.iter().enumerate()
     {
         let query = PreprocessedQuery {
@@ -458,7 +425,9 @@ async fn filters_into_index_filters(
         .map(|(_index_uid, filter)| {
             let Some(filter) = filter else { return Ok(None) };
             condition_to_index_condition(filter.condition, &mut |_| {
-                let Some(((_, _, fid, _), els)) = in_iter.next() else { unreachable!() };
+                let Some((ForeignFilterWithContext { fid, .. }, els)) = in_iter.next() else {
+                    unreachable!()
+                };
                 Ok(IndexFilterCondition::In { fid, els })
             })
             .map(|condition| Some(IndexFilter { condition }))

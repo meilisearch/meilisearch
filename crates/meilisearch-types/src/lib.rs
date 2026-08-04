@@ -9,6 +9,8 @@ pub mod deserr;
 pub mod document_formats;
 #[cfg(feature = "enterprise")]
 pub mod enterprise_edition;
+use std::collections::HashMap;
+
 #[cfg(not(feature = "enterprise"))]
 pub use community_edition as current_edition;
 #[cfg(feature = "enterprise")]
@@ -30,11 +32,14 @@ pub mod tasks;
 pub mod versioning;
 pub mod webhooks;
 
+use crate::index_uid::{ForeignIndexUid, SourceFieldName, SourceIndexUid};
 pub use archive_ext::ArchiveExt;
 pub use milli::{heed, Index};
 use uuid::Uuid;
 pub use versioning::VERSION_FILE_NAME;
+
 pub use {byte_unit, milli, serde_cs};
 
 pub type Document = serde_json::Map<String, serde_json::Value>;
 pub type InstanceUid = Uuid;
+pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, SourceFieldName)>>;

@@ -27,7 +27,8 @@ use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, intersect_index_filters, perform_facet_search, prepare_search,
-    union_index_filters, FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery, RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    union_index_filters, FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery,
+    RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
     DEFAULT_SEARCH_OFFSET,
 };
@@ -371,6 +372,7 @@ pub async fn search(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn search_federated(
     index_scheduler: Data<IndexScheduler>,
     query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
