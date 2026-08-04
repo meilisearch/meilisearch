@@ -1,11 +1,9 @@
 use std::io::Cursor;
 
-use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::{FromRequest, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
-use meilisearch_auth::AuthController;
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
@@ -66,9 +64,8 @@ pub struct McpApi;
     )
 )]
 async fn mcp(
-    req: HttpRequest,
+    request: HttpRequest,
     index_scheduler: Data<IndexScheduler>,
-    auth_controller: Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
     personalization_service: web::Data<crate::personalization::PersonalizationService>,
     body: AwebJson<McpQuery, DeserrJsonError>,
@@ -79,35 +76,35 @@ async fn mcp(
     let McpQuery { jsonrpc, id, method, params } = body.into_inner();
 
     let response = match method.as_str() {
-        "server/discover" => todo!("list tools and resources"),
+        "server/discover" => McpResponse {
+            jsonrpc,
+            id,
+            result: Some(McpResult {
+                result_type: RESULT_TYPE_COMPLETE,
+                content: None,
+                tools: todo!(),
+            }),
+            error: None,
+        },
         // TODO get this from OpenApi
         "tools/call" => match params.name.as_deref() {
-            Some("search_in_index") => {
-                let index_uid = "test";
-                let path =
-                    format!("/indexes/{}/search", serde_urlencoded::to_string(index_uid).unwrap());
-                let request =
-                    actix_web::test::TestRequest::with_uri(&path).app_data(auth_controller);
-                let request = match req.headers().get(header::AUTHORIZATION) {
-                    Some(token) => request.insert_header((header::AUTHORIZATION, token)),
-                    None => request,
-                };
+            Some(tool_names::SEARCH_IN_INDEXES) => {
+                // request
+                // TODO it cannot fail, right? right!?
+                let multi_search_query =
+                    serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
+                let mut payload = actix_web::dev::Payload::from(multi_search_query);
 
-                let request = request.to_http_request();
-                let mut payload = actix_web::dev::Payload::None;
-                // TODO don't unwrap
+                // // TODO don't unwrap
                 let guarded_index_scheduler =
                     GuardedData::from_request(&request, &mut payload).await.unwrap();
                 // TODO don't unwrap
-                let path = web::Path::from_request(&request, &mut payload).await.unwrap();
-                // TODO don't unwrap
                 let params = AwebJson::from_request(&request, &mut payload).await.unwrap();
 
-                let result = super::indexes::search::search_with_post(
+                let result = super::multi_search::multi_search_with_post(
                     guarded_index_scheduler,
                     search_queue,
                     personalization_service,
-                    path,
                     params,
                     request,
                     analytics,
@@ -119,13 +116,17 @@ async fn mcp(
                         let body = response.into_body();
                         // TODO do not unwrap
                         let bytes = actix_web::body::to_bytes(body).await.unwrap();
-                        // TODO this blocks and would have prefered to have a serde_json RawValue
-                        //      to avoid allocating too much and simply pass through.
+                        // TODO this blocks and would have been better to have a serde_json
+                        //      RawValue to avoid allocating too much and simply pass through
                         let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult { result_type: RESULT_TYPE_COMPLETE, content }),
+                            result: Some(McpResult {
+                                result_type: RESULT_TYPE_COMPLETE,
+                                tools: None,
+                                content,
+                            }),
                             error: None,
                         }
                     }
@@ -150,6 +151,13 @@ async fn mcp(
     };
 
     Ok(HttpResponse::Ok().json(response))
+}
+
+pub mod tool_names {
+    pub const LIST_INDEXES: &str = "listIndexes";
+    pub const DESCRIBE_INDEXES: &str = "describeIndexes";
+    pub const SEARCH_IN_INDEXES: &str = "searchInIndexes";
+    pub const FACET_SEARCH: &str = "facetSearch";
 }
 
 #[routes::request]
@@ -213,7 +221,15 @@ const RESULT_TYPE_COMPLETE: &str = "complete";
 #[derive(Debug, Serialize, ToSchema)]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
-    content: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<McpToolDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct McpToolDefinition {
+    // name, title, description, icons (lol, nope), inputSchema (arf), outputSchema (optional. so, nope), annotations (optional. so, nope)
 }
 
 #[derive(Debug, Serialize, ToSchema)]
