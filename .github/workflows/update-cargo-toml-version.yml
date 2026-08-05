@@ -10,21 +10,22 @@ on:
 env:
   NEW_VERSION: ${{ github.event.inputs.new_version }}
   NEW_BRANCH: update-version-${{ github.event.inputs.new_version }}
-  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
 
 jobs:
   update-version-cargo-toml:
     name: Update version in Cargo.toml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Install sd
         run: cargo install sd
       - name: Update Cargo.toml file
@@ -40,6 +41,8 @@ jobs:
           message: "Update version for the next release (${{ env.NEW_VERSION }}) in Cargo.toml"
           new_branch: ${{ env.NEW_BRANCH }}
       - name: Create the PR pointing to ${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
           gh pr create \
             --title "Update version for the next release ($NEW_VERSION) in Cargo.toml" \

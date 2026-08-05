@@ -22,7 +22,7 @@ jobs:
     outputs:
       docker-image: ${{ steps.define-image.outputs.docker-image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Define the Docker image we need to use
         id: define-image
         env:
@@ -50,11 +50,11 @@ jobs:
       MEILISEARCH_VERSION: ${{ needs.define-docker-image.outputs.docker-image }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-dotnet
       - name: Setup .NET Core
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: "8.0.x"
       - name: Install dependencies
@@ -80,10 +80,10 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-dart
-      - uses: dart-lang/setup-dart@v1
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1
         with:
           sdk: "latest"
       - name: Install dependencies
@@ -106,19 +106,14 @@ jobs:
           - "7700:7700"
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: stable
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-go
       - name: Get dependencies
-        run: |
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-            dep ensure
-          fi
+        run: go get -v -t -d ./...
       - name: Run integration tests
         run: go test --race -v ./integration
 
@@ -136,11 +131,11 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-java
       - name: Set up Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: 17
           distribution: "temurin"
@@ -164,13 +159,13 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-js
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           cache: "pnpm"
       - name: Install dependencies
@@ -194,11 +189,11 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-php
       - name: Install PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
       - name: Validate composer.json and composer.lock
         run: composer validate
       - name: Install dependencies
@@ -224,11 +219,11 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
@@ -250,11 +245,11 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-ruby
       - name: Set up Ruby 3
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
         with:
           ruby-version: 3
       - name: Install ruby dependencies
@@ -276,7 +271,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-rust
       - name: Build
@@ -298,7 +293,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-swift
       - name: Run tests
@@ -322,13 +317,13 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-js-plugins
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           cache: pnpm
       - name: Install dependencies
@@ -358,18 +353,18 @@ jobs:
     env:
       RAILS_VERSION: "7.0"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-rails
       - name: Install SQLite dependencies
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
         with:
           ruby-version: 3
           bundler-cache: true
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.12.1
+        uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
         with:
           mongodb-version: 8.0
       - name: Run tests
@@ -389,11 +384,11 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: meilisearch/meilisearch-symfony
       - name: Install PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           tools: composer:v2, flex
       - name: Validate composer.json and composer.lock

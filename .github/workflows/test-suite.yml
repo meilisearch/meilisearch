@@ -22,7 +22,7 @@ jobs:
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
         features: ["", "--features enterprise"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: check free space before
         run: df -h
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
@@ -34,9 +34,11 @@ jobs:
       - name: check free space after
         run: df -h
       - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@1.91.1
+        uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: ${{ matrix.features }}
       - name: Run cargo build without any default features
@@ -54,10 +56,12 @@ jobs:
         features: ["", "--features enterprise"]
     if: github.event_name != 'merge_group'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
-      - uses: dtolnay/rust-toolchain@1.91.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Run cargo build without any default features
         run: cargo build --locked --no-default-features --all
       - name: Run cargo test
@@ -73,10 +77,12 @@ jobs:
         features: ["", "--features enterprise"]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
-      - uses: dtolnay/rust-toolchain@1.91.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Run cargo build without any default features
         run: cargo build --locked --no-default-features --all
       - name: Run cargo test
@@ -87,14 +93,16 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Run cargo build with almost all features
         run: |
           cargo build --workspace --locked --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
@@ -108,7 +116,7 @@ jobs:
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -143,7 +151,7 @@ jobs:
     env:
       MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: "true"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: check free space before
         run: df -h
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
@@ -155,9 +163,11 @@ jobs:
       - name: check free space after
         run: df -h
       - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@1.91.1
+        uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run cargo test
         run: cargo test --locked --all
 
@@ -166,14 +176,16 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -qz lindera; then
@@ -188,16 +200,18 @@ jobs:
     name: Build in release
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Build
         run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
@@ -208,18 +222,19 @@ jobs:
       matrix:
         features: ["", "--features enterprise"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
         with:
+          toolchain: 1.91.1
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run cargo clippy
         run: cargo clippy --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
 
@@ -227,18 +242,19 @@ jobs:
     name: Run Rustfmt
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
         with:
+          toolchain: 1.91.1
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
 
@@ -248,16 +264,18 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run declarative tests
         run: |
           cargo xtask test workloads/tests/*.json

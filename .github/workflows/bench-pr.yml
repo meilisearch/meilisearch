@@ -6,9 +6,6 @@ on:
 permissions:
   issues: write
 
-env:
-  GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
-
 jobs:
   run-benchmarks-on-comment:
     if: startsWith(github.event.comment.body, '/bench')
@@ -19,12 +16,22 @@ jobs:
       - name: Check permissions
         id: permission
         env:
+          GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
           PR_AUTHOR: ${{github.event.issue.user.login }}
           COMMENT_AUTHOR: ${{github.event.comment.user.login }}
           REPOSITORY: ${{github.repository}}
           PR_ID: ${{github.event.issue.number}}
+          COMMENT_AT: ${{github.event.comment.created_at}}
         run: |
           PR_REPOSITORY=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.repo.full_name)
+          PR_HEAD_SHA=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.sha)
+          PUSHED_AT=$(gh api /repos/"$REPOSITORY"/commits/"$PR_HEAD_SHA" --jq .commit.committer.date)
+          if [ "$(date -d "$PUSHED_AT" +%s)" -gt "$(date -d "$COMMENT_AT" +%s)" ]
+          then
+            echo "::error title=Authentication error::Last commit was pushed after the comment"
+            exit 1
+          fi
+          echo "head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"
           if $(gh api /repos/"$REPOSITORY"/collaborators/"$PR_AUTHOR"/permission --jq .user.permissions.push)
           then
             echo "::notice title=Authentication success::PR author authenticated"
@@ -53,20 +60,17 @@ jobs:
         with:
           command: bench
           reaction-type: "rocket"
-          repo-token: ${{ env.GH_TOKEN }}
+          repo-token: ${{ secrets.MEILI_BOT_GH_PAT }}
 
-      - uses: xt0rted/pull-request-comment-branch@e8b8daa837e8ea7331c0003c9c316a64c6d8b0b1 # v3
-        id: comment-branch
-        with:
-          repo_token: ${{ env.GH_TOKEN }}
-
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         if: success()
         with:
           fetch-depth: 0 # fetch full history to be able to get main commit sha
-          ref: ${{ steps.comment-branch.outputs.head_ref }}
+          ref: ${{ steps.permission.outputs.head_sha }}
 
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
 
       - name: Run benchmarks on PR ${{ github.event.issue.id }}
         env:
@@ -78,5 +82,7 @@ jobs:
              -- $BENCH_ARGS > benchlinks.txt
 
       - name: Send comment in PR
+        env:
+          GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
         run: |
           gh pr comment ${{github.event.issue.number}} --body-file benchlinks.txt

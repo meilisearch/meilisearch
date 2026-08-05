@@ -6,6 +6,8 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
     labels:
       - 'dependencies'
     rebase-strategy: disabled
