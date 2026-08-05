@@ -245,6 +245,7 @@ InconsistentDocumentChangeHeaders              , InvalidRequest       , BAD_REQU
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentUseNetwork                      , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentRetrieve                     , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST ;
 InvalidHeaderValue                             , InvalidRequest       , BAD_REQUEST ;

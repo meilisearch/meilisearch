@@ -2,17 +2,13 @@ use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Not as _;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
 use deserr::Deserr;
 pub use federated::ProxyQuery;
-use index_scheduler::filter::{
-    filter_into_index_filter, filters_into_index_filters, parse_filter,
-    retrieve_foreign_keys_settings, SourceIndexUid,
-};
+use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
@@ -29,10 +25,9 @@ use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
     filtered_matching_patterns, filtered_universe, make_document, AttributePatterns,
-    AttributeState, Deadline, DocumentId, Error, FacetValueHit, Filter, IndexFilter, InternalError,
+    AttributeState, Deadline, DocumentId, Error, FacetValueHit, IndexFilter, InternalError,
     MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
 };
-use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
@@ -48,7 +43,9 @@ mod mod_test;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::documents_retrieval::hydrate_documents;
 use crate::error::MeilisearchHttpError;
+use crate::search::federated::NetworkPartitioner;
 
 pub mod federated;
 pub use federated::{
@@ -56,8 +53,6 @@ pub use federated::{
     FederationOptions, MergeFacets, Partition, ShowFederationInfo,
 };
 
-mod hydration;
-use hydration::hydrate_documents;
 mod ranking_rules;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
@@ -363,7 +358,7 @@ pub trait NetworkableQuery {
     /// Factor some logic so that callers don't have to reimplement for federated and single search.
     fn must_use_network(
         &mut self,
-        network: &Network,
+        network_partitioner: &NetworkPartitioner,
         features: &RoFeatures,
     ) -> Result<bool, ResponseError> {
         // as `useNetwork` is going to default to `true` if missing in some cases,
@@ -378,7 +373,7 @@ pub trait NetworkableQuery {
         // fixup value for the use network field to prevent recursion,
         // and we have a different default value.
 
-        let default = if network.sharding() {
+        let default = if network_partitioner.sharding() {
             *self.use_network_field() = Some(false);
             true
         } else {
@@ -1618,6 +1613,28 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
     }
 }
 
+pub fn intersect_index_filters(
+    left: Option<IndexFilter>,
+    right: Option<IndexFilter>,
+) -> Option<IndexFilter> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => Some(left & right),
+    }
+}
+
+pub fn union_index_filters(
+    left: Option<IndexFilter>,
+    right: Option<IndexFilter>,
+) -> Option<IndexFilter> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => Some(left | right),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_search<'t>(
     index: &'t Index,
@@ -1780,7 +1797,7 @@ pub fn perform_search(
 ) -> Result<(SearchResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
-        query,
+        mut query,
         search_kind,
         retrieve_vectors,
         features,
@@ -1796,17 +1813,14 @@ pub fn perform_search(
         let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
         index.fields_ids_map(&rtxn)?
     };
-    let filter = match &query.filter {
-        Some(filter) => {
-            let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
-            filter
-                .map(|f| {
-                    filter_into_index_filter(f, index, &rtxn, index_scheduler, progress, &index_uid)
-                })
-                .transpose()?
-        }
-        None => None,
-    };
+    let filter = query
+        .filter
+        .take()
+        .and_then(|filter| {
+            parse_local_index_filter(&filter, Some(&index_uid), features, Code::InvalidSearchFilter)
+                .transpose()
+        })
+        .transpose()?;
 
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,
@@ -2607,28 +2621,11 @@ pub fn perform_similar(
     )?;
 
     let docid_filter = search_rules.and_then(|search_rules| search_rules.filter);
-    let docid_filter = docid_filter
-        .as_ref()
-        .map(|docid_filter| {
-            parse_filter(
-                docid_filter,
-                Code::InvalidSimilarFilter,
-                features,
-                Some(index_uid.as_str()),
-            )
-        })
-        .transpose()?
-        .flatten();
 
-    let candidates_filter = filter
-        .as_ref()
-        .and_then(|filter| {
-            parse_filter(filter, Code::InvalidSimilarFilter, features, None).transpose()
-        })
-        .transpose()?;
+    let candidates_filter = filter;
 
     let (docid_filter, candidates_filter) =
-        extract_filters(index_scheduler, index_uid, progress, docid_filter, candidates_filter)?;
+        extract_filters(features, &index_uid, docid_filter, candidates_filter)?;
 
     let id: ExternalDocumentId = id.try_into().map_err(|error| {
         let msg = format!("Invalid value at `.id`: {error}");
@@ -2645,7 +2642,8 @@ pub fn perform_similar(
     };
 
     let docid_universe =
-        filtered_universe(&index, &rtxn, &fields_ids_map, &docid_filter, None, progress)?;
+        filtered_universe(&index, &rtxn, &fields_ids_map, &docid_filter, None, progress)
+            .map_err(|err| MeilisearchHttpError::from_milli(err, Some(index_uid.to_string())))?;
     if docid_universe.contains(internal_id).not() {
         return Err(ResponseError::from_msg(
             MeilisearchHttpError::DocumentNotFound(id.into_inner()).to_string(),
@@ -2738,29 +2736,24 @@ pub fn perform_similar(
 }
 
 fn extract_filters(
-    index_scheduler: &IndexScheduler,
-    index_uid: IndexUid,
-    progress: &Progress,
-    docid_filter: Option<Filter>,
-    candidates_filter: Option<Filter>,
+    features: RoFeatures,
+    index_uid: &IndexUid,
+    docid_filter: Option<Value>,
+    candidates_filter: Option<Value>,
 ) -> Result<(Option<IndexFilter>, Option<IndexFilter>), ResponseError> {
-    let source_index_uid = SourceIndexUid(Rc::from(&*index_uid));
-    let foreign_keys_settings =
-        retrieve_foreign_keys_settings(index_scheduler, std::iter::once(&source_index_uid))?;
-    let (docid_filter, candidates_filter) = match filters_into_index_filters(
-        vec![
-            (source_index_uid.clone(), docid_filter),
-            (source_index_uid.clone(), candidates_filter),
-        ],
-        &foreign_keys_settings,
-        index_scheduler,
-        progress,
-    )?
-    .as_mut_slice()
-    {
-        [docid_filter, candidates_filter] => (docid_filter.take(), candidates_filter.take()),
-        _ => unreachable!(),
-    };
+    let docid_filter = docid_filter
+        .and_then(|filter| {
+            parse_local_index_filter(&filter, Some(index_uid), features, Code::InvalidSimilarFilter)
+                .transpose()
+        })
+        .transpose()?;
+    let candidates_filter = candidates_filter
+        .and_then(|filter| {
+            parse_local_index_filter(&filter, Some(index_uid), features, Code::InvalidSimilarFilter)
+                .transpose()
+        })
+        .transpose()?;
+
     Ok((docid_filter, candidates_filter))
 }
 

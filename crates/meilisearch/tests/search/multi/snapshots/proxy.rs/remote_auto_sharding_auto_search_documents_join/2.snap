@@ -1,0 +1,112 @@
+---
+source: crates/meilisearch/tests/search/multi/proxy.rs
+---
+{
+  "hits": [
+    {
+      "title": "Captain Marvel story",
+      "author": {
+        "id": "a2",
+        "name": "Bob",
+        "birthday": "1958-06-15",
+        "popularity": 4.5
+      },
+      "related_authors": [
+        {
+          "id": "a3",
+          "name": "Charlie",
+          "birthday": "1940-05-05",
+          "popularity": 4.8
+        },
+        {
+          "id": "a4",
+          "name": "Diana",
+          "birthday": "1985-03-20",
+          "popularity": 3.2
+        }
+      ],
+      "genres": [
+        "action",
+        "fiction"
+      ],
+      "_federation": {
+        "indexUid": "books",
+        "queriesPosition": 0,
+        "weightedRankingScore": 1.0,
+        "remote": "ms0"
+      }
+    },
+    {
+      "title": "The Great Gatsby",
+      "author": {
+        "id": "a3",
+        "name": "Charlie",
+        "birthday": "1940-05-05",
+        "popularity": 4.8
+      },
+      "related_authors": [
+        {
+          "id": "a4",
+          "name": "Diana",
+          "birthday": "1985-03-20",
+          "popularity": 3.2
+        },
+        {
+          "id": "a5",
+          "name": "Ethan",
+          "birthday": "1972-11-30",
+          "popularity": 3.9
+        }
+      ],
+      "genres": [
+        "action",
+        "classic"
+      ],
+      "_federation": {
+        "indexUid": "books",
+        "queriesPosition": 1,
+        "weightedRankingScore": 1.0,
+        "remote": "ms0"
+      }
+    },
+    {
+      "title": "To Kill a Mockingbird",
+      "author": {
+        "id": "a4",
+        "name": "Diana",
+        "birthday": "1985-03-20",
+        "popularity": 3.2
+      },
+      "related_authors": [
+        {
+          "id": "a5",
+          "name": "Ethan",
+          "birthday": "1972-11-30",
+          "popularity": 3.9
+        },
+        {
+          "id": "a6",
+          "name": "Fiona",
+          "birthday": "1988-07-14",
+          "popularity": 2.8
+        }
+      ],
+      "genres": [
+        "classic",
+        "drama"
+      ],
+      "_federation": {
+        "indexUid": "books",
+        "queriesPosition": 1,
+        "weightedRankingScore": 1.0,
+        "remote": "ms2"
+      }
+    }
+  ],
+  "processingTimeMs": "[time]",
+  "limit": 20,
+  "offset": 0,
+  "estimatedTotalHits": 3,
+  "requestUid": "[uuid]",
+  "remoteErrors": {}
+}

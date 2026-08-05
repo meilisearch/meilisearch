@@ -124,6 +124,12 @@ impl From<&str> for LightToken {
     }
 }
 
+impl From<String> for LightToken {
+    fn from(fragment: String) -> Self {
+        LightToken { fragment, utf8_column: 0, modified_fragment: None }
+    }
+}
+
 impl TokenLike for LightToken {
     fn fragment(&self) -> &str {
         self.modified_fragment.as_ref().unwrap_or(&self.fragment)
@@ -406,15 +412,10 @@ impl FilterCondition {
     }
 
     pub fn use_foreign_operator(&self) -> Option<&Token> {
-        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }.next().and_then(|filter| {
-            match filter {
-                FilterCondition::Foreign { fid, .. } => Some(fid),
-                _ => None,
-            }
-        })
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }.next().map(|(fid, _)| fid)
     }
 
-    pub fn list_foreign_filters(&self) -> impl Iterator<Item = &FilterCondition> {
+    pub fn list_foreign_filters(&self) -> impl Iterator<Item = (&Token, &FilterCondition)> {
         ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }
     }
 
@@ -470,14 +471,14 @@ struct ForeignFilterIter<'a> {
 }
 
 impl<'a> Iterator for ForeignFilterIter<'a> {
-    type Item = &'a FilterCondition;
+    type Item = (&'a Token, &'a FilterCondition);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let (depth, current) = self.stack.pop()?;
 
             match current {
-                FilterCondition::Foreign { .. } => return Some(current),
+                FilterCondition::Foreign { fid, op } => return Some((fid, op)),
 
                 FilterCondition::Not(next) if depth > 0 => {
                     self.stack.push((depth - 1, next));

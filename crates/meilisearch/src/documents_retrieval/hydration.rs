@@ -1,16 +1,24 @@
 use std::collections::{BTreeSet, HashMap};
 
-use index_scheduler::filter::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceIndexUid};
 use meilisearch_types::milli::{
     self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
 };
-use meilisearch_types::Index;
+use meilisearch_types::{ForeignKeysPerIndex, Index};
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
+use crate::documents_retrieval::preprocessing::{
+    fuse_remote_documents, take_document_id_from_federation_hit, take_federation_hit,
+};
+use crate::documents_retrieval::{RemoteErrors, RemoteRetrieveDocuments};
+use crate::routes::indexes::documents::{BrowseQuery, BrowseQueryWithIndex};
+use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
+use crate::search::proxy::ProxySearchParams;
 use crate::search::{ExternalDocumentId, SearchHit};
 
 /// Hydrate the documents based on the foreign keys
@@ -141,13 +149,13 @@ impl<'a> IndexDocumentMaker<'a> {
 }
 
 pub type ForeignExternalDocumentId = ExternalDocumentId;
+#[derive(Clone)]
 pub struct HydrationContext {
     // list of indexes in the order of the queries
     index_by_query_index: Vec<SourceIndexUid>,
     // map from index uid to foreign keys
     hydration_settings: ForeignKeysPerIndex,
     // map from foreign index uid to foreign document ids
-    // TODO Document join: add remote name to the key when implementing network support
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
 }
 
@@ -212,28 +220,143 @@ pub struct FederatedHydrationFormatter {
     hydration_documents: HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>,
 }
 
+fn local_fetch_hydration_documents(
+    index_scheduler: &IndexScheduler,
+    index_uid: &ForeignIndexUid,
+    docids: &[ForeignExternalDocumentId],
+    hydration_documents: &mut HashMap<
+        (ForeignIndexUid, ForeignExternalDocumentId),
+        Map<String, Value>,
+    >,
+) -> Result<(), ResponseError> {
+    let index = index_scheduler.user_index(index_uid.as_ref())?;
+    let rtxn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+    let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;
+    for docid in docids {
+        let document = document_maker.make_document(docid)?;
+        hydration_documents.insert((index_uid.clone(), docid.clone()), document);
+    }
+
+    Ok(())
+}
+
+async fn federated_fetch_hydration_documents(
+    index_scheduler: &IndexScheduler,
+    network_partitioner: &NetworkPartitioner,
+    hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
+) -> Result<
+    (HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>, RemoteErrors),
+    ResponseError,
+> {
+    let params =
+        ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
+
+    let mut hydration_documents = HashMap::new();
+    let mut remote_queries = Vec::new();
+    for (index_uid, docids) in hydration_docids.iter() {
+        let index = index_scheduler.user_index(index_uid.as_ref())?;
+        let rtxn = index.read_txn()?;
+
+        let displayed_fields = index.displayed_fields(&rtxn)?;
+        let fields = displayed_fields
+            .map(|fields| fields.into_iter().map(|field| field.to_string()).collect());
+        let ids = docids.iter().map(|docid| Value::String(docid.as_ref().to_string())).collect();
+        let query = PreprocessedQuery {
+            query: BrowseQueryWithIndex {
+                index_uid: IndexUid::new_unchecked(index_uid),
+                remote: None,
+                query: BrowseQuery {
+                    offset: 0,
+                    limit: docids.len(),
+                    filter: None,
+                    fields,
+                    retrieve_vectors: false,
+                    ids: Some(ids),
+                    sort: None,
+                    use_network: Some(false),
+                },
+            },
+            filter: None,
+        };
+        let queries = network_partitioner
+            .to_partition(&query)?
+            .filter(|query| query.query.remote.as_deref() != network_partitioner.local())
+            .map(|query| (index_uid, query));
+
+        remote_queries.extend(queries);
+    }
+
+    //remote
+    let remote_retrieve_documents =
+        RemoteRetrieveDocuments::start(network_partitioner, params, remote_queries).await?;
+
+    // Perform local search
+    for (index_uid, docids) in hydration_docids.iter() {
+        local_fetch_hydration_documents(
+            index_scheduler,
+            index_uid,
+            docids,
+            &mut hydration_documents,
+        )?;
+    }
+
+    // wait
+    let (remote_results, errors) = remote_retrieve_documents.finish(index_scheduler).await?;
+
+    // Merge results
+    for (index_uid, documents) in fuse_remote_documents(remote_results) {
+        for mut document in documents {
+            let mut federation_hit = take_federation_hit(&mut document);
+            let external_docid = take_document_id_from_federation_hit(&mut federation_hit);
+            hydration_documents.insert((index_uid.clone(), external_docid), document);
+        }
+    }
+
+    let remote_errors = errors
+        .into_iter()
+        .map(|(index_uid, mut error)| {
+            // Add a context to the error message
+            error.message = format!("During Hydration: {}", error.message);
+            (index_uid, error)
+        })
+        .collect();
+
+    Ok((hydration_documents, remote_errors))
+}
+
 impl FederatedHydrationFormatter {
-    pub fn new(
+    pub async fn new(
         hydration_cache: HydrationContext,
         index_scheduler: &IndexScheduler,
-    ) -> Result<Self, ResponseError> {
+        network_partitioner: &NetworkPartitioner,
+    ) -> Result<(Self, RemoteErrors), ResponseError> {
         let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
 
         // Fetch the documents from the foreign indexes
-        let mut hydration_documents = HashMap::new();
-        for (index_uid, docids) in hydration_docids {
-            let index = index_scheduler.user_index(index_uid.as_ref())?;
-            let rtxn = index.read_txn()?;
-            let fields_ids_map = index.fields_ids_map(&rtxn)?;
-            let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;
-            for docid in docids {
-                let document = document_maker.make_document(&docid)?;
-                hydration_documents.insert((index_uid.clone(), docid), document);
+        let (hydration_documents, remote_errors) = if network_partitioner.sharding() {
+            federated_fetch_hydration_documents(
+                index_scheduler,
+                network_partitioner,
+                hydration_docids.clone(),
+            )
+            .await?
+        } else {
+            let mut hydration_documents = HashMap::new();
+            for (index_uid, docids) in hydration_docids {
+                local_fetch_hydration_documents(
+                    index_scheduler,
+                    &index_uid,
+                    &docids,
+                    &mut hydration_documents,
+                )?;
             }
-        }
 
-        Ok(Self { index_by_query_index, hydration_settings, hydration_documents })
+            (hydration_documents, Default::default())
+        };
+
+        Ok((Self { index_by_query_index, hydration_settings, hydration_documents }, remote_errors))
     }
 
     pub fn hydrate_documents(
