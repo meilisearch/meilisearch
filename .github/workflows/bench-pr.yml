@@ -23,6 +23,8 @@ jobs:
           PR_ID: ${{github.event.issue.number}}
         run: |
           PR_REPOSITORY=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.repo.full_name)
+          PR_HEAD_SHA=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.sha)
+          echo "head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"
           if $(gh api /repos/"$REPOSITORY"/collaborators/"$PR_AUTHOR"/permission --jq .user.permissions.push)
           then
             echo "::notice title=Authentication success::PR author authenticated"
@@ -53,16 +55,13 @@ jobs:
           reaction-type: "rocket"
           repo-token: ${{ secrets.MEILI_BOT_GH_PAT }}
 
-      - uses: xt0rted/pull-request-comment-branch@e8b8daa837e8ea7331c0003c9c316a64c6d8b0b1 # v3
-        id: comment-branch
-        with:
-          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         if: success()
         with:
           fetch-depth: 0 # fetch full history to be able to get main commit sha
-          ref: ${{ steps.comment-branch.outputs.head_ref }}
+          # checkout the commit SHA validated in the permission check to avoid
+          # running code pushed to the branch after that check (TOCTOU)
+          ref: ${{ steps.permission.outputs.head_sha }}
 
       - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
         with:
