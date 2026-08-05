@@ -17,9 +17,10 @@ jobs:
     runs-on: benchmarks
     timeout-minutes: 180 # 3h
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
         with:
+          toolchain: 1.91.1
           profile: minimal
 
       - name: Run benchmarks - workload ${WORKLOAD_NAME} - branch ${{ github.ref }} - commit ${{ github.sha }}
