@@ -576,16 +576,17 @@ fn import_dump(
     let progress = Progress::default();
     let reader = File::open(dump_path)?;
     let mut dump_reader = dump::DumpReader::open(reader)?;
-
     if let Some(date) = dump_reader.date() {
         tracing::info!(
-            version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            version = env!("CARGO_PKG_VERSION"),
+            dump_version = ?dump_reader.version(),
             %date,
             "Importing a dump of meilisearch"
         );
     } else {
         tracing::info!(
-            version = ?dump_reader.version(), // TODO: get the meilisearch version instead of the dump version
+            version = env!("CARGO_PKG_VERSION"),
+            dump_version = ?dump_reader.version(),
             "Importing a dump of meilisearch",
         );
     }
