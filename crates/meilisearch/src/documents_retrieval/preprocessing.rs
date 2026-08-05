@@ -120,6 +120,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     let filters = queries
         .iter_mut()
         .enumerate()
+        // take the filter field to avoid using it by mistake instead of the parsed index filter
         .map(|(query_index, query)| match query.filter_field().take() {
             Some(filter) => {
                 let filter = parse_filter(&filter, code, features).with_index(query_index)?;
@@ -300,6 +301,7 @@ async fn federated_process_foreign_filters(
                 query: BrowseQuery {
                     offset: 0,
                     limit: MAX_FOREIGN_FILTER_DOCIDS as usize,
+                    // filter is None because it is already parsed as an index filter below
                     filter: None,
                     fields: Some(vec![]),
                     retrieve_vectors: false,

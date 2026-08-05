@@ -245,14 +245,14 @@ async fn federated_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
     network_partitioner: &NetworkPartitioner,
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
-    hydration_documents: &mut HashMap<
-        (ForeignIndexUid, ForeignExternalDocumentId),
-        Map<String, Value>,
-    >,
-) -> Result<RemoteErrors, ResponseError> {
+) -> Result<
+    (HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>, RemoteErrors),
+    ResponseError,
+> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
+    let mut hydration_documents = HashMap::new();
     let mut remote_queries = Vec::new();
     for (index_uid, docids) in hydration_docids.iter() {
         let index = index_scheduler.user_index(index_uid.as_ref())?;
@@ -293,7 +293,12 @@ async fn federated_fetch_hydration_documents(
 
     // Perform local search
     for (index_uid, docids) in hydration_docids.iter() {
-        local_fetch_hydration_documents(index_scheduler, index_uid, docids, hydration_documents)?;
+        local_fetch_hydration_documents(
+            index_scheduler,
+            index_uid,
+            docids,
+            &mut hydration_documents,
+        )?;
     }
 
     // wait
@@ -308,14 +313,16 @@ async fn federated_fetch_hydration_documents(
         }
     }
 
-    Ok(errors
+    let remote_errors = errors
         .into_iter()
         .map(|(index_uid, mut error)| {
             // Add a context to the error message
             error.message = format!("During Hydration: {}", error.message);
             (index_uid, error)
         })
-        .collect())
+        .collect();
+
+    Ok((hydration_documents, remote_errors))
 }
 
 impl FederatedHydrationFormatter {
@@ -328,19 +335,15 @@ impl FederatedHydrationFormatter {
             hydration_cache;
 
         // Fetch the documents from the foreign indexes
-        let mut hydration_documents = HashMap::new();
-        let mut remote_errors = None;
-        if network_partitioner.sharding() {
-            remote_errors = Some(
-                federated_fetch_hydration_documents(
-                    index_scheduler,
-                    network_partitioner,
-                    hydration_docids.clone(),
-                    &mut hydration_documents,
-                )
-                .await?,
-            );
+        let (hydration_documents, remote_errors) = if network_partitioner.sharding() {
+            federated_fetch_hydration_documents(
+                index_scheduler,
+                network_partitioner,
+                hydration_docids.clone(),
+            )
+            .await?
         } else {
+            let mut hydration_documents = HashMap::new();
             for (index_uid, docids) in hydration_docids {
                 local_fetch_hydration_documents(
                     index_scheduler,
@@ -349,12 +352,11 @@ impl FederatedHydrationFormatter {
                     &mut hydration_documents,
                 )?;
             }
-        }
 
-        Ok((
-            Self { index_by_query_index, hydration_settings, hydration_documents },
-            remote_errors.unwrap_or_default(),
-        ))
+            (hydration_documents, Default::default())
+        };
+
+        Ok((Self { index_by_query_index, hydration_settings, hydration_documents }, remote_errors))
     }
 
     pub fn hydrate_documents(

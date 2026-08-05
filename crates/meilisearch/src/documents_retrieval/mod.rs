@@ -337,6 +337,8 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
 
             if in_flight_requests.len() == in_flight_requests.capacity() {
                 // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
+                // TODO: popping the front doesn't guarantee to wait for the fastest request
+                // It would be preferable to use [a `FuturesUnordered` type](https://docs.rs/futures/latest/futures/stream/futures_unordered/struct.FuturesUnordered.html) instead.
                 let (task, remote_name, metadata): (
                     tokio::task::JoinHandle<Result<DocumentsResult, ProxySearchError>>,
                     _,
