@@ -418,6 +418,8 @@ pub struct Stats {
                 "indexes": {
                     "movies": {
                         "numberOfDocuments": 10,
+                        "indexSize": 1572864,
+                        "usedIndexSize": 524288,
                         "rawDocumentDbSize": 100,
                         "maxDocumentSize": 16,
                         "avgDocumentSize": 10,

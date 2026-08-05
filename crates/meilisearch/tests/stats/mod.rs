@@ -111,11 +111,15 @@ async fn add_remove_embeddings() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -139,11 +143,15 @@ async fn add_remove_embeddings() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -167,11 +175,15 @@ async fn add_remove_embeddings() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -196,11 +208,15 @@ async fn add_remove_embeddings() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -249,11 +265,15 @@ async fn add_remove_embedded_documents() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -273,11 +293,15 @@ async fn add_remove_embedded_documents() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 1,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -309,11 +333,15 @@ async fn update_embedder_settings() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -348,11 +376,15 @@ async fn update_embedder_settings() {
 
     let (stats, _code) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,

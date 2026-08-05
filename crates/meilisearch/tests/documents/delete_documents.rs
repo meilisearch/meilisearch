@@ -152,11 +152,15 @@ async fn delete_document_by_filter() {
 
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 4,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -206,11 +210,15 @@ async fn delete_document_by_filter() {
 
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -279,11 +287,15 @@ async fn delete_document_by_filter() {
 
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 1,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,

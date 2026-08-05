@@ -571,6 +571,10 @@ impl Size {
 pub struct IndexStats {
     /// Number of documents in the index
     pub number_of_documents: u64,
+    /// Size of the index' DB, in bytes.
+    pub index_size: Size,
+    /// Size of the used pages of the index' DB, in bytes.
+    pub used_index_size: Size,
     /// Size of the documents database, in bytes.
     pub raw_document_db_size: Size,
     /// Average size of a document in the documents database.
@@ -619,11 +623,11 @@ impl IndexStats {
                 index_scheduler::InnerIndexStats {
                     documents_database_stats,
                     number_of_documents,
-                    database_size: _,
+                    database_size,
                     internal_database_sizes,
                     number_of_embeddings,
                     number_of_embedded_documents,
-                    used_database_size: _,
+                    used_database_size,
                     primary_key: _,
                     field_distribution,
                     created_at: _,
@@ -634,6 +638,8 @@ impl IndexStats {
         Self {
             number_of_documents: number_of_documents
                 .unwrap_or(documents_database_stats.number_of_entries()),
+            index_size: Size::new(database_size, format),
+            used_index_size: Size::new(used_database_size, format),
             raw_document_db_size: Size::new(documents_database_stats.total_size(), format),
             avg_document_size: Size::new(documents_database_stats.average_value_size(), format),
             internal_database_sizes: if with_internal_database_sizes {
@@ -662,6 +668,8 @@ impl IndexStats {
         (status = OK, description = "The stats of the index.", body = IndexStats, content_type = "application/json", example = json!(
             {
                 "numberOfDocuments": 10,
+                "indexSize": 1572864,
+                "usedIndexSize": 524288,
                 "rawDocumentDbSize": 10,
                 "avgDocumentSize": 10,
                 "numberOfEmbeddings": 10,
