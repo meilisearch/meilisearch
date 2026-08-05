@@ -59,8 +59,6 @@ jobs:
         if: success()
         with:
           fetch-depth: 0 # fetch full history to be able to get main commit sha
-          # checkout the commit SHA validated in the permission check to avoid
-          # running code pushed to the branch after that check (TOCTOU)
           ref: ${{ steps.permission.outputs.head_sha }}
 
       - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
