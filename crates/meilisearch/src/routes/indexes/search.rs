@@ -31,8 +31,8 @@ use crate::search::federated::types::PreprocessedQuery;
 use crate::search::federated::NetworkPartitioner;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, HybridQuery, MatchingStrategy,
-    NetworkableQuery as _, Personalize, RankingScoreThreshold, RetrieveVectors,
-    SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult, SemanticRatio,
+    NetworkableQuery as _, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
+    SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult, SemanticRatio,
     ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
