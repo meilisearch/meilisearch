@@ -21,9 +21,16 @@ jobs:
           COMMENT_AUTHOR: ${{github.event.comment.user.login }}
           REPOSITORY: ${{github.repository}}
           PR_ID: ${{github.event.issue.number}}
+          COMMENT_AT: ${{github.event.comment.created_at}}
         run: |
           PR_REPOSITORY=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.repo.full_name)
           PR_HEAD_SHA=$(gh api /repos/"$REPOSITORY"/pulls/"$PR_ID" --jq .head.sha)
+          PUSHED_AT=$(gh api /repos/"$REPOSITORY"/commits/"$PR_HEAD_SHA" --jq .commit.committer.date)
+          if [ "$(date -d "$PUSHED_AT" +%s)" -gt "$(date -d "$COMMENT_AT" +%s)" ]
+          then
+            echo "::error title=Authentication error::Last commit was pushed after the comment"
+            exit 1
+          fi
           echo "head_sha=$PR_HEAD_SHA" >> "$GITHUB_OUTPUT"
           if $(gh api /repos/"$REPOSITORY"/collaborators/"$PR_AUTHOR"/permission --jq .user.permissions.push)
           then
