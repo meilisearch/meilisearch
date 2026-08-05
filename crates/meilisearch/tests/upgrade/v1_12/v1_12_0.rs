@@ -134,8 +134,8 @@ async fn check_the_index_scheduler(server: &Server) {
     assert_json_snapshot!(stats, {
         ".databaseSize" => "[bytes]",
         ".usedDatabaseSize" => "[bytes]",
-        ".indexes.kefir.databaseSize" => "[bytes]",
-        ".indexes.kefir.usedDatabaseSize" => "[bytes]",
+        ".indexes.kefir.indexSize" => "[bytes]",
+        ".indexes.kefir.usedIndexSize" => "[bytes]",
         ".indexes.kefir.rawDocumentDbSize" => "[bytes]",
         ".indexes.kefir.avgDocumentSize" => "[bytes]",
     },
@@ -147,8 +147,8 @@ async fn check_the_index_scheduler(server: &Server) {
       "indexes": {
         "kefir": {
           "numberOfDocuments": 2,
-          "databaseSize": "[bytes]",
-          "usedDatabaseSize": "[bytes]",
+          "indexSize": "[bytes]",
+          "usedIndexSize": "[bytes]",
           "rawDocumentDbSize": "[bytes]",
           "avgDocumentSize": "[bytes]",
           "isIndexing": false,
@@ -224,8 +224,8 @@ async fn check_the_index_scheduler(server: &Server) {
     assert_json_snapshot!(stats, {
         ".databaseSize" => "[bytes]",
         ".usedDatabaseSize" => "[bytes]",
-        ".indexes.kefir.databaseSize" => "[bytes]",
-        ".indexes.kefir.usedDatabaseSize" => "[bytes]",
+        ".indexes.kefir.indexSize" => "[bytes]",
+        ".indexes.kefir.usedIndexSize" => "[bytes]",
         ".indexes.kefir.rawDocumentDbSize" => "[bytes]",
         ".indexes.kefir.avgDocumentSize" => "[bytes]",
     },
@@ -237,8 +237,8 @@ async fn check_the_index_scheduler(server: &Server) {
       "indexes": {
         "kefir": {
           "numberOfDocuments": 2,
-          "databaseSize": "[bytes]",
-          "usedDatabaseSize": "[bytes]",
+          "indexSize": "[bytes]",
+          "usedIndexSize": "[bytes]",
           "rawDocumentDbSize": "[bytes]",
           "avgDocumentSize": "[bytes]",
           "isIndexing": false,
@@ -258,15 +258,15 @@ async fn check_the_index_scheduler(server: &Server) {
     let index = server.index("kefir");
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
-        ".databaseSize" => "[bytes]",
-        ".usedDatabaseSize" => "[bytes]",
+        ".indexSize" => "[bytes]",
+        ".usedIndexSize" => "[bytes]",
         ".rawDocumentDbSize" => "[bytes]",
         ".avgDocumentSize" => "[bytes]",
     }), @r###"
     {
       "numberOfDocuments": 2,
-      "databaseSize": "[bytes]",
-      "usedDatabaseSize": "[bytes]",
+      "indexSize": "[bytes]",
+      "usedIndexSize": "[bytes]",
       "rawDocumentDbSize": "[bytes]",
       "avgDocumentSize": "[bytes]",
       "isIndexing": false,

@@ -152,15 +152,15 @@ async fn delete_document_by_filter() {
 
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
-        ".databaseSize" => "[size]",
-        ".usedDatabaseSize" => "[size]",
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 4,
-      "databaseSize": "[size]",
-      "usedDatabaseSize": "[size]",
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -210,15 +210,15 @@ async fn delete_document_by_filter() {
 
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
-        ".databaseSize" => "[size]",
-        ".usedDatabaseSize" => "[size]",
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 2,
-      "databaseSize": "[size]",
-      "usedDatabaseSize": "[size]",
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -287,15 +287,15 @@ async fn delete_document_by_filter() {
 
     let (stats, _) = index.stats().await;
     snapshot!(json_string!(stats, {
-        ".databaseSize" => "[size]",
-        ".usedDatabaseSize" => "[size]",
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 1,
-      "databaseSize": "[size]",
-      "usedDatabaseSize": "[size]",
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
