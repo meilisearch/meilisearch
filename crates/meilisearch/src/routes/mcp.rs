@@ -468,12 +468,15 @@ fn list_tools() -> Vec<McpToolDefinition> {
                 .find(|param| param.name == "index_uid")
             {
                 if let Schema::Object(object) = &mut schema {
+                    let field_name = "indexUid";
                     let ref_or_schema = param.schema.clone().unwrap();
                     let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
                     if let Schema::Object(object) = &mut schema {
                         object.description = param.description.clone();
                     }
-                    object.properties.insert("indexUid".to_string(), RefOr::T(schema));
+                    // Insert this new mandatory field at the begining
+                    object.properties.insert_before(0, field_name.to_string(), RefOr::T(schema));
+                    object.required.push(field_name.to_string());
                 }
             }
 
