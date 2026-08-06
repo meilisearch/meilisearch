@@ -220,15 +220,18 @@ async fn mcp(
                             error: None,
                         }
                     }
-                    Err(response) => McpResponse {
-                        jsonrpc,
-                        id,
-                        result: None,
-                        error: Some(McpError {
-                            code: 0,
-                            message: response.message().to_string(),
-                            data: McpErrorData::from(&response),
-                        }),
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError {
+                                code: 0,
+                                message: response.message().to_string(),
+                                data: McpErrorData::from(&response),
+                            }),
+                        }
                     },
                 }
             }
@@ -289,7 +292,9 @@ async fn mcp(
                             error: None,
                         }
                     }
-                    Err(response) => McpResponse {
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        McpResponse {
                         jsonrpc,
                         id,
                         result: None,
@@ -298,6 +303,7 @@ async fn mcp(
                             message: response.message().to_string(),
                             data: McpErrorData::from(&response),
                         }),
+                    }
                     },
                 }
             }
@@ -359,15 +365,18 @@ async fn mcp(
                             error: None,
                         }
                     }
-                    Err(response) => McpResponse {
-                        jsonrpc,
-                        id,
-                        result: None,
-                        error: Some(McpError {
-                            code: 0,
-                            message: response.message().to_string(),
-                            data: McpErrorData::from(&response),
-                        }),
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError {
+                                code: 0,
+                                message: response.message().to_string(),
+                                data: McpErrorData::from(&response),
+                            }),
+                        }
                     },
                 }
             }
