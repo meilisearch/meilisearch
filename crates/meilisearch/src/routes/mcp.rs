@@ -249,15 +249,13 @@ async fn mcp(
                 let index_uid = match params.arguments.as_mut() {
                     Some(serde_json::Value::Object(object)) => {
                         // We remove the extra indexUid parameter to make sure the route accepts the payload
-                        object.remove("indexUid").expect("missing indexUid parameter").to_string()
+                        object.remove("indexUid").expect("missing indexUid parameter").as_str().unwrap().to_owned()
                     }
                     _ => panic!("Invalid arguments: expected Object found something else"),
                 };
 
                 let query = serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
                 let mut payload = actix_web::dev::Payload::from(query);
-
-                dbg!(&index_uid);
 
                 // TODO don't unwrap
                 let guarded_index_scheduler =
