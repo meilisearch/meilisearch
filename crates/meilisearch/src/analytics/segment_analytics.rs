@@ -1,7 +1,6 @@
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -232,7 +231,6 @@ struct Infos {
     ignore_snapshot_if_db_exists: bool,
     http_addr: bool,
     http_payload_size_limit: Byte,
-    http_workers: Option<usize>,
     task_queue_webhook: bool,
     task_webhook_authorization_header: bool,
     log_level: String,
@@ -278,7 +276,6 @@ impl Infos {
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
-            http_workers,
             ssl_cert_path,
             ssl_key_path,
             ssl_auth_path,
@@ -377,7 +374,6 @@ impl Infos {
             ignore_snapshot_if_db_exists,
             http_addr: http_addr != default_http_addr(),
             http_payload_size_limit,
-            http_workers: http_workers.map(NonZeroUsize::get),
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size:
                 experimental_limit_batched_tasks_total_size.map(|size| size.as_u64()),
