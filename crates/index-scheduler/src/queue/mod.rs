@@ -235,12 +235,8 @@ impl Queue {
     /// The returned file and uuid can be used to associate
     /// some data to a task. The file will be kept until
     /// the task has been fully processed.
-    pub fn create_update_file(&self, dry_run: bool) -> Result<(Uuid, file_store::File)> {
-        if dry_run {
-            Ok((Uuid::nil(), file_store::File::dry_file()?))
-        } else {
-            Ok(self.file_store.new_update()?)
-        }
+    pub fn create_update_file(&self) -> Result<(Uuid, file_store::File)> {
+        Ok(self.file_store.new_update()?)
     }
 
     #[cfg(test)]
@@ -257,21 +253,13 @@ impl Queue {
         &self,
         wtxn: &mut RwTxn,
         kind: &KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         network: Option<DbTaskNetwork>,
     ) -> Result<Task> {
         let next_task_id = self.tasks.next_task_id(wtxn)?;
 
-        if let Some(uid) = task_id {
-            if uid < next_task_id {
-                return Err(Error::BadTaskId { received: uid, expected: next_task_id });
-            }
-        }
-
         let mut task = Task {
-            uid: task_id.unwrap_or(next_task_id),
+            uid: next_task_id,
             // The batch is defined once we starts processing the task
             batch_uid: None,
             enqueued_at: OffsetDateTime::now_utc(),
@@ -291,11 +279,6 @@ impl Queue {
         // If the register task is an index swap task, verify that it is well-formed
         // (that it does not contain duplicate indexes).
         check_index_swap_validity(&task)?;
-
-        // At this point the task is going to be registered and no further checks will be done
-        if dry_run {
-            return Ok(task);
-        }
 
         self.tasks.register(wtxn, &task)?;
 
@@ -348,8 +331,6 @@ impl Queue {
                 tasks: to_delete,
             },
             None,
-            None,
-            false,
             None,
         )?;
 

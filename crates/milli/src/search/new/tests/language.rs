@@ -14,7 +14,9 @@ fn test_kanji_language_detection() {
         .unwrap();
 
     let txn = index.write_txn().unwrap();
-    let mut search = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+
+    let mut search = index.search(&txn, &fields_ids_map);
 
     search.query("東京");
     let SearchResult { documents_ids, .. } = search.execute().unwrap();

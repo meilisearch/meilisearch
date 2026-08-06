@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, ValuePointerRef};
@@ -29,6 +30,11 @@ pub struct DynamicSearchRule {
     /// Human-readable description of the dynamic search rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    /// Date time of the last update of this rule.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub last_updated_at: Option<OffsetDateTime>,
+
     /// Precedence of the dynamic search rule. Lower numeric values take precedence over higher
     /// ones. If omitted, the rule is treated as having the lowest precedence. This precedence is
     /// used to resolve conflicts between matching rules:
@@ -52,6 +58,7 @@ impl DynamicSearchRule {
             uid,
             description: None,
             precedence: None,
+            last_updated_at: None,
             active: true,
             conditions: Default::default(),
             actions: vec![],
@@ -62,6 +69,8 @@ impl DynamicSearchRule {
         doc: impl Document<'a>,
         fault_source: FaultSource,
     ) -> Result<Self, milli::Error> {
+        use milli::dynamic_search_rules::fields as dsr_fields;
+
         let to_milli_error = |err| match fault_source {
             FaultSource::User => milli::Error::UserError(milli::UserError::SerdeJson(err)),
             FaultSource::Runtime | FaultSource::Bug | FaultSource::Undecided => {
@@ -70,11 +79,11 @@ impl DynamicSearchRule {
         };
 
         let uid = serde_json::from_str(
-            doc.top_level_field("uid")?
+            doc.top_level_field(dsr_fields::UID)?
                 .ok_or_else(|| match fault_source {
                     FaultSource::User => {
                         milli::Error::UserError(milli::UserError::MissingDocumentId {
-                            primary_key: "uid".to_string(),
+                            primary_key: dsr_fields::UID.to_string(),
                             document: Default::default(),
                         })
                     }
@@ -88,39 +97,50 @@ impl DynamicSearchRule {
                 .get(),
         )
         .map_err(to_milli_error)?;
-        let description = match doc.top_level_field("description")? {
+        let description = match doc.top_level_field(dsr_fields::DESCRIPTION)? {
             // we deserialize the description as an Option rather than hardcoding Some here,
             // because the description could be an explicit `null`
             Some(description) => serde_json::from_str(description.get()).map_err(to_milli_error)?,
             None => None,
         };
 
-        let precedence = match doc.top_level_field("precedence")? {
+        let precedence = match doc.top_level_field(dsr_fields::PRECEDENCE)? {
             Some(precedence) => serde_json::from_str(precedence.get()).map_err(to_milli_error)?,
             None => None,
         };
 
-        let active = match doc.top_level_field("active")? {
+        let last_updated_at = match doc.top_level_field(dsr_fields::LAST_UPDATED_AT)? {
+            Some(updated_at) => {
+                let last_updated_at = time::serde::rfc3339::option::deserialize(updated_at)
+                    .map_err(to_milli_error)?;
+
+                last_updated_at
+            }
+            None => Default::default(),
+        };
+
+        let active = match doc.top_level_field(dsr_fields::ACTIVE)? {
             Some(active) => serde_json::from_str(active.get()).map_err(to_milli_error)?,
             // `active` defaults to true!
             None => true,
         };
 
-        let conditions = match doc.top_level_field("conditions")? {
+        let conditions = match doc.top_level_field(dsr_fields::CONDITIONS)? {
             Some(conditions) => serde_json::from_str(conditions.get()).map_err(to_milli_error)?,
             None => Default::default(),
         };
 
-        let actions = match doc.top_level_field("actions")? {
+        let actions = match doc.top_level_field(dsr_fields::ACTIONS)? {
             Some(actions) => serde_json::from_str(actions.get()).map_err(to_milli_error)?,
             None => Default::default(),
         };
 
-        Ok(Self { uid, description, precedence, active, conditions, actions })
+        Ok(Self { uid, description, last_updated_at, precedence, active, conditions, actions })
     }
 
     pub fn into_uid_update(self) -> (RuleUid, DynamicSearchRuleUpdateRequest) {
-        let Self { uid, description, precedence, active, conditions, actions } = self;
+        let Self { uid, description, last_updated_at: _, precedence, active, conditions, actions } =
+            self;
         (
             uid,
             DynamicSearchRuleUpdateRequest {
@@ -131,6 +151,92 @@ impl DynamicSearchRule {
                 actions: Setting::Set(actions),
             },
         )
+    }
+
+    pub fn apply_update(
+        &mut self,
+        update: DynamicSearchRuleUpdateRequest,
+        updated_at: OffsetDateTime,
+    ) {
+        let Self { uid: _, description, last_updated_at, precedence, active, conditions, actions } =
+            self;
+
+        let DynamicSearchRuleUpdateRequest {
+            description: new_description,
+            precedence: new_precedence,
+            active: new_active,
+            conditions: new_conditions,
+            actions: new_actions,
+        } = update;
+
+        *description = match new_description {
+            Setting::Set(new_description) => Some(new_description),
+            Setting::Reset => None,
+            Setting::NotSet => description.take(),
+        };
+        *precedence = match new_precedence {
+            Setting::Set(new_precedence) => Some(new_precedence),
+            Setting::Reset => None,
+            Setting::NotSet => precedence.take(),
+        };
+
+        *active = match new_active {
+            Setting::Set(new_active) => new_active,
+            Setting::Reset => true,
+            Setting::NotSet => *active,
+        };
+
+        *last_updated_at = Some(updated_at);
+
+        match new_conditions {
+            Setting::Set(Conditions { time: new_time, query: new_query, filter: new_filter }) => {
+                let Conditions { time, query, filter } = conditions;
+                *time = new_time;
+                *query = new_query;
+                *filter = new_filter;
+            }
+            Setting::Reset => *conditions = Conditions::default(),
+            Setting::NotSet => (),
+        }
+
+        *actions = match new_actions {
+            Setting::Set(new_actions) => new_actions,
+            Setting::Reset => vec![],
+            Setting::NotSet => std::mem::take(actions),
+        };
+    }
+
+    pub fn facet_count(&self) -> usize {
+        let Some(filter) = self.conditions.filter.as_ref() else {
+            return 0;
+        };
+
+        let mut count = 0;
+        for value in filter.values.values() {
+            count_value(value, &mut count);
+        }
+        count
+    }
+}
+
+fn count_value(value: &serde_json::Value, count: &mut usize) {
+    match value {
+        serde_json::Value::Null => {}
+        serde_json::Value::String(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::Bool(_) => {
+            *count += 1;
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                count_value(value, count)
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for value in map.values() {
+                count_value(value, count);
+            }
+        }
     }
 }
 
@@ -171,6 +277,9 @@ pub struct Conditions {
     /// Conditions on the search query that determines whether the rule is active
     #[request(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<QueryCondition>,
+    /// Conditions on the values matching the filter of the search query that determines whether the rule is active
+    #[request(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<FilterCondition>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema, Deserr)]
@@ -216,6 +325,13 @@ pub struct QueryCondition {
     /// present in the search query.
     #[request(default, skip_serializing_if = "Option::is_none")]
     pub words: Option<String>,
+}
+
+#[routes::request(db, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct FilterCondition {
+    #[request(default)]
+    pub values: BTreeMap<String, serde_json::Value>,
 }
 
 // We manually check the exclusivity of `is_empty` and `contains` because Deserr does not support

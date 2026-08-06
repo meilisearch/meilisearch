@@ -18,8 +18,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body, OverrideEndpoint};
-use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::Opt;
+use crate::routes::SummarizedTaskView;
 
 /// This macro generates the routes for the settings.
 ///
@@ -74,7 +73,6 @@ macro_rules! make_setting_route {
             use $crate::extractors::authentication::policies::*;
             use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
-            use $crate::Opt;
             use $crate::routes::SummarizedTaskView;
             #[allow(unused_imports)]
             use super::*;
@@ -120,13 +118,12 @@ macro_rules! make_setting_route {
                 >,
                 index_uid: web::Path<String>,
                 req: HttpRequest,
-                opt: web::Data<Opt>,
             ) -> Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
 
-                let task = register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
+                let task = register_new_settings(new_settings, true, index_scheduler, &req, index_uid).await?;
 
                 debug!(returns = ?task, "Delete settings");
                 Ok(HttpResponse::Accepted().json(task))
@@ -176,7 +173,6 @@ macro_rules! make_setting_route {
                 index_uid: actix_web::web::Path<String>,
                 body: deserr::actix_web::AwebJson<Option<$type>, $err_type>,
                 req: HttpRequest,
-                opt: web::Data<Opt>,
                 analytics: web::Data<Analytics>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -198,7 +194,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
+                let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid).await?;
 
                 debug!(returns = ?task, "Update settings");
                 Ok(HttpResponse::Accepted().json(task))
@@ -554,7 +550,6 @@ pub async fn update_all(
     index_uid: web::Path<String>,
     body: AwebJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
-    opt: Data<Opt>,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -608,8 +603,7 @@ pub async fn update_all(
         &req,
     );
 
-    let task =
-        register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
+    let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid).await?;
 
     debug!(returns = ?task, "Update all settings");
     Ok(HttpResponse::Accepted().json(task))
@@ -621,7 +615,6 @@ async fn register_new_settings(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     req: &HttpRequest,
     index_uid: IndexUid,
-    opt: Data<Opt>,
 ) -> Result<SummarizedTaskView, ResponseError> {
     let network = index_scheduler.network();
     let task_network = task_network_and_check_leader_and_version(req, &network)?;
@@ -643,12 +636,9 @@ async fn register_new_settings(
         is_deletion,
         allow_index_creation,
     };
-    let uid = get_task_id(req, &opt)?;
-    let dry_run = is_dry_run(req, &opt)?;
-
     let scheduler = index_scheduler.clone();
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 
@@ -794,14 +784,12 @@ pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = Settings::cleared().into_unchecked();
 
-    let task =
-        register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
+    let task = register_new_settings(new_settings, true, index_scheduler, &req, index_uid).await?;
 
     debug!(returns = ?task, "Delete all settings");
     Ok(HttpResponse::Accepted().json(task))

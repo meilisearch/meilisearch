@@ -6,7 +6,7 @@ If you believe you have found a security vulnerability in any Meilisearch-owned 
 
 ## Supported versions
 
-As long as we are pre-v1.0, only the latest version of Meilisearch will be supported with security updates.
+Only the latest stable release of Meilisearch is supported with security updates.
 
 ## Reporting security issues
 

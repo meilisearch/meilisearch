@@ -52,16 +52,12 @@ fn import_vectors() {
     new_settings.embedders = Setting::Set(embedders);
 
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: S("doggos"),
-                new_settings,
-                is_deletion: false,
-                allow_index_creation: true,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: S("doggos"),
+            new_settings,
+            is_deletion: false,
+            allow_index_creation: true,
+        })
         .unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_registering_settings_task_vectors");
@@ -165,19 +161,15 @@ fn import_vectors() {
     file.persist().unwrap();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: Some(S("id")),
-                method: UpdateDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: Some(S("id")),
+            method: UpdateDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after adding Intel");
@@ -256,19 +248,15 @@ fn import_vectors() {
     file.persist().unwrap();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: None,
-                method: UpdateDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: None,
+            method: UpdateDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "Intel to kefir");
@@ -393,19 +381,15 @@ fn import_vectors_first_and_embedder_later() {
     file.persist().unwrap();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: None,
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: None,
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -433,16 +417,12 @@ fn import_vectors_first_and_embedder_later() {
         ..Default::default()
     };
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: S("doggos"),
-                new_settings: Box::new(setting),
-                is_deletion: false,
-                allow_index_creation: false,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: S("doggos"),
+            new_settings: Box::new(setting),
+            is_deletion: false,
+            allow_index_creation: false,
+        })
         .unwrap();
     index_scheduler.assert_internally_consistent();
     handle.advance_one_successful_batch();
@@ -534,19 +514,15 @@ fn import_vectors_first_and_embedder_later() {
     file.persist().unwrap();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: None,
-                method: UpdateDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: true,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: None,
+            method: UpdateDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: true,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -597,16 +573,12 @@ fn delete_document_containing_vector() {
         ..Default::default()
     };
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: S("doggos"),
-                new_settings: Box::new(setting),
-                is_deletion: false,
-                allow_index_creation: true,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: S("doggos"),
+            new_settings: Box::new(setting),
+            is_deletion: false,
+            allow_index_creation: true,
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -636,31 +608,23 @@ fn delete_document_containing_vector() {
     file.persist().unwrap();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: None,
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: false,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: None,
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: false,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentDeletion {
-                index_uid: S("doggos"),
-                documents_ids: vec![S("1")],
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentDeletion {
+            index_uid: S("doggos"),
+            documents_ids: vec![S("1")],
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -705,9 +669,7 @@ fn delete_document_containing_vector() {
     let EmbeddingsWithMetadata { embeddings: embedding, .. } = &embeddings["manual"];
     assert!(!embedding.is_empty(), "{embedding:?}");
 
-    index_scheduler
-        .register(KindWithContent::DocumentClear { index_uid: S("doggos") }, None, false)
-        .unwrap();
+    index_scheduler.register(KindWithContent::DocumentClear { index_uid: S("doggos") }).unwrap();
     handle.advance_one_successful_batch();
 
     let index = index_scheduler.user_index("doggos").unwrap();
@@ -775,16 +737,12 @@ fn delete_embedder_with_user_provided_vectors() {
         ..Default::default()
     };
     index_scheduler
-        .register(
-            KindWithContent::SettingsUpdate {
-                index_uid: S("doggos"),
-                new_settings: Box::new(setting),
-                is_deletion: false,
-                allow_index_creation: true,
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::SettingsUpdate {
+            index_uid: S("doggos"),
+            new_settings: Box::new(setting),
+            is_deletion: false,
+            allow_index_creation: true,
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -815,19 +773,15 @@ fn delete_embedder_with_user_provided_vectors() {
     file.persist().unwrap();
 
     index_scheduler
-        .register(
-            KindWithContent::DocumentAdditionOrUpdate {
-                index_uid: S("doggos"),
-                primary_key: None,
-                method: ReplaceDocuments,
-                content_file: uuid,
-                documents_count,
-                allow_index_creation: false,
-                on_missing_document: MissingDocumentPolicy::default(),
-            },
-            None,
-            false,
-        )
+        .register(KindWithContent::DocumentAdditionOrUpdate {
+            index_uid: S("doggos"),
+            primary_key: None,
+            method: ReplaceDocuments,
+            content_file: uuid,
+            documents_count,
+            allow_index_creation: false,
+            on_missing_document: MissingDocumentPolicy::default(),
+        })
         .unwrap();
     handle.advance_one_successful_batch();
 
@@ -852,16 +806,12 @@ fn delete_embedder_with_user_provided_vectors() {
             ..Default::default()
         };
         index_scheduler
-            .register(
-                KindWithContent::SettingsUpdate {
-                    index_uid: S("doggos"),
-                    new_settings: Box::new(setting),
-                    is_deletion: false,
-                    allow_index_creation: true,
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::SettingsUpdate {
+                index_uid: S("doggos"),
+                new_settings: Box::new(setting),
+                is_deletion: false,
+                allow_index_creation: true,
+            })
             .unwrap();
         handle.advance_one_successful_batch();
     }
@@ -885,16 +835,12 @@ fn delete_embedder_with_user_provided_vectors() {
             ..Default::default()
         };
         index_scheduler
-            .register(
-                KindWithContent::SettingsUpdate {
-                    index_uid: S("doggos"),
-                    new_settings: Box::new(setting),
-                    is_deletion: false,
-                    allow_index_creation: true,
-                },
-                None,
-                false,
-            )
+            .register(KindWithContent::SettingsUpdate {
+                index_uid: S("doggos"),
+                new_settings: Box::new(setting),
+                is_deletion: false,
+                allow_index_creation: true,
+            })
             .unwrap();
         handle.advance_one_successful_batch();
     }

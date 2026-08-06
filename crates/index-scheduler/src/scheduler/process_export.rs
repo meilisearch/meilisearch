@@ -87,6 +87,7 @@ impl IndexScheduler {
 
             let index = self.user_index(uid)?;
             let index_rtxn = index.read_txn()?;
+            let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
             let filter = filter
                 .as_ref()
                 .map(|f| {
@@ -96,8 +97,10 @@ impl IndexScheduler {
                 .transpose()?
                 .flatten();
 
-            let filter_universe =
-                filter.map(|f| f.evaluate(&index_rtxn, &index)).transpose().map_err(err)?;
+            let filter_universe = filter
+                .map(|f| f.evaluate(&index_rtxn, &index, &fields_ids_map))
+                .transpose()
+                .map_err(err)?;
             let whole_universe =
                 index.documents_ids(&index_rtxn).map_err(milli::Error::from).map_err(err)?;
             let universe = filter_universe.unwrap_or(whole_universe);
@@ -324,7 +327,11 @@ impl IndexScheduler {
                                     document_id: {
                                         if let Ok(Some(Ok(index))) = ctx
                                             .index
-                                            .external_id_of(&index_rtxn, std::iter::once(docid))
+                                            .external_id_of(
+                                                &index_rtxn,
+                                                &fields_ids_map,
+                                                std::iter::once(docid),
+                                            )
                                             .map(|it| it.into_iter().next())
                                         {
                                             index

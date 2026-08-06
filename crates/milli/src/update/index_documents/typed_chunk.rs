@@ -650,6 +650,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let embedders = index.embedding_configs();
+            let fields_ids_map = index.fields_ids_map(wtxn)?;
             let backend = index.get_vector_store(wtxn)?.unwrap_or_default();
 
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
@@ -733,7 +734,7 @@ pub(crate) fn write_typed_chunk_into_index(
 
                 if embeddings.embedding_count() > usize::from(u8::MAX) {
                     let external_docid = if let Ok(Some(Ok(index))) = index
-                        .external_id_of(wtxn, std::iter::once(docid))
+                        .external_id_of(wtxn, &fields_ids_map, std::iter::once(docid))
                         .map(|it| it.into_iter().next())
                     {
                         index

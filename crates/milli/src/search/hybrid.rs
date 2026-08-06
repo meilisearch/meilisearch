@@ -10,7 +10,8 @@ use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
 use crate::{
-    merge_positioned_hits_into_page, Index, MatchingWords, PinDoc, Result, Search, SearchResult,
+    merge_positioned_hits_into_page, FieldsIdsMap, Index, MatchingWords, PinDoc, Precedence,
+    Result, Search, SearchResult,
 };
 
 struct ScoreWithRatioResult {
@@ -97,6 +98,7 @@ impl ScoreWithRatioResult {
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
+    #[allow(clippy::too_many_arguments)]
     fn merge(
         mut vector_results: Self,
         mut keyword_results: Self,
@@ -105,6 +107,7 @@ impl ScoreWithRatioResult {
         distinct: Option<&str>,
         index: &Index,
         rtxn: &RoTxn<'_>,
+        fields_ids_map: &FieldsIdsMap,
     ) -> Result<(SearchResult, u32)> {
         // Pinned documents carry ScoreDetails::Pin, which is a placement directive, not a score.
         // We extract them before the score-based merge, merge organic results normally, then
@@ -114,9 +117,13 @@ impl ScoreWithRatioResult {
 
         for results in [&mut keyword_results.document_scores, &mut vector_results.document_scores] {
             results.retain(|(doc_id, (scores, _))| {
-                if let Some(ScoreDetails::Pin { position }) = scores.first() {
+                if let Some(ScoreDetails::Pin { position, precedence }) = scores.first() {
                     if pinned_doc_ids.insert(*doc_id) {
-                        pins.push(PinDoc { pos: *position, doc_id: *doc_id });
+                        pins.push(PinDoc {
+                            position: *position,
+                            precedence: Precedence(*precedence),
+                            id: *doc_id,
+                        });
                     }
                     false
                 } else {
@@ -124,7 +131,7 @@ impl ScoreWithRatioResult {
                 }
             });
         }
-        pins.sort_by_key(|pin| pin.pos);
+        pins.sort_by_key(|pin| pin.position);
 
         // When pins are present we need the organic prefix up to the end of the
         // requested page, then we merge pins into that prefix before slicing the
@@ -146,7 +153,7 @@ impl ScoreWithRatioResult {
             vector_results.document_scores.len() + keyword_results.document_scores.len(),
         );
 
-        let distinct_fid = distinct_fid(distinct, index, rtxn)?;
+        let distinct_fid = distinct_fid(distinct, index, rtxn, fields_ids_map)?;
         // Seed excluded_documents with pinned docids so they don't appear as organic results
         // (they'll be re-injected at their target positions after the merge).
         let mut excluded_documents = pinned_doc_ids.clone();
@@ -245,12 +252,18 @@ fn merge_pins_into_page(
 
     let organic_hits = documents_ids.into_iter().zip(document_scores).collect();
     let merged_hits = merge_positioned_hits_into_page(
-        pins.to_vec(),
+        pins.len(),
+        pins,
         from,
         length,
         organic_hits,
-        |pin| pin.pos,
-        |pin| (pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]),
+        |pin| pin.position,
+        |pin| {
+            (
+                pin.id,
+                vec![ScoreDetails::Pin { position: pin.position, precedence: pin.precedence.0 }],
+            )
+        },
     );
 
     merged_hits.into_iter().unzip()
@@ -278,6 +291,7 @@ impl Search<'_> {
             max_total_hits: self.max_total_hits,
             rtxn: self.rtxn,
             index: self.index,
+            fields_ids_map: self.fields_ids_map,
             index_uid: self.index_uid,
             before_search: self.before_search,
             semantic: self.semantic.clone(),
@@ -355,6 +369,7 @@ impl Search<'_> {
             search.distinct.as_deref(),
             search.index,
             search.rtxn,
+            search.fields_ids_map,
         )?;
         assert!(merge_results.documents_ids.len() <= self.limit);
         Ok((merge_results, Some(semantic_hit_count)))

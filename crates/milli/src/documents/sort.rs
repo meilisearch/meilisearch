@@ -11,7 +11,7 @@ use crate::documents::GeoSortParameter;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
-use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
+use crate::{is_faceted, AscDesc, DocumentId, FieldsIdsMap, Member, UserError};
 
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {
@@ -412,11 +412,11 @@ impl<'ctx> SortedDocuments<'ctx> {
 pub fn recursive_sort<'ctx>(
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
+    fields_ids_map: &FieldsIdsMap,
     sort: &[AscDesc],
     candidates: &'ctx RoaringBitmap,
 ) -> crate::Result<SortedDocuments<'ctx>> {
     let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
 
     // Retrieve the field ids that are used for sorting
     let mut fields = Vec::new();

@@ -74,7 +74,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -232,6 +232,7 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "avgDocumentSize": 0,
+        "indexSize": "[size]",
         "fieldDistribution": {
           "genres": 31944,
           "id": 31944,
@@ -242,7 +243,8 @@
         },
         "isIndexing": false,
         "numberOfDocuments": 31944,
-        "rawDocumentDbSize": 0
+        "rawDocumentDbSize": 0,
+        "usedIndexSize": "[size]"
       },
       "synchronous": "DontWait"
     },
@@ -251,7 +253,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade"
+          "--upgrade-db"
         ]
       }
     },
@@ -418,6 +420,7 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "avgDocumentSize": "[avgDocSize]",
+        "indexSize": "[size]",
         "fieldDistribution": {
           "genres": 31944,
           "id": 31944,
@@ -430,7 +433,8 @@
         "numberOfDocuments": 31944,
         "numberOfEmbeddedDocuments": 0,
         "numberOfEmbeddings": 0,
-        "rawDocumentDbSize": "[rawDbSize]"
+        "rawDocumentDbSize": "[rawDbSize]",
+        "usedIndexSize": "[size]"
       },
       "synchronous": "DontWait"
     },

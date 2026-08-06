@@ -1,6 +1,7 @@
 use meilisearch_types::index_uid::{DsrIndex, UserIndex};
 use meilisearch_types::milli;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::update::upgrade::must_upgrade_dsr;
 
 use crate::index_mapper::IndexUid as _;
 use crate::processing::UpgradeIndexesProgress;
@@ -71,6 +72,10 @@ impl IndexScheduler {
                 Err(err) => return Err(err),
             };
             let mut index_wtxn = index.write_txn()?;
+
+            // get initial version **before** upgrade, which overwrites it
+            let initial_version = index.get_version(&index_wtxn)?.unwrap_or(db_version);
+
             let regen_stats = milli::update::upgrade::upgrade(
                 &mut index_wtxn,
                 &index,
@@ -82,6 +87,17 @@ impl IndexScheduler {
                 },
             )
             .map_err(err)?;
+
+            if must_upgrade_dsr(initial_version).map_err(err)? {
+                self.apply_dsr_settings(
+                    &mut index_wtxn,
+                    &index,
+                    &progress,
+                    must_stop_processing,
+                    Default::default(),
+                )?;
+            }
+
             if regen_stats {
                 let stats =
                     crate::index_mapper::IndexStats::new(&index, &index_wtxn).map_err(err)?;

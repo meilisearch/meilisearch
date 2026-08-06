@@ -1,13 +1,19 @@
+use std::time::Duration;
+
 use actix_web::web::{self, Data};
-use actix_web::HttpResponse;
+use actix_web::{HttpResponse, Responder};
+use actix_web_lab::sse::{self, Event, Sse};
 use deserr::actix_web::AwebQueryParameter;
-use index_scheduler::{IndexScheduler, Query};
+use index_scheduler::{IndexScheduler, ModifiedTasks, Query};
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::tasks::Status;
 use serde::Serialize;
+use tokio::runtime::Handle;
+use tokio::sync::broadcast::error::RecvError;
 use utoipa::ToSchema;
 
 use super::tasks::TasksFilterQuery;
@@ -18,6 +24,7 @@ use crate::extractors::authentication::GuardedData;
     tag = "Async task management",
     routes(
         "" => get(get_batches),
+        "/stream" => get(get_batches_stream),
         "/{batch_id}" => get(get_batch)
     ),
     tags((
@@ -202,4 +209,114 @@ async fn get_batches(
     let tasks = AllBatches { results, limit: limit.saturating_sub(1), total, from, next };
 
     Ok(HttpResponse::Ok().json(tasks))
+}
+
+/// Stream batches changes
+///
+/// The `/batches/stream` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
+///
+/// Batches are sent throught an SSE stream any time their progress or status changes, i.e., enqueued, processing, succeeded, failed.
+#[routes::path(
+    security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
+    responses(
+        (status = 200, description = "Stream of batches changes.", body = BatchView, content_type = "application/x-ndjson", example = json!(
+            {
+                "uid": 0,
+                "details": {
+                    "receivedDocuments": 1,
+                    "indexedDocuments": 1
+                },
+                "progress": null,
+                "stats": {
+                    "totalNbTasks": 1,
+                    "status": {
+                        "succeeded": 1
+                    },
+                    "types": {
+                        "documentAdditionOrUpdate": 1
+                    },
+                    "indexUids": {
+                        "INDEX_NAME": 1
+                    }
+                },
+                "duration": "PT0.364788S",
+                "startedAt": "2024-12-10T15:48:49.672141Z",
+                "finishedAt": "2024-12-10T15:48:50.036929Z",
+                "batchStrategy": "batched all enqueued tasks"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+async fn get_batches_stream(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::TASKS_GET }>, Data<IndexScheduler>>,
+    params: AwebQueryParameter<TasksFilterQuery, DeserrQueryParamError>,
+) -> Result<impl Responder, ResponseError> {
+    index_scheduler.features().check_tasks_streaming_route("calling the /batches/stream route")?;
+
+    let query = Query { limit: Some(u32::MAX), ..params.into_inner().into_query() };
+    let filters = index_scheduler.filters().clone();
+
+    const PROCESSING_BATCH_REFRESH_RATE: Duration = Duration::from_secs(1);
+
+    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let _join_handle = Handle::current().spawn(async move {
+        let mut wake_up = index_scheduler.as_ref().scheduler.wake_up.resubscribe();
+        let mut refresh_rate = PROCESSING_BATCH_REFRESH_RATE;
+
+        'listener: loop {
+            // wait for new tasks to be available. Every time tasks statuses
+            // change this loop is unblocked and fetches new tasks info.
+            let query = match tokio::time::timeout(refresh_rate, wake_up.recv()).await {
+                // We skip all the batches/tasks when they come from a dump import
+                Ok(Ok(ModifiedTasks::StartProcessing)) => continue,
+                Ok(Ok(ModifiedTasks::Some { ids })) => {
+                    Query { uids: Some(ids.into_iter().collect()), ..query.clone() }
+                }
+                Ok(Err(RecvError::Closed)) => break 'listener,
+                Ok(Err(RecvError::Lagged(_))) => continue,
+                Err(_timeout) => {
+                    Query { statuses: Some(vec![Status::Processing]), ..query.clone() }
+                }
+            };
+
+            let batches =
+                match index_scheduler.get_batches_from_authorized_indexes(&query, &filters) {
+                    Ok((batches, _)) => batches,
+                    Err(e) => {
+                        tracing::error!("Impossible to get batches from authorized indexes: {e}");
+                        break 'listener;
+                    }
+                };
+
+            if batches.iter().all(|b| b.finished_at.is_some()) {
+                // If we find only finished batches let's wait
+                // for another event to wake us up.
+                refresh_rate = Duration::MAX;
+            } else {
+                // else it means that we encountered a processing
+                // batch. Let's send the progress of it.
+                refresh_rate = PROCESSING_BATCH_REFRESH_RATE;
+            }
+
+            for task in batches.iter().map(BatchView::from_batch) {
+                let data = sse::Data::new_json(task).unwrap();
+                if tx.send(Event::Data(data)).await.is_err() {
+                    break 'listener;
+                }
+            }
+        }
+    });
+
+    Ok(Sse::from_infallible_receiver(rx)
+        .with_retry_duration(std::time::Duration::from_secs(10))
+        .customize()
+        .insert_header(("X-Accel-Buffering", "no")))
 }

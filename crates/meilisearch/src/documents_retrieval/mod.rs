@@ -1,8 +1,9 @@
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
 use uuid::Uuid;
 
@@ -10,10 +11,23 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::personalization::PersonalizationService;
+use crate::routes::indexes::documents::{BrowseQueryWithIndex, DocumentsResult};
+use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
+use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
     SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
+
+pub use preprocessing::{preprocess_filters, retrieve_foreign_keys_settings};
+
+pub use hydration::{hydrate_documents, FederatedHydrationFormatter, HydrationContext};
+
+mod hydration;
+mod preprocessing;
+
+pub type RemoteErrors = BTreeMap<String, ResponseError>;
 
 pub struct DocumentSearch {
     pub queries: Vec<SearchQueryWithIndex>,
@@ -50,11 +64,27 @@ impl DocumentSearch {
 
         let index_scheduler = guarded_index_scheduler.clone();
         let features = index_scheduler.features();
+
+        let network_partitioner = NetworkPartitioner::new(&index_scheduler);
+        let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
+            index_scheduler.clone(),
+            &network_partitioner,
+            self.queries,
+            features,
+            self.is_proxy,
+            progress,
+            Code::InvalidSearchFilter,
+        )
+        .await?;
+
         // Federated search
         if let Some(federation) = self.federation.take() {
             let (search_result, _) = perform_federated_search(
                 index_scheduler,
-                self.queries,
+                &network_partitioner,
+                preprocessed_queries,
+                hydration_cache,
+                remote_errors,
                 federation,
                 features,
                 self.is_proxy,
@@ -71,20 +101,30 @@ impl DocumentSearch {
 
         // Multi-search
         let search_results: Result<_, (ResponseError, _)> = async {
-            let mut search_results = Vec::with_capacity(self.queries.len());
-            for (query_index, query) in self.queries.iter().enumerate() {
-                if query.federation_options.is_some() {
+            let mut search_results = Vec::with_capacity(preprocessed_queries.len());
+            for (query_index, query) in preprocessed_queries.into_iter().enumerate() {
+                if query.query.federation_options.is_some() {
                     return Err((
                         MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
                         Some(query_index),
                     ));
                 }
 
-                let (fixed_query, federation) = fixup_query_federation(query);
+                let (q, index_uid, fixed_query, federation) = {
+                    let PreprocessedQuery { query, filter } = query;
+                    let q = query.q.clone();
+                    let index_uid = query.index_uid.to_string();
+                    let (fixed_query, federation) = fixup_query_federation(&query);
+
+                    (q, index_uid, PreprocessedQuery { query: fixed_query, filter }, federation)
+                };
 
                 let (search_result, _) = perform_federated_search(
                     index_scheduler.clone(),
+                    &network_partitioner,
                     vec![fixed_query],
+                    hydration_cache.clone(),
+                    remote_errors.clone(),
                     federation,
                     features,
                     self.is_proxy,
@@ -99,11 +139,9 @@ impl DocumentSearch {
                 .map_err(|(err, _)| (err, Some(query_index)))?;
 
                 search_results.push(SearchResultWithIndex {
-                    index_uid: query.index_uid.to_string(),
-                    result: search_result.into_search_result(
-                        query.q.clone().unwrap_or_default(),
-                        query.index_uid.as_str(),
-                    ),
+                    result: search_result
+                        .into_search_result(q.unwrap_or_default(), index_uid.as_str()),
+                    index_uid,
                 });
             }
 
@@ -115,7 +153,7 @@ impl DocumentSearch {
     }
 }
 
-fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithIndex, Federation) {
+pub fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithIndex, Federation) {
     let mut query = query.clone();
     // Move query parameters that make sense at the federation level
     // from the `SearchQueryWithIndex` to the `Federation`
@@ -231,4 +269,121 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
 pub enum DocumentSearchResult {
     Federated(Box<FederatedSearchResult>),
     Multi(Vec<SearchResultWithIndex>),
+}
+
+const MAX_IN_FLIGHT_REQUESTS: usize = 40;
+
+pub struct RemoteRetrieveDocuments<T> {
+    errors: BTreeMap<String, ResponseError>,
+    results: Vec<(T, DocumentsResult)>,
+    #[allow(clippy::type_complexity)]
+    in_flight_requests:
+        VecDeque<(tokio::task::JoinHandle<Result<DocumentsResult, ProxySearchError>>, String, T)>,
+}
+
+impl<T: Clone> RemoteRetrieveDocuments<T> {
+    pub async fn start(
+        network_partitioner: &NetworkPartitioner,
+        params: ProxySearchParams,
+        remote_queries: Vec<(T, PreprocessedQuery<BrowseQueryWithIndex>)>,
+    ) -> Result<Self, ResponseError> {
+        let mut errors = BTreeMap::new();
+        let mut results = Vec::with_capacity(remote_queries.len());
+        let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
+
+        for (metadata, query) in remote_queries {
+            let BrowseQueryWithIndex { query, remote: Some(remote_name), index_uid } =
+                query.into_inner_preprocessed()
+            else {
+                unreachable!("remote query must have a remote name");
+            };
+
+            let Some(remote) = network_partitioner.get_remote(&remote_name) else {
+                errors.insert(
+                    remote_name.clone(),
+                    ProxySearchError::UnknownRemote { remote: remote_name.clone() }
+                        .as_response_error(),
+                );
+                continue;
+            };
+
+            let path_and_query =
+                match meilisearch_types::network::route::documents_fetch_path(&index_uid) {
+                    Ok(path_and_query) => path_and_query,
+                    Err(err) => {
+                        errors.insert(
+                            remote_name.clone(),
+                            ProxySearchError::InvalidRemoteUrl { cause: err.to_string() }
+                                .as_response_error(),
+                        );
+                        continue;
+                    }
+                };
+
+            let request = match json_proxy(
+                path_and_query,
+                http_client::reqwest::Method::POST,
+                remote,
+                &query,
+                &params,
+                false, // no metadata on documents-fetch
+            ) {
+                Ok(request) => request,
+                Err(err) => {
+                    errors.insert(remote_name.clone(), err.as_response_error());
+                    continue;
+                }
+            };
+
+            if in_flight_requests.len() == in_flight_requests.capacity() {
+                // unwrap: MAX_IN_FLIGHT_REQUESTS > 0
+                // TODO: popping the front doesn't guarantee to wait for the fastest request
+                // It would be preferable to use [a `FuturesUnordered` type](https://docs.rs/futures/latest/futures/stream/futures_unordered/struct.FuturesUnordered.html) instead.
+                let (task, remote_name, metadata): (
+                    tokio::task::JoinHandle<Result<DocumentsResult, ProxySearchError>>,
+                    _,
+                    _,
+                ) = in_flight_requests.pop_front().unwrap();
+                match task.await.unwrap() {
+                    Ok(result) => results.push((metadata, result)),
+                    Err(err) => {
+                        errors.insert(remote_name, err.as_response_error());
+                        continue;
+                    }
+                }
+            }
+            in_flight_requests.push_back((
+                tokio::spawn(request),
+                remote_name.clone(),
+                metadata.clone(),
+            ));
+        }
+
+        Ok(Self { errors, results, in_flight_requests })
+    }
+
+    pub async fn finish(
+        self,
+        index_scheduler: &IndexScheduler,
+    ) -> Result<(Vec<(T, DocumentsResult)>, RemoteErrors), ResponseError> {
+        let Self { mut results, mut errors, in_flight_requests } = self;
+        // Retrieve remote results
+        for (task, remote_name, metadata) in in_flight_requests {
+            match task.await.unwrap() {
+                Ok(result) => results.push((metadata, result)),
+                Err(err) => {
+                    errors.insert(remote_name, err.as_response_error());
+                }
+            }
+        }
+
+        // Mark remote as unavailable if error is server error
+        for (remote_name, error) in errors.iter() {
+            if error.code.is_server_error() {
+                index_scheduler.mark_remote_unavailable(remote_name.clone())?;
+            }
+        }
+
+        Ok((results, errors))
+    }
 }

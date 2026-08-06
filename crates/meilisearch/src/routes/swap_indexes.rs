@@ -9,13 +9,12 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
 
-use super::{get_task_id, is_dry_run, SummarizedTaskView};
+use super::SummarizedTaskView;
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::Opt;
 
 #[routes::routes(
     routes(
@@ -94,7 +93,6 @@ pub async fn swap_indexes(
     index_scheduler: GuardedData<ActionPolicy<{ actions::INDEXES_SWAP }>, Data<IndexScheduler>>,
     params: AwebJson<Vec<SwapIndexesPayload>, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
@@ -129,11 +127,9 @@ pub async fn swap_indexes(
     }
 
     let task = KindWithContent::IndexSwap { swaps };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let scheduler = index_scheduler.clone();
     let mut task = tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+        scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
 

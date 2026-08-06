@@ -9,7 +9,7 @@ jobs:
     name: Check the version validity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Check release validity
         run: bash .github/scripts/check-release.sh
 
@@ -31,10 +31,12 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
       - name: Install cargo-deb
         run: cargo install cargo-deb
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Build deb package
         run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
       - name: Upload debian pkg to release

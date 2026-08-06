@@ -581,7 +581,7 @@
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
-          "--experimental-dumpless-upgrade",
+          "--upgrade-db",
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
@@ -641,7 +641,7 @@
         "description": "apply upgrade task",
         "source": "build",
         "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "extraCliArgs": ["--upgrade-db"]
       }
     },
     {

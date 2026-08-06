@@ -4,7 +4,7 @@ use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::TotalProcessingTimeStep;
@@ -15,12 +15,14 @@ use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
-use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
+use crate::documents_retrieval::{preprocess_filters, DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::personalization::PersonalizationService;
 use crate::routes::parse_include_metadata_header;
+use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
@@ -259,7 +261,15 @@ pub async fn legacy_multi_search_with_post(
 
     let FederatedSearch { mut queries, federation } = federated_search;
 
+    debug!(
+        request_uid = ?request_uid,
+        federation = ?federation,
+        parameters = ?queries,
+        "Multi-search"
+    );
+
     let features = index_scheduler.features();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
     // regardless of federation, check authorization and apply search rules
     let auth = 'check_authorization: {
@@ -287,24 +297,41 @@ pub async fn legacy_multi_search_with_post(
         err
     })?;
 
+    // check remote header
+    let is_proxy = req
+        .headers()
+        .get(PROXY_SEARCH_HEADER)
+        .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+
+    let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
+        index_scheduler.clone(),
+        &network_partitioner,
+        queries,
+        features,
+        is_proxy,
+        &progress,
+        Code::InvalidSearchFilter,
+    )
+    .await
+    .map_err(|(mut err, query_index)| {
+        // Add the query index that failed as context for the error message.
+        // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+        // of result and we can benefit from static typing.
+        if let Some(query_index) = query_index {
+            err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+        }
+        err
+    })?;
+
     let include_metadata = parse_include_metadata_header(&req);
     let response = match federation {
         Some(federation) => {
-            debug!(
-                request_uid = ?request_uid,
-                federation = ?federation,
-                parameters = ?queries,
-                "Federated-search"
-            );
-
-            // check remote header
-            let is_proxy = req
-                .headers()
-                .get(PROXY_SEARCH_HEADER)
-                .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
             let search_result = perform_federated_search(
                 index_scheduler.clone(),
-                queries,
+                &network_partitioner,
+                preprocessed_queries,
+                hydration_cache,
+                remote_errors,
                 federation,
                 features,
                 is_proxy,
@@ -346,19 +373,13 @@ pub async fn legacy_multi_search_with_post(
             // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
             // changes.
             let search_results: Result<_, (ResponseError, usize)> = async {
-                let mut search_results = Vec::with_capacity(queries.len());
-                for (query_index, (index_uid, query, federation_options)) in queries
+                let mut search_results = Vec::with_capacity(preprocessed_queries.len());
+                for (query_index, (index_uid, query, federation_options)) in preprocessed_queries
                     .into_iter()
+                    .map(PreprocessedQuery::into_inner_preprocessed)
                     .map(SearchQueryWithIndex::into_index_query_federation)
                     .enumerate()
                 {
-                    debug!(
-                        request_uid = ?request_uid,
-                        on_index = query_index,
-                        parameters = ?query,
-                        "Multi-search"
-                    );
-
                     if federation_options.is_some() {
                         return Err((
                             MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
@@ -366,7 +387,7 @@ pub async fn legacy_multi_search_with_post(
                         ));
                     }
 
-                    let search_result = crate::routes::indexes::search::search(
+                    let search_result = crate::routes::indexes::search::legacy_search(
                         query,
                         index_scheduler.clone(),
                         index_uid.clone(),

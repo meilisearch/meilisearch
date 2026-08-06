@@ -134,7 +134,8 @@ fn test_attribute_position_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -150,7 +151,8 @@ fn test_attribute_position_repeated() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("a a a a a");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -167,7 +169,8 @@ fn test_attribute_position_different_fields() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -184,7 +187,8 @@ fn test_attribute_position_ngrams() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("quick brown");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);

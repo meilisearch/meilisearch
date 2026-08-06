@@ -3,30 +3,34 @@ use std::collections::{BTreeMap, BinaryHeap, HashSet, VecDeque};
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use index_scheduler::filter::{filter_into_index_filter, parse_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools as _;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{FacetValueHit, OrderBy};
-use meilisearch_types::network::Network;
+use meilisearch_types::milli::{
+    serialize_index_filter_to_filter_string, FacetValueHit, IndexFilter, OrderBy,
+};
 use serde_json::Value;
 use tracing::debug;
 
 use crate::analytics::{Aggregate, Analytics};
+use crate::documents_retrieval::{preprocess_filters, RemoteErrors};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
+use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
-    add_search_rules, fuse_filters, perform_facet_search, prepare_search, FacetSearchResult,
-    HybridQuery, MatchingStrategy, NetworkableQuery, Partition, RankingScoreThreshold, SearchQuery,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, intersect_index_filters, perform_facet_search, prepare_search,
+    union_index_filters, FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery,
+    RankingScoreThreshold, SearchQuery, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
@@ -109,13 +113,23 @@ pub struct FacetSearchQuery {
     pub use_network: Option<bool>,
 }
 
-impl NetworkableQuery for FacetSearchQuery {
+impl NetworkableQuery for (IndexUid, FacetSearchQuery) {
     fn use_network_field(&mut self) -> &mut Option<bool> {
-        &mut self.use_network
+        &mut self.1.use_network
     }
 
     fn has_remote(&self) -> bool {
         false
+    }
+}
+
+impl PreprocessableQuery for (IndexUid, FacetSearchQuery) {
+    fn index_uid(&self) -> &IndexUid {
+        &self.0
+    }
+
+    fn filter_field(&mut self) -> &mut Option<Value> {
+        &mut self.1.filter
     }
 }
 
@@ -310,22 +324,39 @@ pub async fn search(
 
     let mut aggregate = FacetSearchAggregator::from_query(&query);
     let features = index_scheduler.features();
-    let network = index_scheduler.network();
+    let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
-    let search_result = if query.must_use_network(&network, &features)? {
+    let queries = vec![(index_uid.clone(), query)];
+    let (_, mut queries, remote_errors) = preprocess_filters(
+        index_scheduler.clone(),
+        &network_partitioner,
+        queries,
+        features,
+        false,
+        &progress,
+        Code::InvalidSearchFilter,
+    )
+    .await
+    .map_err(|(err, _)| err)?;
+    // we only have one query, so we can pop it
+    let mut query = queries.pop().unwrap();
+
+    let search_result = if query.must_use_network(&network_partitioner, &features)? {
         search_federated(
             index_scheduler.clone(),
             query,
+            remote_errors,
             index_uid,
             before_search,
             progress,
             features,
-            network,
+            &network_partitioner,
         )
         .await
     } else {
-        search_local(index_scheduler.clone(), query, index_uid, before_search, progress, features)
+        search_local(index_scheduler.clone(), query, before_search, progress, features)
             .await
+            .map(|(results, _)| results)
     };
 
     permit.drop().await;
@@ -341,24 +372,24 @@ pub async fn search(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn search_federated(
     index_scheduler: Data<IndexScheduler>,
-    mut query: FacetSearchQuery,
+    query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
+    mut remote_errors: RemoteErrors,
     index_uid: IndexUid,
     before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
-    network: Network,
+    network_partitioner: &NetworkPartitioner,
 ) -> Result<FacetSearchResult, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
-    let remote_availability = index_scheduler.remote_availability();
-    let partition = Partition::new(network.clone(), remote_availability);
 
     let (local_queries, remote_queries): (Vec<_>, Vec<_>) =
-        partition.into_partition(&query)?.partition(
+        network_partitioner.to_partition(&query)?.partition(
             // true is left, false is right
-            |(remote, _)| Some(remote) == network.local.as_ref(),
+            |(remote, _)| Some(remote.as_str()) == network_partitioner.local(),
         );
 
     let mut results: Vec<FacetSearchResult> = Vec::with_capacity(remote_queries.len() + 1);
@@ -368,10 +399,10 @@ async fn search_federated(
     const MAX_IN_FLIGHT_REQUESTS: usize = 40;
     let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
 
-    let original_filter = query.filter.clone();
+    let PreprocessedQuery { query: (_, mut query), filter: original_filter } = query;
 
     for (remote_name, shard_filter) in remote_queries {
-        let Some(remote) = network.remotes.get(&remote_name) else {
+        let Some(remote) = network_partitioner.get_remote(&remote_name) else {
             errors.insert(
                 remote_name.clone(),
                 ProxySearchError::UnknownRemote { remote: remote_name }.as_response_error(),
@@ -391,7 +422,13 @@ async fn search_federated(
                 continue;
             }
         };
-        query.filter = fuse_filters(original_filter.clone(), shard_filter);
+
+        // manually serialize the filter to a string due to the special case of facet-search
+        let fused_filter = intersect_index_filters(original_filter.clone(), shard_filter);
+        query.filter = fused_filter
+            .and_then(|f| serialize_index_filter_to_filter_string(&f).ok())
+            .map(serde_json::Value::String);
+
         let request = match json_proxy(
             path_and_query,
             http_client::reqwest::Method::POST,
@@ -424,13 +461,11 @@ async fn search_federated(
         in_flight_requests.push_back(tokio::spawn(async move { (request.await, remote_name) }));
     }
 
-    query.filter = original_filter;
-
+    let query = PreprocessedQuery { query: (index_uid, query), filter: original_filter };
     let (mut local_results, order) = search_multi_local(
         local_queries,
         index_scheduler,
         query,
-        index_uid,
         before_search,
         progress,
         features,
@@ -441,7 +476,7 @@ async fn search_federated(
         match task.await.unwrap() {
             (Ok(result), _) => results.push(result),
             (Err(err), remote_name) => {
-                errors.insert(remote_name, err.as_response_error());
+                remote_errors.insert(remote_name, err.as_response_error());
             }
         }
     }
@@ -459,7 +494,7 @@ async fn search_federated(
         facet_hits,
         facet_query,
         processing_time_ms,
-        remote_errors: Some(errors),
+        remote_errors: Some(remote_errors),
     })
 }
 
@@ -490,81 +525,33 @@ fn lexicographic_merge(results: Vec<FacetSearchResult>) -> Vec<FacetValueHit> {
 }
 
 async fn search_multi_local(
-    local_queries: Vec<(String, Option<serde_json::Value>)>,
+    local_queries: Vec<(String, Option<IndexFilter>)>,
     index_scheduler: Data<IndexScheduler>,
-    query: FacetSearchQuery,
-    index_uid: IndexUid,
+    mut query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
     before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
 ) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
-    let facet_query = query.facet_query.clone();
-    let facet_name = query.facet_name.clone();
-    let locales = query.locales.clone().map(|l| l.into_iter().map(Into::into).collect());
-    let mut search_query = SearchQuery::from(query);
+    // we need to fuse the shard filters from the local queries into the query
+    // inner array is OR, which is what we want
+    let shard_filters =
+        local_queries.into_iter().map(|(_, filter)| filter).reduce(union_index_filters).flatten();
 
-    let progress_clone = progress.clone();
-    let search_result = tokio::task::spawn_blocking(move || {
-        let index = index_scheduler.user_index(&index_uid)?;
-        let rtxn = index.read_txn()?;
-        let deadline = index.search_deadline(&rtxn)?;
-        let search_kind =
-            search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
+    query.filter = intersect_index_filters(query.filter.take(), shard_filters);
 
-        let shard_filters: Vec<serde_json::Value> =
-            local_queries.iter().filter_map(|(_, filter)| filter.clone()).collect();
-
-        // inner array is OR, which is what we want
-        let shard_filters = serde_json::Value::Array(vec![serde_json::Value::Array(shard_filters)]);
-
-        let filter = fuse_filters(search_query.filter.take(), Some(shard_filters));
-
-        let filter = filter
-            .as_ref()
-            .and_then(|f| parse_filter(f, Code::InvalidSearchFilter, features, None).transpose())
-            .map(|f| {
-                f.and_then(|f| {
-                    filter_into_index_filter(
-                        f,
-                        &index,
-                        &rtxn,
-                        &index_scheduler,
-                        &progress_clone,
-                        &index_uid,
-                    )
-                })
-            })
-            .transpose()?;
-
-        let (search, _, _, _) = prepare_search(
-            &index,
-            &rtxn,
-            index_uid.as_str(),
-            before_search,
-            &search_query,
-            filter,
-            &search_kind,
-            deadline,
-            features,
-            &progress_clone,
-        )?;
-
-        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
-    })
-    .await;
-    search_result?
+    search_local(index_scheduler, query, before_search, progress, features).await
 }
 
 async fn search_local(
     index_scheduler: Data<IndexScheduler>,
-    query: FacetSearchQuery,
-    index_uid: IndexUid,
+    query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
     before_search: time::OffsetDateTime,
     progress: Progress,
     features: RoFeatures,
-) -> Result<FacetSearchResult, ResponseError> {
-    let facet_query = query.facet_query.clone();
+) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
+    let PreprocessedQuery { query: (index_uid, query), filter } = query;
     let facet_name = query.facet_name.clone();
+    let facet_query = query.facet_query.clone();
     let locales = query.locales.clone().map(|l| l.into_iter().map(Into::into).collect());
     let search_query = SearchQuery::from(query);
 
@@ -573,30 +560,14 @@ async fn search_local(
         let index = index_scheduler.user_index(&index_uid)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let search_kind =
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
-        let filter = match &search_query.filter {
-            Some(filter) => {
-                let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;
-                filter
-                    .map(|f| {
-                        filter_into_index_filter(
-                            f,
-                            &index,
-                            &rtxn,
-                            &index_scheduler,
-                            &progress_clone,
-                            &index_uid,
-                        )
-                    })
-                    .transpose()?
-            }
-            None => None,
-        };
 
         let (search, _, _, _) = prepare_search(
             &index,
             &rtxn,
+            &fields_ids_map,
             index_uid.as_str(),
             before_search,
             &search_query,
@@ -607,8 +578,16 @@ async fn search_local(
             &progress_clone,
         )?;
 
-        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
-            .map(|(results, _)| results)
+        perform_facet_search(
+            &index,
+            &rtxn,
+            &fields_ids_map,
+            search,
+            facet_query,
+            facet_name,
+            search_kind,
+            locales,
+        )
     })
     .await;
     search_result?

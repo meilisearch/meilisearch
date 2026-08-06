@@ -159,8 +159,15 @@ fn main() {
 
                             // after executing a batch we check if the database is corrupted
                             let progress = Progress::default();
+                            let fields_ids_map = index.fields_ids_map(&wtxn).unwrap();
                             let res = index
-                                .search(&wtxn, "test", time::OffsetDateTime::now_utc(), &progress)
+                                .search(
+                                    &wtxn,
+                                    "test",
+                                    &fields_ids_map,
+                                    time::OffsetDateTime::now_utc(),
+                                    &progress,
+                                )
                                 .execute()
                                 .unwrap();
                             index.documents(&wtxn, res.documents_ids).unwrap();

@@ -325,13 +325,7 @@ async fn update_or_create_rule(
             rule_id: uid,
             update: rule.clone(),
         });
-        index_scheduler.register_with_custom_metadata(
-            kind,
-            None,
-            custom_metadata,
-            false,
-            task_network,
-        )
+        index_scheduler.register_with_custom_metadata(kind, custom_metadata, task_network)
     }?;
 
     if let Some(task_network) = task.network.take() {
@@ -393,13 +387,7 @@ async fn delete_rule(
 
     let mut task = {
         let kind = KindWithContent::DsrUpdate(DsrUpdate::Deletion(uid));
-        index_scheduler.register_with_custom_metadata(
-            kind,
-            None,
-            custom_metadata,
-            false,
-            task_network,
-        )?
+        index_scheduler.register_with_custom_metadata(kind, custom_metadata, task_network)?
     };
 
     if let Some(task_network) = task.network.take() {
@@ -456,13 +444,7 @@ async fn clear_rules(
 
     let mut task = {
         let kind = KindWithContent::DsrClear;
-        index_scheduler.register_with_custom_metadata(
-            kind,
-            None,
-            custom_metadata,
-            false,
-            task_network,
-        )?
+        index_scheduler.register_with_custom_metadata(kind, custom_metadata, task_network)?
     };
 
     if let Some(task_network) = task.network.take() {

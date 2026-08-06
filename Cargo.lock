@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "anyhow",
  "time",
@@ -1113,6 +1113,17 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
+name = "chacha20"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "rand_core 0.10.1",
+]
 
 [[package]]
 name = "change-detection"
@@ -1428,6 +1439,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1602,7 +1622,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
  "digest",
  "fiat-crypto",
@@ -1925,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "big_s",
  "flate2",
@@ -2248,7 +2268,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "tempfile",
  "thiserror 2.0.18",
@@ -2268,9 +2288,10 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "insta",
+ "itertools 0.14.0",
  "levenshtein_automata",
  "nom",
  "nom_locate",
@@ -2296,7 +2317,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2480,7 +2501,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "arbitrary",
  "bumpalo",
@@ -2857,11 +2878,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -2871,10 +2890,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de51e6874e94e7bf76d726fc5d13ba782deca734ff60d5bb2fb2607c7406555"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "rand_core 0.10.1",
  "wasip2",
  "wasip3",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3224,7 +3246,7 @@ dependencies = [
 
 [[package]]
 name = "http-client"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "cidr",
  "hyper-util",
@@ -3544,7 +3566,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "anyhow",
  "backoff",
@@ -3574,7 +3596,6 @@ dependencies = [
  "rusty-s3",
  "serde",
  "serde_json",
- "synchronoise",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
@@ -3793,7 +3814,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -4312,7 +4333,7 @@ checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
 
 [[package]]
 name = "meili-snap"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "insta",
  "md5 0.8.0",
@@ -4323,7 +4344,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -4416,7 +4437,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "base64 0.22.1",
  "enum-iterator",
@@ -4435,7 +4456,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -4473,7 +4494,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4507,7 +4528,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "arroy",
  "bbqueue",
@@ -5132,7 +5153,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "big_s",
  "serde_json",
@@ -5568,14 +5589,15 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.14"
+version = "0.11.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
+checksum = "2f4bfc015262b9df63c8845072ce59068853ff5872180c2ce2f13038b970e560"
 dependencies = [
  "bytes",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "lru-slab",
- "rand 0.9.4",
+ "rand 0.10.2",
+ "rand_pcg",
  "ring",
  "rustc-hash",
  "rustls",
@@ -5650,6 +5672,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"
+dependencies = [
+ "chacha20",
+ "getrandom 0.4.2",
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5688,6 +5721,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
 name = "rand_distr"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5695,6 +5734,15 @@ checksum = "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463"
 dependencies = [
  "num-traits",
  "rand 0.9.4",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caa0f4137e1c0a72f4c651489402276c8e8e1cf081f3b0ba156d2cbeef09e86a"
+dependencies = [
+ "rand_core 0.10.1",
 ]
 
 [[package]]
@@ -6099,7 +6147,7 @@ dependencies = [
 
 [[package]]
 name = "routes"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "actix-web",
  "routes-macros",
@@ -6111,7 +6159,7 @@ dependencies = [
 
 [[package]]
 name = "routes-macros"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
@@ -6600,7 +6648,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5058ada175748e33390e40e872bd0fe59a19f265d0158daa551c5a88a76009c"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -6611,7 +6659,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest",
 ]
 
@@ -8674,7 +8722,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.50.0"
+version = "1.52.0"
 dependencies = [
  "anyhow",
  "build-info",

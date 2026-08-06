@@ -2,6 +2,7 @@ use crate::make_enum_progress;
 
 make_enum_progress! {
     pub enum SearchStep {
+        LoadFieldIdsMap,
         TokenizeQuery,
         EmbedQuery,
         EvaluateFilter,
@@ -17,6 +18,7 @@ make_enum_progress! {
 
 make_enum_progress! {
     pub enum FederatingResultsStep {
+        PreprocessFilters,
         PartitionQueries,
         StartRemoteSearch,
         ExecuteLocalSearch,

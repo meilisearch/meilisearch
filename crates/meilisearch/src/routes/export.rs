@@ -21,8 +21,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::export_analytics::ExportAnalytics;
-use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
-use crate::Opt;
+use crate::routes::SummarizedTaskView;
 
 #[routes::routes(
     routes(
@@ -60,7 +59,6 @@ async fn export(
     index_scheduler: GuardedData<ActionPolicy<{ actions::EXPORT }>, Data<IndexScheduler>>,
     export: AwebJson<Export, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let export = export.into_inner();
@@ -89,12 +87,8 @@ async fn export(
         payload_size: payload_size.map(|ByteWithDeserr(bytes)| bytes),
         indexes,
     };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     analytics.publish(analytics_aggregate, &req);
 

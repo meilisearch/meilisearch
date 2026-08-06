@@ -98,13 +98,13 @@ async fn get_all_documents_bad_filter() {
     "###);
 
     let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
-    snapshot!(code, @"404 Not Found");
+    snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Index `DOES_NOT_EXISTS` not found.",
-      "code": "index_not_found",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1:6 doggo",
+      "code": "invalid_document_filter",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#index_not_found"
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
     "###);
 
@@ -698,7 +698,7 @@ async fn edit_documents_by_function_foreign_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Index `[uuid]`: using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"

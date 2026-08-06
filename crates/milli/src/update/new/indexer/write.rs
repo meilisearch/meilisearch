@@ -170,7 +170,7 @@ pub fn build_vectors(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn update_index(
+pub fn update_index(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
     new_fields_ids_map: FieldIdMapWithMetadata,

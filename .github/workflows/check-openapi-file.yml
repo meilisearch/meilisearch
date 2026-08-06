@@ -20,16 +20,18 @@ jobs:
     name: Check OpenAPI specification
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.91.1
+        uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        with:
+          toolchain: 1.91.1
 
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '20'
 

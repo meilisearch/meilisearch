@@ -9,6 +9,7 @@ use crate::error::{Error, UserError};
 mod index_filter;
 pub use self::index_filter::{serialize_index_filter_to_filter_string, IndexFilter};
 mod parser;
+pub mod value_bounds;
 mod vector;
 
 #[cfg(test)]

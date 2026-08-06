@@ -75,7 +75,7 @@ impl RankingRuleGraphTrait for FidGraph {
             all_fields.extend(fields);
         }
 
-        let weights_map = ctx.index.fieldids_weights_map(ctx.txn)?;
+        let weights_map = ctx.index.fieldids_weights_map(ctx.txn, ctx.fields_ids_map)?;
 
         let mut edges = vec![];
         for fid in all_fields.iter().copied() {

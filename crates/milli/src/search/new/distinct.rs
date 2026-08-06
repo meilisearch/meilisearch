@@ -9,7 +9,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetCodec,
 };
 use crate::heed_codec::BytesRefCodec;
-use crate::{FieldId, Index, Result, SearchContext};
+use crate::{FieldId, FieldsIdsMap, Index, Result, SearchContext};
 
 pub struct DistinctOutput {
     pub remaining: RoaringBitmap,
@@ -126,6 +126,7 @@ pub fn distinct_fid(
     query_distinct_field: Option<&str>,
     index: &Index,
     rtxn: &RoTxn<'_>,
+    fields_ids_map: &FieldsIdsMap,
 ) -> Result<Option<FieldId>> {
     let distinct_field = match query_distinct_field {
         Some(distinct) => Some(distinct),
@@ -133,6 +134,6 @@ pub fn distinct_fid(
     };
 
     let distinct_fid =
-        if let Some(field) = distinct_field { index.fields_ids_map(rtxn)?.id(field) } else { None };
+        if let Some(field) = distinct_field { fields_ids_map.id(field) } else { None };
     Ok(distinct_fid)
 }

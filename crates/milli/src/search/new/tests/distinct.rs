@@ -246,7 +246,8 @@ fn test_distinct_placeholder_no_ranking_rules() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.distinct(S("letter"));
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 5, 8, 9, 15, 18, 20, 21, 24, 25, 26]");
@@ -274,8 +275,9 @@ fn test_distinct_at_search_placeholder_no_ranking_rules() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-    let s = index.search(&txn);
+    let s = index.search(&txn, &fields_ids_map);
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 5, 8, 9, 15, 18, 20, 21, 24, 25, 26]");
     let distinct_values = verify_distinct(&index, &txn, None, &documents_ids);
@@ -308,7 +310,8 @@ fn test_distinct_placeholder_sort() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank1")))]);
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -348,7 +351,7 @@ fn test_distinct_placeholder_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
 
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -388,7 +391,7 @@ fn test_distinct_placeholder_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.sort_criteria(vec![
         AscDesc::Desc(Member::Field(S("letter"))),
         AscDesc::Desc(Member::Field(S("rank1"))),
@@ -443,7 +446,8 @@ fn test_distinct_words() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
 
@@ -496,7 +500,8 @@ fn test_distinct_sort_words() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
@@ -569,7 +574,8 @@ fn test_distinct_all_candidates() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank1")))]);
     s.exhaustive_number_hits(true);
@@ -592,7 +598,8 @@ fn test_distinct_typo() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+    let mut s = index.search(&txn, &fields_ids_map);
     s.query("the quick brown fox jumps over the lazy dog");
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
 

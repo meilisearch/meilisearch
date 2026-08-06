@@ -29,12 +29,16 @@ async fn import_dump_v1_movie_raw() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -190,12 +194,16 @@ async fn import_dump_v1_movie_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
         json_string!(stats, {
+            ".indexSize" => "[size]",
+            ".usedIndexSize" => "[size]",
             ".rawDocumentDbSize" => "[size]",
             ".avgDocumentSize" => "[size]",
         }),
         @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -364,12 +372,16 @@ async fn import_dump_v1_rubygems_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -535,12 +547,16 @@ async fn import_dump_v2_movie_raw() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -696,12 +712,16 @@ async fn import_dump_v2_movie_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -867,12 +887,16 @@ async fn import_dump_v2_rubygems_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -1035,12 +1059,16 @@ async fn import_dump_v3_movie_raw() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -1196,12 +1224,16 @@ async fn import_dump_v3_movie_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -1367,12 +1399,16 @@ async fn import_dump_v3_rubygems_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -1535,12 +1571,16 @@ async fn import_dump_v4_movie_raw() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -1696,12 +1736,16 @@ async fn import_dump_v4_movie_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -1867,12 +1911,16 @@ async fn import_dump_v4_rubygems_with_settings() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 53,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -2043,11 +2091,15 @@ async fn import_dump_v5() {
     let (stats, code) = index1.stats().await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(stats, {
+        ".indexSize" => "[size]",
+        ".usedIndexSize" => "[size]",
         ".rawDocumentDbSize" => "[size]",
         ".avgDocumentSize" => "[size]",
     }), @r###"
     {
       "numberOfDocuments": 10,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -2083,12 +2135,16 @@ async fn import_dump_v5() {
     snapshot!(code, @"200 OK");
     snapshot!(
       json_string!(stats, {
+          ".indexSize" => "[size]",
+          ".usedIndexSize" => "[size]",
           ".rawDocumentDbSize" => "[size]",
           ".avgDocumentSize" => "[size]",
       }),
       @r###"
     {
       "numberOfDocuments": 10,
+      "indexSize": "[size]",
+      "usedIndexSize": "[size]",
       "rawDocumentDbSize": "[size]",
       "avgDocumentSize": "[size]",
       "isIndexing": false,
@@ -2183,6 +2239,7 @@ async fn import_dump_v6_containing_experimental_features() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -2316,6 +2373,7 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,
@@ -2429,6 +2487,7 @@ async fn generate_and_import_dump_containing_vectors() {
     {
       "metrics": false,
       "logsRoute": false,
+      "tasksStreamingRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
       "dynamicSearchRules": false,

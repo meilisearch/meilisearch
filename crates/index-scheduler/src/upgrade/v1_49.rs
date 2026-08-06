@@ -113,12 +113,13 @@ impl LegacyDynamicSearchRule {
             }
         }
 
-        let conditions = NewConditions { time, query };
+        let conditions = NewConditions { time, query, filter: None };
 
         Some(NewDynamicSearchRule {
             uid,
             description,
             precedence: priority,
+            last_updated_at: None,
             active,
             conditions,
             actions,

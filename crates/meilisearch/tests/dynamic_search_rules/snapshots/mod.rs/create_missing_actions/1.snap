@@ -1,9 +1,0 @@
----
-source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
----
-{
-  "message": "Cannot set an empty list of actions to a dynamic search rule.\n - Note: for rule `no-actions`.",
-  "code": "invalid_dynamic_search_rule_actions",
-  "type": "invalid_request",
-  "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
-}

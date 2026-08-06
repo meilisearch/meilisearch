@@ -32,10 +32,17 @@ macro_rules! test_distinct {
             wtxn.commit().unwrap();
 
             let rtxn = index.read_txn().unwrap();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
             let progress = Progress::default();
-            let mut search =
-                Search::new(&rtxn, &index, "test", time::OffsetDateTime::now_utc(), &progress);
+            let mut search = Search::new(
+                &rtxn,
+                &index,
+                &fields_ids_map,
+                "test",
+                time::OffsetDateTime::now_utc(),
+                &progress,
+            );
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);

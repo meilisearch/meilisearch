@@ -46,13 +46,20 @@ macro_rules! test_filter {
             let criteria = vec![Words, Typo, Proximity, Attribute, Exactness];
             let index = search::setup_search_index_with_criteria(&criteria);
             let rtxn = index.read_txn().unwrap();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
             let filter_conditions =
                 Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
             let progress = Progress::default();
-            let mut search =
-                Search::new(&rtxn, &index, "test", time::OffsetDateTime::now_utc(), &progress);
+            let mut search = Search::new(
+                &rtxn,
+                &index,
+                &fields_ids_map,
+                "test",
+                time::OffsetDateTime::now_utc(),
+                &progress,
+            );
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 

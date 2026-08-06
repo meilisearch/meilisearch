@@ -87,6 +87,7 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tokio::sync::broadcast::error::RecvError;
 pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
@@ -94,6 +95,7 @@ use versioning::Versioning;
 use crate::dynamic_search_rules::DynamicSearchRules;
 use crate::index_mapper::IndexMapper;
 use crate::processing::ProcessingTasks;
+pub use crate::scheduler::ModifiedTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -144,9 +146,6 @@ pub struct IndexSchedulerOptions {
     /// Set to `true` iff the index scheduler is allowed to automatically
     /// batch tasks together, to process multiple tasks at once.
     pub autobatching_enabled: bool,
-    /// Set to `true` iff the index scheduler is allowed to automatically
-    /// delete the finished tasks when there are too many tasks.
-    pub cleanup_enabled: bool,
     /// The maximum number of tasks stored in the task queue before starting
     /// to auto schedule task deletions.
     pub max_number_of_tasks: usize,
@@ -160,16 +159,12 @@ pub struct IndexSchedulerOptions {
     pub export_default_payload_size_bytes: Byte,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
-    /// Whether the index scheduler is able to auto upgrade or not.
-    pub auto_upgrade: bool,
     /// The maximal number of entries in the search query cache of an embedder.
     ///
     /// 0 disables the cache.
     pub embedding_cache_cap: usize,
     /// IP policy for requests performed by the index scheduler.
     pub ip_policy: http_client::policy::IpPolicy,
-    /// Snapshot compaction status.
-    pub experimental_no_snapshot_compaction: bool,
     /// Fuel for Dynamic Search Rules
     pub dsr_fuel: DsrFuel,
 }
@@ -197,12 +192,6 @@ pub struct IndexScheduler {
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
-
-    /// Whether we should automatically cleanup the task queue or not.
-    pub(crate) cleanup_enabled: bool,
-
-    /// Whether we should use the old document indexer or the new one.
-    pub(crate) experimental_no_edition_2024_for_dumps: bool,
 
     /// A database to store single-keyed data that is persisted across restarts.
     persisted: Database<Str, Str>,
@@ -257,8 +246,6 @@ impl IndexScheduler {
             scheduler: self.scheduler.private_clone(),
 
             index_mapper: self.index_mapper.clone(),
-            cleanup_enabled: self.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             persisted: self.persisted,
             export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
@@ -295,8 +282,7 @@ impl IndexScheduler {
         from_db_version: (u32, u32, u32),
         runtime: Option<tokio::runtime::Handle>,
     ) -> Result<Self> {
-        let this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
-
+        let mut this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
         this.run();
         Ok(this)
     }
@@ -373,10 +359,6 @@ impl IndexScheduler {
             scheduler,
             index_mapper,
             env,
-            cleanup_enabled: options.cleanup_enabled,
-            experimental_no_edition_2024_for_dumps: options
-                .indexer_config
-                .experimental_no_edition_2024_for_dumps,
             persisted,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
@@ -501,26 +483,34 @@ impl IndexScheduler {
     ///
     /// This function will execute in a different thread and must be called
     /// only once per index scheduler.
-    fn run(&self) {
+    fn run(&mut self) {
         // If the number of batched tasks is 0, we don't need to run the scheduler at all.
         // It will never be able to process any tasks.
         if self.scheduler.max_number_of_batched_tasks == 0 {
             return;
         }
-        let run = self.private_clone();
+        let mut run = self.private_clone();
         std::thread::Builder::new()
             .name(String::from("scheduler"))
             .spawn(move || {
                 #[cfg(test)]
                 run.breakpoint(test_utils::Breakpoint::Init);
 
-                run.scheduler.wake_up.wait_timeout(std::time::Duration::from_secs(60));
-
                 loop {
-                    let ret = catch_unwind(AssertUnwindSafe(|| run.tick()));
-                    match ret {
+                    match catch_unwind(AssertUnwindSafe(|| run.tick())) {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
-                        Ok(Ok(TickOutcome::WaitForSignal)) => run.scheduler.wake_up.wait(),
+                        Ok(Ok(TickOutcome::WaitForSignal)) => {
+                            // no panic: this function is called in a freshly spawned thread and so
+                            // is not within an asynchronous execution context.
+                            match run.scheduler.wake_up.blocking_recv() {
+                                Ok(_) => (),
+                                Err(RecvError::Closed) => break,
+                                // The receiver lost messages as it was lagging behind the senders. We definitely
+                                // received a message in this case, so we will tick again. As the tick will catch
+                                // up with any newly received tasks, it is fair to skip older messages.
+                                Err(RecvError::Lagged(_)) => continue,
+                            }
+                        },
                         Ok(Ok(TickOutcome::StopProcessingForever)) => break,
                         Ok(Err(e)) => {
                             tracing::error!("{e}");
@@ -531,7 +521,6 @@ impl IndexScheduler {
                         }
                         Err(_panic) => {
                             tracing::error!("Internal error: Unexpected panic in the `IndexScheduler::run` method.");
-
                         }
                     }
                 }
@@ -699,11 +688,6 @@ impl IndexScheduler {
         Ok(nbr_index_processing_tasks > 0)
     }
 
-    /// Whether the index should use the old document indexer.
-    pub fn no_edition_2024_for_dumps(&self) -> bool {
-        self.experimental_no_edition_2024_for_dumps
-    }
-
     /// Return the tasks matching the query from the user's point of view along
     /// with the total number of tasks matching the query, ignoring from and limit.
     ///
@@ -793,31 +777,17 @@ impl IndexScheduler {
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
-    pub fn register(
-        &self,
-        kind: KindWithContent,
-        task_id: Option<TaskId>,
-        dry_run: bool,
-    ) -> Result<Task> {
-        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    pub fn register(&self, kind: KindWithContent) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(kind, None, None, None)
     }
 
     pub fn register_with_custom_metadata(
         &self,
         kind: KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         task_network: Option<TaskNetwork>,
     ) -> Result<Task> {
-        self.register_with_custom_metadata_and_network(
-            kind,
-            task_id,
-            custom_metadata,
-            dry_run,
-            task_network,
-            None,
-        )
+        self.register_with_custom_metadata_and_network(kind, custom_metadata, task_network, None)
     }
 
     /// Register a new task in the scheduler, with metadata.
@@ -837,9 +807,7 @@ impl IndexScheduler {
     pub fn register_with_custom_metadata_and_network(
         &self,
         kind: KindWithContent,
-        task_id: Option<TaskId>,
         custom_metadata: Option<String>,
-        dry_run: bool,
         task_network: Option<TaskNetwork>,
         new_network: Option<Network>,
     ) -> Result<Task> {
@@ -869,9 +837,7 @@ impl IndexScheduler {
         let task = self.queue.register(
             &mut wtxn,
             &kind,
-            task_id,
             custom_metadata,
-            dry_run,
             task_network.map(DbTaskNetwork::from),
         )?;
 
@@ -894,7 +860,11 @@ impl IndexScheduler {
         }
 
         // notify the scheduler loop to execute a new tick
-        self.scheduler.wake_up.signal();
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task.uid]) })
+            .unwrap();
+
         Ok(task)
     }
 
@@ -905,14 +875,25 @@ impl IndexScheduler {
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
 
-        self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
-            Ok(network_topology_change.receive_remote_task(&remote_name, None, None, 0, 0, 0)?)
-        })?;
+        let (task_uid, _) =
+            self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+                Ok(network_topology_change.receive_remote_task(
+                    &remote_name,
+                    None,
+                    None,
+                    0,
+                    0,
+                    0,
+                )?)
+            })?;
 
         wtxn.commit()?;
 
         // wake up the scheduler as the task state has changed
-        self.scheduler.wake_up.signal();
+        self.scheduler
+            .waker
+            .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+            .unwrap();
 
         Ok(())
     }
@@ -924,7 +905,7 @@ impl IndexScheduler {
         origin: Origin,
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
-        let has_changed =
+        let (task_uid, has_changed) =
             self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
                 Ok(network_topology_change.receive_import_finished(&remote_name, successful)?)
             })?;
@@ -932,7 +913,10 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         if has_changed {
-            self.scheduler.wake_up.signal();
+            self.scheduler
+                .waker
+                .send(ModifiedTasks::Some { ids: RoaringBitmap::from([task_uid]) })
+                .unwrap();
         }
         Ok(())
     }
@@ -948,12 +932,13 @@ impl IndexScheduler {
         }
     }
 
+    /// Updates the first processing network task and returns it's ID.
     fn update_network_task<F, O>(
         &self,
         wtxn: &mut heed::RwTxn<'_>,
         network_change: &Origin,
         update_fn: F,
-    ) -> Result<O, Error>
+    ) -> Result<(TaskId, O), Error>
     where
         F: FnOnce(&mut NetworkTopologyChange) -> Result<O, Error>,
     {
@@ -1005,7 +990,8 @@ impl IndexScheduler {
         let o = update_fn(network_topology_change)?;
 
         self.queue.tasks.update_task(wtxn, &mut network_task)?;
-        Ok(o)
+
+        Ok((network_task.uid, o))
     }
 
     /// Register a new task coming from a dump in the scheduler.

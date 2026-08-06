@@ -24,7 +24,6 @@ mod test_failure;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
@@ -36,7 +35,6 @@ use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
-use synchronoise::SignalEvent;
 
 use crate::processing::{AtomicTaskStep, BatchProgress};
 use crate::{Error, IndexScheduler, IndexSchedulerOptions, Result, TickOutcome};
@@ -45,8 +43,11 @@ pub struct Scheduler {
     /// A boolean that can be set to true to stop the currently processing tasks.
     pub must_stop_processing: MustStopProcessing,
 
-    /// Get a signal when a batch needs to be processed.
-    pub(crate) wake_up: Arc<SignalEvent>,
+    /// Receive signals for when to process tasks or when anything changes in the tasks queue.
+    pub wake_up: tokio::sync::broadcast::Receiver<ModifiedTasks>,
+
+    /// Send signals to wake up the listening part and react to tasks changes.
+    pub waker: tokio::sync::broadcast::Sender<ModifiedTasks>,
 
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
@@ -77,9 +78,6 @@ pub struct Scheduler {
     /// IP policy for requests performed by the index scheduler.
     pub(crate) ip_policy: http_client::policy::IpPolicy,
 
-    /// Snapshot compaction status.
-    pub(crate) experimental_no_snapshot_compaction: bool,
-
     /// S3 Snapshot options.
     pub(crate) s3_snapshot_options: Option<S3SnapshotOptions>,
 }
@@ -88,7 +86,8 @@ impl Scheduler {
     pub(crate) fn private_clone(&self) -> Self {
         Self {
             must_stop_processing: self.must_stop_processing.clone(),
-            wake_up: self.wake_up.clone(),
+            wake_up: self.wake_up.resubscribe(),
+            waker: self.waker.clone(),
             autobatching_enabled: self.autobatching_enabled,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
             batched_tasks_size_limit: self.batched_tasks_size_limit,
@@ -97,7 +96,6 @@ impl Scheduler {
             auth_env: self.auth_env.clone(),
             version_file_path: self.version_file_path.clone(),
             embedding_cache_cap: self.embedding_cache_cap,
-            experimental_no_snapshot_compaction: self.experimental_no_snapshot_compaction,
             s3_snapshot_options: self.s3_snapshot_options.clone(),
             ip_policy: self.ip_policy.clone(),
         }
@@ -121,23 +119,24 @@ impl Scheduler {
             index_count: _,
             indexer_config,
             autobatching_enabled,
-            cleanup_enabled: _,
             max_number_of_tasks: _,
             max_number_of_batched_tasks,
             batched_tasks_size_limit,
             export_default_payload_size_bytes: _,
             instance_features: _,
-            auto_upgrade: _,
             embedding_cache_cap,
             ip_policy,
-            experimental_no_snapshot_compaction,
             dsr_fuel: _,
         } = options;
 
+        let (waker, wake_up) = tokio::sync::broadcast::channel(32);
+        // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
+        let _ = waker.send(ModifiedTasks::StartProcessing).unwrap();
+
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
-            // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-            wake_up: Arc::new(SignalEvent::auto(true)),
+            wake_up,
+            waker,
             autobatching_enabled: *autobatching_enabled,
             max_number_of_batched_tasks: *max_number_of_batched_tasks,
             batched_tasks_size_limit: *batched_tasks_size_limit,
@@ -147,7 +146,6 @@ impl Scheduler {
             version_file_path: version_file_path.clone(),
             embedding_cache_cap: *embedding_cache_cap,
             ip_policy: ip_policy.clone(),
-            experimental_no_snapshot_compaction: *experimental_no_snapshot_compaction,
             s3_snapshot_options: indexer_config.s3_snapshot_options.clone(),
         }
     }
@@ -176,11 +174,9 @@ impl IndexScheduler {
 
         let previous_processing_batch = self.processing_tasks.write().unwrap().stop_processing();
 
-        if self.cleanup_enabled {
-            let mut wtxn = self.env.write_txn()?;
-            self.queue.cleanup_task_queue(&mut wtxn)?;
-            wtxn.commit()?;
-        }
+        let mut wtxn = self.env.write_txn()?;
+        self.queue.cleanup_task_queue(&mut wtxn)?;
+        wtxn.commit()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
         let (batch, mut processing_batch) = match self
@@ -211,6 +207,8 @@ impl IndexScheduler {
 
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::BatchCreated);
+
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
 
         // 2. Process the tasks
         let res = {
@@ -270,6 +268,7 @@ impl IndexScheduler {
         progress.update_progress(BatchProgress::WritingTasksToDisk);
 
         processing_batch.finished();
+
         // whether the batch made progress.
         // a batch make progress if it failed or if it contains at least one fully processed (or cancelled) task.
         //
@@ -447,6 +446,8 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
+        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
+
         if batch_made_progress {
             // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
             // and then become « not found » for some time until the commit everything is written and the final commit is made.
@@ -487,4 +488,10 @@ impl IndexScheduler {
             Ok(TickOutcome::TickAgain(processed_tasks))
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum ModifiedTasks {
+    StartProcessing,
+    Some { ids: RoaringBitmap },
 }

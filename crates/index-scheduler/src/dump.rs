@@ -13,6 +13,7 @@ use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
 
+use crate::scheduler::ModifiedTasks;
 use crate::{utils, Error, IndexScheduler, Result};
 
 pub struct Dump<'a> {
@@ -115,7 +116,7 @@ impl<'a> Dump<'a> {
 
         let content_uuid = match content_file {
             Some(content_file) if task.status == Status::Enqueued => {
-                let (uuid, file) = self.index_scheduler.queue.create_update_file(false)?;
+                let (uuid, file) = self.index_scheduler.queue.create_update_file()?;
                 let mut writer = io::BufWriter::new(file);
                 for doc in content_file {
                     let doc = doc?;
@@ -132,7 +133,7 @@ impl<'a> Dump<'a> {
             // in case we try to open it later.
             _ if task.status != Status::Enqueued => Some(Uuid::nil()),
             None if task.status == Status::Enqueued && task_has_no_docs => {
-                let (uuid, file) = self.index_scheduler.queue.create_update_file(false)?;
+                let (uuid, file) = self.index_scheduler.queue.create_update_file()?;
                 file.persist()?;
 
                 Some(uuid)
@@ -330,7 +331,8 @@ impl<'a> Dump<'a> {
         }
 
         self.wtxn.commit()?;
-        self.index_scheduler.scheduler.wake_up.signal();
+
+        self.index_scheduler.scheduler.waker.send(ModifiedTasks::StartProcessing).unwrap();
 
         Ok(())
     }

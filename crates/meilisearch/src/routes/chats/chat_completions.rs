@@ -20,10 +20,8 @@ use async_openai::types::{
 use async_openai::Client;
 use bumpalo::Bump;
 use futures::StreamExt;
-use index_scheduler::filter::{
-    filter_into_index_filter, filters_into_index_filters_unchecked, parse_filter,
-};
-use index_scheduler::IndexScheduler;
+use index_scheduler::filter::parse_local_index_filter;
+use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_auth::{AuthController, IndexSearchRules};
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{
@@ -31,15 +29,16 @@ use meilisearch_types::features::{
     ChatCompletionSource as DbChatCompletionSource, SystemRole,
 };
 use meilisearch_types::heed::RoTxn;
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    all_obkv_to_json, obkv_to_json, Filter, OrderBy, PatternMatch, TotalProcessingTimeStep,
+    all_obkv_to_json, obkv_to_json, FieldsIdsMap, OrderBy, PatternMatch, TotalProcessingTimeStep,
 };
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 
@@ -52,6 +51,7 @@ use super::{
     MEILI_SEARCH_PROGRESS_NAME, MEILI_SEARCH_SOURCES_NAME,
 };
 use crate::analytics::Analytics;
+use crate::documents_retrieval::preprocess_filters;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
@@ -62,6 +62,8 @@ use crate::metrics::{
 };
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
+use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
+use crate::search::federated::NetworkPartitioner;
 use crate::search::{add_search_rules, elapsed, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
@@ -245,7 +247,6 @@ fn setup_search_tool(
     let mut index_uids = Vec::new();
     let mut function_description = prompts.search_description.clone();
     let mut filter_description = prompts.search_filter_param.clone();
-    let progress = &Default::default();
     index_scheduler.try_for_each_user_index::<_, ()>(|name, index| {
         // Make sure to skip unauthorized indexes
         if !filters.is_index_authorized(name.uid()) {
@@ -254,6 +255,7 @@ fn setup_search_tool(
         let search_rules = filters.get_index_search_rules(name.uid());
 
         let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let chat_config = index.chat_config(&rtxn)?;
         let index_description = chat_config.description;
         let _ = writeln!(
@@ -266,10 +268,10 @@ fn setup_search_tool(
             index_scheduler,
             index,
             &rtxn,
+            &fields_ids_map,
             10,
             search_rules,
             name.uid(),
-            progress,
         )
         .unwrap(); // TODO do not unwrap
         let _ = writeln!(
@@ -348,86 +350,74 @@ async fn process_search_request(
         ActionPolicy<{ actions::CHAT_COMPLETIONS }>,
         Data<IndexScheduler>,
     >,
+    features: RoFeatures,
     auth_ctrl: web::Data<AuthController>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
-    index_uid: String,
     start_time: time::OffsetDateTime,
-    q: Option<String>,
-    filter: Option<String>,
+    mut query: SearchInIndexParameters,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
-    let index = index_scheduler.user_index(&index_uid)?;
     let progress = Progress::default();
+    let index = index_scheduler.user_index(query.index_uid.as_str())?;
     let rtxn = index.static_read_txn()?;
-    let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
-    let mut query = SearchQuery {
-        q,
-        filter: filter.map(serde_json::Value::from),
-        ..SearchQuery::from(search_parameters)
-    };
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
     tracing::debug!("LLM query: {:?}", query);
 
     let auth_filter = ActionPolicy::<{ actions::SEARCH }>::authenticate(
         auth_ctrl,
         auth_token,
-        Some(index_uid.as_str()),
+        Some(query.index_uid.as_str()),
     )?;
 
     // Tenant token search_rules.
-    if let Some(search_rules) = auth_filter.get_index_search_rules(&index_uid) {
+    if let Some(search_rules) = auth_filter.get_index_search_rules(&query.index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
+
+    let network_partitioner = NetworkPartitioner::new(index_scheduler);
+    let (_, mut preprocessed_queries, remote_errors) = preprocess_filters(
+        (*index_scheduler).clone(),
+        &network_partitioner,
+        vec![query],
+        features,
+        false,
+        &progress,
+        Code::InvalidSearchFilter,
+    )
+    .await
+    .map_err(|(e, _)| e)?;
+
+    // TODO: Handle remote errors when implementing network support in chat completions
+    let _remote_errors = remote_errors;
+
+    let PreprocessedQuery { query: SearchInIndexParameters { index_uid, q, filter: _ }, filter } =
+        preprocessed_queries.pop().unwrap();
+
+    let index = index_scheduler.user_index(&index_uid)?;
+    let rtxn = index.static_read_txn()?;
+    let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
+    let query = SearchQuery { q, filter: None, ..SearchQuery::from(search_parameters) };
+
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
 
     progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
-    let features = index_scheduler.features();
     let index_cloned = index.clone();
-
-    let filter = match &query.filter {
-        Some(filter) => {
-            let filter = parse_filter(
-                filter,
-                Code::InvalidSearchFilter,
-                features,
-                Some(index_uid.as_str()),
-            )?;
-            filter
-                .map(|f| {
-                    if features.runtime_features().foreign_keys && f.use_foreign_filter().is_some()
-                    {
-                        filter_into_index_filter(
-                            f,
-                            &index,
-                            &rtxn,
-                            index_scheduler,
-                            &progress,
-                            &index_uid,
-                        )
-                    } else {
-                        filters_into_index_filters_unchecked(vec![Some(f)]).map(|mut filters| {
-                            // there is exactly one filter that can't be None
-                            filters.pop().unwrap().unwrap()
-                        })
-                    }
-                })
-                .transpose()?
-        }
-        None => None,
-    };
 
     let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
         let deadline = index_cloned
             .search_deadline(&rtxn)
-            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?;
+            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
 
+        let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?;
         let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
             &index_cloned,
             &rtxn,
-            &index_uid,
+            &fields_ids_map,
+            index_uid.as_str(),
             start_time,
             &query,
             filter,
@@ -462,7 +452,7 @@ async fn process_search_request(
         }
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let displayed_fields = index.displayed_fields_ids(rtxn)?;
+        let displayed_fields = index.displayed_fields_ids(rtxn, &fields_ids_map)?;
         for &document_id in &search_result.documents_ids {
             let obkv = index.document(rtxn, document_id)?;
             let document = match displayed_fields {
@@ -475,7 +465,13 @@ async fn process_search_request(
 
     let (rtxn, search_result) = output?;
     let render_alloc = Bump::new();
-    let formatted = format_documents(&rtxn, &index, &render_alloc, search_result.documents_ids)?;
+    let formatted = format_documents(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        &render_alloc,
+        search_result.documents_ids,
+    )?;
     let text = formatted.join("\n");
     drop(rtxn);
 
@@ -492,7 +488,8 @@ async fn non_streamed_chat(
     chat_completion: CreateChatCompletionRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
+    let features = index_scheduler.features();
+    features.check_chat_completions("using the /chats chat completions route")?;
 
     // Create analytics aggregator
     let aggregate = ChatCompletionAggregator::from_request(
@@ -561,20 +558,17 @@ async fn non_streamed_chat(
 
                 for call in meili_calls {
                     let result = match serde_json::from_str(&call.function.arguments) {
-                        Ok(SearchInIndexParameters { index_uid, q, filter }) => {
-                            process_search_request(
-                                &index_scheduler,
-                                auth_ctrl.clone(),
-                                &search_queue,
-                                auth_token,
-                                index_uid,
-                                start_time,
-                                q,
-                                filter,
-                            )
-                            .await
-                            .map_err(|e| e.to_string())
-                        }
+                        Ok(query) => process_search_request(
+                            &index_scheduler,
+                            features,
+                            auth_ctrl.clone(),
+                            &search_queue,
+                            auth_token,
+                            start_time,
+                            query,
+                        )
+                        .await
+                        .map_err(|e| e.to_string()),
                         Err(err) => Err(err.to_string()),
                     };
 
@@ -627,7 +621,8 @@ async fn streamed_chat(
     mut chat_completion: CreateChatCompletionRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<impl Responder, ResponseError> {
-    index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
+    let features = index_scheduler.features();
+    features.check_chat_completions("using the /chats chat completions route")?;
     let filters = index_scheduler.filters();
 
     if let Some(n) = chat_completion.n.filter(|&n| n != 1) {
@@ -877,6 +872,8 @@ async fn handle_meili_tools(
     FunctionSupport { report_progress, report_sources, append_to_conversation, .. }: FunctionSupport,
     start_time: time::OffsetDateTime,
 ) -> Result<(), SendError<Event>> {
+    let features = index_scheduler.features();
+
     for call in meili_calls {
         if report_progress {
             tx.report_search_progress(
@@ -901,15 +898,14 @@ async fn handle_meili_tools(
         let mut error = None;
 
         let result = match serde_json::from_str(&call.function.arguments) {
-            Ok(SearchInIndexParameters { index_uid, q, filter }) => match process_search_request(
+            Ok(query) => match process_search_request(
                 index_scheduler,
+                features,
                 auth_ctrl.clone(),
                 search_queue,
                 auth_token,
-                index_uid,
                 start_time,
-                q,
-                filter,
+                query,
             )
             .await
             {
@@ -979,46 +975,63 @@ impl Call {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct SearchInIndexParameters {
     /// The index uid to search in.
-    index_uid: String,
+    index_uid: IndexUid,
     /// The query parameter to use.
     q: Option<String>,
     /// The filter parameter to use.
-    filter: Option<String>,
+    filter: Option<serde_json::Value>,
 }
 
+impl PreprocessableQuery for SearchInIndexParameters {
+    fn index_uid(&self) -> &IndexUid {
+        &self.index_uid
+    }
+
+    fn filter_field(&mut self) -> &mut Option<Value> {
+        &mut self.filter
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn format_facet_distributions(
     index_scheduler: &IndexScheduler,
     index: &Index,
     rtxn: &RoTxn,
+    fields_ids_map: &FieldsIdsMap,
     max_values_per_facet: usize,
     search_rules: Option<IndexSearchRules>,
     index_uid: &str,
-    progress: &Progress,
 ) -> index_scheduler::Result<String> {
+    let features = index_scheduler.features();
     let from_milli = |err| index_scheduler::Error::from_milli(err, Some(index_uid.to_string()));
     let universe = 'filter: {
         let Some(search_rules) = search_rules else { break 'filter index.documents_ids(rtxn)? };
         let Some(filter) = search_rules.filter else {
             break 'filter index.documents_ids(rtxn)?;
         };
-        let Some(filter) = Filter::from_json(&filter).map_err(from_milli)? else {
+
+        // TODO: should we support foreign filters from the search rules?
+        let Some(filter) = parse_local_index_filter(
+            &filter,
+            Some(index_uid),
+            features,
+            Code::InvalidSearchFilter,
+        )?
+        else {
             break 'filter index.documents_ids(rtxn)?;
         };
-        let filter =
-            filter_into_index_filter(filter, index, rtxn, index_scheduler, progress, index_uid)?;
-        filter.evaluate(rtxn, index).map_err(from_milli)?
+        filter.evaluate(rtxn, index, fields_ids_map).map_err(from_milli)?
     };
     let rules = index.filterable_attributes_rules(rtxn)?;
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
     let filterable_attributes = fields_ids_map
         .names()
         .filter(|name| rules.iter().any(|rule| matches!(rule.match_str(name), PatternMatch::Match)))
         .map(|name| (name, OrderBy::Count));
     let facets_distribution = index
-        .facets_distribution(rtxn)
+        .facets_distribution(rtxn, fields_ids_map)
         .max_values_per_facet(max_values_per_facet)
         .candidates(universe)
         .facets(filterable_attributes)

@@ -118,8 +118,9 @@ fn test_attribute_fid_simple() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -146,8 +147,9 @@ fn test_attribute_fid_ngrams() {
     "###);
 
     let txn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-    let mut s = index.search(&txn);
+    let mut s = index.search(&txn, &fields_ids_map);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);

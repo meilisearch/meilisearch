@@ -14,7 +14,7 @@ use crate::error::UserError;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
-use crate::{DocumentId, FieldId, Index, OrderBy, Result};
+use crate::{DocumentId, FieldId, FieldsIdsMap, Index, OrderBy, Result};
 
 /// The maximum number of values per facet returned by the facet search route.
 const DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET: usize = 100;
@@ -23,18 +23,25 @@ pub struct SearchForFacetValues<'a> {
     query: Option<String>,
     facet: String,
     index: &'a Index,
+    fields_ids_map: &'a FieldsIdsMap,
     rtxn: &'a RoTxn<'a>,
     max_values: usize,
     locales: Option<Vec<Language>>,
 }
 
 impl<'a> SearchForFacetValues<'a> {
-    pub fn new(facet: String, index: &'a Index, rtxn: &'a RoTxn<'a>) -> SearchForFacetValues<'a> {
+    pub fn new(
+        facet: String,
+        index: &'a Index,
+        rtxn: &'a RoTxn<'a>,
+        fields_ids_map: &'a FieldsIdsMap,
+    ) -> SearchForFacetValues<'a> {
         SearchForFacetValues {
             query: None,
             facet,
             index,
             rtxn,
+            fields_ids_map,
             max_values: DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET,
             locales: None,
         }
@@ -95,8 +102,7 @@ impl<'a> SearchForFacetValues<'a> {
             .into());
         };
 
-        let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let Some(fid) = fields_ids_map.id(&self.facet) else {
+        let Some(fid) = self.fields_ids_map.id(&self.facet) else {
             return Ok((Vec::new(), order));
         };
 
@@ -129,7 +135,8 @@ impl<'a> SearchForFacetValues<'a> {
                 let query = query.as_ref();
 
                 let authorize_typos = index.authorize_typos(rtxn)?;
-                let field_authorizes_typos = !index.exact_attributes_ids(rtxn)?.contains(&fid);
+                let field_authorizes_typos =
+                    !index.exact_attributes_ids(rtxn, self.fields_ids_map)?.contains(&fid);
 
                 if authorize_typos && field_authorizes_typos {
                     let exact_words_fst = index.exact_words(rtxn)?;

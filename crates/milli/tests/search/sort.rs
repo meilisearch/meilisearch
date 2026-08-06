@@ -11,10 +11,17 @@ fn sort_ranking_rule_missing() {
     // sortables: `tag` and `asc_desc_rank`
     let index = search::setup_search_index_with_criteria(&criteria);
     let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
     let progress = Progress::default();
-    let mut search =
-        Search::new(&rtxn, &index, "index_uid", time::OffsetDateTime::now_utc(), &progress);
+    let mut search = Search::new(
+        &rtxn,
+        &index,
+        &fields_ids_map,
+        "index_uid",
+        time::OffsetDateTime::now_utc(),
+        &progress,
+    );
     search.query(search::TEST_QUERY);
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 

@@ -25,7 +25,7 @@ use crate::search::new::{
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Position, Result, SearchContext, SearchStep, UserError,
+    FieldsIdsMap, Index, Position, Result, SearchContext, SearchStep, UserError,
 };
 
 // Building these factories is not free.
@@ -51,8 +51,82 @@ pub struct SemanticSearch {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PinDoc {
-    pub pos: Position,
-    pub doc_id: DocumentId,
+    pub position: Position,
+    pub precedence: Precedence,
+    pub id: DocumentId,
+}
+
+impl Pin for PinDoc {
+    type Id = DocumentId;
+
+    fn id(&self) -> Self::Id {
+        self.id
+    }
+
+    fn position(&self) -> u32 {
+        self.position
+    }
+
+    fn precedence(&self) -> Precedence {
+        self.precedence
+    }
+}
+
+pub trait Pin {
+    type Id;
+    fn id(&self) -> Self::Id;
+
+    fn position(&self) -> u32;
+    fn precedence(&self) -> Precedence;
+
+    fn sort(pins: &mut Vec<Self>)
+    where
+        Self: Sized,
+    {
+        pins.sort_unstable_by_key(|item| (item.position(), item.precedence()));
+    }
+
+    fn dedup(pins: &mut Vec<Self>)
+    where
+        Self: Sized,
+        Self::Id: PartialEq + PartialOrd + Ord,
+    {
+        pins.sort_unstable_by_key(|item| (item.id(), item.precedence(), item.position()));
+        pins.dedup_by_key(|item| item.id());
+    }
+
+    fn dedup_and_sort(pins: &mut Vec<Self>)
+    where
+        Self: Sized,
+        Self::Id: PartialEq + PartialOrd + Ord,
+    {
+        Self::dedup(pins);
+        Self::sort(pins);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Precedence(pub Option<u64>);
+
+impl PartialOrd for Precedence {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Overrides the natural order of Option such that None is considered greater than Some rather than Less
+///
+/// When both options are Some, use the regular order.
+impl Ord for Precedence {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering::*;
+        match (self.0, other.0) {
+            (None, None) => Equal,
+            (None, Some(_)) => Greater,
+            (Some(_), None) => Less,
+            (Some(left), Some(right)) => left.cmp(&right),
+        }
+    }
 }
 
 pub struct Search<'a> {
@@ -73,6 +147,7 @@ pub struct Search<'a> {
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    fields_ids_map: &'a FieldsIdsMap,
     index_uid: &'a str,
     before_search: OffsetDateTime,
     semantic: Option<SemanticSearch>,
@@ -88,6 +163,7 @@ impl<'a> Search<'a> {
     pub fn new(
         rtxn: &'a heed::RoTxn<'a>,
         index: &'a Index,
+        fields_ids_map: &'a FieldsIdsMap,
         index_uid: &'a str,
         before_search: OffsetDateTime,
         progress: &'a Progress,
@@ -109,6 +185,7 @@ impl<'a> Search<'a> {
             words_limit: 10,
             rtxn,
             index,
+            fields_ids_map,
             index_uid,
             before_search,
             semantic: None,
@@ -254,17 +331,34 @@ impl<'a> Search<'a> {
         };
 
         if has_vector {
-            let ctx =
-                SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)
+            let ctx = SearchContext::new(
+                self.index,
+                self.rtxn,
+                self.fields_ids_map,
+                self.index_uid,
+                self.before_search,
+            )?;
+            filtered_universe(
+                ctx.index,
+                ctx.txn,
+                self.fields_ids_map,
+                &self.filter,
+                self.candidates,
+                self.progress,
+            )
         } else {
             Ok(self.execute()?.candidates)
         }
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut ctx =
-            SearchContext::new(self.index, self.rtxn, self.index_uid, self.before_search)?;
+        let mut ctx = SearchContext::new(
+            self.index,
+            self.rtxn,
+            self.fields_ids_map,
+            self.index_uid,
+            self.before_search,
+        )?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {
             ctx.attributes_to_search_on(searchable_attributes)?;
@@ -298,11 +392,17 @@ impl<'a> Search<'a> {
             }
         }
 
-        let mut universe =
-            filtered_universe(ctx.index, ctx.txn, &self.filter, self.candidates, self.progress)?;
+        let mut universe = filtered_universe(
+            ctx.index,
+            ctx.txn,
+            self.fields_ids_map,
+            &self.filter,
+            self.candidates,
+            self.progress,
+        )?;
 
         let (query_terms, pins, used_negative_operator) =
-            self.build_located_query_terms(&mut ctx, &mut universe)?;
+            self.build_located_query_terms(&mut ctx, self.filter.as_ref(), &mut universe)?;
 
         let mut query_vector = None;
         let PartialSearchResult {
@@ -391,38 +491,41 @@ impl<'a> Search<'a> {
     pub fn build_located_query_terms(
         &self,
         ctx: &mut SearchContext<'_>,
+        filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
     ) -> Result<(Option<(QueryGraph, Vec<new::LocatedQueryTerm>)>, Vec<PinDoc>, bool), Error> {
         let mut used_negative_operator = false;
 
         let mut ignored = RoaringBitmap::new();
 
-        let query_graph_terms = if let Some(query) = self.query.as_deref() {
-            let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
+        let query_graph_terms =
+            if let Some(query) = self.query.as_deref().filter(|q| !q.trim().is_empty()) {
+                let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
 
-            let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
-                extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
+                let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
+                    extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
 
-            used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+                used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
-            ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
-            ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
+                ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
+                ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
 
-            if query_terms.is_empty() {
-                // Do a placeholder search instead
-                None
+                if query_terms.is_empty() {
+                    // Do a placeholder search instead
+                    None
+                } else {
+                    Some((graph, query_terms))
+                }
             } else {
-                Some((graph, query_terms))
-            }
-        } else {
-            None
-        };
+                None
+            };
 
         let pins = self
             .dynamic_search_rules
             .map(|(dsrs, fuel)| {
                 dsrs.resolve_pins(
                     query_graph_terms.as_ref().map(|(_, terms)| terms.as_slice()).unwrap_or(&[]),
+                    filter,
                     universe,
                     ctx,
                     fuel,
@@ -456,6 +559,7 @@ impl fmt::Debug for Search<'_> {
             max_total_hits,
             rtxn: _,
             index: _,
+            fields_ids_map: _,
             index_uid: _,
             before_search: _,
             semantic,
@@ -547,7 +651,8 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
 }
 
 pub fn merge_positioned_hits_into_page<P, T, FPos, FMap>(
-    pins: Vec<P>,
+    pin_count: usize,
+    pins: impl IntoIterator<Item = P>,
     skip: usize,
     take: usize,
     organic_hits: Vec<T>,
@@ -558,12 +663,12 @@ where
     FPos: Fn(&P) -> Position,
     FMap: FnMut(P) -> T,
 {
-    if pins.is_empty() {
+    if pin_count == 0 {
         return organic_hits;
     }
 
     let page_end = skip.saturating_add(take);
-    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
+    let capacity = take.min(organic_hits.len().saturating_add(pin_count));
     let mut merged_hits = Vec::with_capacity(capacity);
     let mut organic_hits = organic_hits.into_iter();
     let mut pins = pins.into_iter().peekable();
@@ -642,7 +747,15 @@ mod test {
             .unwrap();
 
         let txn = index.write_txn().unwrap();
-        let mut search = Search::new(&txn, &index, "test", OffsetDateTime::now_utc(), &progress);
+        let fields_ids_map = index.fields_ids_map(&txn).unwrap();
+        let mut search = Search::new(
+            &txn,
+            &index,
+            &fields_ids_map,
+            "test",
+            OffsetDateTime::now_utc(),
+            &progress,
+        );
 
         search.query("김밥");
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
