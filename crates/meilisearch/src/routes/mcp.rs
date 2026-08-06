@@ -107,6 +107,7 @@ async fn mcp(
                 }),
                 capabilities: Some(McpCapabilities { tools: Some(BTreeMap::new()), resources: None }),
                 content: None,
+                structured_content: None,
                 instructions: Some(
                     "Meilisearch is a prefix search engine that supports filtering, sorting, federated searching (mixing results from different indexes).\
                     Meilisearch support classic keyword search but may also support semantic search throught the use of the hybrid search parameter.
@@ -124,6 +125,7 @@ async fn mcp(
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
                 content: None,
+                structured_content: None,
                 tools: Some(list_tools()),
                 resources: None,
                 prompts: None,
@@ -142,6 +144,7 @@ async fn mcp(
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
                 content: None,
+                structured_content: None,
                 tools: None,
                 resources: Some(vec![]),
                 prompts: None,
@@ -160,6 +163,7 @@ async fn mcp(
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
                 content: None,
+                structured_content: None,
                 tools: None,
                 resources: None,
                 prompts: Some(vec![]),
@@ -200,6 +204,7 @@ async fn mcp(
                         let body = response.into_body();
                         // TODO do not unwrap
                         let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        let text = String::from_utf8_lossy(&bytes).into_owned();
                         // TODO this blocks and would have been better to have a serde_json
                         //      RawValue to avoid allocating too much and simply pass through
                         let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
@@ -211,7 +216,8 @@ async fn mcp(
                                 tools: None,
                                 resources: None,
                                 prompts: None,
-                                content: Some(vec![content]),
+                                content: Some(vec![McpTextContentOutput::from(text)]),
+                                structured_content: Some(content),
                                 supported_versions: None,
                                 meta: None,
                                 capabilities: None,
@@ -272,6 +278,7 @@ async fn mcp(
                         let body = response.into_body();
                         // TODO do not unwrap
                         let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        let text = String::from_utf8_lossy(&bytes).into_owned();
                         // TODO this blocks and would have been better to have a serde_json
                         //      RawValue to avoid allocating too much and simply pass through
                         let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
@@ -283,7 +290,8 @@ async fn mcp(
                                 tools: None,
                                 resources: None,
                                 prompts: None,
-                                content: Some(vec![content]),
+                                content: Some(vec![McpTextContentOutput::from(text)]),
+                                structured_content: Some(content),
                                 supported_versions: None,
                                 meta: None,
                                 capabilities: None,
@@ -345,6 +353,7 @@ async fn mcp(
                         let body = response.into_body();
                         // TODO do not unwrap
                         let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        let text = String::from_utf8_lossy(&bytes).into_owned();
                         // TODO this blocks and would have been better to have a serde_json
                         //      RawValue to avoid allocating too much and simply pass through
                         let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
@@ -356,7 +365,8 @@ async fn mcp(
                                 tools: None,
                                 resources: None,
                                 prompts: None,
-                                content: Some(vec![content]),
+                                content: Some(vec![McpTextContentOutput::from(text)]),
+                                structured_content: Some(content),
                                 supported_versions: None,
                                 meta: None,
                                 capabilities: None,
@@ -640,7 +650,9 @@ pub struct McpResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     capabilities: Option<McpCapabilities>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<Vec<serde_json::Value>>,
+    content: Option<Vec<McpTextContentOutput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    structured_content: Option<serde_json::Value>,
     /// Optional natural-language guidance for LLMs on how to use this server effectively.
     #[serde(skip_serializing_if = "Option::is_none")]
     instructions: Option<String>,
@@ -665,6 +677,19 @@ pub struct McpCapabilities {
     tools: Option<BTreeMap<(), ()>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     resources: Option<BTreeMap<(), ()>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpTextContentOutput {
+    r#type: &'static str, // text
+    text: String,
+}
+
+impl From<String> for McpTextContentOutput {
+    fn from(text: String) -> Self {
+        McpTextContentOutput { r#type: "text", text }
+    }
 }
 
 /// <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#data-types>
