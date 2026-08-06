@@ -189,11 +189,14 @@ async fn run_http(
         analytics,
     };
 
-    let http_server =
+    let mut http_server =
         HttpServer::new(move || create_app(services.clone(), opt.clone(), enable_dashboard))
             // Disable signals allows the server to terminate immediately when a user enter CTRL-C
             .disable_signals()
             .keep_alive(KeepAlive::Os);
+    if let Some(http_workers) = opt_clone.http_workers {
+        http_server = http_server.workers(http_workers.get());
+    }
 
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
