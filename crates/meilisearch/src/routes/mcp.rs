@@ -6,11 +6,15 @@ use std::sync::LazyLock;
 use actix_web::web::{self, Data};
 use actix_web::{FromRequest, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
+use deserr::{Deserr, IntoValue, Value, ValuePointerRef};
+use either::Either;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::batch_view::BatchView;
-use meilisearch_types::deserr::DeserrJsonError;
+use meilisearch_types::deserr::{DeserrError, DeserrJson, DeserrJsonError};
+use meilisearch_types::error::deserr_codes::BadRequest;
 use meilisearch_types::error::ResponseError;
 use serde::Serialize;
+use serde_json::Number;
 use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref, Schema};
 use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
 use utoipa::{OpenApi as _, ToSchema};
@@ -425,12 +429,12 @@ fn list_tools() -> Vec<McpToolDefinition> {
 }
 
 #[routes::request]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct McpQuery {
     #[request(required)]
     jsonrpc: String,
     #[request(required)]
-    id: String, // RequestId: String | Number
+    id: RequestId,
     #[request(required)]
     method: String, // server/discover, tools/list, resources/list
     #[request(required)]
@@ -438,7 +442,7 @@ pub struct McpQuery {
 }
 
 #[routes::request]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ParamsWithMeta {
     #[request(required, rename = "_meta")]
     meta: McpClientMeta,
@@ -449,7 +453,7 @@ pub struct ParamsWithMeta {
 }
 
 #[routes::request]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct McpClientMeta {
     #[request(required, rename = "io.modelcontextprotocol/protocolVersion")]
     protocol_version: String, // "2026-07-28"
@@ -460,7 +464,7 @@ pub struct McpClientMeta {
 }
 
 #[routes::request]
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ClientServerInfo {
     #[request(required)]
     name: String, // "ExampleClient"
@@ -468,16 +472,67 @@ pub struct ClientServerInfo {
     version: String, // "1.0.0"
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
+pub struct RequestId {
+    #[serde(serialize_with = "either::serde_untagged::serialize")]
+    inner: Either<Number, String>,
+}
+
+impl Deserr<DeserrError<DeserrJson, BadRequest>> for RequestId {
+    fn deserialize_from_value<V: IntoValue>(
+        value: Value<V>,
+        _location: ValuePointerRef,
+    ) -> Result<Self, DeserrError<DeserrJson, BadRequest>> {
+        let inner = match value {
+            Value::Integer(x) => Either::Left(Number::from(x)),
+            Value::NegativeInteger(x) => Either::Left(Number::from(x)),
+            Value::Float(x) => Either::Left(Number::from_f64(x).unwrap()), // TODO don't unwrap
+            Value::String(string) => Either::Right(string),
+            _otherwise => todo!(),
+        };
+
+        Ok(RequestId { inner })
+    }
+}
+
+impl utoipa::ToSchema for RequestId {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("RequestId")
+    }
+}
+impl utoipa::PartialSchema for RequestId {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::OneOfBuilder::new()
+            .item(
+                utoipa::openapi::ObjectBuilder::new()
+                    .schema_type(utoipa::openapi::schema::Type::Integer),
+            )
+            .item(
+                utoipa::openapi::ObjectBuilder::new()
+                    .schema_type(utoipa::openapi::schema::Type::String),
+            )
+            .description(Some(
+                "The request ID MUST NOT match the ID of any other request \
+                the sender has issued and not yet received a response for",
+            ))
+            .into()
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpResponse {
     jsonrpc: String,
-    id: String, // RequestId: String | Number
+    id: RequestId,
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<McpResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<McpError>,
 }
+
+// manual impl: not sure why we need the Serialize derive
+impl routes::RequestBody for RequestId {}
 
 // TODO prefer using an enum, but utoipa is not cool with it
 const RESULT_TYPE_COMPLETE: &str = "complete";
@@ -637,7 +692,3 @@ fn clean_refs_from_schema(components: &Components, schema: RefOr<Schema>) -> Opt
 
     Some(schema)
 }
-
-// TODO that's the way to go
-// #[derive(Debug, Serialize, ToSchema)]
-// pub struct RequestId(Either<Number, String>);
