@@ -441,11 +441,16 @@ pub struct McpQuery {
     params: ParamsWithMeta,
 }
 
+// TODO Note that I would have rather refused unknown fields
+//      but online playgrounds provide more fields than expected
+//      <https://mcpplaygroundonline.com>
 #[routes::request(allow_unknown_fields)]
 #[derive(Debug, Clone)]
 pub struct ParamsWithMeta {
-    #[request(required, rename = "_meta")]
-    meta: McpClientMeta,
+    // TODO Note that this field MUST be provided but most playground don't
+    //      <https://mcpplaygroundonline.com>
+    #[request(default, rename = "_meta")]
+    meta: Option<McpClientMeta>,
     #[request(default)]
     name: Option<String>, // get_weather
     #[request(default)]
