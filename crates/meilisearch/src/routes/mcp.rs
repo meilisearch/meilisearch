@@ -441,7 +441,7 @@ pub struct McpQuery {
     params: ParamsWithMeta,
 }
 
-#[routes::request]
+#[routes::request(allow_unknown_fields)]
 #[derive(Debug, Clone)]
 pub struct ParamsWithMeta {
     #[request(required, rename = "_meta")]
