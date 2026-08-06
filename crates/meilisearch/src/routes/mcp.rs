@@ -211,7 +211,7 @@ async fn mcp(
                                 tools: None,
                                 resources: None,
                                 prompts: None,
-                                content,
+                                content: Some(vec![content]),
                                 supported_versions: None,
                                 meta: None,
                                 capabilities: None,
@@ -283,7 +283,7 @@ async fn mcp(
                                 tools: None,
                                 resources: None,
                                 prompts: None,
-                                content,
+                                content: Some(vec![content]),
                                 supported_versions: None,
                                 meta: None,
                                 capabilities: None,
@@ -356,7 +356,7 @@ async fn mcp(
                                 tools: None,
                                 resources: None,
                                 prompts: None,
-                                content,
+                                content: Some(vec![content]),
                                 supported_versions: None,
                                 meta: None,
                                 capabilities: None,
@@ -640,7 +640,7 @@ pub struct McpResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     capabilities: Option<McpCapabilities>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<serde_json::Value>,
+    content: Option<Vec<serde_json::Value>>,
     /// Optional natural-language guidance for LLMs on how to use this server effectively.
     #[serde(skip_serializing_if = "Option::is_none")]
     instructions: Option<String>,
