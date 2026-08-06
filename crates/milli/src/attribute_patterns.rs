@@ -31,7 +31,7 @@ impl utoipa::PartialSchema for AttributePatterns {
                 matches exactly, `overview_*` matches any attribute starting with \
                 `overview_`, and `*_date` matches any attribute ending with `_date`.",
             ))
-            .examples(std::iter::once(r#"["title", "description_*", "*_date", "*content*"]"#))
+            .examples(std::iter::once(r#"["*", "title", "description_*", "*_date", "*content*"]"#))
             .into()
     }
 }
