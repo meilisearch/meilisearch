@@ -94,6 +94,7 @@ async fn mcp(
             id,
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
+                is_error: None,
                 supported_versions: Some(SUPPORTED_VERSIONS),
                 tools: None,
                 resources: None,
@@ -124,6 +125,7 @@ async fn mcp(
             id,
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
+                is_error: None,
                 content: None,
                 structured_content: None,
                 tools: Some(list_tools()),
@@ -143,6 +145,7 @@ async fn mcp(
             id,
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
+                is_error: None,
                 content: None,
                 structured_content: None,
                 tools: None,
@@ -162,6 +165,7 @@ async fn mcp(
             id,
             result: Some(McpResult {
                 result_type: RESULT_TYPE_COMPLETE,
+                is_error: None,
                 content: None,
                 structured_content: None,
                 tools: None,
@@ -213,6 +217,7 @@ async fn mcp(
                             id,
                             result: Some(McpResult {
                                 result_type: RESULT_TYPE_COMPLETE,
+                                is_error: None,
                                 tools: None,
                                 resources: None,
                                 prompts: None,
@@ -233,12 +238,22 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: None,
-                            error: Some(McpError {
-                                code: 0,
-                                message: response.message().to_string(),
-                                data: McpErrorData::from(&response),
+                            result: Some(McpResult {
+                                result_type: RESULT_TYPE_COMPLETE,
+                                is_error: None,
+                                tools: None,
+                                resources: None,
+                                prompts: None,
+                                structured_content: Some(serde_json::to_value(&response).unwrap()),
+                                content: Some(vec![McpTextContentOutput::from(response.message)]),
+                                supported_versions: None,
+                                meta: None,
+                                capabilities: None,
+                                instructions: None,
+                                ttl_ms: 0, // immediately stale
+                                cache_scope: cache_scope::PRIVATE,
                             }),
+                            error: None,
                         }
                     },
                 }
@@ -287,6 +302,7 @@ async fn mcp(
                             id,
                             result: Some(McpResult {
                                 result_type: RESULT_TYPE_COMPLETE,
+                                is_error: None,
                                 tools: None,
                                 resources: None,
                                 prompts: None,
@@ -307,12 +323,22 @@ async fn mcp(
                         McpResponse {
                         jsonrpc,
                         id,
-                        result: None,
-                        error: Some(McpError {
-                            code: 0,
-                            message: response.message().to_string(),
-                            data: McpErrorData::from(&response),
+                        result: Some(McpResult {
+                            result_type: RESULT_TYPE_COMPLETE,
+                            is_error: None,
+                            tools: None,
+                            resources: None,
+                            prompts: None,
+                            structured_content: Some(serde_json::to_value(&response).unwrap()),
+                            content: Some(vec![McpTextContentOutput::from(response.message)]),
+                            supported_versions: None,
+                            meta: None,
+                            capabilities: None,
+                            instructions: None,
+                            ttl_ms: 0, // immediately stale
+                            cache_scope: cache_scope::PRIVATE,
                         }),
+                        error: None,
                     }
                     },
                 }
@@ -362,6 +388,7 @@ async fn mcp(
                             id,
                             result: Some(McpResult {
                                 result_type: RESULT_TYPE_COMPLETE,
+                                is_error: None,
                                 tools: None,
                                 resources: None,
                                 prompts: None,
@@ -382,16 +409,27 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: None,
-                            error: Some(McpError {
-                                code: 0,
-                                message: response.message().to_string(),
-                                data: McpErrorData::from(&response),
+                            result: Some(McpResult {
+                                result_type: RESULT_TYPE_COMPLETE,
+                                is_error: None,
+                                tools: None,
+                                resources: None,
+                                prompts: None,
+                                structured_content: Some(serde_json::to_value(&response).unwrap()),
+                                content: Some(vec![McpTextContentOutput::from(response.message)]),
+                                supported_versions: None,
+                                meta: None,
+                                capabilities: None,
+                                instructions: None,
+                                ttl_ms: 0, // immediately stale
+                                cache_scope: cache_scope::PRIVATE,
                             }),
+                            error: None,
                         }
                     },
                 }
             }
+            // TODO <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling>
             Some(_unknown) => todo!("Unknown tool. What to do?"),
             None => todo!("no params name. what do to?"),
         },
@@ -636,6 +674,8 @@ const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28"];
 #[serde(rename_all = "camelCase")]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_error: Option<bool>,
     /// Protocol versions the server supports. The client should choose one of these for subsequent requests.
     #[serde(skip_serializing_if = "Option::is_none")]
     supported_versions: Option<&'static [&'static str]>,
