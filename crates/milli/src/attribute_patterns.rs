@@ -2,23 +2,38 @@ use std::fmt;
 
 use deserr::Deserr;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::is_faceted_by;
 
-/// A collection of patterns used to match attribute names. Patterns can
-/// include wildcards (`*`) for flexible matching. For example, `title`
-/// matches exactly, `overview_*` matches any attribute starting with
-/// `overview_`, and `*_date` matches any attribute ending with `_date`.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+// Note about the ToSchema macro: As it doesn't support the
+// `transparent` repr we have to implement it ourselves.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct AttributePatterns {
-    /// An array of attribute name patterns. Each pattern can be an exact
-    /// attribute name, or include wildcards (`*`) at the start, end, or
-    /// both. Examples: `["title", "description_*", "*_date", "*content*"]`.
-    #[schema(example = json!(["title", "overview_*", "release_date"]))]
     pub patterns: Vec<String>,
+}
+
+impl utoipa::ToSchema for AttributePatterns {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("AttributePatterns")
+    }
+}
+impl utoipa::PartialSchema for AttributePatterns {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ArrayBuilder::new()
+            .items(utoipa::openapi::schema::Object::with_type(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .description(Some(
+                "A collection of patterns used to match attribute names. Patterns can \
+                include wildcards (`*`) for flexible matching. For example, `title` \
+                matches exactly, `overview_*` matches any attribute starting with \
+                `overview_`, and `*_date` matches any attribute ending with `_date`.",
+            ))
+            .examples(std::iter::once(r#"["title", "description_*", "*_date", "*content*"]"#))
+            .into()
+    }
 }
 
 // manual impl: transparent + manual deserr impl
