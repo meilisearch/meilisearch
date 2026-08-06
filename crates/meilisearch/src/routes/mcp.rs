@@ -390,7 +390,7 @@ async fn mcp(
         }
     };
 
-    dbg!(&response);
+    eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
 
     Ok(HttpResponse::Ok().json(response))
 }
