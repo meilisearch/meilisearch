@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Cursor;
 use std::mem;
 use std::sync::LazyLock;
@@ -96,7 +97,7 @@ async fn mcp(
                         version: "1.53.0".to_string(),
                     },
                 }),
-                capabilities: Some(McpCapabilities { tools: Some(list_tools()), resources: None }),
+                capabilities: Some(McpCapabilities { tools: Some(BTreeMap::new()), resources: None }),
                 content: None,
                 instructions: Some(
                     "Meilisearch is a prefix search engine that supports filtering, sorting, federated searching (mixing results from different indexes).\
@@ -468,6 +469,7 @@ pub struct ClientServerInfo {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpResponse {
     jsonrpc: String,
     id: String, // RequestId: String | Number
@@ -483,10 +485,11 @@ const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28"];
 // const RESULT_TYPE_INPUT_REQUIRED: &str = "input_required";
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
     /// Protocol versions the server supports. The client should choose one of these for subsequent requests.
-    #[serde(rename = "supportedVersions", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     supported_versions: Option<&'static [&'static str]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<McpToolDefinition>>,
@@ -503,17 +506,21 @@ pub struct McpResult {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpServerMeta {
     #[serde(rename = "io.modelcontextprotocol/serverInfo")]
     server_info: ClientServerInfo,
 }
 
+// Note that those fields are just a way to display the
+// capabilities and must always stay empty or not shown at all.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<McpToolDefinition>>,
+    tools: Option<BTreeMap<(), ()>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    resources: Option<Vec<McpToolDefinition>>,
+    resources: Option<BTreeMap<(), ()>>,
 }
 
 /// <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#data-types>
