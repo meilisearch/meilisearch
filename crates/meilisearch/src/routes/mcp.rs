@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::Cursor;
-use std::mem;
 use std::sync::LazyLock;
+use std::{fmt, mem};
 
 use actix_web::web::{self, Data};
 use actix_web::{FromRequest, HttpRequest, HttpResponse};
@@ -85,7 +85,9 @@ async fn mcp(
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_mcp_route("calling the /mcp route")?;
 
-    let McpQuery { jsonrpc, id, method, mut params } = body.into_inner();
+    let body = body.into_inner();
+    let McpQuery { jsonrpc, id, method, mut params } = dbg!(body);
+
     let response = match method.as_str() {
         method::SERVER_DISCOVERY => McpResponse {
             jsonrpc,
@@ -388,6 +390,8 @@ async fn mcp(
         }
     };
 
+    dbg!(&response);
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -596,7 +600,7 @@ impl utoipa::PartialSchema for RequestId {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpResponse {
     jsonrpc: String,
@@ -615,7 +619,7 @@ const RESULT_TYPE_COMPLETE: &str = "complete";
 const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28"];
 // const RESULT_TYPE_INPUT_REQUIRED: &str = "input_required";
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
@@ -645,7 +649,7 @@ pub struct McpResult {
     cache_scope: &'static str, // public | private
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerMeta {
     #[serde(rename = "io.modelcontextprotocol/serverInfo")]
@@ -654,7 +658,7 @@ pub struct McpServerMeta {
 
 // Note that those fields are just a way to display the
 // capabilities and must always stay empty or not shown at all.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -678,6 +682,16 @@ pub struct McpToolDefinition {
     input_schema: Schema,
     // outputSchema (optional)
     // annotations (optional)
+}
+
+impl fmt::Debug for McpToolDefinition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpToolDefinition")
+            .field("name", &self.name)
+            .field("title", &self.title)
+            .field("description", &self.description)
+            .finish()
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
