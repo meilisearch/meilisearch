@@ -80,179 +80,47 @@ async fn mcp(
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_mcp_route("calling the /mcp route")?;
 
-    fn ref_to_schema<'a>(components: &'a Components, r#ref: &Ref) -> Option<&'a Schema> {
-        let location = r#ref.ref_location.strip_prefix("#/components/schemas/")?;
-        match components.schemas.get(location)? {
-            RefOr::Ref(r#ref) => ref_to_schema(components, r#ref),
-            RefOr::T(schema) => Some(schema),
-        }
-    }
-
-    fn clean_refs_from_schema(components: &Components, schema: RefOr<Schema>) -> Option<Schema> {
-        let mut schema = match schema {
-            RefOr::Ref(r#ref) => ref_to_schema(components, &r#ref)?.clone(),
-            RefOr::T(schema) => schema,
-        };
-
-        match schema {
-            Schema::Array(ref mut array) => {
-                array.items = match mem::replace(&mut array.items, ArrayItems::False) {
-                    ArrayItems::RefOrSchema(ref_or_schema) => {
-                        let schema = clean_refs_from_schema(components, *ref_or_schema)?;
-                        ArrayItems::RefOrSchema(Box::new(RefOr::T(schema)))
-                    }
-                    ArrayItems::False => ArrayItems::False,
-                };
-            }
-            Schema::Object(ref mut object) => {
-                object.properties = mem::take(&mut object.properties)
-                    .into_iter()
-                    .map(|(property, schema)| {
-                        clean_refs_from_schema(components, schema)
-                            .map(|schema| (property, RefOr::T(schema)))
-                    })
-                    .collect::<Option<_>>()?;
-
-                object.additional_properties = match mem::take(&mut object.additional_properties) {
-                    Some(props) => match *props {
-                        AdditionalProperties::RefOr(r#ref) => {
-                            let schema = clean_refs_from_schema(&components, r#ref)?;
-                            Some(Box::new(AdditionalProperties::RefOr(RefOr::T(schema))))
-                        }
-                        AdditionalProperties::FreeForm(yes) => {
-                            Some(Box::new(AdditionalProperties::FreeForm(yes)))
-                        }
-                    },
-                    None => None,
-                };
-            }
-            Schema::OneOf(ref mut one_of) => {
-                one_of.items = mem::take(&mut one_of.items)
-                    .into_iter()
-                    .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
-                    .collect::<Option<_>>()?;
-            }
-            Schema::AllOf(ref mut all_of) => {
-                all_of.items = mem::take(&mut all_of.items)
-                    .into_iter()
-                    .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
-                    .collect::<Option<_>>()?;
-            }
-            Schema::AnyOf(ref mut any_of) => {
-                any_of.items = mem::take(&mut any_of.items)
-                    .into_iter()
-                    .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
-                    .collect::<Option<_>>()?;
-            }
-            _ => return None,
-        };
-
-        Some(schema)
-    }
-
     let McpQuery { jsonrpc, id, method, mut params } = body.into_inner();
     let response = match method.as_str() {
-        method::SERVER_DISCOVERY => {
-            McpResponse {
-                jsonrpc,
-                id,
-                result: Some(McpResult {
-                    result_type: RESULT_TYPE_COMPLETE,
-                    content: None,
-                    tools: Some(vec![
-                        {
-                            // search in indexes
-                            let route = "/multi-search";
-                            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-                            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-                            let operation = paths.post.as_ref().unwrap();
-                            let request_body = operation.request_body.as_ref().unwrap();
-                            let content = request_body.content.get("application/json").unwrap();
-                            let ref_or_schema = content.schema.clone().unwrap();
-                            let schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
-
-                            McpToolDefinition {
-                                name: tool_name::SEARCH_IN_INDEXES.to_string(),
-                                title: operation.summary.clone().unwrap(),
-                                description: operation.description.clone().unwrap(),
-                                // TODO maybe add more information about how to do filtering and such?
-                                //      It is probably better to explain it in the OpenAPI description or examples maybe?
-                                input_schema: schema,
-                            }
-                        },
-                        {
-                            // facet search
-                            let route = "/indexes/{index_uid}/facet-search";
-                            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-                            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-                            let operation = paths.post.as_ref().unwrap();
-                            let request_body = operation.request_body.as_ref().unwrap();
-                            let content = request_body.content.get("application/json").unwrap();
-                            let ref_or_schema = content.schema.clone().unwrap();
-                            let mut schema =
-                                clean_refs_from_schema(components, ref_or_schema).unwrap();
-
-                            // We modify the schema's properties a bit to expose
-                            // the original-in-the-path index uid.
-                            if let Some(param) = operation
-                                .parameters
-                                .as_ref()
-                                .unwrap()
-                                .iter()
-                                .find(|param| param.name == "index_uid")
-                            {
-                                if let Schema::Object(object) = &mut schema {
-                                    let ref_or_schema = param.schema.clone().unwrap();
-                                    let mut schema =
-                                        clean_refs_from_schema(components, ref_or_schema).unwrap();
-                                    if let Schema::Object(object) = &mut schema {
-                                        object.description = param.description.clone();
-                                    }
-                                    object
-                                        .properties
-                                        .insert("indexUid".to_string(), RefOr::T(schema));
-                                }
-                            }
-
-                            McpToolDefinition {
-                                name: tool_name::FACET_SEARCH.to_string(),
-                                title: operation.summary.clone().unwrap(),
-                                description: operation.description.clone().unwrap(),
-                                input_schema: schema,
-                            }
-                        },
-                        {
-                            // list indexes
-                            let route = "/indexes";
-                            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-                            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-                            let operation = paths.get.as_ref().unwrap();
-
-                            let mut properties = ObjectBuilder::new();
-                            for parameter in operation.parameters.as_ref().unwrap() {
-                                let ref_or_schema = parameter.schema.as_ref().unwrap().clone();
-                                let mut schema =
-                                    clean_refs_from_schema(components, ref_or_schema).unwrap();
-                                if let Schema::Object(object) = &mut schema {
-                                    object.description = parameter.description.clone();
-                                }
-                                properties = properties.property(&parameter.name, schema);
-                            }
-
-                            let schema = Schema::from(properties);
-
-                            McpToolDefinition {
-                                name: tool_name::LIST_INDEXES.to_string(),
-                                title: operation.summary.clone().unwrap(),
-                                description: operation.description.clone().unwrap(),
-                                input_schema: schema,
-                            }
-                        },
-                    ]),
+        method::SERVER_DISCOVERY => McpResponse {
+            jsonrpc,
+            id,
+            result: Some(McpResult {
+                result_type: RESULT_TYPE_COMPLETE,
+                supported_versions: Some(SUPPORTED_VERSIONS),
+                tools: None,
+                meta: Some(McpServerMeta {
+                    // TODO what's my name and version?
+                    server_info: ClientServerInfo {
+                        name: "Meilisearch".to_string(),
+                        version: "1.53.0".to_string(),
+                    },
                 }),
-                error: None,
-            }
-        }
+                capabilities: Some(McpCapabilities { tools: Some(list_tools()), resources: None }),
+                content: None,
+                instructions: Some(
+                    "Meilisearch is a prefix search engine that supports filtering, sorting, federated searching (mixing results from different indexes).\
+                    Meilisearch support classic keyword search but may also support semantic search throught the use of the hybrid search parameter.
+                    You can find more information about available embedders for a given index when describing an index.\
+                    We recommend you to use the listIndexes, describeIndex, and searchInIndexes tools, in this order to fetch the right informations from the available indexes.".to_string()
+                ),
+            }),
+            error: None,
+        },
+        method::TOOLS_LIST => McpResponse {
+            jsonrpc,
+            id,
+            result: Some(McpResult {
+                result_type: RESULT_TYPE_COMPLETE,
+                content: None,
+                tools: Some(list_tools()),
+                supported_versions: None,
+                meta: None,
+                capabilities: None,
+                instructions: None,
+            }),
+            error: None,
+        },
         method::TOOLS_CALL => match params.name.as_deref() {
             Some(tool_name::SEARCH_IN_INDEXES) => {
                 // request
@@ -291,6 +159,10 @@ async fn mcp(
                                 result_type: RESULT_TYPE_COMPLETE,
                                 tools: None,
                                 content,
+                                supported_versions: None,
+                                meta: None,
+                                capabilities: None,
+                                instructions: None,
                             }),
                             error: None,
                         }
@@ -352,6 +224,10 @@ async fn mcp(
                                 result_type: RESULT_TYPE_COMPLETE,
                                 tools: None,
                                 content,
+                                supported_versions: None,
+                                meta: None,
+                                capabilities: None,
+                                instructions: None,
                             }),
                             error: None,
                         }
@@ -414,6 +290,10 @@ async fn mcp(
                                 result_type: RESULT_TYPE_COMPLETE,
                                 tools: None,
                                 content,
+                                supported_versions: None,
+                                meta: None,
+                                capabilities: None,
+                                instructions: None,
                             }),
                             error: None,
                         }
@@ -444,6 +324,8 @@ async fn mcp(
 pub mod method {
     pub const SERVER_DISCOVERY: &str = "server/discover";
     pub const TOOLS_CALL: &str = "tools/call";
+    pub const TOOLS_LIST: &str = "tools/list";
+    pub const RESOURCES_LIST: &str = "resources/list";
 }
 
 pub mod tool_name {
@@ -451,6 +333,94 @@ pub mod tool_name {
     pub const DESCRIBE_INDEXES: &str = "describeIndexes";
     pub const SEARCH_IN_INDEXES: &str = "searchInIndexes";
     pub const FACET_SEARCH: &str = "facetSearch";
+}
+
+fn list_tools() -> Vec<McpToolDefinition> {
+    vec![
+        {
+            // search in indexes
+            let route = "/multi-search";
+            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
+            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
+            let operation = paths.post.as_ref().unwrap();
+            let request_body = operation.request_body.as_ref().unwrap();
+            let content = request_body.content.get("application/json").unwrap();
+            let ref_or_schema = content.schema.clone().unwrap();
+            let schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+
+            McpToolDefinition {
+                name: tool_name::SEARCH_IN_INDEXES.to_string(),
+                title: operation.summary.clone().unwrap(),
+                description: operation.description.clone().unwrap(),
+                // TODO maybe add more information about how to do filtering and such?
+                //      It is probably better to explain it in the OpenAPI description or examples maybe?
+                input_schema: schema,
+            }
+        },
+        {
+            // facet search
+            let route = "/indexes/{index_uid}/facet-search";
+            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
+            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
+            let operation = paths.post.as_ref().unwrap();
+            let request_body = operation.request_body.as_ref().unwrap();
+            let content = request_body.content.get("application/json").unwrap();
+            let ref_or_schema = content.schema.clone().unwrap();
+            let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+
+            // We modify the schema's properties a bit to expose
+            // the original-in-the-path index uid.
+            if let Some(param) = operation
+                .parameters
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|param| param.name == "index_uid")
+            {
+                if let Schema::Object(object) = &mut schema {
+                    let ref_or_schema = param.schema.clone().unwrap();
+                    let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                    if let Schema::Object(object) = &mut schema {
+                        object.description = param.description.clone();
+                    }
+                    object.properties.insert("indexUid".to_string(), RefOr::T(schema));
+                }
+            }
+
+            McpToolDefinition {
+                name: tool_name::FACET_SEARCH.to_string(),
+                title: operation.summary.clone().unwrap(),
+                description: operation.description.clone().unwrap(),
+                input_schema: schema,
+            }
+        },
+        {
+            // list indexes
+            let route = "/indexes";
+            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
+            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
+            let operation = paths.get.as_ref().unwrap();
+
+            let mut properties = ObjectBuilder::new();
+            for parameter in operation.parameters.as_ref().unwrap() {
+                let ref_or_schema = parameter.schema.as_ref().unwrap().clone();
+                let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                if let Schema::Object(object) = &mut schema {
+                    object.description = parameter.description.clone();
+                }
+                properties = properties.property(&parameter.name, schema);
+            }
+
+            let schema = Schema::from(properties);
+
+            McpToolDefinition {
+                name: tool_name::LIST_INDEXES.to_string(),
+                title: operation.summary.clone().unwrap(),
+                description: operation.description.clone().unwrap(),
+                input_schema: schema,
+            }
+        },
+    ]
 }
 
 #[routes::request]
@@ -470,7 +440,7 @@ pub struct McpQuery {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamsWithMeta {
     #[request(required, rename = "_meta")]
-    meta: Meta,
+    meta: McpClientMeta,
     #[request(default)]
     name: Option<String>, // get_weather
     #[request(default)]
@@ -479,18 +449,18 @@ pub struct ParamsWithMeta {
 
 #[routes::request]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Meta {
+pub struct McpClientMeta {
     #[request(required, rename = "io.modelcontextprotocol/protocolVersion")]
     protocol_version: String, // "2026-07-28"
     #[request(required, rename = "io.modelcontextprotocol/clientInfo")]
-    client_info: ClientInfo,
+    client_info: ClientServerInfo,
     #[request(default, rename = "io.modelcontextprotocol/clientCapabilities")]
     client_capabilities: serde_json::Value,
 }
 
 #[routes::request]
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClientInfo {
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ClientServerInfo {
     #[request(required)]
     name: String, // "ExampleClient"
     #[request(required)]
@@ -509,15 +479,41 @@ pub struct McpResponse {
 
 // TODO prefer using an enum, but utoipa is not cool with it
 const RESULT_TYPE_COMPLETE: &str = "complete";
+const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28"];
 // const RESULT_TYPE_INPUT_REQUIRED: &str = "input_required";
 
 #[derive(Serialize)]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
+    /// Protocol versions the server supports. The client should choose one of these for subsequent requests.
+    #[serde(rename = "supportedVersions", skip_serializing_if = "Option::is_none")]
+    supported_versions: Option<&'static [&'static str]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<McpToolDefinition>>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    meta: Option<McpServerMeta>,
+    /// Capabilities the server supports (tools, resources, prompts, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capabilities: Option<McpCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<serde_json::Value>,
+    /// Optional natural-language guidance for LLMs on how to use this server effectively.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructions: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct McpServerMeta {
+    #[serde(rename = "io.modelcontextprotocol/serverInfo")]
+    server_info: ClientServerInfo,
+}
+
+#[derive(Serialize)]
+pub struct McpCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<McpToolDefinition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<serde_json::Value>,
+    resources: Option<Vec<McpToolDefinition>>,
 }
 
 /// <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#data-types>
@@ -563,6 +559,76 @@ impl From<&ResponseError> for McpErrorData {
             error_link: response_error.error_link().to_string(),
         }
     }
+}
+
+fn ref_to_schema<'a>(components: &'a Components, r#ref: &Ref) -> Option<&'a Schema> {
+    let location = r#ref.ref_location.strip_prefix("#/components/schemas/")?;
+    match components.schemas.get(location)? {
+        RefOr::Ref(r#ref) => ref_to_schema(components, r#ref),
+        RefOr::T(schema) => Some(schema),
+    }
+}
+
+fn clean_refs_from_schema(components: &Components, schema: RefOr<Schema>) -> Option<Schema> {
+    let mut schema = match schema {
+        RefOr::Ref(r#ref) => ref_to_schema(components, &r#ref)?.clone(),
+        RefOr::T(schema) => schema,
+    };
+
+    match schema {
+        Schema::Array(ref mut array) => {
+            array.items = match mem::replace(&mut array.items, ArrayItems::False) {
+                ArrayItems::RefOrSchema(ref_or_schema) => {
+                    let schema = clean_refs_from_schema(components, *ref_or_schema)?;
+                    ArrayItems::RefOrSchema(Box::new(RefOr::T(schema)))
+                }
+                ArrayItems::False => ArrayItems::False,
+            };
+        }
+        Schema::Object(ref mut object) => {
+            object.properties = mem::take(&mut object.properties)
+                .into_iter()
+                .map(|(property, schema)| {
+                    clean_refs_from_schema(components, schema)
+                        .map(|schema| (property, RefOr::T(schema)))
+                })
+                .collect::<Option<_>>()?;
+
+            object.additional_properties = match mem::take(&mut object.additional_properties) {
+                Some(props) => match *props {
+                    AdditionalProperties::RefOr(r#ref) => {
+                        let schema = clean_refs_from_schema(&components, r#ref)?;
+                        Some(Box::new(AdditionalProperties::RefOr(RefOr::T(schema))))
+                    }
+                    AdditionalProperties::FreeForm(yes) => {
+                        Some(Box::new(AdditionalProperties::FreeForm(yes)))
+                    }
+                },
+                None => None,
+            };
+        }
+        Schema::OneOf(ref mut one_of) => {
+            one_of.items = mem::take(&mut one_of.items)
+                .into_iter()
+                .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
+                .collect::<Option<_>>()?;
+        }
+        Schema::AllOf(ref mut all_of) => {
+            all_of.items = mem::take(&mut all_of.items)
+                .into_iter()
+                .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
+                .collect::<Option<_>>()?;
+        }
+        Schema::AnyOf(ref mut any_of) => {
+            any_of.items = mem::take(&mut any_of.items)
+                .into_iter()
+                .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
+                .collect::<Option<_>>()?;
+        }
+        _ => return None,
+    };
+
+    Some(schema)
 }
 
 // TODO that's the way to go
