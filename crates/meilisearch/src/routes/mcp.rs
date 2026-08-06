@@ -519,7 +519,7 @@ pub struct ParamsWithMeta {
     arguments: Option<serde_json::Value>, // RawValue would have been better
 }
 
-#[routes::request]
+#[routes::request(allow_unknown_fields)]
 #[derive(Debug, Clone)]
 pub struct McpClientMeta {
     #[request(required, rename = "io.modelcontextprotocol/protocolVersion")]
