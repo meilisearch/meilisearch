@@ -257,6 +257,8 @@ async fn mcp(
                 let query = serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
                 let mut payload = actix_web::dev::Payload::from(query);
 
+                dbg!(&index_uid);
+
                 // TODO don't unwrap
                 let guarded_index_scheduler =
                     GuardedData::from_request(&request, &mut payload).await.unwrap();
