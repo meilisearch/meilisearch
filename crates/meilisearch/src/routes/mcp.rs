@@ -94,6 +94,8 @@ async fn mcp(
                 result_type: RESULT_TYPE_COMPLETE,
                 supported_versions: Some(SUPPORTED_VERSIONS),
                 tools: None,
+                resources: None,
+                prompts: None,
                 meta: Some(McpServerMeta {
                     // TODO what's my name and version?
                     server_info: ClientServerInfo {
@@ -119,6 +121,40 @@ async fn mcp(
                 result_type: RESULT_TYPE_COMPLETE,
                 content: None,
                 tools: Some(list_tools()),
+                resources: None,
+                prompts: None,
+                supported_versions: None,
+                meta: None,
+                capabilities: None,
+                instructions: None,
+            }),
+            error: None,
+        },
+        method::RESOURCES_LIST => McpResponse {
+            jsonrpc,
+            id,
+            result: Some(McpResult {
+                result_type: RESULT_TYPE_COMPLETE,
+                content: None,
+                tools: None,
+                resources: Some(vec![]),
+                prompts: None,
+                supported_versions: None,
+                meta: None,
+                capabilities: None,
+                instructions: None,
+            }),
+            error: None,
+        },
+        method::PROMPTS_LIST => McpResponse {
+            jsonrpc,
+            id,
+            result: Some(McpResult {
+                result_type: RESULT_TYPE_COMPLETE,
+                content: None,
+                tools: None,
+                resources: None,
+                prompts: Some(vec![]),
                 supported_versions: None,
                 meta: None,
                 capabilities: None,
@@ -163,6 +199,8 @@ async fn mcp(
                             result: Some(McpResult {
                                 result_type: RESULT_TYPE_COMPLETE,
                                 tools: None,
+                                resources: None,
+                                prompts: None,
                                 content,
                                 supported_versions: None,
                                 meta: None,
@@ -228,6 +266,8 @@ async fn mcp(
                             result: Some(McpResult {
                                 result_type: RESULT_TYPE_COMPLETE,
                                 tools: None,
+                                resources: None,
+                                prompts: None,
                                 content,
                                 supported_versions: None,
                                 meta: None,
@@ -294,6 +334,8 @@ async fn mcp(
                             result: Some(McpResult {
                                 result_type: RESULT_TYPE_COMPLETE,
                                 tools: None,
+                                resources: None,
+                                prompts: None,
                                 content,
                                 supported_versions: None,
                                 meta: None,
@@ -319,7 +361,7 @@ async fn mcp(
             None => todo!("no params name. what do to?"),
         },
         _otherwise => {
-            todo!("break and send an error")
+            todo!("unwkown method: {_otherwise}")
         }
     };
 
@@ -331,6 +373,7 @@ pub mod method {
     pub const TOOLS_CALL: &str = "tools/call";
     pub const TOOLS_LIST: &str = "tools/list";
     pub const RESOURCES_LIST: &str = "resources/list";
+    pub const PROMPTS_LIST: &str = "prompts/list";
 }
 
 pub mod tool_name {
@@ -553,6 +596,12 @@ pub struct McpResult {
     supported_versions: Option<&'static [&'static str]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<McpToolDefinition>>,
+    // Note that for know we will simply return an empty list of resources
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resources: Option<Vec<()>>,
+    // Note that for know we will simply return an empty list of prompt
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompts: Option<Vec<()>>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     meta: Option<McpServerMeta>,
     /// Capabilities the server supports (tools, resources, prompts, etc.).
