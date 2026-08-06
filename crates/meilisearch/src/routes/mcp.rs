@@ -111,6 +111,8 @@ async fn mcp(
                     You can find more information about available embedders for a given index when describing an index.\
                     We recommend you to use the listIndexes, describeIndex, and searchInIndexes tools, in this order to fetch the right informations from the available indexes.".to_string()
                 ),
+                ttl_ms: 300_000, // 5min
+                cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
         },
@@ -127,6 +129,8 @@ async fn mcp(
                 meta: None,
                 capabilities: None,
                 instructions: None,
+                ttl_ms: 86_400_000, // 24h
+                cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
         },
@@ -143,6 +147,8 @@ async fn mcp(
                 meta: None,
                 capabilities: None,
                 instructions: None,
+                ttl_ms: 86_400_000, // 24h
+                cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
         },
@@ -159,6 +165,8 @@ async fn mcp(
                 meta: None,
                 capabilities: None,
                 instructions: None,
+                ttl_ms: 86_400_000, // 24h
+                cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
         },
@@ -206,6 +214,8 @@ async fn mcp(
                                 meta: None,
                                 capabilities: None,
                                 instructions: None,
+                                ttl_ms: 0, // immediately stale
+                                cache_scope: cache_scope::PRIVATE,
                             }),
                             error: None,
                         }
@@ -273,6 +283,8 @@ async fn mcp(
                                 meta: None,
                                 capabilities: None,
                                 instructions: None,
+                                ttl_ms: 0, // immediately stale
+                                cache_scope: cache_scope::PRIVATE,
                             }),
                             error: None,
                         }
@@ -341,6 +353,8 @@ async fn mcp(
                                 meta: None,
                                 capabilities: None,
                                 instructions: None,
+                                ttl_ms: 300_000, // 5min
+                                cache_scope: cache_scope::PRIVATE,
                             }),
                             error: None,
                         }
@@ -381,6 +395,11 @@ pub mod tool_name {
     pub const DESCRIBE_INDEXES: &str = "describeIndexes";
     pub const SEARCH_IN_INDEXES: &str = "searchInIndexes";
     pub const FACET_SEARCH: &str = "facetSearch";
+}
+
+pub mod cache_scope {
+    pub const PUBLIC: &str = "public";
+    pub const PRIVATE: &str = "private";
 }
 
 fn list_tools() -> Vec<McpToolDefinition> {
@@ -612,6 +631,9 @@ pub struct McpResult {
     /// Optional natural-language guidance for LLMs on how to use this server effectively.
     #[serde(skip_serializing_if = "Option::is_none")]
     instructions: Option<String>,
+    // <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#cacheable-model>
+    ttl_ms: usize,             // 300000
+    cache_scope: &'static str, // public | private
 }
 
 #[derive(Serialize)]
