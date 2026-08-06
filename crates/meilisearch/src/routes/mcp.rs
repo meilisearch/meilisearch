@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 
 use actix_web::web::{self, Data};
 use actix_web::{FromRequest, HttpRequest, HttpResponse};
-use deserr::actix_web::AwebJson;
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -150,7 +150,7 @@ async fn mcp(
         Some(schema)
     }
 
-    let McpQuery { jsonrpc, id, method, params } = body.into_inner();
+    let McpQuery { jsonrpc, id, method, mut params } = body.into_inner();
     let response = match method.as_str() {
         method::SERVER_DISCOVERY => {
             McpResponse {
@@ -169,20 +169,15 @@ async fn mcp(
                             let request_body = operation.request_body.as_ref().unwrap();
                             let content = request_body.content.get("application/json").unwrap();
                             let ref_or_schema = content.schema.clone().unwrap();
-                            let schema = clean_refs_from_schema(components, ref_or_schema);
+                            let schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
 
                             McpToolDefinition {
                                 name: tool_name::SEARCH_IN_INDEXES.to_string(),
                                 title: operation.summary.clone().unwrap(),
                                 description: operation.description.clone().unwrap(),
-                                input_schema: {
-                                    // TODO maybe add more information about how to do filtering and such?
-                                    //      It is probably better to explain it in the OpenAPI description or examples maybe?
-                                    serde_json::json!({
-                                        "type": "object",
-                                        "properties": schema,
-                                    })
-                                },
+                                // TODO maybe add more information about how to do filtering and such?
+                                //      It is probably better to explain it in the OpenAPI description or examples maybe?
+                                input_schema: schema,
                             }
                         },
                         {
@@ -194,7 +189,8 @@ async fn mcp(
                             let request_body = operation.request_body.as_ref().unwrap();
                             let content = request_body.content.get("application/json").unwrap();
                             let ref_or_schema = content.schema.clone().unwrap();
-                            let mut schema = clean_refs_from_schema(components, ref_or_schema);
+                            let mut schema =
+                                clean_refs_from_schema(components, ref_or_schema).unwrap();
 
                             // We modify the schema's properties a bit to expose
                             // the original-in-the-path index uid.
@@ -205,11 +201,16 @@ async fn mcp(
                                 .iter()
                                 .find(|param| param.name == "index_uid")
                             {
-                                if let Some(Schema::Object(object)) = &mut schema {
-                                    object.properties.insert(
-                                        "indexUid".to_string(),
-                                        param.schema.clone().unwrap(),
-                                    );
+                                if let Schema::Object(object) = &mut schema {
+                                    let ref_or_schema = param.schema.clone().unwrap();
+                                    let mut schema =
+                                        clean_refs_from_schema(components, ref_or_schema).unwrap();
+                                    if let Schema::Object(object) = &mut schema {
+                                        object.description = param.description.clone();
+                                    }
+                                    object
+                                        .properties
+                                        .insert("indexUid".to_string(), RefOr::T(schema));
                                 }
                             }
 
@@ -217,10 +218,7 @@ async fn mcp(
                                 name: tool_name::FACET_SEARCH.to_string(),
                                 title: operation.summary.clone().unwrap(),
                                 description: operation.description.clone().unwrap(),
-                                input_schema: serde_json::json!({
-                                    "type": "object",
-                                    "properties": schema,
-                                }),
+                                input_schema: schema,
                             }
                         },
                         {
@@ -247,7 +245,7 @@ async fn mcp(
                                 name: tool_name::LIST_INDEXES.to_string(),
                                 title: operation.summary.clone().unwrap(),
                                 description: operation.description.clone().unwrap(),
-                                input_schema: serde_json::to_value(schema).unwrap(),
+                                input_schema: schema,
                             }
                         },
                     ]),
@@ -259,9 +257,8 @@ async fn mcp(
             Some(tool_name::SEARCH_IN_INDEXES) => {
                 // request
                 // TODO it cannot fail, right? right!?
-                let multi_search_query =
-                    serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
-                let mut payload = actix_web::dev::Payload::from(multi_search_query);
+                let query = serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
+                let mut payload = actix_web::dev::Payload::from(query);
 
                 // // TODO don't unwrap
                 let guarded_index_scheduler =
@@ -313,10 +310,16 @@ async fn mcp(
             Some(tool_name::FACET_SEARCH) => {
                 // request
                 // TODO it cannot fail, right? right!?
-                let index_uid = params.arguments.as_ref().unwrap()["indexUid"].to_string();
-                let multi_search_query =
-                    serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
-                let mut payload = actix_web::dev::Payload::from(multi_search_query);
+                let index_uid = match params.arguments.as_mut() {
+                    Some(serde_json::Value::Object(object)) => {
+                        // We remove the extra indexUid parameter to make sure the route accepts the payload
+                        object.remove("indexUid").expect("missing indexUid parameter").to_string()
+                    }
+                    _ => panic!("Invalid arguments: expected Object found something else"),
+                };
+
+                let query = serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
+                let mut payload = actix_web::dev::Payload::from(query);
 
                 // TODO don't unwrap
                 let guarded_index_scheduler =
@@ -333,6 +336,68 @@ async fn mcp(
                     analytics,
                 )
                 .await;
+
+                match result {
+                    Ok(response) => {
+                        let body = response.into_body();
+                        // TODO do not unwrap
+                        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        // TODO this blocks and would have been better to have a serde_json
+                        //      RawValue to avoid allocating too much and simply pass through
+                        let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(McpResult {
+                                result_type: RESULT_TYPE_COMPLETE,
+                                tools: None,
+                                content,
+                            }),
+                            error: None,
+                        }
+                    }
+                    Err(response) => McpResponse {
+                        jsonrpc,
+                        id,
+                        result: None,
+                        error: Some(McpError {
+                            code: 0,
+                            message: response.message().to_string(),
+                            data: McpErrorData::from(&response),
+                        }),
+                    },
+                }
+            }
+            Some(tool_name::LIST_INDEXES) => {
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Pagination {
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    offset: Option<u64>,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    limit: Option<u64>,
+                }
+
+                let pagination = match params.arguments.as_mut() {
+                    Some(serde_json::Value::Object(object)) => {
+                        // We remove the extra indexUid parameter to make sure the route accepts the payload
+                        // TODO better error message in case the time is invalid
+                        let offset = object.remove("offset").and_then(|off| off.as_u64());
+                        let limit = object.remove("limit").and_then(|limit| limit.as_u64());
+                        Pagination { offset, limit }
+                    }
+                    _ => panic!("Invalid arguments: expected Object found something else"),
+                };
+
+                // // TODO don't unwrap
+                let mut payload = actix_web::dev::Payload::None;
+                let guarded_index_scheduler =
+                    GuardedData::from_request(&request, &mut payload).await.unwrap();
+                let query = serde_urlencoded::to_string(&pagination).unwrap();
+                // TODO don't unwrap
+                let paginate = AwebQueryParameter::from_query(&query).unwrap();
+
+                let result = super::indexes::list_indexes(guarded_index_scheduler, paginate).await;
 
                 match result {
                     Ok(response) => {
@@ -432,7 +497,7 @@ pub struct ClientInfo {
     version: String, // "1.0.0"
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Serialize)]
 pub struct McpResponse {
     jsonrpc: String,
     id: String, // RequestId: String | Number
@@ -446,7 +511,7 @@ pub struct McpResponse {
 const RESULT_TYPE_COMPLETE: &str = "complete";
 // const RESULT_TYPE_INPUT_REQUIRED: &str = "input_required";
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Serialize)]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -456,7 +521,7 @@ pub struct McpResult {
 }
 
 /// <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#data-types>
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpToolDefinition {
     /// Unique identifier for the tool.
@@ -467,7 +532,7 @@ pub struct McpToolDefinition {
     description: String,
     // icons (optional)
     /// JSON Schema defining expected parameters.
-    input_schema: serde_json::Value,
+    input_schema: Schema,
     // outputSchema (optional)
     // annotations (optional)
 }
