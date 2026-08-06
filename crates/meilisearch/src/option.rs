@@ -33,7 +33,6 @@ const MEILI_TASK_WEBHOOK_URL: &str = "MEILI_TASK_WEBHOOK_URL";
 const MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER: &str = "MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER";
 const MEILI_NO_ANALYTICS: &str = "MEILI_NO_ANALYTICS";
 const MEILI_HTTP_PAYLOAD_SIZE_LIMIT: &str = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT";
-const MEILI_HTTP_WORKERS: &str = "MEILI_HTTP_WORKERS";
 const MEILI_SSL_CERT_PATH: &str = "MEILI_SSL_CERT_PATH";
 const MEILI_SSL_KEY_PATH: &str = "MEILI_SSL_KEY_PATH";
 const MEILI_SSL_AUTH_PATH: &str = "MEILI_SSL_AUTH_PATH";
@@ -270,11 +269,6 @@ pub struct Opt {
     #[clap(long, env = MEILI_HTTP_PAYLOAD_SIZE_LIMIT, default_value_t = default_http_payload_size_limit())]
     #[serde(default = "default_http_payload_size_limit")]
     pub http_payload_size_limit: Byte,
-
-    /// Sets the number of HTTP workers to start, i.e. the number of threads that will handle
-    /// incoming requests. Defaults to the number of logical CPUs if unset.
-    #[clap(long, env = MEILI_HTTP_WORKERS)]
-    pub http_workers: Option<NonZeroUsize>,
 
     /// Sets the server's SSL certificates.
     #[clap(long, env = MEILI_SSL_CERT_PATH, value_parser)]
@@ -592,7 +586,6 @@ impl Opt {
             max_index_size: _,
             max_task_db_size: _,
             http_payload_size_limit,
-            http_workers,
             ssl_cert_path,
             ssl_key_path,
             ssl_auth_path,
@@ -652,9 +645,6 @@ impl Opt {
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
         );
-        if let Some(http_workers) = http_workers {
-            export_to_env_if_not_present(MEILI_HTTP_WORKERS, http_workers.to_string());
-        }
         if let Some(ssl_cert_path) = ssl_cert_path {
             export_to_env_if_not_present(MEILI_SSL_CERT_PATH, ssl_cert_path);
         }
