@@ -599,9 +599,15 @@ pub async fn get_health(
             .json(HealthResponse { status: HealthStatus::MustRestart }));
     }
 
-    search_queue.health().unwrap();
-    index_scheduler.health().unwrap();
-    auth_controller.health().unwrap();
+    tokio::task::spawn_blocking(move || {
+        search_queue.health()?;
+        index_scheduler.health()?;
+        auth_controller.health()?;
+        Ok::<(), ResponseError>(())
+    })
+    .await
+    .unwrap()
+    .unwrap();
 
     Ok(HttpResponse::Ok().json(HealthResponse::default()))
 }
