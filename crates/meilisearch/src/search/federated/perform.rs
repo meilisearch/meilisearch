@@ -1674,7 +1674,7 @@ impl SearchByIndex {
                 if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
                     let mut hit = result_by_query
                         .hit_maker
-                        .make_hit(doc_id, &score)
+                        .make_hit(doc_id, &score, progress)
                         .with_index(result_by_query.query_index)?;
                     let _federation = build_federation_hit(
                         params,
@@ -1725,7 +1725,7 @@ impl SearchByIndex {
                     }
 
                     let hit: Result<_, ResponseError> = (|| {
-                        let mut hit = { hit_maker.make_hit(docid, &score)? };
+                        let mut hit = hit_maker.make_hit(docid, &score, progress)?;
 
                         if let Some(distinct) = self.federation.distinct.as_deref() {
                             let mut facet_values = Vec::new();
