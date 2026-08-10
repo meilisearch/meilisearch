@@ -1792,10 +1792,7 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
-    let fields_ids_map = {
-        let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
-        index.fields_ids_map(&rtxn)?
-    };
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let filter = match &query.filter {
         Some(filter) => {
             let filter = parse_filter(filter, Code::InvalidSearchFilter, features, None)?;

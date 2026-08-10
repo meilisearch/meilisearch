@@ -1433,10 +1433,7 @@ impl SearchByIndex {
 
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
 
-        let fidmap = {
-            let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
-            index.fields_ids_map(&rtxn).without_index()?
-        };
+        let fidmap = index.fields_ids_map(&rtxn).without_index()?;
 
         let mut degraded = false;
         let mut used_negative_operator = false;
