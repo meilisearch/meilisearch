@@ -24,6 +24,7 @@ mod test_failure;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
@@ -35,6 +36,7 @@ use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use roaring::RoaringBitmap;
+use synchronoise::SignalEvent;
 
 use crate::processing::{AtomicTaskStep, BatchProgress};
 use crate::{Error, IndexScheduler, IndexSchedulerOptions, Result, TickOutcome};
@@ -43,11 +45,8 @@ pub struct Scheduler {
     /// A boolean that can be set to true to stop the currently processing tasks.
     pub must_stop_processing: MustStopProcessing,
 
-    /// Receive signals for when to process tasks or when anything changes in the tasks queue.
-    pub wake_up: tokio::sync::broadcast::Receiver<ModifiedTasks>,
-
-    /// Send signals to wake up the listening part and react to tasks changes.
-    pub waker: tokio::sync::broadcast::Sender<ModifiedTasks>,
+    /// Get a signal when a batch needs to be processed.
+    pub(crate) wake_up: Arc<SignalEvent>,
 
     /// Whether auto-batching is enabled or not.
     pub(crate) autobatching_enabled: bool,
@@ -86,8 +85,7 @@ impl Scheduler {
     pub(crate) fn private_clone(&self) -> Self {
         Self {
             must_stop_processing: self.must_stop_processing.clone(),
-            wake_up: self.wake_up.resubscribe(),
-            waker: self.waker.clone(),
+            wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
             max_number_of_batched_tasks: self.max_number_of_batched_tasks,
             batched_tasks_size_limit: self.batched_tasks_size_limit,
@@ -129,14 +127,10 @@ impl Scheduler {
             dsr_fuel: _,
         } = options;
 
-        let (waker, wake_up) = tokio::sync::broadcast::channel(32);
-        // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
-        let _ = waker.send(ModifiedTasks::StartProcessing).unwrap();
-
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
-            wake_up,
-            waker,
+            // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
+            wake_up: Arc::new(SignalEvent::auto(true)),
             autobatching_enabled: *autobatching_enabled,
             max_number_of_batched_tasks: *max_number_of_batched_tasks,
             batched_tasks_size_limit: *batched_tasks_size_limit,
@@ -208,8 +202,6 @@ impl IndexScheduler {
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::BatchCreated);
 
-        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
-
         // 2. Process the tasks
         let res = {
             let cloned_index_scheduler = self.private_clone();
@@ -268,7 +260,6 @@ impl IndexScheduler {
         progress.update_progress(BatchProgress::WritingTasksToDisk);
 
         processing_batch.finished();
-
         // whether the batch made progress.
         // a batch make progress if it failed or if it contains at least one fully processed (or cancelled) task.
         //
@@ -446,8 +437,6 @@ impl IndexScheduler {
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
-        self.scheduler.waker.send(ModifiedTasks::Some { ids: ids.clone() }).unwrap();
-
         if batch_made_progress {
             // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
             // and then become « not found » for some time until the commit everything is written and the final commit is made.
@@ -488,10 +477,4 @@ impl IndexScheduler {
             Ok(TickOutcome::TickAgain(processed_tasks))
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum ModifiedTasks {
-    StartProcessing,
-    Some { ids: RoaringBitmap },
 }

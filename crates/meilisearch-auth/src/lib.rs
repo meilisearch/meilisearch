@@ -194,7 +194,7 @@ impl AuthController {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AuthFilter {
     search_rules: Option<SearchRules>,
     key_authorized_indexes: SearchRules,

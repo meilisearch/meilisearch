@@ -377,12 +377,6 @@ impl Queue {
 
         if let Some(task_uids) = &uids {
             let mut batches_by_task_uids = RoaringBitmap::new();
-            if task_uids.iter().any(|tuid| processing.processing.contains(*tuid)) {
-                if let Some(batch_id) = processing.batch.as_ref().map(|batch| batch.uid) {
-                    batches_by_task_uids.insert(batch_id);
-                }
-            }
-
             for task_uid in task_uids {
                 if let Some(task) = self.tasks.get_task(rtxn, *task_uid)? {
                     if let Some(batch_uid) = task.batch_uid {
@@ -390,7 +384,7 @@ impl Queue {
                     }
                 }
             }
-            batches &= batches_by_task_uids
+            batches &= batches_by_task_uids;
         }
 
         // There is no database for this query, we must retrieve the task queried by the client and ensure it's valid

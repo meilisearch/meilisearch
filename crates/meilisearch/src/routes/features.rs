@@ -48,7 +48,6 @@ pub struct ExperimentalFeaturesApi;
             disable_documents_fetch_queue: Some(false),
             legacy_search: Some(false),
             render_route: Some(false),
-            tasks_streaming_route: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -84,9 +83,6 @@ pub struct RuntimeTogglableFeatures {
     /// Enable the /logs route for log configuration
     #[request(default)]
     pub logs_route: Option<bool>,
-    /// Enable the `GET /tasks/stream` and `GET /batches/stream` SSE-based routes
-    #[request(default)]
-    pub tasks_streaming_route: Option<bool>,
     /// Enable document editing via JavaScript functions
     #[request(default)]
     pub edit_documents_by_function: Option<bool>,
@@ -146,7 +142,6 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             disable_documents_fetch_queue,
             legacy_search,
             render_route,
-            tasks_streaming_route,
         } = value;
 
         Self {
@@ -165,7 +160,6 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             disable_documents_fetch_queue: Some(disable_documents_fetch_queue),
             legacy_search,
             render_route: Some(render_route),
-            tasks_streaming_route: Some(tasks_streaming_route),
         }
     }
 }
@@ -174,7 +168,6 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
 pub struct PatchExperimentalFeatureAnalytics {
     metrics: bool,
     logs_route: bool,
-    tasks_streaming_route: bool,
     edit_documents_by_function: bool,
     contains_filter: bool,
     dynamic_search_rules: bool,
@@ -199,7 +192,6 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
         Box::new(Self {
             metrics: new.metrics,
             logs_route: new.logs_route,
-            tasks_streaming_route: new.tasks_streaming_route,
             edit_documents_by_function: new.edit_documents_by_function,
             contains_filter: new.contains_filter,
             dynamic_search_rules: new.dynamic_search_rules,
@@ -231,7 +223,6 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
         (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
             metrics: Some(true),
             logs_route: Some(false),
-            tasks_streaming_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
             dynamic_search_rules: Some(false),
@@ -303,10 +294,6 @@ async fn patch_features(
             .unwrap_or(old_features.disable_documents_fetch_queue),
         legacy_search: new_features.0.legacy_search.or(old_features.legacy_search),
         render_route: new_features.0.render_route.unwrap_or(old_features.render_route),
-        tasks_streaming_route: new_features
-            .0
-            .tasks_streaming_route
-            .unwrap_or(old_features.tasks_streaming_route),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -328,7 +315,6 @@ async fn patch_features(
         disable_documents_fetch_queue,
         legacy_search,
         render_route,
-        tasks_streaming_route,
     } = new_features;
 
     analytics.publish(
@@ -348,7 +334,6 @@ async fn patch_features(
             disable_documents_fetch_queue,
             legacy_search: legacy_search.unwrap_or(false),
             render_route,
-            tasks_streaming_route,
         },
         &req,
     );

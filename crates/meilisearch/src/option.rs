@@ -51,8 +51,6 @@ const MEILI_IGNORE_DUMP_IF_DB_EXISTS: &str = "MEILI_IGNORE_DUMP_IF_DB_EXISTS";
 const MEILI_DUMP_DIR: &str = "MEILI_DUMP_DIR";
 const MEILI_LOG_LEVEL: &str = "MEILI_LOG_LEVEL";
 const MEILI_EXPERIMENTAL_LOGS_MODE: &str = "MEILI_EXPERIMENTAL_LOGS_MODE";
-const MEILI_EXPERIMENTAL_ENABLE_TASKS_STREAMING_ROUTE: &str =
-    "MEILI_EXPERIMENTAL_ENABLE_TASKS_STREAMING_ROUTE";
 const MEILI_UPGRADE_DB: &str = "MEILI_UPGRADE_DB";
 const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE";
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
@@ -460,15 +458,6 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_enable_logs_route: bool,
 
-    /// Experimental tasks and batches routes feature. For more information,
-    /// see: <https://github.com/orgs/meilisearch/discussions/889>
-    ///
-    /// Enables the tasks and batches routes on the `GET /tasks/stream`
-    /// and `GET /batches/stream` endpoints.
-    #[clap(long, env = MEILI_EXPERIMENTAL_ENABLE_TASKS_STREAMING_ROUTE)]
-    #[serde(default)]
-    pub experimental_enable_tasks_streaming_route: bool,
-
     /// Experimental RAM reduction during indexing, do not use in production,
     /// see: <https://github.com/meilisearch/product/discussions/652>
     #[clap(long, env = MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE)]
@@ -615,7 +604,6 @@ impl Opt {
             experimental_logs_mode,
             upgrade_db,
             experimental_enable_logs_route,
-            experimental_enable_tasks_streaming_route,
             experimental_reduce_indexing_memory_usage,
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size,
@@ -699,10 +687,6 @@ impl Opt {
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE,
             experimental_enable_logs_route.to_string(),
-        );
-        export_to_env_if_not_present(
-            MEILI_EXPERIMENTAL_ENABLE_TASKS_STREAMING_ROUTE,
-            experimental_enable_tasks_streaming_route.to_string(),
         );
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_REDUCE_INDEXING_MEMORY_USAGE,
@@ -801,7 +785,6 @@ impl Opt {
             metrics: self.experimental_enable_metrics,
             legacy_search_as_default: self.experimental_legacy_search_default,
             logs_route: self.experimental_enable_logs_route,
-            tasks_streaming_route: self.experimental_enable_tasks_streaming_route,
             contains_filter: self.experimental_contains_filter,
         }
     }
