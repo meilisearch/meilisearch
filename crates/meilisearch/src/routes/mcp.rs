@@ -135,7 +135,7 @@ async fn mcp(
                 meta: None,
                 capabilities: None,
                 instructions: None,
-                ttl_ms: 86_400_000, // 24h
+                ttl_ms: 300_000, // TODO 86_400_000, // 24h
                 cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
@@ -155,7 +155,7 @@ async fn mcp(
                 meta: None,
                 capabilities: None,
                 instructions: None,
-                ttl_ms: 86_400_000, // 24h
+                ttl_ms: 300_000, // TODO 86_400_000, // 24h
                 cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
@@ -175,7 +175,7 @@ async fn mcp(
                 meta: None,
                 capabilities: None,
                 instructions: None,
-                ttl_ms: 86_400_000, // 24h
+                ttl_ms: 300_000, // TODO 86_400_000, // 24h
                 cache_scope: cache_scope::PRIVATE,
             }),
             error: None,
