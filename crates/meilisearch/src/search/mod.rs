@@ -1914,7 +1914,6 @@ pub fn perform_search(
         format,
         matching_words,
         documents_ids.iter().copied().zip(document_scores.iter()),
-        progress,
     )?;
 
     // Document join: hydrate documents based on the foreign keys
@@ -2477,9 +2476,7 @@ fn make_hits<'a>(
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
-    progress: &Progress,
 ) -> milli::Result<Vec<SearchHit>> {
-    let _step = progress.update_progress_scoped(SearchStep::Format);
     let mut documents = Vec::new();
 
     let dictionary = index.dictionary(rtxn)?;
@@ -2710,7 +2707,6 @@ pub fn perform_similar(
         format,
         Default::default(),
         documents_ids.iter().copied().zip(document_scores.iter()),
-        progress,
     )?;
 
     let max_total_hits = index

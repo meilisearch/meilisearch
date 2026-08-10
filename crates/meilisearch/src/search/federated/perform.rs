@@ -21,7 +21,7 @@ use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string,
     AttributePatterns, Deadline, DocumentId, FederatingResultsStep, FieldsIdsMap, MetadataBuilder,
-    OrderBy, PatternMatch, Pin, Precedence, SearchStep, DEFAULT_VALUES_PER_FACET,
+    OrderBy, PatternMatch, Pin, Precedence, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1667,8 +1667,6 @@ impl SearchByIndex {
         let mut documents_seen = RoaringBitmap::new();
         let mut local_pinned_hits = Vec::new();
         for result_by_query in &mut results_by_query {
-            let _step = progress.update_progress_scoped(SearchStep::Format);
-
             let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
@@ -1727,10 +1725,7 @@ impl SearchByIndex {
                     }
 
                     let hit: Result<_, ResponseError> = (|| {
-                        let mut hit = {
-                            let _step = progress.update_progress_scoped(SearchStep::Format);
-                            hit_maker.make_hit(docid, &score)?
-                        };
+                        let mut hit = { hit_maker.make_hit(docid, &score)? };
 
                         if let Some(distinct) = self.federation.distinct.as_deref() {
                             let mut facet_values = Vec::new();

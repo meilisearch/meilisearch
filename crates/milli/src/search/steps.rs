@@ -9,7 +9,6 @@ make_enum_progress! {
         KeywordRanking,
         PlaceholderRanking,
         SemanticRanking,
-        Format,
         FacetDistribution,
         Personalization,
     }
