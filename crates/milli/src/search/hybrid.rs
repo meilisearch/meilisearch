@@ -10,8 +10,8 @@ use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
 use crate::{
-    merge_positioned_hits_into_page, FieldsIdsMap, Index, MatchingWords, PinDoc, Precedence,
-    Result, Search, SearchResult,
+    merge_positioned_hits_into_page, FieldsIdsMap, Index, MatchingWords, PinDoc, Result, Search,
+    SearchResult,
 };
 
 struct ScoreWithRatioResult {
@@ -117,13 +117,9 @@ impl ScoreWithRatioResult {
 
         for results in [&mut keyword_results.document_scores, &mut vector_results.document_scores] {
             results.retain(|(doc_id, (scores, _))| {
-                if let Some(ScoreDetails::Pin { position, precedence }) = scores.first() {
+                if let Some(ScoreDetails::Pin { position }) = scores.first() {
                     if pinned_doc_ids.insert(*doc_id) {
-                        pins.push(PinDoc {
-                            position: *position,
-                            precedence: Precedence(*precedence),
-                            id: *doc_id,
-                        });
+                        pins.push(PinDoc { pos: *position, doc_id: *doc_id });
                     }
                     false
                 } else {
@@ -131,7 +127,7 @@ impl ScoreWithRatioResult {
                 }
             });
         }
-        pins.sort_by_key(|pin| pin.position);
+        pins.sort_by_key(|pin| pin.pos);
 
         // When pins are present we need the organic prefix up to the end of the
         // requested page, then we merge pins into that prefix before slicing the
@@ -252,18 +248,12 @@ fn merge_pins_into_page(
 
     let organic_hits = documents_ids.into_iter().zip(document_scores).collect();
     let merged_hits = merge_positioned_hits_into_page(
-        pins.len(),
-        pins,
+        pins.to_vec(),
         from,
         length,
         organic_hits,
-        |pin| pin.position,
-        |pin| {
-            (
-                pin.id,
-                vec![ScoreDetails::Pin { position: pin.position, precedence: pin.precedence.0 }],
-            )
-        },
+        |pin| pin.pos,
+        |pin| (pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]),
     );
 
     merged_hits.into_iter().unzip()

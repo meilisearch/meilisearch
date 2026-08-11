@@ -3,8 +3,7 @@ use std::cmp::Ordering;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::criterion::AttributeState;
-use crate::distance_between_two_points;
+use crate::{criterion::AttributeState, distance_between_two_points};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
@@ -29,7 +28,6 @@ pub enum ScoreDetails {
     /// handle pinned documents appropriately.
     Pin {
         position: u32,
-        precedence: Option<u64>,
     },
 }
 
@@ -407,11 +405,10 @@ impl ScoreDetails {
                         .insert("skipped".to_string(), serde_json::json!({ "order": order }));
                     order += 1;
                 }
-                ScoreDetails::Pin { position, precedence } => {
+                ScoreDetails::Pin { position } => {
                     let pin_details = serde_json::json!({
                         "order": order,
                         "position": position,
-                        "precedence": precedence,
                     });
                     details_map.insert("pin".into(), pin_details);
                     order += 1;

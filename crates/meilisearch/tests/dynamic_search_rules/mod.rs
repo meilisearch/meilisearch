@@ -1952,8 +1952,7 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0,
-            "precedence": null
+            "position": 0
           }
         }
       },
@@ -2020,8 +2019,7 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0,
-            "precedence": null
+            "position": 0
           }
         }
       },
@@ -2088,8 +2086,7 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0,
-            "precedence": null
+            "position": 0
           }
         }
       },
@@ -2226,8 +2223,7 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0,
-            "precedence": null
+            "position": 0
           }
         }
       },
@@ -2335,8 +2331,7 @@ async fn filter_conditions() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 1,
-            "precedence": null
+            "position": 1
           }
         }
       }
@@ -2761,8 +2756,7 @@ async fn search_applies_precedenceless_rules() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 0,
-            "precedence": 10
+            "position": 0
           }
         }
       },
@@ -2772,337 +2766,10 @@ async fn search_applies_precedenceless_rules() {
         "_rankingScoreDetails": {
           "pin": {
             "order": 0,
-            "position": 1,
-            "precedence": null
+            "position": 1
           }
         }
       }
     ]
-    "###);
-}
-
-#[actix_web::test]
-async fn multi_search_deduplicates_pins() {
-    let server = dynamic_search_rules_server().await;
-    let index = server.index("movies");
-
-    let (task, code) = index
-        .add_documents(
-            json!([
-                { "id": "organic-match", "title": "Batman Returns" },
-                { "id": "pinned-query-miss", "title": "The Matrix" },
-                { "id": "filtered-pin", "title": "Batman Returns" }
-            ]),
-            None,
-        )
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(task.uid()).await.succeeded();
-
-    let (task, code) = server
-        .create_dynamic_search_rule(
-            "pin-invoked-twice-in-multi-search",
-            json!({
-                "active": true,
-                "conditions": {
-                    "query": {
-                        "words": "returns"
-                    }
-                },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-query-miss" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
-            }),
-        )
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(task.uid()).await.succeeded();
-
-    let (value, code) = server
-        .multi_search(json!({
-          "federation": {},
-          "queries": [
-            // 2 identical queries, both trigger the DSR
-           { "q": "Batman Returns", "indexUid": "movies", "showRankingScoreDetails": true },
-           { "q": "Batman Returns", "indexUid": "movies", "showRankingScoreDetails": true }
-          ]
-        }))
-        .await;
-    snapshot!(code, @"200 OK");
-    // docs are pinned only once
-    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
-    {
-      "hits": [
-        {
-          "id": "pinned-query-miss",
-          "title": "The Matrix",
-          "_federation": {
-            "indexUid": "movies",
-            "queriesPosition": 0,
-            "weightedRankingScore": 1.0
-          },
-          "_rankingScoreDetails": {
-            "pin": {
-              "order": 0,
-              "position": 0,
-              "precedence": null
-            }
-          }
-        },
-        {
-          "id": "filtered-pin",
-          "title": "Batman Returns",
-          "_federation": {
-            "indexUid": "movies",
-            "queriesPosition": 0,
-            "weightedRankingScore": 1.0
-          },
-          "_rankingScoreDetails": {
-            "pin": {
-              "order": 0,
-              "position": 1,
-              "precedence": null
-            }
-          }
-        },
-        {
-          "id": "organic-match",
-          "title": "Batman Returns",
-          "_federation": {
-            "indexUid": "movies",
-            "queriesPosition": 0,
-            "weightedRankingScore": 1.0
-          },
-          "_rankingScoreDetails": {
-            "words": {
-              "order": 0,
-              "matchingWords": 2,
-              "maxMatchingWords": 2,
-              "score": 1.0
-            },
-            "typo": {
-              "order": 1,
-              "typoCount": 0,
-              "maxTypoCount": 2,
-              "score": 1.0
-            },
-            "proximity": {
-              "order": 2,
-              "score": 1.0
-            },
-            "attributeRank": {
-              "order": 3,
-              "score": 1.0
-            },
-            "wordPosition": {
-              "order": 4,
-              "score": 1.0
-            },
-            "exactness": {
-              "order": 5,
-              "matchType": "exactMatch",
-              "score": 1.0
-            }
-          }
-        }
-      ],
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 3,
-      "requestUid": "[uuid]"
-    }
-    "###);
-}
-
-#[actix_web::test]
-async fn multi_search_lower_precedence_pin_wins() {
-    let server = dynamic_search_rules_server().await;
-    let index = server.index("movies");
-
-    let (task, code) = index
-        .add_documents(
-            json!([
-                { "id": "organic-match", "title": "Batman Returns" },
-                { "id": "pinned-twice", "title": "The Matrix" },
-                { "id": "filtered-pin", "title": "Batman Returns" }
-            ]),
-            None,
-        )
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(task.uid()).await.succeeded();
-
-    let (task, code) = server
-        .create_dynamic_search_rule(
-            "pin-for-query-0",
-            json!({
-                "precedence": 42,
-                "active": true,
-                "conditions": {
-                    "query": {
-                        "words": "returns"
-                    }
-                },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-twice" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
-            }),
-        )
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(task.uid()).await.succeeded();
-
-    let (task, code) = server
-        .create_dynamic_search_rule(
-            "pin-for-query-1",
-            json!({
-                "precedence": 0,
-                "active": true,
-                "conditions": {
-                    "query": {
-                        "words": "batman"
-                    }
-                },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-twice" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
-            }),
-        )
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(task.uid()).await.succeeded();
-
-    let (value, code) = server
-        .multi_search(json!({
-          "federation": {},
-          "queries": [
-            // each query triggers one DSR, each DSR wants to pin the same document in different locations
-           { "q": "Returns", "indexUid": "movies", "showRankingScoreDetails": true },
-           { "q": "Batman", "indexUid": "movies", "showRankingScoreDetails": true }
-          ]
-        }))
-        .await;
-    snapshot!(code, @"200 OK");
-    // doc is only pinned once at the location (1) decided by the rule with earliest precedence
-    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
-    {
-      "hits": [
-        {
-          "id": "organic-match",
-          "title": "Batman Returns",
-          "_federation": {
-            "indexUid": "movies",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.9848484848484848
-          },
-          "_rankingScoreDetails": {
-            "words": {
-              "order": 0,
-              "matchingWords": 1,
-              "maxMatchingWords": 1,
-              "score": 1.0
-            },
-            "typo": {
-              "order": 1,
-              "typoCount": 0,
-              "maxTypoCount": 1,
-              "score": 1.0
-            },
-            "proximity": {
-              "order": 2,
-              "score": 1.0
-            },
-            "attributeRank": {
-              "order": 3,
-              "score": 1.0
-            },
-            "wordPosition": {
-              "order": 4,
-              "score": 1.0
-            },
-            "exactness": {
-              "order": 5,
-              "matchType": "matchesStart",
-              "score": 0.6666666666666666
-            }
-          }
-        },
-        {
-          "id": "pinned-twice",
-          "title": "The Matrix",
-          "_federation": {
-            "indexUid": "movies",
-            "queriesPosition": 1,
-            "weightedRankingScore": 1.0
-          },
-          "_rankingScoreDetails": {
-            "pin": {
-              "order": 0,
-              "position": 1,
-              "precedence": 0
-            }
-          }
-        },
-        {
-          "id": "filtered-pin",
-          "title": "Batman Returns",
-          "_federation": {
-            "indexUid": "movies",
-            "queriesPosition": 1,
-            "weightedRankingScore": 0.9848484848484848
-          },
-          "_rankingScoreDetails": {
-            "words": {
-              "order": 0,
-              "matchingWords": 1,
-              "maxMatchingWords": 1,
-              "score": 1.0
-            },
-            "typo": {
-              "order": 1,
-              "typoCount": 0,
-              "maxTypoCount": 1,
-              "score": 1.0
-            },
-            "proximity": {
-              "order": 2,
-              "score": 1.0
-            },
-            "attributeRank": {
-              "order": 3,
-              "score": 1.0
-            },
-            "wordPosition": {
-              "order": 4,
-              "score": 1.0
-            },
-            "exactness": {
-              "order": 5,
-              "matchType": "matchesStart",
-              "score": 0.6666666666666666
-            }
-          }
-        }
-      ],
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 3,
-      "requestUid": "[uuid]"
-    }
     "###);
 }

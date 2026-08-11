@@ -97,9 +97,8 @@ pub use self::search::similar::Similar;
 pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{
     merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, FacetDistribution,
-    Filter, FormatOptions, IndexFilter, MatchBounds, MatcherBuilder, MatchingWords, OrderBy, Pin,
-    PinDoc, Precedence, Search, SearchResult, SemanticSearch, TermsMatchingStrategy,
-    DEFAULT_VALUES_PER_FACET,
+    Filter, FormatOptions, IndexFilter, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
+    PinDoc, Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 pub use self::update::{
     ChannelCongestion, FragmentDiff, InnerIndexSettings, InnerIndexSettingsDiff, SettingsDelta,
