@@ -44,9 +44,11 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub type TaskId = u32;
 
 use std::collections::{BTreeMap, HashMap};
+use std::env::VarError;
 use std::io::{self, BufReader, Read};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -322,6 +324,19 @@ impl IndexScheduler {
         let env = unsafe {
             let env_options = heed::EnvOpenOptions::new();
             let mut env_options = env_options.read_txn_without_tls();
+
+            // You can find more details about this experimental
+            // environment variable on the following GitHub discussion:
+            // <https://github.com/orgs/meilisearch/discussions/806>
+            let max_readers = match std::env::var("MEILI_EXPERIMENTAL_TASK_QUEUE_MAX_READERS") {
+                Ok(value) => u32::from_str(&value).unwrap(),
+                Err(VarError::NotPresent) => 1024,
+                Err(VarError::NotUnicode(value)) => panic!(
+                    "Invalid unicode for the `MEILI_EXPERIMENTAL_TASK_QUEUE_MAX_READERS` env var: {value:?}"
+                ),
+            };
+            env_options.max_readers(max_readers);
+
             env_options
                 .max_dbs(Self::nb_db())
                 .map_size(budget.task_db_size)
