@@ -9,8 +9,8 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{self, TotalProcessingTimeStep};
+use meilisearch_types::milli;
+use meilisearch_types::milli::progress::{Progress, ProgressVerbosityMode};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -556,7 +556,7 @@ pub async fn search_with_url_query(
     if use_documents_retrieval {
         let request_uid = Uuid::now_v7();
         debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
-        let progress = Progress::default();
+        let progress = Progress::fast(ProgressVerbosityMode::Info);
         progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
         let permit = search_queue.try_get_search_permit().await?;
         progress.update_progress(TotalProcessingTimeStep::Search);
@@ -637,7 +637,7 @@ pub async fn legacy_search_with_url_query(
 ) -> Result<HttpResponse, ResponseError> {
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
-    let progress = Progress::default();
+    let progress = Progress::fast(ProgressVerbosityMode::Info);
     progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
@@ -880,7 +880,7 @@ pub async fn search_with_post(
         let index_uid = IndexUid::try_from(index_uid.into_inner())?;
         let request_uid = Uuid::now_v7();
 
-        let progress = Progress::default();
+        let progress = Progress::fast(ProgressVerbosityMode::Info);
         progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
         let permit = search_queue.try_get_search_permit().await?;
         progress.update_progress(TotalProcessingTimeStep::Search);
@@ -962,7 +962,7 @@ pub async fn legacy_search_with_post(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let request_uid = Uuid::now_v7();
 
-    let progress = Progress::default();
+    let progress = Progress::fast(ProgressVerbosityMode::Info);
     progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
