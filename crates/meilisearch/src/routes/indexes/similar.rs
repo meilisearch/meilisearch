@@ -206,7 +206,8 @@ async fn similar(
     index_uid: IndexUid,
     mut query: SimilarQuery,
 ) -> Result<SimilarResult, ResponseError> {
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = Progress::quiet();
 
     let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     let search_rules = auth_filter.get_index_search_rules(&index_uid);
