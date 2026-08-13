@@ -533,7 +533,7 @@ where
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share
-                    Progress::default(),
+                    Progress::quiet(),
                     &mut rng,
                     dimension,
                     is_quantizing,
@@ -545,7 +545,7 @@ where
             .map_err(InternalError::from)??;
         }
 
-        self.index.cellulite.build(self.wtxn, &|| self.should_abort.get(), &Progress::default())?;
+        self.index.cellulite.build(self.wtxn, &|| self.should_abort.get(), &Progress::quiet())?;
 
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),
@@ -562,7 +562,7 @@ where
             self.index,
             &*settings_diff,
             self.should_abort,
-            &Progress::default(),
+            &Progress::quiet(),
         )?;
 
         Ok(number_of_documents)
