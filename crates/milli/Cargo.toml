@@ -26,6 +26,7 @@ crossbeam-channel = "0.5.15"
 ureq = { version = "3.3.0", features = ["json"] }
 deserr = "0.6.4"
 either = { version = "1.15.0", features = ["serde"] }
+fastant = "0.1"
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
