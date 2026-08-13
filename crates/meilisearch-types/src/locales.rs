@@ -171,4 +171,5 @@ make_locale!(
     (Yi, "yi") => (Yid, "yid"),
     (Zh, "zh") => (Zho, "zho"),
     (Zu, "zu") => (Zul, "zul"),
+    (Cy, "cy") => (Cym, "cym"),
 );

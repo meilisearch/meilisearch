@@ -1,5 +1,5 @@
 use rand::seq::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt as _, SeedableRng};
 use roaring::RoaringBitmap;
 
 use crate::heed_codec::facet::OrderedF64Codec;
@@ -132,7 +132,7 @@ fn merge_values() {
     for key in keys {
         let mut bitmap = RoaringBitmap::new();
         bitmap.insert(key);
-        bitmap.insert(rng.gen_range(256..512));
+        bitmap.insert(rng.random_range(256..512));
         index.verify_structure_validity(&txn, 0);
         index.insert(&mut txn, 0, &(key as f64), &bitmap);
     }
@@ -293,7 +293,7 @@ fn in_place_level0_insert() {
     for i in 0..4 {
         for &key in keys.iter() {
             let mut bitmap = RoaringBitmap::new();
-            bitmap.insert(rng.gen_range(i * 256..(i + 1) * 256));
+            bitmap.insert(rng.random_range(i * 256..(i + 1) * 256));
             index.verify_structure_validity(&txn, 0);
             index.insert(&mut txn, 0, &(key as f64), &bitmap);
         }

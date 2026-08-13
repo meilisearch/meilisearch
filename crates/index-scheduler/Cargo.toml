@@ -28,7 +28,7 @@ meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.11"
 page_size = "0.6.0"
 rayon = "1.12.0"
-roaring = { version = "0.10.12", features = ["serde"] }
+roaring = { version = "0.11.4", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
 tar = { version = "0.4.46", default-features = false }

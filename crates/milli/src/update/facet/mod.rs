@@ -605,7 +605,7 @@ pub(crate) mod test_helpers {
 mod comparison_bench {
     use std::iter::once;
 
-    use rand::Rng;
+    use rand::{Rng, RngExt as _};
     use roaring::RoaringBitmap;
 
     use super::test_helpers::FacetIndex;
@@ -623,7 +623,7 @@ mod comparison_bench {
     fn benchmark_facet_indexing() {
         let mut facet_value = 0;
 
-        let mut r = rand::thread_rng();
+        let mut r = rand::rng();
 
         for i in 1..=20 {
             let size = 50_000 * i;
@@ -650,7 +650,7 @@ mod comparison_bench {
                 // insert one document
                 //
                 for _ in 0..nbr_doc {
-                    index.insert(&mut txn, 0, &r.gen(), &once(1).collect());
+                    index.insert(&mut txn, 0, &r.random(), &once(1).collect());
                 }
                 let time_spent = timer.elapsed().as_millis();
                 println!("    add {nbr_doc} : {time_spent}ms");
