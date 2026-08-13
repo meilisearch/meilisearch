@@ -9,7 +9,6 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::TotalProcessingTimeStep;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -218,8 +217,6 @@ async fn similar(
 
     let progress_clone = progress.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let _step = progress_clone.update_progress_scoped(TotalProcessingTimeStep::Search);
-
         perform_similar(&index_scheduler, index_uid, query, &progress_clone, search_rules)
     })
     .await;

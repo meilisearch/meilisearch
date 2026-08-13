@@ -360,6 +360,7 @@ async fn process_search_request(
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
     // Progress is not used, we use the quiet progress to avoid logging any steps.
     let progress = Progress::quiet();
+    let permit = search_queue.try_get_search_permit(&progress).await?;
     let index = index_scheduler.user_index(query.index_uid.as_str())?;
     let rtxn = index.static_read_txn()?;
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
@@ -404,9 +405,7 @@ async fn process_search_request(
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
 
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
+    progress.update_progress(TotalProcessingTimeStep::Process);
     let index_cloned = index.clone();
 
     let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {

@@ -21,12 +21,13 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
+use meilisearch_types::milli::steps::RetrieveIndexDataStep;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
     filtered_matching_patterns, filtered_universe, make_document, AttributePatterns,
     AttributeState, Deadline, DocumentId, Error, FacetValueHit, IndexFilter, InternalError,
-    MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, SearchStep, UserError,
+    MetadataBuilder, OrderBy, PatternMatch, SearchForFacetValues, UserError,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -1672,7 +1673,7 @@ pub fn prepare_search<'t>(
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
                 None => {
-                    let _step = progress.update_progress_scoped(SearchStep::EmbedQuery);
+                    let _step = progress.update_progress_scoped(RetrieveIndexDataStep::EmbedQuery);
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 
@@ -1810,7 +1811,7 @@ pub fn perform_search(
     let deadline = index.search_deadline(&rtxn)?;
 
     let fields_ids_map = {
-        let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
+        let _step = progress.update_progress_scoped(RetrieveIndexDataStep::LoadFieldIdsMap);
         index.fields_ids_map(&rtxn)?
     };
     let filter = query
@@ -1960,7 +1961,7 @@ pub fn perform_search(
 
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
-            let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
+            let _step = progress.update_progress_scoped(RetrieveIndexDataStep::FacetDistribution);
             compute_facet_distribution_stats(&facets, index, &rtxn, &fields_ids_map, candidates)
         })
         .transpose()?
@@ -2496,7 +2497,7 @@ fn make_hits<'a>(
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
     progress: &Progress,
 ) -> milli::Result<Vec<SearchHit>> {
-    let _step = progress.update_progress_scoped(SearchStep::Format);
+    let _step = progress.update_progress_scoped(RetrieveIndexDataStep::Format);
     let mut documents = Vec::new();
 
     let dictionary = index.dictionary(rtxn)?;
