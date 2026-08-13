@@ -221,6 +221,11 @@ pub struct ExportIndexSettings {
     pub filter: Option<Value>,
     /// Whether to override settings on the destination index
     pub override_settings: bool,
+    /// Target index name on the destination instance. The `$name` variable is
+    /// replaced with the name of the matched source index. When omitted, the
+    /// source index name is used.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl KindWithContent {
