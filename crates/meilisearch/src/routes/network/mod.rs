@@ -383,7 +383,7 @@ fn merge_networks(
             let mut merged_shards = BTreeMap::new();
             for either_or_both in old_shards
                 .into_iter()
-                .merge_join_by(new_shards.into_iter(), |left, right| left.0.cmp(&right.0))
+                .merge_join_by(new_shards, |left, right| left.0.cmp(&right.0))
             {
                 match either_or_both {
                     EitherOrBoth::Both((name, old_shard), (_, Some(new_shard))) => {
@@ -409,7 +409,7 @@ fn merge_networks(
             let mut merged_remotes = BTreeMap::new();
             for either_or_both in old_remotes
                 .into_iter()
-                .merge_join_by(new_remotes.into_iter(), |left, right| left.0.cmp(&right.0))
+                .merge_join_by(new_remotes, |left, right| left.0.cmp(&right.0))
             {
                 match either_or_both {
                     EitherOrBoth::Both((key, old), (_, Some(new))) => {
