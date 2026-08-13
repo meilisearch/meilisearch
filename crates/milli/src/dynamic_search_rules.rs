@@ -390,7 +390,8 @@ impl<'a> DynamicSearchRulesView<'a> {
                     k => {
                         for word_rules in words_rules.iter().combinations(k.into()) {
                             verifying_constraints_rules |= roaring::MultiOps::intersection(
-                                std::iter::once(&constraint_count_rules).chain(word_rules),
+                                std::iter::once(&constraint_count_rules)
+                                    .chain(word_rules),
                             );
                             if fuel.consume_word_combination().is_break() {
                                 break;
