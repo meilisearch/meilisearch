@@ -6,8 +6,7 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::TotalProcessingTimeStep;
+use meilisearch_types::milli::progress::{Progress, ProgressVerbosityMode};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -160,7 +159,7 @@ pub async fn multi_search_with_post(
     if use_documents_retrieval {
         // Since we don't want to process half of the search requests and then get a permit refused
         // we're going to get one permit for the whole duration of the multi-search request.
-        let progress = Progress::default();
+        let progress = Progress::fast(ProgressVerbosityMode::Info);
         progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
         let permit = search_queue.try_get_search_permit().await?;
         progress.update_progress(TotalProcessingTimeStep::Search);
@@ -249,7 +248,7 @@ pub async fn legacy_multi_search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
-    let progress = Progress::default();
+    let progress = Progress::fast(ProgressVerbosityMode::Info);
     progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
