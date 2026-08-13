@@ -140,7 +140,7 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
         .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
         .collect();
 
-    let progress = meilisearch_types::milli::progress::Progress::default();
+    let progress = meilisearch_types::milli::progress::Progress::quiet();
     let finished = AtomicBool::new(false);
 
     std::thread::scope(|scope| {
