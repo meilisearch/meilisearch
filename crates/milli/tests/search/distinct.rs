@@ -23,7 +23,7 @@ macro_rules! test_distinct {
             builder
                 .execute(
                     &milli::MustStopProcessing::default(),
-                    &Progress::default(),
+                    &Progress::quiet(),
                     // NO DANGER: test
                     &http_client::policy::IpPolicy::danger_always_allow(),
                     Default::default(),
@@ -34,7 +34,7 @@ macro_rules! test_distinct {
             let rtxn = index.read_txn().unwrap();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-            let progress = Progress::default();
+            let progress = Progress::quiet();
             let mut search = Search::new(
                 &rtxn,
                 &index,
