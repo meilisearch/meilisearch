@@ -69,7 +69,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::default(),
+            &Progress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -105,7 +105,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -125,7 +125,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),

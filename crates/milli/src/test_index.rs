@@ -54,7 +54,7 @@ impl TempIndex {
             Index::new(options, _tempdir.path(), CreateOrOpen::create_without_shards()).unwrap();
         let indexer_config = IndexerConfig::default();
         let index_documents_config = IndexDocumentsConfig::default();
-        let progress = Progress::default();
+        let progress = Progress::quiet();
 
         Self { inner, indexer_config, index_documents_config, progress, _tempdir }
     }
@@ -102,7 +102,7 @@ impl TempIndex {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )?;
 
@@ -122,7 +122,7 @@ impl TempIndex {
                 &document_changes,
                 embedders,
                 &MustStopProcessing::default(),
-                &Progress::default(),
+                &Progress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
@@ -159,7 +159,7 @@ impl TempIndex {
         update(&mut builder);
         builder.execute(
             &MustStopProcessing::default(),
-            &Progress::default(),
+            &Progress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -201,7 +201,7 @@ impl TempIndex {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )?;
 
@@ -221,7 +221,7 @@ impl TempIndex {
                 &document_changes,
                 embedders,
                 &MustStopProcessing::default(),
-                &Progress::default(),
+                &Progress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
@@ -290,7 +290,7 @@ fn aborting_indexation() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -310,7 +310,7 @@ fn aborting_indexation() {
                 &document_changes,
                 embedders,
                 &should_abort,
-                &Progress::default(),
+                &Progress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),

@@ -710,7 +710,7 @@ mod test {
     #[test]
     fn test_kanji_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::default();
+        let progress = Progress::quiet();
 
         let index = TempIndex::new();
 
@@ -735,7 +735,7 @@ mod test {
     #[test]
     fn test_hangul_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::default();
+        let progress = Progress::quiet();
 
         let index = TempIndex::new();
 
