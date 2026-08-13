@@ -573,7 +573,8 @@ fn import_dump(
     index_scheduler: &mut IndexScheduler,
     auth: &mut AuthController,
 ) -> Result<(), anyhow::Error> {
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = Progress::quiet();
     let reader = File::open(dump_path)?;
     let mut dump_reader = dump::DumpReader::open(reader)?;
 

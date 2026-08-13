@@ -277,6 +277,8 @@ pub async fn get_document(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = Progress::quiet();
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
@@ -794,7 +796,8 @@ pub async fn documents_by_query_post(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     // TODO: https://linear.app/meilisearch/issue/ENGPROD-2703
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = Progress::quiet();
 
     let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
@@ -902,7 +905,8 @@ pub async fn get_documents(
     debug!(parameters = ?params, "Get documents GET");
 
     // TODO: https://linear.app/meilisearch/issue/ENGPROD-2703
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = Progress::quiet();
 
     let use_queue = index_scheduler.features().queue_documents_fetch();
     let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
