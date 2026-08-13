@@ -175,7 +175,7 @@ mod test {
             doc_allocs: &doc_allocs,
             fields_ids_map_store: &fields_ids_map_store,
             must_stop_processing: &MustStopProcessing::default(),
-            progress: &Progress::default(),
+            progress: &Progress::quiet(),
             grenad_parameters: &Default::default(),
         };
 
