@@ -558,9 +558,7 @@ pub async fn search_with_url_query(
         let request_uid = Uuid::now_v7();
         debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
         let progress = Progress::fast(ProgressVerbosityMode::Info);
-        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-        let permit = search_queue.try_get_search_permit().await?;
-        progress.update_progress(TotalProcessingTimeStep::Search);
+        let permit = search_queue.try_get_search_permit(&progress).await?;
         let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
         let query: SearchQuery = params.into_inner().try_into()?;
@@ -583,14 +581,17 @@ pub async fn search_with_url_query(
         };
 
         let search_result = document_retrieval
-            .execute(index_scheduler, &progress)
+            .execute(index_scheduler, progress)
             .await
             .map(|result| {
-                let DocumentSearchResult::Multi(mut search_results) = result else {
+                let DocumentSearchResult::Multi(mut search_results, mut progress_by_query) = result
+                else {
                     unreachable!()
                 };
 
-                search_results.pop().unwrap().result
+                let (_, progress) = progress_by_query.pop().unwrap();
+                let search_result = search_results.pop().unwrap();
+                (search_result.result, progress)
             })
             .map_err(|(mut err, _)| match err.error_code.as_str() {
                 "index_not_found" => {
@@ -603,14 +604,14 @@ pub async fn search_with_url_query(
 
         permit.drop().await;
 
-        if let Ok(search_result) = search_result.as_ref() {
+        if let Ok((search_result, _)) = search_result.as_ref() {
             aggregate.succeed(search_result);
         }
         analytics.publish(aggregate, &req);
 
-        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search get");
+        let (search_result, progress) = search_result?;
 
-        let search_result = search_result?;
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress, "Search get");
 
         Ok(HttpResponse::Ok().json(search_result))
     } else {
@@ -639,9 +640,7 @@ pub async fn legacy_search_with_url_query(
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
     let progress = Progress::fast(ProgressVerbosityMode::Info);
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
+    let permit = search_queue.try_get_search_permit(&progress).await?;
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let mut query: SearchQuery = params.into_inner().try_into()?;
@@ -890,9 +889,7 @@ pub async fn search_with_post(
         let request_uid = Uuid::now_v7();
 
         let progress = Progress::fast(ProgressVerbosityMode::Info);
-        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-        let permit = search_queue.try_get_search_permit().await?;
-        progress.update_progress(TotalProcessingTimeStep::Search);
+        let permit = search_queue.try_get_search_permit(&progress).await?;
 
         let query = params.into_inner();
         debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
@@ -915,14 +912,17 @@ pub async fn search_with_post(
         };
 
         let search_result = document_retrieval
-            .execute(index_scheduler, &progress)
+            .execute(index_scheduler, progress)
             .await
             .map(|result| {
-                let DocumentSearchResult::Multi(mut search_results) = result else {
+                let DocumentSearchResult::Multi(mut search_results, mut progress_by_query) = result
+                else {
                     unreachable!()
                 };
 
-                search_results.pop().unwrap().result
+                let (_, progress) = progress_by_query.pop().unwrap();
+                let search_result = search_results.pop().unwrap();
+                (search_result.result, progress)
             })
             .map_err(|(mut err, _)| match err.error_code.as_str() {
                 "index_not_found" => {
@@ -935,14 +935,14 @@ pub async fn search_with_post(
 
         permit.drop().await;
 
-        if let Ok(search_result) = search_result.as_ref() {
+        if let Ok((search_result, _)) = search_result.as_ref() {
             aggregate.succeed(search_result);
         }
         analytics.publish(aggregate, &req);
 
-        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search post");
+        let (search_result, progress) = search_result?;
 
-        let search_result = search_result?;
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress, "Search post");
 
         Ok(HttpResponse::Ok().json(search_result))
     } else {
@@ -972,9 +972,7 @@ pub async fn legacy_search_with_post(
     let request_uid = Uuid::now_v7();
 
     let progress = Progress::fast(ProgressVerbosityMode::Info);
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
+    let permit = search_queue.try_get_search_permit(&progress).await?;
 
     let mut query = params.into_inner();
     debug!(request_uid = ?request_uid, parameters = ?query, "Search post");

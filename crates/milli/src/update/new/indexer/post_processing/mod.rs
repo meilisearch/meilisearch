@@ -21,7 +21,7 @@ use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEV
 use crate::update::new::facet_search_builder::FacetSearchBuilder;
 use crate::update::new::indexer::{MiniString, WordDelta};
 use crate::update::new::merger::FacetFieldIdDelta;
-use crate::update::new::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
+use crate::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::new::word_fst_builder::{PrefixData, WordFstBuilder};
 use crate::update::new::words_prefix_docids::{
     compute_exact_word_prefix_docids, compute_word_prefix_docids, compute_word_prefix_fid_docids,

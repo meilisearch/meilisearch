@@ -15,11 +15,13 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
+use meilisearch_types::milli::steps::{
+    PerformRetrievalStep, QueryStep, RetrieveIndexDataStep, TotalProcessingTimeStep,
+};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page, AttributePatterns, Deadline, DocumentId,
-    FederatingResultsStep, FieldsIdsMap, MetadataBuilder, OrderBy, PatternMatch, Pin, Precedence,
-    SearchStep, DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, AttributePatterns, Deadline, DocumentId, FieldsIdsMap,
+    MetadataBuilder, OrderBy, PatternMatch, Pin, Precedence, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::Remote;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -59,7 +61,7 @@ pub async fn perform_federated_search(
     index_scheduler: Data<IndexScheduler>,
     network_partitioner: &NetworkPartitioner,
     queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
-    mut hydration_cache: Option<HydrationContext>,
+    hydration_cache: Option<HydrationContext>,
     mut remote_errors: RemoteErrors,
     federation: Federation,
     features: RoFeatures,
@@ -71,6 +73,7 @@ pub async fn perform_federated_search(
     progress: &Progress,
     auth_filter: &AuthFilter,
 ) -> Result<(FederatedSearchResult, Deadline), (ResponseError, Option<usize>)> {
+    progress.update_progress(PerformRetrievalStep::Prepare);
     if is_proxy {
         features.check_network("Performing a remote federated search").without_index()?;
     }
@@ -113,7 +116,6 @@ pub async fn perform_federated_search(
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
 
     // 1. partition queries by host and index
-    progress.update_progress(FederatingResultsStep::PartitionQueries);
     let mut partitioned_queries = PartitionedQueries::new();
 
     let mut federation = federation;
@@ -127,7 +129,7 @@ pub async fn perform_federated_search(
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
-    progress.update_progress(FederatingResultsStep::StartRemoteSearch);
+    progress.update_progress(PerformRetrievalStep::SendToRemote);
     let remote_search = RemoteSearch::start(
         partitioned_queries.remote_queries_by_host,
         &federation,
@@ -136,7 +138,6 @@ pub async fn perform_federated_search(
     );
 
     // 2.2. concurrently execute local queries
-    progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
     let params = SearchByIndexParams {
         index_scheduler,
         auth_filter: auth_filter.clone(),
@@ -159,6 +160,7 @@ pub async fn perform_federated_search(
     let (search_by_index, params, deadline) = tokio::task::spawn_blocking({
         let progress = progress.clone();
         move || -> Result<_, (ResponseError, Option<usize>)> {
+            progress.update_progress(PerformRetrievalStep::ExecuteLocal);
             for (index_uid, queries) in partitioned_queries.local_queries_by_index {
                 // note: this is the only place we open `index_uid`
                 let index_deadline = search_by_index.execute(
@@ -194,7 +196,7 @@ pub async fn perform_federated_search(
         facet_order,
     } = search_by_index;
 
-    progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
+    progress.update_progress(PerformRetrievalStep::WaitForRemote);
     let before_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 2.3. Wait for proxy search requests to complete
@@ -204,7 +206,7 @@ pub async fn perform_federated_search(
     let after_waiting_remote_results = time::OffsetDateTime::now_utc();
 
     // 3. merge hits and metadata across indexes and hosts
-    progress.update_progress(FederatingResultsStep::MergeResults);
+    progress.update_progress(PerformRetrievalStep::Merge);
     // 3.1. Build metadata in the same order as the original queries
     let query_metadata = {
         // If a remote is present, set the local remote name
@@ -355,18 +357,18 @@ pub async fn perform_federated_search(
     );
 
     // 3.3.1. hydrate documents based on the hydration points
-    progress.update_progress(FederatingResultsStep::HydrateDocuments);
-    if let Some(hydration_cache) = hydration_cache.as_mut() {
+    if let Some(mut hydration_cache) = hydration_cache {
+        progress.update_progress(TotalProcessingTimeStep::Hydrate);
         for (query_index, hit) in &merged_hits {
             hydration_cache.register_foreign_docids(hit, *query_index);
         }
-    }
-    if let Some(hydration_cache) = hydration_cache {
+
         let (hydration_formatter, hydration_remote_errors) = FederatedHydrationFormatter::new(
             hydration_cache,
             &index_scheduler,
             network_partitioner,
             auth_filter,
+            &progress,
         )
         .await
         .without_index()?;
@@ -401,9 +403,8 @@ pub async fn perform_federated_search(
     };
 
     // 3.5. merge facets
-    progress.update_progress(FederatingResultsStep::MergeFacets);
     let (facet_distribution, facet_stats, facets_by_index) =
-        facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits);
+        facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits, progress);
 
     let after_merge = time::OffsetDateTime::now_utc();
 
@@ -1379,7 +1380,7 @@ impl SearchByIndex {
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
 
         let fidmap = {
-            let _step = progress.update_progress_scoped(SearchStep::LoadFieldIdsMap);
+            let _step = progress.update_progress_scoped(RetrieveIndexDataStep::LoadFieldIdsMap);
             index.fields_ids_map(&rtxn).without_index()?
         };
 
@@ -1430,7 +1431,9 @@ impl SearchByIndex {
             }
         }
 
+        let queries_len = queries.len();
         for QueryByIndex { query, weight, query_index } in queries {
+            let _step = progress.update_progress_scoped(QueryStep(query_index, queries_len));
             // use an immediately invoked lambda to capture the result without returning from the function
             let res: Result<(), ResponseError> = (|| {
                 let search_kind =
@@ -1616,50 +1619,53 @@ impl SearchByIndex {
 
             res.with_index(query_index)?;
         }
-        let mut documents_seen = RoaringBitmap::new();
-        let mut local_pinned_hits = Vec::new();
-        for result_by_query in &mut results_by_query {
-            let _step = progress.update_progress_scoped(SearchStep::Format);
 
-            let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
-            let prev_scores = std::mem::take(&mut result_by_query.document_scores);
+        let local_pinned_hits = {
+            let _step = progress.update_progress_scoped(RetrieveIndexDataStep::PinHits);
+            let mut local_pinned_hits = Vec::new();
+            for result_by_query in &mut results_by_query {
+                let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
+                let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
-            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
-                if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
-                    let mut hit = result_by_query
-                        .hit_maker
-                        .make_hit(doc_id, &score)
-                        .with_index(result_by_query.query_index)?;
-                    let _federation = build_federation_hit(
-                        params,
-                        &index_uid,
-                        result_by_query.query_index,
-                        &score,
-                        result_by_query.weight,
-                        &mut hit.extra_document,
-                    );
+                for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
+                    if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
+                        let mut hit = result_by_query
+                            .hit_maker
+                            .make_hit(doc_id, &score)
+                            .with_index(result_by_query.query_index)?;
+                        let _federation = build_federation_hit(
+                            params,
+                            &index_uid,
+                            result_by_query.query_index,
+                            &score,
+                            result_by_query.weight,
+                            &mut hit.extra_document,
+                        );
 
-                    hit.document.insert(FEDERATION_HIT.to_string(), _federation);
-                    local_pinned_hits.push(LocalPin {
-                        position: *position,
-                        precedence: Precedence(*precedence),
-                        query_index: result_by_query.query_index,
-                        hit: SearchHitByIndex {
-                            hit,
-                            score,
-                            weight: result_by_query.weight,
+                        hit.document.insert(FEDERATION_HIT.to_string(), _federation);
+                        local_pinned_hits.push(LocalPin {
+                            position: *position,
+                            precedence: Precedence(*precedence),
                             query_index: result_by_query.query_index,
-                        },
-                        doc_id,
-                    });
-                } else {
-                    result_by_query.documents_ids.push(doc_id);
-                    result_by_query.document_scores.push(score);
+                            hit: SearchHitByIndex {
+                                hit,
+                                score,
+                                weight: result_by_query.weight,
+                                query_index: result_by_query.query_index,
+                            },
+                            doc_id,
+                        });
+                    } else {
+                        result_by_query.documents_ids.push(doc_id);
+                        result_by_query.document_scores.push(score);
+                    }
                 }
             }
-        }
 
-        Pin::dedup_and_sort(&mut local_pinned_hits);
+            Pin::dedup_and_sort(&mut local_pinned_hits);
+
+            local_pinned_hits
+        };
 
         // A set of the seen values for the facet.
         // Whenever we consider a document, we check that its value for the distinct fid has not already been seen.
@@ -1667,6 +1673,7 @@ impl SearchByIndex {
         // already dedup'd.
         // If it wasn't seen, it is accepted and we update the list of seen values accordingly.
         let mut distinct_values = HashSet::new();
+        let mut documents_seen = RoaringBitmap::new();
 
         let organic_hits = merge_index_local_results(results_by_query)
             // skip documents we've already seen & mark that we saw the current document
@@ -1680,7 +1687,8 @@ impl SearchByIndex {
 
                     let hit: Result<_, ResponseError> = (|| {
                         let mut hit = {
-                            let _step = progress.update_progress_scoped(SearchStep::Format);
+                            let _step =
+                                progress.update_progress_scoped(RetrieveIndexDataStep::Format);
                             hit_maker.make_hit(docid, &score)?
                         };
 
@@ -1927,7 +1935,9 @@ impl FacetOrder {
         remote_results: Vec<FederatedSearchResult>,
         mut facets: FederatedFacets,
         rejected_hits: BTreeMap<String, Vec<SearchHit>>,
+        progress: &Progress,
     ) -> (Option<FacetDistributions>, Option<FacetStats>, FederatedFacets) {
+        let _step = progress.update_progress_scoped(TotalProcessingTimeStep::MergeFacets);
         let (facet_distribution, facet_stats, facets_by_index) = match (self, merge_facets) {
             (FacetOrder::ByFacet(facet_order), Some(merge_facets)) => {
                 for remote_facets_by_index in

@@ -313,7 +313,7 @@ pub async fn search(
 
     let before_search = time::OffsetDateTime::now_utc();
 
-    let permit = search_queue.try_get_search_permit().await?;
+    let permit = search_queue.try_get_search_permit(&progress).await?;
 
     let mut query = params.into_inner();
     debug!(parameters = ?query, "Facet search");

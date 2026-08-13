@@ -19,7 +19,6 @@ mod merger;
 mod parallel_iterator_ext;
 mod ref_cell_ext;
 pub mod reindex;
-pub(crate) mod steps;
 pub(crate) mod thread_local;
 pub mod vector_document;
 mod word_fst_builder;

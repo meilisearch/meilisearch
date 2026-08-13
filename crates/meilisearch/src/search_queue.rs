@@ -22,6 +22,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::steps::TotalProcessingTimeStep;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use tokio::sync::{mpsc, oneshot};
@@ -174,7 +176,11 @@ impl SearchQueue {
 
     /// Returns a search `Permit`.
     /// It should be dropped as soon as you've freed all the RAM associated with the search request being processed.
-    pub async fn try_get_search_permit(&self) -> Result<Permit, MeilisearchHttpError> {
+    pub async fn try_get_search_permit(
+        &self,
+        progress: &Progress,
+    ) -> Result<Permit, MeilisearchHttpError> {
+        let _step = progress.update_progress_scoped(TotalProcessingTimeStep::WaitInQueue);
         let now = std::time::Instant::now();
         let (sender, receiver) = oneshot::channel();
         self.sender.send(sender).await.map_err(|_| MeilisearchHttpError::SearchLimiterIsDown)?;

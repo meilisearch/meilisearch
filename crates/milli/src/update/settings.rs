@@ -34,7 +34,7 @@ use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::{reindex, update_index};
-use crate::update::new::steps::SettingsIndexerStep;
+use crate::steps::SettingsIndexerStep;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
 use crate::vector::embedder::{openai, rest};
