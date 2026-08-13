@@ -1141,7 +1141,8 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.10.0"
-source = "git+https://github.com/meilisearch/charabia?branch=bump-dependencies#cc67e09f612478617abecf0b7264ca7786500d64"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27d98f4c66de52108210ee491c9c991513021dfd259bf65e4bbd889687b488d7"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -3618,7 +3619,8 @@ checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/charabia?branch=bump-dependencies#cc67e09f612478617abecf0b7264ca7786500d64"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
 dependencies = [
  "csv",
  "once_cell",
