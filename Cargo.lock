@@ -1997,7 +1997,6 @@ dependencies = [
  "maplit",
  "meili-snap",
  "meilisearch-types",
- "once_cell",
  "regex",
  "roaring",
  "serde",
@@ -4235,7 +4234,6 @@ version = "1.53.0"
 dependencies = [
  "insta",
  "md5",
- "once_cell",
  "regex-lite",
  "uuid",
 ]
@@ -4292,7 +4290,6 @@ dependencies = [
  "mopa-maintained",
  "num_cpus",
  "obkv",
- "once_cell",
  "permissive-json-pointer",
  "pin-project-lite",
  "platform-dirs",
@@ -4478,7 +4475,6 @@ dependencies = [
  "memmap2",
  "mimalloc",
  "obkv",
- "once_cell",
  "ordered-float",
  "permissive-json-pointer",
  "rand 0.10.2",

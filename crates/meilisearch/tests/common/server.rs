@@ -12,7 +12,7 @@ use byte_unit::{Byte, Unit};
 use clap::Parser;
 use meilisearch::option::{IndexerOpts, MaxMemory, MaxThreads, Opt};
 use meilisearch::setup_meilisearch;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tempfile::TempDir;
 use tokio::sync::OnceCell;
 use tokio::time::sleep;
@@ -32,7 +32,7 @@ pub struct Server<State = Owned> {
     _marker: PhantomData<State>,
 }
 
-pub static TEST_TEMP_DIR: Lazy<TempDir> = Lazy::new(|| TempDir::new().unwrap());
+pub static TEST_TEMP_DIR: LazyLock<TempDir> = LazyLock::new(|| TempDir::new().unwrap());
 
 impl Server<Owned> {
     pub(super) fn into_shared(self) -> Server<Shared> {
@@ -266,7 +266,7 @@ impl Server<Shared> {
     }
 
     pub fn new_shared() -> &'static Server<Shared> {
-        static SERVER: Lazy<Server<Shared>> = Lazy::new(Server::init_new_shared_instance);
+        static SERVER: LazyLock<Server<Shared>> = LazyLock::new(Server::init_new_shared_instance);
         &SERVER
     }
 

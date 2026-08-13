@@ -544,10 +544,11 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
             | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness
-                if !words => {
-                    ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
-                    words = true;
-                }
+                if !words =>
+            {
+                ranking_rules.push(Box::new(Words::new(terms_matching_strategy)));
+                words = true;
+            }
             _ => {}
         }
         match rr {

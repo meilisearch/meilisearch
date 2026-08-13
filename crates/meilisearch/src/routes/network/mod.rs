@@ -381,9 +381,8 @@ fn merge_networks(
     let mut merged_shards = match new_shards {
         Setting::Set(new_shards) => {
             let mut merged_shards = BTreeMap::new();
-            for either_or_both in old_shards
-                .into_iter()
-                .merge_join_by(new_shards, |left, right| left.0.cmp(&right.0))
+            for either_or_both in
+                old_shards.into_iter().merge_join_by(new_shards, |left, right| left.0.cmp(&right.0))
             {
                 match either_or_both {
                     EitherOrBoth::Both((name, old_shard), (_, Some(new_shard))) => {

@@ -1,5 +1,5 @@
 use meili_snap::{json_string, snapshot};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use crate::common::index::Index;
 use crate::common::{Server, Shared, Value};
@@ -45,7 +45,7 @@ async fn index_with_documents_hf<'a>(server: &'a Server<Shared>, documents: &Val
     index
 }
 
-static SIMPLE_SEARCH_DOCUMENTS_VEC: Lazy<Value> = Lazy::new(|| {
+static SIMPLE_SEARCH_DOCUMENTS_VEC: LazyLock<Value> = LazyLock::new(|| {
     json!([
     {
         "title": "Shazam!",
@@ -67,7 +67,7 @@ static SIMPLE_SEARCH_DOCUMENTS_VEC: Lazy<Value> = Lazy::new(|| {
     }])
 });
 
-static SINGLE_DOCUMENT_VEC: Lazy<Value> = Lazy::new(|| {
+static SINGLE_DOCUMENT_VEC: LazyLock<Value> = LazyLock::new(|| {
     json!([{
             "title": "Shazam!",
             "desc": "a Captain Marvel ersatz",
@@ -76,7 +76,7 @@ static SINGLE_DOCUMENT_VEC: Lazy<Value> = Lazy::new(|| {
     }])
 });
 
-static TEST_DISTINCT_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static TEST_DISTINCT_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     // for query "Captain Marvel" and vector [1.0, 1.0]
     json!([
         {
@@ -118,7 +118,7 @@ static TEST_DISTINCT_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
-static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static SIMPLE_SEARCH_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
     {
         "title": "Shazam!",
@@ -137,7 +137,7 @@ static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     }])
 });
 
-static MANY_DOCS: Lazy<Value> = Lazy::new(|| {
+static MANY_DOCS: LazyLock<Value> = LazyLock::new(|| {
     json!([
     {
         "title": "Shazam!",
