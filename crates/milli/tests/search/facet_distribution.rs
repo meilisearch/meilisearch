@@ -32,7 +32,7 @@ fn test_facet_distribution_with_no_facet_values() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::default(),
+            &Progress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -70,7 +70,7 @@ fn test_facet_distribution_with_no_facet_values() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -86,7 +86,7 @@ fn test_facet_distribution_with_no_facet_values() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),

@@ -135,7 +135,7 @@ fn main() {
                                     None,
                                     &mut new_fields_ids_map,
                                     &MustStopProcessing::default(),
-                                    Progress::default(),
+                                    Progress::quiet(),
                                     None,
                                 )
                                 .unwrap();
@@ -151,14 +151,14 @@ fn main() {
                                 &document_changes,
                                 embedders,
                                 &MustStopProcessing::default(),
-                                &Progress::default(),
+                                &Progress::quiet(),
                                 &IpPolicy::deny_all_local_ips(),
                                 &Default::default(),
                             )
                             .unwrap();
 
                             // after executing a batch we check if the database is corrupted
-                            let progress = Progress::default();
+                            let progress = Progress::quiet();
                             let fields_ids_map = index.fields_ids_map(&wtxn).unwrap();
                             let res = index
                                 .search(

@@ -51,7 +51,7 @@ macro_rules! test_filter {
             let filter_conditions =
                 Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
-            let progress = Progress::default();
+            let progress = Progress::quiet();
             let mut search = Search::new(
                 &rtxn,
                 &index,
