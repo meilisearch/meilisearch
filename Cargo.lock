@@ -1146,8 +1146,9 @@ dependencies = [
 
 [[package]]
 name = "charabia"
-version = "0.9.7"
-source = "git+https://github.com/meilisearch/charabia?branch=bump-dependencies#a0a154afcf7e962c7e5d9f40035531052220e3f7"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27d98f4c66de52108210ee491c9c991513021dfd259bf65e4bbd889687b488d7"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -2981,8 +2982,8 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.1.3"
-source = "git+https://github.com/nnethercott/hannoy?branch=bump-dependencies#1a8e2f6843ac8c156acf15336db2e81bdf8e4226"
+version = "0.2.0"
+source = "git+https://github.com/nnethercott/hannoy?branch=bump-dependencies#9aac31ef1048922651fc59ab96a1557a815e00ec"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3641,7 +3642,8 @@ checksum = "6a756c3fac73139e83f14c2d742155dd2b78d3ee56597b419a0579b7bdd6dd78"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/charabia?branch=bump-dependencies#a0a154afcf7e962c7e5d9f40035531052220e3f7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
 dependencies = [
  "csv",
  "once_cell",
@@ -5071,9 +5073,9 @@ dependencies = [
 
 [[package]]
 name = "pest"
-version = "2.8.8"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7df728be843c7070fab6ab7c328c4e9e9d78e23bf749c0669c86ee7ebfa050a2"
+checksum = "5a07a60cc7a4d00c91f95c685609d1d2f79050e6804b70ebedd7650f0b839bcf"
 dependencies = [
  "memchr",
  "ucd-trie",
@@ -5081,9 +5083,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.8.8"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e2dd6fc3b26b3462ee188aac870f5a41d398f1cd5e2408d16531bd71c9591fd"
+checksum = "b3a83744a5c8455b8b3e0dc5031362780a347c878bdd11584d1a8984228cc88d"
 dependencies = [
  "pest",
  "pest_generator",
@@ -5091,9 +5093,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.8.8"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a7a9205cfb6f596a9e8b689c0a15f9ceb7a1aafae7aaf788150ac65b29975b6"
+checksum = "e0cd3451aa3de60d4b9a1e736885e4dea6b31617598026f12256ad566d63304a"
 dependencies = [
  "pest",
  "pest_meta",
@@ -5104,9 +5106,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.8.8"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85abd351c0de1e8384fc791a0737111a350394937e92b956b743dac12429f57c"
+checksum = "e04d3a0849e241d7dfce834c83b1c5edc8622009e8dd51a12ba1927c32f05496"
 dependencies = [
  "pest",
 ]
