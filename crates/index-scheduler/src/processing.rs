@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use meilisearch_types::milli::progress::{AtomicSubStep, NamedStep, Progress, ProgressView};
+use meilisearch_types::milli::progress::{
+    AtomicSubStep, NamedStep, Progress, ProgressVerbosityMode, ProgressView,
+};
 use meilisearch_types::milli::{make_atomic_progress, make_enum_progress};
 use roaring::RoaringBitmap;
 
@@ -33,7 +35,7 @@ impl ProcessingTasks {
     ) -> Progress {
         self.batch = Some(Arc::new(processing_batch));
         self.processing = Arc::new(processing);
-        let progress = Progress::default();
+        let progress = Progress::precise(ProgressVerbosityMode::Info);
         progress.update_progress(BatchProgress::ProcessingTasks);
         self.progress = Some(progress.clone());
 
