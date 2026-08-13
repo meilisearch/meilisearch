@@ -297,8 +297,8 @@ impl Retry {
                 let retry_duration = retry_duration.min(std::time::Duration::from_millis(100)); // don't wait more than 100ms
 
                 // randomly up to double the retry duration
-                let retry_duration = retry_duration
-                    + rand::random_range(std::time::Duration::ZERO..retry_duration);
+                let retry_duration =
+                    retry_duration + rand::random_range(std::time::Duration::ZERO..retry_duration);
 
                 tracing::warn!(
                     "Attempt #{}, failed with {}, retrying after {}ms.",

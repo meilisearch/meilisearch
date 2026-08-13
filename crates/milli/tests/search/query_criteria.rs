@@ -14,8 +14,8 @@ use milli::{
     AscDesc, CreateOrOpen, Criterion, Index, Member, MustStopProcessing, Search, SearchResult,
     TermsMatchingStrategy,
 };
-use Criterion::*;
 use rand::RngExt as _;
+use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 

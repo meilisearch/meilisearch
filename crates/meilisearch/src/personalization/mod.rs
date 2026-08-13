@@ -164,8 +164,8 @@ impl CohereService {
             };
 
             // randomly up to double the retry duration
-            let retry_duration = retry_duration
-                + rand::random_range(std::time::Duration::ZERO..retry_duration);
+            let retry_duration =
+                retry_duration + rand::random_range(std::time::Duration::ZERO..retry_duration);
 
             warn!("Retrying after {}ms", retry_duration.as_millis());
             tokio::time::sleep(retry_duration).await;

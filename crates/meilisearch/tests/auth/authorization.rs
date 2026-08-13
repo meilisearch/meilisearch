@@ -939,8 +939,8 @@ async fn error_creating_index_without_action() {
     let create_index_actions = AUTHORIZATIONS
         .get(&("POST", "/indexes", IndexScopePolicy::Allow))
         .unwrap()
-        .iter()
-        .flat_map(|(s, _)| s.iter())
+        .keys()
+        .flat_map(|s| s.iter())
         .cloned()
         .collect::<HashSet<_>>();
     let content = json!({
