@@ -1133,9 +1133,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             .collect();
         let mut updated_configs = BTreeMap::new();
         let mut embedder_actions = BTreeMap::new();
-        for joined in old_configs
-            .into_iter()
-            .merge_join_by(configs, |(left, _), (right, _)| left.cmp(right))
+        for joined in
+            old_configs.into_iter().merge_join_by(configs, |(left, _), (right, _)| left.cmp(right))
         {
             match joined {
                 // updated config

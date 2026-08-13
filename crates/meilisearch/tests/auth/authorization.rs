@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use ::time::format_description::well_known::Rfc3339;
 use meilisearch::Opt;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tempfile::TempDir;
 use time::{Duration, OffsetDateTime};
 
@@ -52,7 +52,7 @@ type AuthorizationMap = HashMap<
 >;
 
 #[allow(clippy::type_complexity)]
-pub static AUTHORIZATIONS: Lazy<AuthorizationMap> = Lazy::new(|| {
+pub static AUTHORIZATIONS: LazyLock<AuthorizationMap> = LazyLock::new(|| {
     use IndexScopePolicy::*;
 
     let authorizations: AuthorizationMap = maplit::hashmap! {
@@ -120,7 +120,7 @@ pub static AUTHORIZATIONS: Lazy<AuthorizationMap> = Lazy::new(|| {
     authorizations
 });
 
-pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+pub static ALL_ACTIONS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     AUTHORIZATIONS
         .values()
         .flat_map(|value| value.keys())
@@ -129,7 +129,7 @@ pub static ALL_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         .collect()
 });
 
-pub static ALL_INDEX_SCOPED_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+pub static ALL_INDEX_SCOPED_ACTIONS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     AUTHORIZATIONS
         .values()
         .flat_map(|value| {
@@ -142,7 +142,7 @@ pub static ALL_INDEX_SCOPED_ACTIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| 
         .collect()
 });
 
-static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
+static INVALID_RESPONSE: LazyLock<Value> = LazyLock::new(|| {
     json!({"message": null,
         "code": "invalid_api_key",
         "type": "auth",
@@ -150,7 +150,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     })
 });
 
-static INVALID_ROUTE_POLICY_RESPONSE: Lazy<Value> = Lazy::new(|| {
+static INVALID_ROUTE_POLICY_RESPONSE: LazyLock<Value> = LazyLock::new(|| {
     json!({"message": "The provided API key is invalid.",
         "code": "invalid_api_key",
         "type": "auth",

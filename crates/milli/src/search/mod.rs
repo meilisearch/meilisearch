@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use charabia::Language;
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
-use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
+use std::sync::LazyLock;
 use time::OffsetDateTime;
 
 pub use self::facet::{
@@ -29,9 +29,9 @@ use crate::{
 };
 
 // Building these factories is not free.
-static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
-static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
-static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
+static LEVDIST0: LazyLock<LevBuilder> = LazyLock::new(|| LevBuilder::new(0, true));
+static LEVDIST1: LazyLock<LevBuilder> = LazyLock::new(|| LevBuilder::new(1, true));
+static LEVDIST2: LazyLock<LevBuilder> = LazyLock::new(|| LevBuilder::new(2, true));
 
 pub mod facet;
 mod fst_utils;

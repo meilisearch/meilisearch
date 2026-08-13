@@ -1,8 +1,8 @@
 use std::collections::{BinaryHeap, HashMap};
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 
 use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod};
@@ -69,7 +69,7 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
         ret.total_received = 1;
 
         if let Some(ref filter) = filter {
-            static RE: Lazy<Regex> = Lazy::new(|| Regex::new("AND | OR").unwrap());
+            static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("AND | OR").unwrap());
             ret.filter_total_number_of_criteria = 1;
 
             let syntax = match filter {

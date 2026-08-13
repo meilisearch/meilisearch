@@ -554,24 +554,16 @@ impl IndexFilter {
                     bottom_left_point[1].parse_finite_float()?,
                 ];
                 if !(-90.0..=90.0).contains(&top_right[0]) {
-                    Err(
-                        top_right_point[0].to_external_error(BadGeoError::Lat(top_right[0]))
-                    )?;
+                    Err(top_right_point[0].to_external_error(BadGeoError::Lat(top_right[0])))?;
                 }
                 if !(-180.0..=180.0).contains(&top_right[1]) {
-                    Err(
-                        top_right_point[1].to_external_error(BadGeoError::Lng(top_right[1]))
-                    )?;
+                    Err(top_right_point[1].to_external_error(BadGeoError::Lng(top_right[1])))?;
                 }
                 if !(-90.0..=90.0).contains(&bottom_left[0]) {
-                    Err(
-                        bottom_left_point[0].to_external_error(BadGeoError::Lat(bottom_left[0]))
-                    )?;
+                    Err(bottom_left_point[0].to_external_error(BadGeoError::Lat(bottom_left[0])))?;
                 }
                 if !(-180.0..=180.0).contains(&bottom_left[1]) {
-                    Err(
-                        bottom_left_point[1].to_external_error(BadGeoError::Lng(bottom_left[1]))
-                    )?;
+                    Err(bottom_left_point[1].to_external_error(BadGeoError::Lng(bottom_left[1])))?;
                 }
                 if top_right[0] < bottom_left[0] {
                     Err(bottom_left_point[1].to_external_error(
@@ -712,15 +704,13 @@ impl IndexFilter {
             }
             IndexFilterCondition::GeoPolygon { points } => {
                 if !index.is_geojson_filtering_enabled(rtxn)? {
-                    Err(points[0][0].to_external_error(
-                        FilterError::AttributeNotFilterable {
-                            attribute: RESERVED_GEOJSON_FIELD_NAME,
-                            filterable_patterns: filtered_matching_patterns(
-                                filterable_attribute_rules,
-                                &|features| features.is_filterable(),
-                            ),
-                        },
-                    ))?;
+                    Err(points[0][0].to_external_error(FilterError::AttributeNotFilterable {
+                        attribute: RESERVED_GEOJSON_FIELD_NAME,
+                        filterable_patterns: filtered_matching_patterns(
+                            filterable_attribute_rules,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?;
                 }
 
                 let mut coords = Vec::new();
