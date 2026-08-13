@@ -60,7 +60,7 @@ permissive-json-pointer = { path = "../permissive-json-pointer" }
 pin-project-lite = "0.2.17"
 platform-dirs = "0.3.0"
 prometheus = { version = "0.14.0", default-features = false, features = ["process"] }
-rand = "0.8.7"
+rand = "0.10.2"
 
 regex = "1.13.1"
 rustls = { version = "0.23.43", features = ["ring"], default-features = false }
@@ -90,7 +90,7 @@ tracing-subscriber = { version = "0.3.23", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.22"
 build-info = { version = "1.7.0", path = "../build-info" }
-roaring = "0.10.12"
+roaring = "0.11.4"
 mopa-maintained = "0.2.3"
 utoipa = { version = "5.5.0", features = [
     "actix_extras",

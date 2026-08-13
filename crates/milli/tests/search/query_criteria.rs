@@ -14,8 +14,8 @@ use milli::{
     AscDesc, CreateOrOpen, Criterion, Index, Member, MustStopProcessing, Search, SearchResult,
     TermsMatchingStrategy,
 };
-use rand::Rng;
 use Criterion::*;
+use rand::RngExt as _;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
@@ -331,11 +331,11 @@ fn criteria_ascdesc() {
 
     let mut file = tempfile::tempfile().unwrap();
     (0..ASC_DESC_CANDIDATES_THRESHOLD + 1).for_each(|_| {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
-        let age = rng.gen::<u32>().to_string();
+        let age = rng.random::<u32>().to_string();
         let name = rng
-            .sample_iter(&rand::distributions::Alphanumeric)
+            .sample_iter(rand::distr::Alphanumeric)
             .map(char::from)
             .filter(|c| *c >= 'a' && *c <= 'z')
             .take(10)

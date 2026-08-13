@@ -433,9 +433,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "arroy"
-version = "0.6.4"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "699ea33fc45fb11de023c86d7d4dfe7dda934cfa81838d6bc637e2587f0e5d6d"
+checksum = "2f88e18ede2cb2f69e1a68ea804c8fc2f19f748da5f28c795271f279f4068afb"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -443,11 +443,11 @@ dependencies = [
  "heed",
  "memmap2",
  "nohash",
- "ordered-float 4.6.0",
+ "ordered-float",
  "page_size",
- "rand 0.8.7",
+ "rand 0.10.2",
  "rayon",
- "roaring 0.10.12",
+ "roaring",
  "tempfile",
  "thiserror 2.0.20",
  "tracing",
@@ -475,7 +475,7 @@ dependencies = [
  "eventsource-stream",
  "futures",
  "http-client",
- "rand 0.8.7",
+ "rand 0.10.2",
  "reqwest-eventsource",
  "routes",
  "secrecy",
@@ -1087,9 +1087,9 @@ dependencies = [
  "h3o",
  "heed",
  "intmap",
- "ordered-float 5.3.0",
+ "ordered-float",
  "rayon",
- "roaring 0.11.4",
+ "roaring",
  "steppe",
  "thiserror 2.0.20",
  "thread_local",
@@ -1141,8 +1141,7 @@ dependencies = [
 [[package]]
 name = "charabia"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27d98f4c66de52108210ee491c9c991513021dfd259bf65e4bbd889687b488d7"
+source = "git+https://github.com/meilisearch/charabia?branch=bump-dependencies#cc67e09f612478617abecf0b7264ca7786500d64"
 dependencies = [
  "aho-corasick",
  "csv",
@@ -1969,7 +1968,7 @@ dependencies = [
  "meilisearch-types",
  "once_cell",
  "regex",
- "roaring 0.10.12",
+ "roaring",
  "serde",
  "serde_json",
  "tar",
@@ -2954,22 +2953,21 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202cc875f1cff075e50f71e3b2415b549f31709be4f9a1de29dfb3920038cdb2"
+version = "0.2.0"
+source = "git+https://github.com/nnethercott/hannoy?branch=bump-dependencies#9aac31ef1048922651fc59ab96a1557a815e00ec"
 dependencies = [
  "bytemuck",
  "byteorder",
  "crossbeam-channel",
- "hashbrown 0.15.5",
+ "hashbrown 0.17.1",
  "heed",
  "madvise",
  "min-max-heap",
  "page_size",
  "papaya",
- "rand 0.8.7",
+ "rand 0.10.2",
  "rayon",
- "roaring 0.10.12",
+ "roaring",
  "rustc-hash",
  "steppe",
  "thiserror 2.0.20",
@@ -3026,6 +3024,11 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "heapless"
@@ -3532,7 +3535,7 @@ dependencies = [
  "memmap2",
  "page_size",
  "rayon",
- "roaring 0.10.12",
+ "roaring",
  "rusty-s3",
  "serde",
  "serde_json",
@@ -3616,8 +3619,7 @@ checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 [[package]]
 name = "irg-kvariants"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef2af7c331f2536964a32b78a7d2e0963d78b42f4a76323b16cc7d94b1ddce26"
+source = "git+https://github.com/meilisearch/charabia?branch=bump-dependencies#cc67e09f612478617abecf0b7264ca7786500d64"
 dependencies = [
  "csv",
  "once_cell",
@@ -4269,10 +4271,10 @@ dependencies = [
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
- "rand 0.8.7",
+ "rand 0.10.2",
  "regex",
  "reqwest",
- "roaring 0.10.12",
+ "roaring",
  "routes",
  "rustls",
  "rustls-pemfile",
@@ -4315,7 +4317,7 @@ dependencies = [
  "hmac",
  "maplit",
  "meilisearch-types",
- "rand 0.8.7",
+ "rand 0.10.2",
  "serde",
  "serde_json",
  "sha2",
@@ -4347,7 +4349,7 @@ dependencies = [
  "memmap2",
  "milli",
  "papaya",
- "roaring 0.10.12",
+ "roaring",
  "routes",
  "rustc-hash",
  "serde",
@@ -4451,12 +4453,12 @@ dependencies = [
  "mimalloc",
  "obkv",
  "once_cell",
- "ordered-float 5.3.0",
+ "ordered-float",
  "permissive-json-pointer",
- "rand 0.8.7",
+ "rand 0.10.2",
  "rayon",
  "rhai",
- "roaring 0.10.12",
+ "roaring",
  "routes",
  "rstar",
  "rustc-hash",
@@ -4886,15 +4888,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "ordered-float"
-version = "4.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "ordered-float"
@@ -5999,23 +5992,13 @@ checksum = "3582f63211428f83597b51b2ddb88e2a91a9d52d12831f9d08f5e624e8977422"
 
 [[package]]
 name = "roaring"
-version = "0.10.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19e8d2cfa184d94d0726d650a9f4a1be7f9b76ac9fdb954219878dc00c1c1e7b"
-dependencies = [
- "bytemuck",
- "byteorder",
- "serde",
-]
-
-[[package]]
-name = "roaring"
 version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dedc5658c6ecb3bdb5ef5f3295bb9253f42dcf3fd1402c03f6b1f7659c3c4a9"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "serde",
 ]
 
 [[package]]
@@ -7158,9 +7141,9 @@ dependencies = [
 
 [[package]]
 name = "tinyvec"
-version = "1.11.0"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e61e67053d25a4e82c844e8424039d9745781b3fc4f32b8d55ed50f5f667ef3"
+checksum = "4cf0ded5c4e56918d8f8a339e1bb67d038d3bc6d144ac407904015ba2e4cde9b"
 dependencies = [
  "tinyvec_macros",
 ]

@@ -5,7 +5,6 @@ pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
 use http_client::reqwest::{Method, RequestBuilder, Response, StatusCode};
 use meilisearch_types::network::{route, Remote};
-use rand::Rng as _;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -299,7 +298,7 @@ impl Retry {
 
                 // randomly up to double the retry duration
                 let retry_duration = retry_duration
-                    + rand::thread_rng().gen_range(std::time::Duration::ZERO..retry_duration);
+                    + rand::random_range(std::time::Duration::ZERO..retry_duration);
 
                 tracing::warn!(
                     "Attempt #{}, failed with {}, retrying after {}ms.",

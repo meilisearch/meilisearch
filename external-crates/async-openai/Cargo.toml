@@ -22,7 +22,7 @@ async-openai-macros = { path = "../async-openai-macros", version = "0.1.0" }
 backoff = { version = "0.4.0", features = ["tokio"] }
 base64 = "0.22.1"
 futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }
-rand = "0.8.7"
+rand = "0.10.2"
 http-client = { path = "../../crates/http-client" }
 routes = { path = "../../crates/routes" }
 reqwest-eventsource = { version = "0.6.0", path = "../reqwest-eventsource" }
