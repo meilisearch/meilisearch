@@ -2983,7 +2983,8 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.2.0"
-source = "git+https://github.com/nnethercott/hannoy?branch=bump-dependencies#9aac31ef1048922651fc59ab96a1557a815e00ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27b6b2dbf4421103a9a65bf5691ae6b9c2b997d5a6a62ca5f21a728982a442d8"
 dependencies = [
  "bytemuck",
  "byteorder",
