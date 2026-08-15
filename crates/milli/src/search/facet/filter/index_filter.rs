@@ -106,7 +106,7 @@ impl filter_parser2::Semantics for FilterEvaluation {
 
     fn vector_exists(
         &mut self,
-        embedder: Option<filter_parser2::TokenView<'_>>,
+        embedder: Option<filter_parser2::SpanView<'_>>,
         filter: filter_parser2::VectorFilterView<'_>,
     ) {
         self.right =
@@ -115,24 +115,24 @@ impl filter_parser2::Semantics for FilterEvaluation {
 
     fn geo_lower_than(
         &mut self,
-        point: [filter_parser2::TokenView<'_>; 2],
-        radius: filter_parser2::TokenView<'_>,
-        resolution: Option<filter_parser2::TokenView<'_>>,
+        point: [filter_parser2::SpanView<'_>; 2],
+        radius: filter_parser2::SpanView<'_>,
+        resolution: Option<filter_parser2::SpanView<'_>>,
     ) {
         _
     }
 
     fn geo_bounding_box(
         &mut self,
-        top_right_point: [filter_parser2::TokenView<'_>; 2],
-        bottom_left_point: [filter_parser2::TokenView<'_>; 2],
+        top_right_point: [filter_parser2::SpanView<'_>; 2],
+        bottom_left_point: [filter_parser2::SpanView<'_>; 2],
     ) {
         _
     }
 
     fn geo_polygon<'a>(
         &mut self,
-        points: impl Iterator<Item = [filter_parser2::TokenView<'a>; 2]>,
+        points: impl Iterator<Item = [filter_parser2::SpanView<'a>; 2]>,
         point_count: usize,
     ) {
         _
@@ -140,78 +140,78 @@ impl filter_parser2::Semantics for FilterEvaluation {
 
     fn greater_than(
         &mut self,
-        left: filter_parser2::TokenView<'_>,
-        right: filter_parser2::TokenView<'_>,
+        left: filter_parser2::SpanView<'_>,
+        right: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
     fn greater_than_or_equal(
         &mut self,
-        left: filter_parser2::TokenView<'_>,
-        right: filter_parser2::TokenView<'_>,
+        left: filter_parser2::SpanView<'_>,
+        right: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
     fn lower_than(
         &mut self,
-        left: filter_parser2::TokenView<'_>,
-        right: filter_parser2::TokenView<'_>,
+        left: filter_parser2::SpanView<'_>,
+        right: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
     fn lower_than_or_equal(
         &mut self,
-        left: filter_parser2::TokenView<'_>,
-        right: filter_parser2::TokenView<'_>,
+        left: filter_parser2::SpanView<'_>,
+        right: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
-    fn equal(&mut self, left: filter_parser2::TokenView<'_>, right: filter_parser2::TokenView<'_>) {
+    fn equal(&mut self, left: filter_parser2::SpanView<'_>, right: filter_parser2::SpanView<'_>) {
         _
     }
 
-    fn null(&mut self, operand: filter_parser2::TokenView<'_>) {
+    fn null(&mut self, operand: filter_parser2::SpanView<'_>) {
         _
     }
 
-    fn empty(&mut self, operand: filter_parser2::TokenView<'_>) {
+    fn empty(&mut self, operand: filter_parser2::SpanView<'_>) {
         _
     }
 
-    fn exists(&mut self, operand: filter_parser2::TokenView<'_>) {
+    fn exists(&mut self, operand: filter_parser2::SpanView<'_>) {
         _
     }
 
     fn between(
         &mut self,
-        operand: filter_parser2::TokenView<'_>,
-        lower: filter_parser2::TokenView<'_>,
-        upper: filter_parser2::TokenView<'_>,
+        operand: filter_parser2::SpanView<'_>,
+        lower: filter_parser2::SpanView<'_>,
+        upper: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
     fn contains(
         &mut self,
-        left: filter_parser2::TokenView<'_>,
-        right: filter_parser2::TokenView<'_>,
+        left: filter_parser2::SpanView<'_>,
+        right: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
     fn starts_with(
         &mut self,
-        left: filter_parser2::TokenView<'_>,
-        right: filter_parser2::TokenView<'_>,
+        left: filter_parser2::SpanView<'_>,
+        right: filter_parser2::SpanView<'_>,
     ) {
         _
     }
 
-    fn foreign(&mut self, id: filter_parser2::TokenView<'_>) {
+    fn foreign(&mut self, id: filter_parser2::SpanView<'_>) {
         _
     }
 }

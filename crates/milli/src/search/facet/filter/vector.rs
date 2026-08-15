@@ -29,7 +29,7 @@ pub enum VectorFilterError<'a> {
             format!("Available embedders are: {}.{did_you_mean}", available.iter().map(|e| format!("`{e}`")).collect::<Vec<_>>().join(", "))
         }
     })]
-    EmbedderDoesNotExist2 { embedder: filter_parser2::TokenView<'a>, available: Vec<String> },
+    EmbedderDoesNotExist2 { embedder: filter_parser2::SpanView<'a>, available: Vec<String> },
 
     #[error("The fragment `{}` does not exist on embedder `{}`. {}", fragment.fragment(), embedder.fragment(), {
         if available.is_empty() {
@@ -53,7 +53,11 @@ pub enum VectorFilterError<'a> {
             format!("Available fragments on this embedder are: {}.{did_you_mean}", available.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "))
         }
     })]
-    FragmentDoesNotExist2 { embedder: filter_parser2::TokenView<'a>, fragment: filter_parser2::TokenView<'a>, available: Vec<String> },
+    FragmentDoesNotExist2 {
+        embedder: filter_parser2::SpanView<'a>,
+        fragment: filter_parser2::SpanView<'a>,
+        available: Vec<String>,
+    },
 }
 
 use VectorFilterError::*;
@@ -101,7 +105,7 @@ pub(super) fn evaluate(
 pub(super) fn evaluate_2(
     rtxn: &heed::RoTxn<'_>,
     index: &Index,
-    embedder: Option<filter_parser2::TokenView<'_>>,
+    embedder: Option<filter_parser2::SpanView<'_>>,
     filter: filter_parser2::VectorFilterView<'_>,
 ) -> crate::Result<RoaringBitmap> {
     let index_embedding_configs = index.embedding_configs();
@@ -207,7 +211,7 @@ fn evaluate_inner(
 fn evaluate_inner_2(
     rtxn: &heed::RoTxn<'_>,
     index: &Index,
-    embedder: filter_parser2::TokenView<'_>,
+    embedder: filter_parser2::SpanView<'_>,
     embedding_configs: &[IndexEmbeddingConfig],
     filter: filter_parser2::VectorFilterView<'_>,
 ) -> crate::Result<RoaringBitmap> {
