@@ -10,6 +10,7 @@ use super::query_graph::QueryNodeData;
 use super::query_term::{Phrase, QueryTermSubset};
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, SearchContext, Word};
+use crate::proximity::MAX_DISTANCE;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::Result;
 
@@ -210,22 +211,27 @@ pub fn compute_phrase_docids(
         return Ok(RoaringBitmap::new());
     };
 
-    let winsize = words.len().min(3);
+    // Windows are built over the real words: stop words leave `None` holes,
+    // and a window over the raw sequence may not contain two words to pair.
+    let real_words: Vec<(usize, Interned<String>)> = words
+        .iter()
+        .enumerate()
+        .filter_map(|(index, word)| word.as_ref().map(|word| (index, *word)))
+        .collect();
 
-    for win in words.windows(winsize) {
+    let winsize = real_words.len().clamp(1, 3);
+
+    for win in real_words.windows(winsize) {
         // Get all the documents with the matching distance for each word pairs.
         let mut bitmaps = Vec::with_capacity(winsize.pow(2));
-        for (offset, &s1) in win
-            .iter()
-            .enumerate()
-            .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
-        {
-            for (dist, &s2) in win
-                .iter()
-                .skip(offset + 1)
-                .enumerate()
-                .filter_map(|(index, word)| word.as_ref().map(|word| (index, word)))
-            {
+        for (offset, &(position1, s1)) in win.iter().enumerate() {
+            for &(position2, s2) in win.iter().skip(offset + 1) {
+                let dist = position2 - position1 - 1;
+                // Word pairs are only indexed up to MAX_DISTANCE, so a pair
+                // separated by more stop words cannot be constrained.
+                if dist as u32 + 1 >= MAX_DISTANCE {
+                    continue;
+                }
                 if dist == 0 {
                     match ctx.get_db_word_pair_proximity_docids(None, s1, s2, 1)? {
                         Some(m) => bitmaps.push(m),
