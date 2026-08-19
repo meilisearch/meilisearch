@@ -1360,6 +1360,7 @@ impl SearchByIndex {
         let separators = index.allowed_separators(&rtxn).without_index()?;
         let separators: Option<Vec<_>> =
             separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+        let stop_words = index.stop_words(&rtxn).without_index()?;
 
         let max_total_hits = index
             .pagination_max_total_hits(&rtxn)
@@ -1583,7 +1584,11 @@ impl SearchByIndex {
                 degraded |= query_degraded;
                 used_negative_operator |= query_used_negative_operator;
 
-                let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
+                let tokenizer = HitMaker::tokenizer(
+                    dictionary.as_deref(),
+                    separators.as_deref(),
+                    stop_words.as_ref(),
+                );
 
                 let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 

@@ -111,6 +111,7 @@ humantime = { version = "2.3.0", default-features = false }
 cidr = { version = "0.3.2", features = ["serde"] }
 routes = { path = "../routes" }
 bumparaw-collections = "0.1.7"
+fst = "0.4.7"
 
 [dev-dependencies]
 actix-rt = "2.11.0"

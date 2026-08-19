@@ -187,6 +187,113 @@ async fn search_with_stop_word() {
 }
 
 #[actix_rt::test]
+async fn stop_words_not_highlighted() {
+    // related to https://github.com/meilisearch/meilisearch/issues/6594
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (_, code) = index.update_settings(json!({"stopWords": ["the", "The", "to"]})).await;
+    snapshot!(code, @"202 Accepted");
+
+    let documents = json!([
+        {
+            "id": 1,
+            "title": "to The City",
+        },
+        {
+            "id": 2,
+            "title": "This is Their The City",
+        },
+        {
+            "id": 3,
+            "title": "to the New City",
+        },
+        {
+            "id": 4,
+            "title": "to THE City",
+        }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // prefix search
+    index
+        .search(json!({"q": "to the", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+            assert_eq!(code, 200, "{response}");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "to THE City",
+                "_formatted": {
+                  "title": "to <em>THE</em> City"
+                }
+              },
+              {
+                "title": "This is Their The City",
+                "_formatted": {
+                  "title": "This is <em>The</em>ir The City"
+                }
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    // exact matches "THE". "THE" is not a stop word
+    index
+        // search is case-insensitive, "tHE" or "THE" returns same hits
+        .search(json!({"q": "to tHE ", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+            assert_eq!(code, 200, "{response}");
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "title": "to THE City",
+                "_formatted": {
+                  "title": "to <em>THE</em> City"
+                }
+              }
+            ]
+            "###);
+        })
+        .await;
+
+    // non-prefix search
+    index
+          .search(json!({"q": "to the ", "attributesToHighlight": ["title"], "attributesToRetrieve": ["title"] }), |response, code| {
+              assert_eq!(code, 200, "{response}");
+              snapshot!(json_string!(response["hits"]), @r###"
+              [
+                {
+                  "title": "to The City",
+                  "_formatted": {
+                    "title": "to The City"
+                  }
+                },
+                {
+                  "title": "This is Their The City",
+                  "_formatted": {
+                    "title": "This is Their The City"
+                  }
+                },
+                {
+                  "title": "to the New City",
+                  "_formatted": {
+                    "title": "to the New City"
+                  }
+                },
+                {
+                  "title": "to THE City",
+                  "_formatted": {
+                    "title": "to THE City"
+                  }
+                }
+              ]
+              "###);
+          })
+          .await;
+}
+
+#[actix_rt::test]
 async fn search_with_typo_settings() {
     // related to https://github.com/meilisearch/meilisearch/issues/5240
     let server = Server::new_shared();
