@@ -107,6 +107,12 @@ impl SearchQueue {
         self.searches_waiting_to_be_processed.load(Ordering::Relaxed)
     }
 
+    /// Remove closed senders from the queue.
+    /// A sender is closed when its receiver has been dropped (e.g., request cancelled).
+    fn prune_closed_senders(queue: &mut Vec<oneshot::Sender<Permit>>) {
+        queue.retain(|sender| !sender.is_closed());
+    }
+
     /// This function is the main loop, it's in charge on scheduling which search request should execute first and
     /// how many should executes at the same time.
     ///
@@ -130,6 +136,8 @@ impl SearchQueue {
                 biased;
                 _ = search_finished.recv() => {
                     searches_running = searches_running.saturating_sub(1);
+                    // Prune closed senders before selecting the next waiter
+                    Self::prune_closed_senders(&mut queue);
                     if !queue.is_empty() {
                         // Can't panic: the queue wasn't empty thus the range isn't empty.
                         let remove = rng.gen_range(0..queue.len());
@@ -146,6 +154,9 @@ impl SearchQueue {
                         None => continue,
                     };
 
+                    // Prune closed senders before making capacity decisions
+                    Self::prune_closed_senders(&mut queue);
+
                     if searches_running < usize::from(parallelism) && queue.is_empty() {
                         searches_running += 1;
                         // if the search requests die, it's not a hard error on our side
@@ -159,6 +170,7 @@ impl SearchQueue {
                         continue;
 
                     } else if queue.len() >= capacity {
+                        // Can't panic: queue.len() >= capacity > 0, so range is not empty.
                         let remove = rng.gen_range(0..queue.len());
                         let thing = queue.swap_remove(remove); // this will drop the channel and notify the search that it won't be processed
                         drop(thing);
@@ -166,6 +178,9 @@ impl SearchQueue {
                     queue.push(search_request);
                 },
             }
+
+            // Prune closed senders before publishing metrics
+            Self::prune_closed_senders(&mut queue);
 
             metric_searches_running.store(searches_running, Ordering::Relaxed);
             metric_searches_waiting.store(queue.len(), Ordering::Relaxed);
