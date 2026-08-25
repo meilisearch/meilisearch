@@ -2301,7 +2301,7 @@ fn retrieve_documents<S: AsRef<str>>(
                 index,
                 rtxn,
                 fields_ids_map,
-                documents.into_iter(),
+                documents,
                 retrieve_vectors,
                 attributes_to_retrieve,
                 extra_attributes_to_retrieve,

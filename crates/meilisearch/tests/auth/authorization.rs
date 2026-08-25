@@ -174,7 +174,7 @@ async fn error_access_expired_key() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
@@ -188,7 +188,7 @@ async fn error_access_expired_key() {
         response["message"] = serde_json::json!(null);
 
         assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
-        assert_eq!(403, code, "{:?}", &response);
+        assert_eq!(403, code, "{:?}", response);
     }
 }
 
@@ -204,7 +204,7 @@ async fn error_access_unauthorized_index() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     let key = response["key"].as_str().unwrap();
@@ -219,7 +219,7 @@ async fn error_access_unauthorized_index() {
         response["message"] = serde_json::json!(null);
 
         assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
-        assert_eq!(403, code, "{:?}", &response);
+        assert_eq!(403, code, "{:?}", response);
     }
 }
 
@@ -241,7 +241,7 @@ async fn error_access_unauthorized_action() {
         });
 
         let (response, code) = server.add_api_key(content).await;
-        assert_eq!(201, code, "{:?}", &response);
+        assert_eq!(201, code, "{:?}", response);
         assert!(response["key"].is_string());
 
         let key = response["key"].as_str().unwrap();
@@ -250,7 +250,7 @@ async fn error_access_unauthorized_action() {
         response["message"] = serde_json::json!(null);
 
         assert_eq!(response, INVALID_RESPONSE.clone(), "on route: {:?} - {:?}", method, route);
-        assert_eq!(403, code, "{:?}", &response);
+        assert_eq!(403, code, "{:?}", response);
     }
 }
 
@@ -285,7 +285,7 @@ async fn access_authorized_restricted_index() {
         });
 
         let (response, code) = server.add_api_key(content).await;
-        assert_eq!(201, code, "{:?}", &response);
+        assert_eq!(201, code, "{:?}", response);
 
         assert!(response["key"].is_string());
 
@@ -307,7 +307,7 @@ async fn access_authorized_restricted_index() {
 
             if matches!(key_policy, IndexScopePolicy::Allow) {
                 // adding an API key is possible for this action
-                assert_eq!(201, code, "{:?}", &response);
+                assert_eq!(201, code, "{:?}", response);
                 assert!(response["key"].is_string());
 
                 let key = response["key"].as_str().unwrap();
@@ -369,7 +369,7 @@ async fn access_authorized_restricted_index() {
                 }
             } else {
                 // cannot add key for this action
-                assert_eq!(400, code, "{:?}", &response);
+                assert_eq!(400, code, "{:?}", response);
 
                 // test all_actions key
                 server.use_api_key(&all_actions_key);
@@ -410,7 +410,7 @@ async fn unauthorized_partial_actions() {
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await.succeeded();
 
@@ -438,7 +438,7 @@ async fn unauthorized_partial_actions() {
                     });
 
                     let (response, code) = server.add_api_key(content).await;
-                    assert_eq!(201, code, "{:?}", &response);
+                    assert_eq!(201, code, "{:?}", response);
                     assert!(response["key"].is_string());
 
                     let key = response["key"].as_str().unwrap();
@@ -455,7 +455,7 @@ async fn unauthorized_partial_actions() {
                         route,
                         actions
                     );
-                    assert_eq!(code, 403, "{:?}", &response);
+                    assert_eq!(code, 403, "{:?}", response);
                 }
             }
         }
@@ -478,7 +478,7 @@ async fn access_authorized_no_index_restriction() {
             });
 
             let (response, code) = server.add_api_key(content).await;
-            assert_eq!(201, code, "{:?}", &response);
+            assert_eq!(201, code, "{:?}", response);
             assert!(response["key"].is_string());
 
             let key = response["key"].as_str().unwrap();
@@ -511,11 +511,11 @@ async fn access_authorized_stats_restricted_index() {
     // create index `test`
     let index = server.index("test");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await;
 
@@ -526,7 +526,7 @@ async fn access_authorized_stats_restricted_index() {
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -534,7 +534,7 @@ async fn access_authorized_stats_restricted_index() {
     server.use_api_key(key);
 
     let (response, code) = server.stats().await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
 
     // key should have access on `products` index.
     assert!(response["indexes"].get("products").is_some());
@@ -551,11 +551,11 @@ async fn access_authorized_stats_no_index_restriction() {
     // create index `test`
     let index = server.index("test");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await;
 
@@ -566,7 +566,7 @@ async fn access_authorized_stats_no_index_restriction() {
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -574,7 +574,7 @@ async fn access_authorized_stats_no_index_restriction() {
     server.use_api_key(key);
 
     let (response, code) = server.stats().await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
 
     // key should have access on `products` index.
     assert!(response["indexes"].get("products").is_some());
@@ -591,11 +591,11 @@ async fn list_authorized_indexes_restricted_index() {
     // create index `test`
     let index = server.index("test");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await;
 
@@ -606,7 +606,7 @@ async fn list_authorized_indexes_restricted_index() {
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -614,7 +614,7 @@ async fn list_authorized_indexes_restricted_index() {
     server.use_api_key(key);
 
     let (response, code) = server.list_indexes(None, None).await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
 
     let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
@@ -632,11 +632,11 @@ async fn list_authorized_indexes_no_index_restriction() {
     // create index `test`
     let index = server.index("test");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await;
 
@@ -647,7 +647,7 @@ async fn list_authorized_indexes_no_index_restriction() {
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -655,7 +655,7 @@ async fn list_authorized_indexes_no_index_restriction() {
     server.use_api_key(key);
 
     let (response, code) = server.list_indexes(None, None).await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
 
     let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
@@ -673,12 +673,12 @@ async fn access_authorized_index_patterns() {
     // create products_1 index
     let index_1 = server.index("products_1");
     let (response, code) = index_1.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
 
     // create products index
     let index_ = server.index("products");
     let (response, code) = index_.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
 
     // create key with all document access on indices with product_* pattern.
     let content = json!({
@@ -689,7 +689,7 @@ async fn access_authorized_index_patterns() {
 
     // Register the key
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -711,12 +711,12 @@ async fn access_authorized_index_patterns() {
 
     // Adding document to products_1 index. Should succeed with 202
     let (response, code) = index_1.add_documents(documents.clone(), None).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
     // Adding document to products index. Should Fail with 403 -- invalid_api_key
     let (response, code) = index_.add_documents(documents, None).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     server.use_api_key(MASTER_KEY);
 
@@ -726,7 +726,7 @@ async fn access_authorized_index_patterns() {
     server.wait_task(task_id).await;
 
     let (response, code) = index_1.get_task(task_id).await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
     assert_eq!(response["status"], "succeeded");
 }
 
@@ -738,17 +738,17 @@ async fn raise_error_non_authorized_index_patterns() {
     // create products_1 index
     let product_1_index = server.index("products_1");
     let (response, code) = product_1_index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
 
     // create products_2 index
     let product_2_index = server.index("products_2");
     let (response, code) = product_2_index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
 
     // create test index
     let test_index = server.index("test");
     let (response, code) = test_index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
 
     // create key with all document access on indices with product_* pattern.
     let content = json!({
@@ -759,7 +759,7 @@ async fn raise_error_non_authorized_index_patterns() {
 
     // Register the key
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -783,17 +783,17 @@ async fn raise_error_non_authorized_index_patterns() {
 
     // Adding document to products_1 index. Should succeed with 202
     let (response, code) = product_1_index.add_documents(documents.clone(), None).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task1_id = response["taskUid"].as_u64().unwrap();
 
     // Adding document to products_2 index. Should succeed with 202
     let (response, code) = product_2_index.add_documents(documents.clone(), None).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task2_id = response["taskUid"].as_u64().unwrap();
 
     // Adding a document to test index. Should Fail with 403 -- invalid_api_key
     let (response, code) = test_index.add_documents(documents, None).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     server.use_api_key(MASTER_KEY);
 
@@ -806,11 +806,11 @@ async fn raise_error_non_authorized_index_patterns() {
     server.wait_task(task2_id).await;
 
     let (response, code) = product_1_index.get_task(task1_id).await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
     assert_eq!(response["status"], "succeeded");
 
     let (response, code) = product_1_index.get_task(task2_id).await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
     assert_eq!(response["status"], "succeeded");
 }
 
@@ -829,24 +829,24 @@ async fn pattern_indexes() {
 
     // Generate and use the api key
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     let key = response["key"].as_str().expect("Key is not string");
     server.use_api_key(key);
 
     // Create Index products_1 using generated api key
     let products_1 = server.index("products_1");
     let (response, code) = products_1.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
 
     // Fail to create products_* using generated api key
     let products_1 = server.index("products_*");
     let (response, code) = products_1.create(Some("id")).await;
-    assert_eq!(400, code, "{:?}", &response);
+    assert_eq!(400, code, "{:?}", response);
 
     // Fail to create test_1 using generated api key
     let products_1 = server.index("test_1");
     let (response, code) = products_1.create(Some("id")).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 }
 
 #[actix_rt::test]
@@ -857,11 +857,11 @@ async fn list_authorized_tasks_restricted_index() {
     // create index `test`
     let index = server.index("test");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await;
 
@@ -872,7 +872,7 @@ async fn list_authorized_tasks_restricted_index() {
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -880,7 +880,7 @@ async fn list_authorized_tasks_restricted_index() {
     server.use_api_key(key);
 
     let (response, code) = server.service.get("/tasks").await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
     let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
     assert!(response.iter().any(|task| task["indexUid"] == "products"));
@@ -897,11 +897,11 @@ async fn list_authorized_tasks_no_index_restriction() {
     // create index `test`
     let index = server.index("test");
     let (response, code) = index.create(Some("id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     // create index `products`
     let index = server.index("products");
     let (response, code) = index.create(Some("product_id")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
     server.wait_task(task_id).await;
 
@@ -912,7 +912,7 @@ async fn list_authorized_tasks_no_index_restriction() {
         "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -920,7 +920,7 @@ async fn list_authorized_tasks_no_index_restriction() {
     server.use_api_key(key);
 
     let (response, code) = server.service.get("/tasks").await;
-    assert_eq!(200, code, "{:?}", &response);
+    assert_eq!(200, code, "{:?}", response);
 
     let response = response["results"].as_array().unwrap();
     // key should have access on `products` index.
@@ -939,8 +939,8 @@ async fn error_creating_index_without_action() {
     let create_index_actions = AUTHORIZATIONS
         .get(&("POST", "/indexes", IndexScopePolicy::Allow))
         .unwrap()
-        .iter()
-        .flat_map(|(s, _)| s.iter())
+        .keys()
+        .flat_map(|s| s.iter())
         .cloned()
         .collect::<HashSet<_>>();
     let content = json!({
@@ -950,7 +950,7 @@ async fn error_creating_index_without_action() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -974,7 +974,7 @@ async fn error_creating_index_without_action() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = server.wait_task(task_id).await;
@@ -985,7 +985,7 @@ async fn error_creating_index_without_action() {
     let settings = json!({ "distinctAttribute": "test"});
 
     let (response, code) = index.update_settings(settings).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = server.wait_task(task_id).await;
@@ -995,7 +995,7 @@ async fn error_creating_index_without_action() {
 
     // try to create a index via add specialized settings route
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
-    assert_eq!(202, code, "{:?}", &response);
+    assert_eq!(202, code, "{:?}", response);
     let task_id = response["taskUid"].as_u64().unwrap();
 
     let response = server.wait_task(task_id).await;
@@ -1030,7 +1030,7 @@ async fn lazy_create_index() {
     for content in contents {
         server.use_api_key(MASTER_KEY);
         let (response, code) = server.add_api_key(content).await;
-        assert_eq!(201, code, "{:?}", &response);
+        assert_eq!(201, code, "{:?}", response);
         assert!(response["key"].is_string());
 
         // use created key.
@@ -1047,13 +1047,13 @@ async fn lazy_create_index() {
         ]);
 
         let (response, code) = index.add_documents(documents, None).await;
-        assert_eq!(202, code, "{:?}", &response);
+        assert_eq!(202, code, "{:?}", response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
         server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
-        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(200, code, "{:?}", response);
         assert_eq!(response["status"], "succeeded");
 
         // try to create a index via add settings route
@@ -1061,25 +1061,25 @@ async fn lazy_create_index() {
         let settings = json!({ "distinctAttribute": "test"});
 
         let (response, code) = index.update_settings(settings).await;
-        assert_eq!(202, code, "{:?}", &response);
+        assert_eq!(202, code, "{:?}", response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
         server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
-        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(200, code, "{:?}", response);
         assert_eq!(response["status"], "succeeded");
 
         // try to create a index via add specialized settings route
         let index = server.index("test2");
         let (response, code) = index.update_distinct_attribute(json!("test")).await;
-        assert_eq!(202, code, "{:?}", &response);
+        assert_eq!(202, code, "{:?}", response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
         server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
-        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(200, code, "{:?}", response);
         assert_eq!(response["status"], "succeeded");
     }
 }
@@ -1110,7 +1110,7 @@ async fn lazy_create_index_from_pattern() {
     for content in contents {
         server.use_api_key(MASTER_KEY);
         let (response, code) = server.add_api_key(content).await;
-        assert_eq!(201, code, "{:?}", &response);
+        assert_eq!(201, code, "{:?}", response);
         assert!(response["key"].is_string());
 
         // use created key.
@@ -1128,31 +1128,31 @@ async fn lazy_create_index_from_pattern() {
         ]);
 
         let (response, code) = index.add_documents(documents.clone(), None).await;
-        assert_eq!(202, code, "{:?}", &response);
+        assert_eq!(202, code, "{:?}", response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
         server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
-        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(200, code, "{:?}", response);
         assert_eq!(response["status"], "succeeded");
 
         // Fail to create test index
         let (response, code) = test.add_documents(documents, None).await;
-        assert_eq!(403, code, "{:?}", &response);
+        assert_eq!(403, code, "{:?}", response);
 
         // try to create a index via add settings route
         let index = server.index("products_2");
         let settings = json!({ "distinctAttribute": "test"});
 
         let (response, code) = index.update_settings(settings).await;
-        assert_eq!(202, code, "{:?}", &response);
+        assert_eq!(202, code, "{:?}", response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
         server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
-        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(200, code, "{:?}", response);
         assert_eq!(response["status"], "succeeded");
 
         // Fail to create test index
@@ -1161,18 +1161,18 @@ async fn lazy_create_index_from_pattern() {
         let settings = json!({ "distinctAttribute": "test"});
 
         let (response, code) = index.update_settings(settings).await;
-        assert_eq!(403, code, "{:?}", &response);
+        assert_eq!(403, code, "{:?}", response);
 
         // try to create a index via add specialized settings route
         let index = server.index("products_3");
         let (response, code) = index.update_distinct_attribute(json!("test")).await;
-        assert_eq!(202, code, "{:?}", &response);
+        assert_eq!(202, code, "{:?}", response);
         let task_id = response["taskUid"].as_u64().unwrap();
 
         server.wait_task(task_id).await;
 
         let (response, code) = index.get_task(task_id).await;
-        assert_eq!(200, code, "{:?}", &response);
+        assert_eq!(200, code, "{:?}", response);
         assert_eq!(response["status"], "succeeded");
 
         // Fail to create test index
@@ -1180,7 +1180,7 @@ async fn lazy_create_index_from_pattern() {
         let settings = json!({ "distinctAttribute": "test"});
 
         let (response, code) = index.update_settings(settings).await;
-        assert_eq!(403, code, "{:?}", &response);
+        assert_eq!(403, code, "{:?}", response);
     }
 }
 
@@ -1197,7 +1197,7 @@ async fn error_creating_index_without_index() {
     });
 
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(201, code, "{:?}", &response);
+    assert_eq!(201, code, "{:?}", response);
     assert!(response["key"].is_string());
 
     // use created key.
@@ -1214,23 +1214,23 @@ async fn error_creating_index_without_index() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via add settings route
     let index = server.index("test1");
     let settings = json!({ "distinctAttribute": "test"});
     let (response, code) = index.update_settings(settings).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via add specialized settings route
     let index = server.index("test2");
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via create index route
     let index = server.index("test3");
     let (response, code) = index.create(None).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via add documents route
     let index = server.index("products");
@@ -1242,21 +1242,21 @@ async fn error_creating_index_without_index() {
     ]);
 
     let (response, code) = index.add_documents(documents, None).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via add settings route
     let index = server.index("products");
     let settings = json!({ "distinctAttribute": "test"});
     let (response, code) = index.update_settings(settings).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via add specialized settings route
     let index = server.index("products");
     let (response, code) = index.update_distinct_attribute(json!("test")).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 
     // try to create a index via create index route
     let index = server.index("products");
     let (response, code) = index.create(None).await;
-    assert_eq!(403, code, "{:?}", &response);
+    assert_eq!(403, code, "{:?}", response);
 }
