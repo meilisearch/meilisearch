@@ -33,8 +33,6 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - name: check free space after
         run: df -h
-      - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
         with:
@@ -56,8 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
-      - uses: dtolnay/rust-toolchain@1.91.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run cargo build without any default features
         run: cargo build --locked --no-default-features --all
       - name: Run cargo test
@@ -75,8 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.9.1
-      - uses: dtolnay/rust-toolchain@1.91.1
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run cargo build without any default features
         run: cargo build --locked --no-default-features --all
       - name: Run cargo test
@@ -94,7 +90,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build with almost all features
         run: |
           cargo build --workspace --locked --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
@@ -154,8 +149,6 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - name: check free space after
         run: df -h
-      - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo test
@@ -173,7 +166,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -qz lindera; then
@@ -195,7 +187,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Build
@@ -215,9 +206,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
-        with:
-          components: clippy
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo clippy
@@ -234,9 +222,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
-        with:
-          components: rustfmt
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo fmt
@@ -255,7 +240,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.9.1
       - name: Run declarative tests
