@@ -217,8 +217,7 @@ pub fn filters_into_index_filters(
         }
 
         // Build the In filter for each filter
-        for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids.into_iter())
-        {
+        for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids) {
             let mut inner = Vec::new();
             for internal in docids.iter() {
                 if let Some(external) = internal_to_external_docids.get(&internal) {

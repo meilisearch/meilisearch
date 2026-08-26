@@ -171,7 +171,7 @@ pub async fn perform_federated_search(
     let mut federation = federation;
     let mut partition = None;
     for (query_index, (mut federated_query, filter)) in
-        queries.into_iter().zip(precomputed_filters.into_iter()).enumerate()
+        queries.into_iter().zip(precomputed_filters).enumerate()
     {
         // Insert back the filter into the query as a string before sending it to the remote
         federated_query.filter = filter.as_ref().map(|f| {
@@ -356,7 +356,7 @@ pub async fn perform_federated_search(
                     return None;
                 }
 
-                distinct_values.extend(facet_values.into_iter());
+                distinct_values.extend(facet_values);
             }
             Some(hit)
         })
@@ -1675,7 +1675,7 @@ impl SearchByIndex {
             let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
-            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
+            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores) {
                 if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
                     let mut hit = result_by_query
                         .hit_maker

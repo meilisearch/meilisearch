@@ -60,7 +60,7 @@ impl IndexFilter {
             }
 
             // If the field is not filterable, return an error
-            return Err(fid.to_external_error(FilterError::AttributeNotFilterable {
+            Err(fid.to_external_error(FilterError::AttributeNotFilterable {
                 attribute,
                 filterable_patterns: filtered_matching_patterns(
                     &filterable_attributes_rules,
@@ -466,17 +466,17 @@ impl IndexFilter {
                 let base_point: [f64; 2] =
                     [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                 if !(-90.0..=90.0).contains(&base_point[0]) {
-                    return Err(point[0].to_external_error(BadGeoError::Lat(base_point[0])))?;
+                    Err(point[0].to_external_error(BadGeoError::Lat(base_point[0])))?;
                 }
                 if !(-180.0..=180.0).contains(&base_point[1]) {
-                    return Err(point[1].to_external_error(BadGeoError::Lng(base_point[1])))?;
+                    Err(point[1].to_external_error(BadGeoError::Lng(base_point[1])))?;
                 }
                 let radius = radius.parse_finite_float()?;
                 let mut resolution = 125;
                 if let Some(res_token) = res_token {
                     resolution = res_token.parse_finite_float()? as usize;
                     if !(3..=1000).contains(&resolution) {
-                        return Err(
+                        Err(
                             res_token.to_external_error(BadGeoError::InvalidResolution(resolution))
                         )?;
                     }
@@ -538,27 +538,19 @@ impl IndexFilter {
                     bottom_left_point[1].parse_finite_float()?,
                 ];
                 if !(-90.0..=90.0).contains(&top_right[0]) {
-                    return Err(
-                        top_right_point[0].to_external_error(BadGeoError::Lat(top_right[0]))
-                    )?;
+                    Err(top_right_point[0].to_external_error(BadGeoError::Lat(top_right[0])))?;
                 }
                 if !(-180.0..=180.0).contains(&top_right[1]) {
-                    return Err(
-                        top_right_point[1].to_external_error(BadGeoError::Lng(top_right[1]))
-                    )?;
+                    Err(top_right_point[1].to_external_error(BadGeoError::Lng(top_right[1])))?;
                 }
                 if !(-90.0..=90.0).contains(&bottom_left[0]) {
-                    return Err(
-                        bottom_left_point[0].to_external_error(BadGeoError::Lat(bottom_left[0]))
-                    )?;
+                    Err(bottom_left_point[0].to_external_error(BadGeoError::Lat(bottom_left[0])))?;
                 }
                 if !(-180.0..=180.0).contains(&bottom_left[1]) {
-                    return Err(
-                        bottom_left_point[1].to_external_error(BadGeoError::Lng(bottom_left[1]))
-                    )?;
+                    Err(bottom_left_point[1].to_external_error(BadGeoError::Lng(bottom_left[1])))?;
                 }
                 if top_right[0] < bottom_left[0] {
-                    return Err(bottom_left_point[1].to_external_error(
+                    Err(bottom_left_point[1].to_external_error(
                         BadGeoError::BoundingBoxTopIsBelowBottom(top_right[0], bottom_left[0]),
                     ))?;
                 }
@@ -696,15 +688,13 @@ impl IndexFilter {
             }
             IndexFilterCondition::GeoPolygon { points } => {
                 if !index.is_geojson_filtering_enabled(rtxn)? {
-                    return Err(points[0][0].to_external_error(
-                        FilterError::AttributeNotFilterable {
-                            attribute: RESERVED_GEOJSON_FIELD_NAME,
-                            filterable_patterns: filtered_matching_patterns(
-                                filterable_attribute_rules,
-                                &|features| features.is_filterable(),
-                            ),
-                        },
-                    ))?;
+                    Err(points[0][0].to_external_error(FilterError::AttributeNotFilterable {
+                        attribute: RESERVED_GEOJSON_FIELD_NAME,
+                        filterable_patterns: filtered_matching_patterns(
+                            filterable_attribute_rules,
+                            &|features| features.is_filterable(),
+                        ),
+                    }))?;
                 }
 
                 let mut coords = Vec::new();
@@ -712,10 +702,10 @@ impl IndexFilter {
                     let lat = lat_token.parse_finite_float()?;
                     let lng = lng_token.parse_finite_float()?;
                     if !(-90.0..=90.0).contains(&lat) {
-                        return Err(lat_token.to_external_error(BadGeoError::Lat(lat)))?;
+                        Err(lat_token.to_external_error(BadGeoError::Lat(lat)))?;
                     }
                     if !(-180.0..=180.0).contains(&lng) {
-                        return Err(lng_token.to_external_error(BadGeoError::Lng(lng)))?;
+                        Err(lng_token.to_external_error(BadGeoError::Lng(lng)))?;
                     }
                     coords.push(geo_types::Coord { x: lng, y: lat });
                 }
