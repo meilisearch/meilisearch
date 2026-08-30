@@ -174,8 +174,9 @@ impl IndexScheduler {
 
         let previous_processing_batch = self.processing_tasks.write().unwrap().stop_processing();
 
+        let task_database_is_almost_full = self.remaining_size_until_task_queue_stop()? == 0;
         let mut wtxn = self.env.write_txn()?;
-        self.queue.cleanup_task_queue(&mut wtxn)?;
+        self.queue.cleanup_task_queue(&mut wtxn, task_database_is_almost_full)?;
         wtxn.commit()?;
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
