@@ -8,9 +8,9 @@ use rayon::slice::ParallelSlice;
 use super::document_changes::IndexingContext;
 use crate::documents::PrimaryKey;
 use crate::progress::AtomicDocumentStep;
+use crate::steps::IndexingStep;
 use crate::update::new::document::{DocumentContext, DocumentIdentifiers};
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
-use crate::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::{DocumentId, InternalError, Result};
 

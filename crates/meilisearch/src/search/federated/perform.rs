@@ -362,7 +362,7 @@ pub async fn perform_federated_search(
             hydration_cache,
             &index_scheduler,
             network_partitioner,
-            &progress,
+            progress,
         )
         .await
         .without_index()?;

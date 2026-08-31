@@ -23,6 +23,8 @@ use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::ProxySearchParams;
 use crate::search::{ExternalDocumentId, SearchHit};
 
+type HydrationDocuments = HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>;
+
 /// Hydrate the documents based on the foreign keys
 ///
 /// This function will walk the document and hydrate the foreign key values with the full document from the foreign index using the displayed fields.
@@ -219,15 +221,14 @@ pub struct FederatedHydrationFormatter {
     // map from index uid to foreign keys
     hydration_settings: ForeignKeysPerIndex,
     // map from foreign index uid and foreign document id to document
-    hydration_documents: HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>,
+    hydration_documents: HydrationDocuments,
 }
 
 fn local_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
     hydration_docids: &HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     progress: &Progress,
-) -> Result<HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>, ResponseError>
-{
+) -> Result<HydrationDocuments, ResponseError> {
     let _step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
 
     let mut hydration_documents = HashMap::new();
