@@ -1,7 +1,8 @@
 # Compile
 FROM    rust:1.89-alpine3.22 AS compiler
 
-RUN     apk add -q --no-cache build-base openssl-dev
+RUN     apk upgrade -q --no-cache \
+        && apk add -q --no-cache build-base openssl-dev
 
 WORKDIR /
 
@@ -24,7 +25,8 @@ LABEL   org.opencontainers.image.source="https://github.com/meilisearch/meilisea
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 ENV     MEILI_SERVER_PROVIDER docker
 
-RUN     apk add -q --no-cache libgcc tini curl
+RUN     apk upgrade -q --no-cache \
+        && apk add -q --no-cache libgcc tini curl
 
 # add meilisearch and meilitool to the `/bin` so you can run it from anywhere
 # and it's easy to find.
