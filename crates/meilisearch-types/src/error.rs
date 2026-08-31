@@ -139,7 +139,7 @@ impl fmt::Display for ErrorType {
 /// so we can get a value of the `Code` enum with the correct variant by calling
 /// `MyErrorCode::default().error_code()`.
 macro_rules! make_error_codes {
-    ($($code_ident:ident, $err_type:ident, $status:ident);*) => {
+    ($($code_ident:ident, $err_type:ident, $status:ident, $description:literal);*) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
         #[schema(rename_all = "snake_case")]
         pub enum Code {
@@ -160,6 +160,14 @@ macro_rules! make_error_codes {
                 match self {
                     $(
                         Code::$code_ident => stringify!($code_ident).to_case(convert_case::Case::Snake)
+                    ),*
+                }
+            }
+
+            pub fn description(&self) -> &'static str {
+                match self {
+                    $(
+                        Code::$code_ident => $description
                     ),*
                 }
             }
