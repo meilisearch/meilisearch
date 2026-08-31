@@ -24,6 +24,8 @@ use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::ProxySearchParams;
 use crate::search::{ExternalDocumentId, SearchHit};
 
+type HydrationDocuments = HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>;
+
 /// Hydrate the documents based on the foreign keys
 ///
 /// This function will walk the document and hydrate the foreign key values with the full document from the foreign index using the displayed fields.
@@ -227,34 +229,27 @@ pub struct FederatedHydrationFormatter {
     // map from index uid to foreign keys
     hydration_settings: ForeignKeysPerIndex,
     // map from foreign index uid and foreign document id to document
-    hydration_documents: HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>,
+    hydration_documents: HydrationDocuments,
 }
 
 fn local_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
-    index_uid: &ForeignIndexUid,
-    docids: &[ForeignExternalDocumentId],
-    hydration_documents: &mut HashMap<
-        (ForeignIndexUid, ForeignExternalDocumentId),
-        Map<String, Value>,
-    >,
+    hydration_docids: &HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     auth_filter: &AuthFilter,
     progress: &Progress,
-) -> Result<(), ResponseError> {
+) -> Result<HydrationDocuments, ResponseError> {
     let _step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
-    let index = index_scheduler
-        .user_index(index_uid.as_ref(), auth_filter)
-        .map_err(ResponseError::from)
-        .map_err(|mut e| {
-            e.message = format!("When trying to open an hydration index: {}", e.message);
-            e
-        })?;
-    let rtxn = index.read_txn()?;
-    let fields_ids_map = index.fields_ids_map(&rtxn)?;
-    let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;
-    for docid in docids {
-        let document = document_maker.make_document(docid)?;
-        hydration_documents.insert((index_uid.clone(), docid.clone()), document);
+
+    let mut hydration_documents = HashMap::new();
+    for (index_uid, docids) in hydration_docids {
+        let index = index_scheduler.user_index(index_uid.as_ref(), auth_filter)?;
+        let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;
+        for docid in docids {
+            let document = document_maker.make_document(docid)?;
+            hydration_documents.insert((index_uid.clone(), docid.clone()), document);
+        }
     }
 
     Ok(hydration_documents)

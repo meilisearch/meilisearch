@@ -368,7 +368,7 @@ pub async fn perform_federated_search(
             &index_scheduler,
             network_partitioner,
             auth_filter,
-            &progress,
+            progress,
         )
         .await
         .without_index()?;
