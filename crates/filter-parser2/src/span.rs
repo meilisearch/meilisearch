@@ -1,14 +1,6 @@
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 
-use itertools::Itertools;
-use nom::branch::alt;
-use nom::bytes::complete::{escaped, tag, take_while, take_while1};
-use nom::character::complete::{anychar, multispace0, one_of};
-use nom::combinator::cut;
-use nom::number::complete::recognize_float;
-use nom::sequence::{preceded, terminated};
-use nom::{IResult, Input, Parser};
+use nom::Input;
 use wip::WipResultExt;
 
 use crate::{FilterSource, FilterSources, SourceHandle};
@@ -17,7 +9,7 @@ use crate::{FilterSource, FilterSources, SourceHandle};
 ///
 /// Consists of a handle to the source and the span inside the source.
 /// The span must be smaller than 4GB.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
     source: SourceHandle,
     start: u32,
@@ -25,7 +17,7 @@ pub struct Span {
 }
 
 impl Span {
-    /// Build a span from a source and its handle, spanning the entire source  
+    /// Build a span from a source and its handle, spanning the entire source
     pub(crate) fn from_entire_source(source_handle: SourceHandle, source: &FilterSource) -> Self {
         let end = source.source.len().try_into().unwrap_wip();
         Self { source: source_handle, start: 0, end }
@@ -89,27 +81,7 @@ impl<'a> SpanView<'a> {
     ///
     /// If the text of this span is not quoted, returns the entire text of the span as borrowed, without unescaping anything.
     pub fn unquote(&self) -> Cow<'a, str> {
-        if self.text.len() < 2 {
-            return Cow::Borrowed(self.text);
-        }
-        if self.text.starts_with('\'') && self.text.ends_with('\'') {
-            let inner = &self.text[1..(self.text.len() - 1)];
-            if !inner.contains('\\') {
-                return Cow::Borrowed(inner);
-            } else {
-                let inner: String = serde_json::from_reader(std::io::Read::chain(
-                    std::io::Read::chain("\"".as_bytes(), inner.as_bytes()),
-                    "\"".as_bytes(),
-                ))
-                .unwrap();
-                Cow::Owned(inner)
-            }
-        } else if self.text.starts_with('"') && self.text.ends_with('"') {
-            let inner: Cow<'_, str> = serde_json::from_str(self.text).unwrap();
-            inner
-        } else {
-            Cow::Borrowed(self.text)
-        }
+        unquote(self.text)
     }
 
     /// A reference to the text corresponding to this span in the underlying source.
@@ -120,6 +92,34 @@ impl<'a> SpanView<'a> {
     /// For these uses, the text returned by [`Self::unquote`] is suitable, but may incur an allocation.
     pub fn raw_possibly_escaped_text(&self) -> &'a str {
         self.text
+    }
+}
+
+fn unquote<'a>(text: &'a str) -> Cow<'a, str> {
+    if text.len() < 2 {
+        return Cow::Borrowed(text);
+    }
+    if text.starts_with('\'') && text.ends_with('\'') {
+        let inner = &text[1..(text.len() - 1)];
+        if !inner.contains('\\') {
+            return Cow::Borrowed(inner);
+        } else {
+            let inner: String = serde_json::from_reader(std::io::Read::chain(
+                std::io::Read::chain("\"".as_bytes(), inner.as_bytes()),
+                "\"".as_bytes(),
+            ))
+            .unwrap();
+            Cow::Owned(inner)
+        }
+    } else if text.starts_with('"') && text.ends_with('"') {
+        let inner = &text[1..(text.len() - 1)];
+        if !inner.contains('\\') {
+            return Cow::Borrowed(inner);
+        }
+        let inner: String = serde_json::from_str(text).unwrap();
+        Cow::Owned(inner)
+    } else {
+        Cow::Borrowed(text)
     }
 }
 
@@ -213,4 +213,54 @@ impl<'a> nom::Offset for SpanView<'a> {
 pub enum SpanViewError {
     UnknownSourceHandle(Span),
     SpanOutOfRange(Span),
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::span::unquote;
+
+    enum Cow {
+        Borrowed,
+        Owned,
+    }
+
+    fn check_unquote(text: &str, expected: &str, cow: Cow) {
+        let unquoted = unquote(text);
+        assert_eq!(unquoted, expected);
+        match cow {
+            Cow::Borrowed => assert!(matches!(unquoted, std::borrow::Cow::Borrowed(_))),
+            Cow::Owned => assert!(matches!(unquoted, std::borrow::Cow::Owned(_))),
+        }
+    }
+
+    #[test]
+    fn unquote_works() {
+        // short text always borrowed
+        check_unquote("t", "t", Cow::Borrowed);
+        check_unquote("\"", "\"", Cow::Borrowed);
+
+        // no quote: unchanged and borrowed
+        check_unquote("toto", "toto", Cow::Borrowed);
+        // unbalanced quotes: unchanged and borrowed
+        check_unquote("\"toto", "\"toto", Cow::Borrowed);
+        check_unquote("toto\"", "toto\"", Cow::Borrowed);
+        check_unquote("'toto", "'toto", Cow::Borrowed);
+        check_unquote("toto'", "toto'", Cow::Borrowed);
+
+        // quotes with no inner escape: unquoted and borrowed
+        check_unquote("\"toto\"", "toto", Cow::Borrowed);
+        check_unquote("'toto'", "toto", Cow::Borrowed);
+
+        // quotes with inner escape: replaced and owned
+        check_unquote("\"to\\\\to\"", "to\\to", Cow::Owned);
+        check_unquote("'to\\\\to'", "to\\to", Cow::Owned);
+        check_unquote("\"to\\\"to\"", "to\"to", Cow::Owned);
+        check_unquote("'to\\\"to'", "to\"to", Cow::Owned);
+
+        // should not parse in actual filter as it would contain a char illegal outside of quotes
+        // unchanged because not inside quotes
+        check_unquote("to\"to", "to\"to", Cow::Borrowed);
+        check_unquote("to'to", "to'to", Cow::Borrowed);
+        check_unquote("to\\\\to", "to\\\\to", Cow::Borrowed);
+    }
 }
