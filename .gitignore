@@ -32,3 +32,5 @@ crates/milli/fuzz/update::facet::incremental::fuzz::fuzz/
 
 # OpenAPI generator
 **/meilisearch-openapi.json
+# Error codes
+**/meilisearch-error-codes.json
