@@ -1,5 +1,3 @@
-mod error;
-
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -7,11 +5,10 @@ use std::pin::Pin;
 use actix_web::http::header::AUTHORIZATION;
 use actix_web::web::Data;
 use actix_web::FromRequest;
-pub use error::AuthenticationError;
 use futures::future::err;
 use futures::Future;
 use meilisearch_auth::{AuthController, AuthFilter};
-use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
 
 use self::policies::AuthError;
 

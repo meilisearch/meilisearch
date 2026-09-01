@@ -10,7 +10,7 @@ use deserr::actix_web::AwebJson;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderTemplate};
-use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::error::{AuthenticationError, Code, ErrorCode, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
@@ -27,7 +27,7 @@ use utoipa::ToSchema;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::DoubleActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::render_analytics::RenderAggregator;
 

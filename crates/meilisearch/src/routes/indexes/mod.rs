@@ -8,7 +8,7 @@ use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{deserr_codes::*, AuthenticationError};
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::{self, FieldDistribution, Index};
@@ -21,7 +21,7 @@ use utoipa::{IntoParams, ToSchema};
 use super::{Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 
 pub mod compact;

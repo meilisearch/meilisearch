@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::documents::{BrowseQueryWithIndex, DocumentsResult};
 use crate::search::federated::types::PreprocessedQuery;
