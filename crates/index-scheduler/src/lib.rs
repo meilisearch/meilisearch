@@ -58,7 +58,9 @@ pub use error::Error;
 pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::error::AuthenticationError;
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -581,7 +583,18 @@ impl IndexScheduler {
     /// Some configurations also can't reasonably open multiple indexes at once.
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
-    pub fn user_index(&self, name: &str) -> Result<Index> {
+    pub fn user_index(&self, name: &str, auth_filter: &AuthFilter) -> Result<Index> {
+        if !auth_filter.is_index_authorized(name) {
+            return Err(Error::AuthenticationError(AuthenticationError::InvalidToken));
+        }
+
+        self.user_index_unsecured(name)
+    }
+
+    /// Same as `user_index` but without checking authorization.
+    ///
+    /// This function is not meant to be used outside of the index scheduler.
+    pub(crate) fn user_index_unsecured(&self, name: &str) -> Result<Index> {
         let name = UserIndex::try_from_uid(name)?;
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
