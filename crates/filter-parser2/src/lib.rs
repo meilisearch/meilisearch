@@ -14,6 +14,8 @@
 //! - Semantics is fully decoupled from the parsing via a [`Semantics`] trait that implementors can use to interpret the filter.
 //! - Parsing is done with a virtual stack rather than on the actual stack, reducing the risk of stack overflow.
 //! - Parsing is done with an explicit state machine that matches on permissible tokens depending on the current state of the parser.
+//! - Parsing starts with tokenization, then tokens are used to built [`Terminal`]s separated by their [`Link`]s (AND, OR), and
+//! finally a semantics ties the knot.
 //!
 //! # Possible tokens
 //!
@@ -68,6 +70,8 @@ mod span;
 mod token;
 
 pub use span::{Span, SpanView, SpanViewError};
+
+use crate::token::{ParseOutput, Token, TokenKind};
 
 type SourceHandle = u16;
 
@@ -285,6 +289,7 @@ fn parse_expression(
 ) {
 }
 
+#[derive(Debug, Clone)]
 enum ParsingState<'a> {
     Terminal,
     Operator { left_operand: SpanView<'a> },
@@ -293,12 +298,20 @@ enum ParsingState<'a> {
     To { left_operand: SpanView<'a> },
 }
 
-struct ParsingContext<'a> {
+struct OpenParen<'a> {
+    paren: SpanView<'a>,
     polarity: bool,
-    state: ParsingState<'a>,
+    is_foreign: bool,
+    has_associative_priority: bool,
+}
+
+struct ParsingContext<'a> {
+    open_parens: Vec<OpenParen<'a>>,
+    open_brackets: Vec<SpanView<'a>>,
     previous_link: Link,
-    in_foreign: bool,
-    next: SpanView<'a>,
+    has_associative_priority: bool,
+    allows_empty_terminal: bool,
+    input: SpanView<'a>,
 }
 
 struct SourceParser<'a> {
@@ -329,7 +342,193 @@ impl<'a> SourceParser<'a> {
             nested: Default::default(),
         }
     }
+
+    fn advance_to_next_token(&mut self) -> Token<'a> {
+        let ParseOutput { parsed_token, remaining_input } = Token::parse_next(self.current.next);
+        self.current.next = remaining_input;
+        parsed_token
+    }
 }
+
+impl<'a> Iterator for SourceParser<'a> {
+    type Item = Result<Instruction, ParseInstructionError>;
+
+    /// Parses the next instruction
+    fn next(&mut self) -> Option<Self::Item> {
+        // 1. parse terminal
+        // 2. parse forward link or eof
+        // 3. forcefully push state if:
+        //    1. previous link is a non push AND
+        //    2. next link is an OR
+        // 4. save state:
+        //    1. remaining input
+        //    2. whether we forcefully pushed
+        //    3. polarity
+        //    4. unclosed parens
+        //    5. unclosed brackets
+        // 5. allow eof if:
+        //    1. no unclosed stuff
+        //    2. in link context or instead of an empty source
+        wip::fixme!(
+            "review 'switch polarity' verbiage when the link can indicate absolute polarity"
+        );
+        wip::fixme!("address distributivy, associativity and de morgan's law: NOT (a AND b) <=> NOT a OR NOT b");
+        // NOT (a AND b OR c) <=> NOT (a AND (b OR c)) <=> NOT a OR NOT (b OR c) <=> NOT a OR (NOT b AND NOT c)
+        // => it seems to work as follow: 1. de morgan's still replace semantics of AND to OR, but not associations
+        // in terms of implementation, just need to know about the parens' polarity, and can proceed as usual
+        //
+        // double polarity: cancels as expected
+        //
+        // NOT (a AND NOT (b OR c)) <=> NOT a OR NOT NOT (b OR c) <=> NOT a OR NOT (NOT b AND NOT c) <=> NOT a OR (NOT NOT b OR NOT NOT c) <=> NOT a OR (b OR c)
+        let next_token = self.advance_to_next_token();
+        match (&mut self.current.state, next_token.kind) {
+            (
+                _,
+                illegal @ (TokenKind::IllegalSingleQuoted
+                | TokenKind::IllegalDoubleQuoted
+                | TokenKind::IllegalCharacter),
+            ) => wip::wip!("return error here"),
+            (ParsingState::Terminal, TokenKind::Value | TokenKind::FloatValue) => wip::wip!("Operand state"),
+            (ParsingState::Terminal, TokenKind::LeftParens) => wip::wip!("Terminal state, upstack"),
+            (ParsingState::Terminal, TokenKind::RightParens) => wip::wip!("Unsure which contexts this is allowed?"),
+            (ParsingState::Terminal, TokenKind::Not) => wip::wip!("Terminal state, inverted polarity"),
+            (
+                ParsingState::Terminal,
+                TokenKind::LeftSquareBracket
+                | TokenKind::RightSquareBracket
+                | TokenKind::Or
+                | TokenKind::And
+                | TokenKind::In
+                | TokenKind::Exists
+                | TokenKind::Is
+                | TokenKind::Null
+                | TokenKind::To
+                | TokenKind::Comma
+                | TokenKind::Equal
+                | TokenKind::Different
+                | TokenKind::GreaterThan
+                | TokenKind::GreaterOrEqual
+                | TokenKind::LowerThan
+                | TokenKind::LowerOrEqual,
+            ) => wip::wip!("error unexpected token"),
+            (ParsingState::Terminal, TokenKind::GeoRadius) => todo!(),
+            (ParsingState::Terminal, TokenKind::GeoBoundingBox) => todo!(),
+            (ParsingState::Terminal, TokenKind::GeoPolygon) => todo!(),
+            (ParsingState::Terminal, TokenKind::Vectors) => todo!(),
+            (ParsingState::Terminal, TokenKind::Foreign) => todo!(),
+            (ParsingState::Terminal, TokenKind::Eof) => wip::wip!("behavior depends on context: no open paren, no open bracket, no standing previous link"),
+            (ParsingState::Operator { left_operand }, TokenKind::Value | TokenKind::FloatValue) => wip::wip!("TO state"),
+            (ParsingState::Operator { left_operand }, TokenKind::LeftParens | TokenKind::RightParens | TokenKind::LeftSquareBracket | TokenKind::RightSquareBracket) => wip::wip!("error"),
+            (ParsingState::Operator { left_operand }, TokenKind::Or) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::And) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Not) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::In) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Exists) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Is) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Null) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::To) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::GeoRadius) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::GeoBoundingBox) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::GeoPolygon) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Vectors) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Foreign) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Comma) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Equal) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Different) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::GreaterThan) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::GreaterOrEqual) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::LowerThan) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::LowerOrEqual) => todo!(),
+            (ParsingState::Operator { left_operand }, TokenKind::Eof) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Value) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::FloatValue) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::LeftParens) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::RightParens) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::LeftSquareBracket) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::RightSquareBracket) => {
+                todo!()
+            }
+            (ParsingState::In { left_operand, next_link }, TokenKind::Or) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::And) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Not) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::In) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Exists) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Is) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Null) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::To) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::GeoRadius) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::GeoBoundingBox) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::GeoPolygon) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Vectors) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Foreign) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Comma) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Equal) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Different) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::GreaterThan) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::GreaterOrEqual) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::LowerThan) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::LowerOrEqual) => todo!(),
+            (ParsingState::In { left_operand, next_link }, TokenKind::Eof) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Value) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::FloatValue) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::LeftParens) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::RightParens) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::LeftSquareBracket) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::RightSquareBracket) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Or) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::And) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Not) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::In) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Exists) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Is) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Null) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::To) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::GeoRadius) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::GeoBoundingBox) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::GeoPolygon) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Vectors) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Foreign) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Comma) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Equal) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Different) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::GreaterThan) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::GreaterOrEqual) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::LowerThan) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::LowerOrEqual) => todo!(),
+            (ParsingState::Link { terminal }, TokenKind::Eof) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Value) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::FloatValue) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::LeftParens) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::RightParens) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::LeftSquareBracket) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::RightSquareBracket) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Or) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::And) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Not) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::In) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Exists) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Is) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Null) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::To) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::GeoRadius) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::GeoBoundingBox) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::GeoPolygon) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Vectors) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Foreign) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Comma) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Equal) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Different) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::GreaterThan) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::GreaterOrEqual) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::LowerThan) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::LowerOrEqual) => todo!(),
+            (ParsingState::To { left_operand }, TokenKind::Eof) => todo!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ParseInstructionError {}
 
 /// A filter instruction
 ///
@@ -406,6 +605,7 @@ struct Terminal {
 /// A terminal typically represents the leaf objects of a filter
 ///
 /// In Meilisearch's case, it generally resolves to roaring bitmaps representing lists of docids.
+#[derive(Debug, Clone)]
 enum TerminalKind {
     VectorExists { embedder: Option<Span>, filter: VectorFilter },
     GeoLowerThan { point: [Span; 2], radius: Span, resolution: Option<Span> },

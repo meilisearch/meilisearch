@@ -55,6 +55,11 @@ debug = true
 [profile.release.package.heed]
 debug-assertions = true
 
+[profile.dev]
+debug = false
+codegen-units = 1
+incremental = false
+
 [profile.dev.package.flate2]
 opt-level = 3
 

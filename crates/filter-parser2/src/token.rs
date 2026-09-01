@@ -10,11 +10,11 @@ use nom::{IResult, Input, Parser};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Token<'a> {
-    span: SpanView<'a>,
-    kind: TokenKind,
+    pub span: SpanView<'a>,
+    pub kind: TokenKind,
 }
 
-struct ParseOutput<'a> {
+pub struct ParseOutput<'a> {
     parsed_token: Token<'a>,
     remaining_input: SpanView<'a>,
 }
@@ -236,7 +236,7 @@ fn parse_quoted_value<'a>(input: SpanView<'a>) -> IResult<SpanView<'a>, Token<'a
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TokenKind {
+pub enum TokenKind {
     /// field name, directly or single or double quoted
     Value,
     /// Single quoted value containing illegal characters
