@@ -78,7 +78,11 @@ impl MatchingWords {
         for located_words in &self.words {
             for word in &located_words.value {
                 let word = self.word_interner.get(*word);
-                // if the word is a prefix we match using starts_with.
+                // if it is a stop-word, don't match
+                if token.is_stopword() {
+                    continue;
+                }
+                // if the word is a prefix, we match using starts_with.
                 if located_words.is_prefix && token.lemma().starts_with(word) {
                     let Some((char_index, c)) =
                         word.char_indices().take(located_words.original_char_count).last()

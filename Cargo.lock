@@ -4370,6 +4370,7 @@ dependencies = [
  "either",
  "file-store",
  "flate2",
+ "fst",
  "futures",
  "futures-util",
  "hex",

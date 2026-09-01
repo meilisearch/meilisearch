@@ -2242,8 +2242,9 @@ impl<'a> HitMaker<'a> {
     pub fn tokenizer<'b>(
         dictionary: Option<&'b [&'b str]>,
         separators: Option<&'b [&'b str]>,
+        stop_words: Option<&'b fst::Set<&'b [u8]>>,
     ) -> milli::tokenizer::Tokenizer<'b> {
-        let mut tokenizer_builder = TokenizerBuilder::default();
+        let mut tokenizer_builder = TokenizerBuilder::<&[u8]>::new();
         tokenizer_builder.create_char_map(true);
 
         if let Some(separators) = separators {
@@ -2252,6 +2253,10 @@ impl<'a> HitMaker<'a> {
 
         if let Some(dictionary) = dictionary {
             tokenizer_builder.words_dict(dictionary);
+        }
+
+        if let Some(stop_words) = stop_words {
+            tokenizer_builder.stop_words(stop_words);
         }
 
         tokenizer_builder.into_tokenizer()
@@ -2505,8 +2510,10 @@ fn make_hits<'a>(
     let separators = index.allowed_separators(rtxn)?;
     let separators: Option<Vec<_>> =
         separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    let stop_words = index.stop_words(rtxn)?;
 
-    let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
+    let tokenizer =
+        HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref(), stop_words.as_ref());
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
