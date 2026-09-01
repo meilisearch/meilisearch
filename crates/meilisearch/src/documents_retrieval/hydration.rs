@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceIndexUid};
@@ -29,6 +30,7 @@ pub fn hydrate_documents(
     documents: &mut [SearchHit],
     foreign_keys: &[ForeignKey],
     index_scheduler: &IndexScheduler,
+    auth_filter: &AuthFilter,
 ) -> Result<(), ResponseError> {
     // Group the foreign keys by index uid
     let mut foreign_keys_by_index_uid: HashMap<_, Vec<_>> = HashMap::new();
@@ -38,7 +40,7 @@ pub fn hydrate_documents(
 
     // Open each foreign index once
     for (foreign_index_uid, field_names) in foreign_keys_by_index_uid {
-        let index = index_scheduler.user_index(foreign_index_uid)?;
+        let index = index_scheduler.user_index(foreign_index_uid, auth_filter)?;
         let rtxn = index.read_txn()?;
         let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let formatter =
@@ -228,8 +230,9 @@ fn local_fetch_hydration_documents(
         (ForeignIndexUid, ForeignExternalDocumentId),
         Map<String, Value>,
     >,
+    auth_filter: &AuthFilter,
 ) -> Result<(), ResponseError> {
-    let index = index_scheduler.user_index(index_uid.as_ref())?;
+    let index = index_scheduler.user_index(index_uid.as_ref(), auth_filter)?;
     let rtxn = index.read_txn()?;
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;
@@ -245,6 +248,7 @@ async fn federated_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
     network_partitioner: &NetworkPartitioner,
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
+    auth_filter: &AuthFilter,
 ) -> Result<
     (HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>, RemoteErrors),
     ResponseError,
@@ -255,7 +259,7 @@ async fn federated_fetch_hydration_documents(
     let mut hydration_documents = HashMap::new();
     let mut remote_queries = Vec::new();
     for (index_uid, docids) in hydration_docids.iter() {
-        let index = index_scheduler.user_index(index_uid.as_ref())?;
+        let index = index_scheduler.user_index(index_uid.as_ref(), auth_filter)?;
         let rtxn = index.read_txn()?;
 
         let displayed_fields = index.displayed_fields(&rtxn)?;
@@ -298,6 +302,7 @@ async fn federated_fetch_hydration_documents(
             index_uid,
             docids,
             &mut hydration_documents,
+            auth_filter,
         )?;
     }
 
@@ -330,6 +335,7 @@ impl FederatedHydrationFormatter {
         hydration_cache: HydrationContext,
         index_scheduler: &IndexScheduler,
         network_partitioner: &NetworkPartitioner,
+        auth_filter: &AuthFilter,
     ) -> Result<(Self, RemoteErrors), ResponseError> {
         let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
@@ -340,6 +346,7 @@ impl FederatedHydrationFormatter {
                 index_scheduler,
                 network_partitioner,
                 hydration_docids.clone(),
+                auth_filter,
             )
             .await?
         } else {
@@ -350,6 +357,7 @@ impl FederatedHydrationFormatter {
                     &index_uid,
                     &docids,
                     &mut hydration_documents,
+                    auth_filter,
                 )?;
             }
 

@@ -10,6 +10,7 @@ use actix_web::web::Data;
 use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
@@ -68,6 +69,7 @@ pub async fn perform_federated_search(
     show_federation_info: ShowFederationInfo,
     personalization_service: &PersonalizationService,
     progress: &Progress,
+    auth_filter: &AuthFilter,
 ) -> Result<(FederatedSearchResult, Deadline), (ResponseError, Option<usize>)> {
     if is_proxy {
         features.check_network("Performing a remote federated search").without_index()?;
@@ -135,8 +137,9 @@ pub async fn perform_federated_search(
 
     // 2.2. concurrently execute local queries
     progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
-    let params = SearchByIndexParams {
+    let params: SearchByIndexParams = SearchByIndexParams {
         index_scheduler,
+        auth_filter: auth_filter.clone(),
         local_name: network_partitioner.local().map(|local| local.to_string()),
         features,
         is_proxy,
@@ -169,7 +172,9 @@ pub async fn perform_federated_search(
             }
 
             // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
-            search_by_index.check_unused_facets(&params.index_scheduler).without_index()?;
+            search_by_index
+                .check_unused_facets(&params.index_scheduler, &params.auth_filter)
+                .without_index()?;
 
             Ok((search_by_index, params, deadline))
         }
@@ -361,6 +366,7 @@ pub async fn perform_federated_search(
             hydration_cache,
             &index_scheduler,
             network_partitioner,
+            auth_filter,
         )
         .await
         .without_index()?;
@@ -1288,6 +1294,7 @@ impl RemoteSearch {
 
 struct SearchByIndexParams {
     index_scheduler: Data<IndexScheduler>,
+    auth_filter: AuthFilter,
     local_name: Option<String>,
     required_hit_count: usize,
     is_exhaustive: bool,
@@ -1341,7 +1348,7 @@ impl SearchByIndex {
         progress: &Progress,
     ) -> Result<Deadline, (ResponseError, Option<usize>)> {
         let first_query_index = queries.first().map(|query| query.query_index);
-        let index = match params.index_scheduler.user_index(&index_uid) {
+        let index = match params.index_scheduler.user_index(&index_uid, &params.auth_filter) {
             Ok(index) => index,
             Err(err) => {
                 let mut err = ResponseError::from(err);
@@ -1753,9 +1760,10 @@ impl SearchByIndex {
     fn check_unused_facets(
         &mut self,
         index_scheduler: &IndexScheduler,
+        auth_filter: &AuthFilter,
     ) -> Result<(), ResponseError> {
         for (index_uid, facets) in std::mem::take(&mut self.federation.facets_by_index) {
-            let index = match index_scheduler.user_index(&index_uid) {
+            let index = match index_scheduler.user_index(&index_uid, auth_filter) {
                 Ok(index) => index,
                 Err(err) => {
                     let mut err = ResponseError::from(err);

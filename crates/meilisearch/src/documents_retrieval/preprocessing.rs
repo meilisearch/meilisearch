@@ -5,6 +5,7 @@ use index_scheduler::filter::{
     condition_to_index_condition, parse_filter, parse_local_index_filter,
 };
 use index_scheduler::{IndexScheduler, RoFeatures};
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceFieldName, SourceIndexUid};
 use meilisearch_types::milli::progress::Progress;
@@ -46,6 +47,7 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
     features: RoFeatures,
     is_proxy: bool,
     progress: &Progress,
+    auth_filter: &AuthFilter,
     code: Code,
 ) -> Result<
     (Option<HydrationContext>, Vec<PreprocessedQuery<Q>>, RemoteErrors),
@@ -59,6 +61,7 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
         let foreign_keys_settings = retrieve_foreign_keys_settings(
             &index_scheduler,
             queries.iter().map(|q| SourceIndexUid(q.index_uid().clone())),
+            auth_filter,
         )
         .without_index()?;
 
@@ -72,6 +75,7 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
             queries,
             features,
             progress,
+            auth_filter,
             code,
         )
         .await?;
@@ -114,6 +118,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     mut queries: Vec<Q>,
     features: RoFeatures,
     progress: &Progress,
+    auth_filter: &AuthFilter,
     code: Code,
 ) -> Result<(Vec<PreprocessedQuery<Q>>, RemoteErrors), (ResponseError, Option<usize>)> {
     // parse each query filter and bind them to their respective index
@@ -138,6 +143,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
         filters,
         foreign_keys_settings,
         progress,
+        auth_filter,
     )
     .await
     .without_index()?;
@@ -218,10 +224,12 @@ async fn local_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
     foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
+    auth_filter: &AuthFilter,
 ) -> Result<Vec<Vec<LightToken>>, ResponseError> {
     let index_scheduler = index_scheduler.clone();
     let foreign_filters = foreign_filters.to_vec();
     let progress = progress.clone();
+    let auth_filter = auth_filter.clone();
 
     tokio::task::spawn_blocking(move || {
     let filters_per_foreign_index = group_foreign_filters_by_foreign_index(&foreign_filters);
@@ -229,7 +237,7 @@ async fn local_process_foreign_filters(
     let mut foreign_filters_external_docids = vec![vec![]; foreign_filters.len()];
     // open each foreign index once and process the filters
     for (foreign_index_uid, filter_indices) in filters_per_foreign_index.iter() {
-        let foreign_index = index_scheduler.user_index(foreign_index_uid.as_ref())?;
+        let foreign_index = index_scheduler.user_index(foreign_index_uid.as_ref(), &auth_filter)?;
         let foreign_rtxn = foreign_index.read_txn()?;
         let foreign_external_docids = foreign_index.external_documents_ids();
         let fields_ids_map = foreign_index.fields_ids_map(&foreign_rtxn)?;
@@ -286,6 +294,7 @@ async fn federated_process_foreign_filters(
     partitioner: &NetworkPartitioner,
     foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
+    auth_filter: &AuthFilter,
 ) -> Result<(Vec<Vec<LightToken>>, RemoteErrors), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -326,7 +335,8 @@ async fn federated_process_foreign_filters(
 
     // Perform local search
     let mut foreign_filters_external_docids =
-        local_process_foreign_filters(index_scheduler, foreign_filters, progress).await?;
+        local_process_foreign_filters(index_scheduler, foreign_filters, progress, auth_filter)
+            .await?;
 
     // wait
     let (remote_results, errors) = remote_retrieve_documents.finish(index_scheduler).await?;
@@ -399,6 +409,7 @@ async fn filters_into_index_filters(
     filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
     progress: &Progress,
+    auth_filter: &AuthFilter,
 ) -> Result<(Vec<Option<IndexFilter>>, RemoteErrors), ResponseError> {
     let foreign_filters = extract_foreign_filters(&filters, foreign_keys_per_index)?;
 
@@ -410,12 +421,14 @@ async fn filters_into_index_filters(
             network_partitioner,
             &foreign_filters,
             progress,
+            auth_filter,
         )
         .await?
     } else {
         // local
         (
-            local_process_foreign_filters(index_scheduler, &foreign_filters, progress).await?,
+            local_process_foreign_filters(index_scheduler, &foreign_filters, progress, auth_filter)
+                .await?,
             Default::default(),
         )
     };
@@ -445,6 +458,7 @@ async fn filters_into_index_filters(
 pub fn retrieve_foreign_keys_settings(
     index_scheduler: &IndexScheduler,
     index_uids: impl IntoIterator<Item = SourceIndexUid>,
+    auth_filter: &AuthFilter,
 ) -> Result<ForeignKeysPerIndex, ResponseError> {
     let mut foreign_keys_settings = HashMap::new();
     for index_uid in index_uids.into_iter() {
@@ -452,7 +466,7 @@ pub fn retrieve_foreign_keys_settings(
             continue;
         }
 
-        let index = index_scheduler.user_index(index_uid.as_ref())?;
+        let index = index_scheduler.user_index(index_uid.as_ref(), auth_filter)?;
         let rtxn = index.read_txn()?;
         let foreign_keys = index
             .foreign_keys(&rtxn)?

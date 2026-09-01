@@ -272,17 +272,17 @@ pub async fn legacy_multi_search_with_post(
     let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
     // regardless of federation, check authorization and apply search rules
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     let auth = 'check_authorization: {
         for (query_index, federated_query) in queries.iter_mut().enumerate() {
             let index_uid = federated_query.index_uid.as_str();
             // Check index from API key
-            if !index_scheduler.filters().is_index_authorized(index_uid) {
+            if !auth_filter.is_index_authorized(index_uid) {
                 break 'check_authorization Err(AuthenticationError::InvalidToken)
                     .with_index(query_index);
             }
             // Apply search rules from tenant token
-            if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(index_uid)
-            {
+            if let Some(search_rules) = auth_filter.get_index_search_rules(index_uid) {
                 add_search_rules(&mut federated_query.filter, search_rules);
             }
         }
@@ -310,6 +310,7 @@ pub async fn legacy_multi_search_with_post(
         features,
         is_proxy,
         &progress,
+        &auth_filter,
         Code::InvalidSearchFilter,
     )
     .await
@@ -340,6 +341,7 @@ pub async fn legacy_multi_search_with_post(
                 ShowFederationInfo::Always,
                 &personalization_service,
                 &progress,
+                &auth_filter,
             )
             .await;
             permit.drop().await;
@@ -394,6 +396,7 @@ pub async fn legacy_multi_search_with_post(
                         request_uid,
                         include_metadata,
                         &progress,
+                        &auth_filter,
                         &personalization_service,
                         StatusCode::BAD_REQUEST,
                     )

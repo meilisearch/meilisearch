@@ -23,6 +23,10 @@ impl<P, D> GuardedData<P, D> {
         &self.filters
     }
 
+    pub fn into_inner(self) -> (D, AuthFilter) {
+        (self.data, self.filters)
+    }
+
     async fn auth_bearer(
         auth: Data<AuthController>,
         token: String,

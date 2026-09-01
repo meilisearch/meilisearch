@@ -335,7 +335,8 @@ pub async fn get_index(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let index = index_scheduler.user_index(&index_uid)?;
+    let auth_filter = index_scheduler.filters();
+    let index = index_scheduler.user_index(&index_uid, auth_filter)?;
     let index_view = IndexView::new(index_uid.into_inner(), &index)?;
 
     debug!(returns = ?index_view, "Get index");
