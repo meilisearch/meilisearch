@@ -33,7 +33,7 @@ impl IndexScheduler {
                 i as u32,
                 indexes.len() as u32,
             ));
-            let index = self.user_index(uid)?;
+            let index = self.user_index_unsecured(uid)?;
             let mut index_wtxn = index.write_txn()?;
             let regen_stats = milli::update::upgrade::upgrade(
                 &mut index_wtxn,
