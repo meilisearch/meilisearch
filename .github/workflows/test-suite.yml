@@ -34,9 +34,9 @@ jobs:
       - name: check free space after
         run: df -h
       - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
@@ -59,9 +59,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Run cargo build without any default features
         run: cargo build --locked --no-default-features --all
       - name: Run cargo test
@@ -80,9 +80,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Run cargo build without any default features
         run: cargo build --locked --no-default-features --all
       - name: Run cargo test
@@ -100,9 +100,9 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Run cargo build with almost all features
         run: |
           cargo build --workspace --locked --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
@@ -163,9 +163,9 @@ jobs:
       - name: check free space after
         run: df -h
       - name: Setup test with Rust stable
-        uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+        uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run cargo test
@@ -183,9 +183,9 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Run cargo tree without default features and check lindera is not present
         run: |
           if cargo tree -f '{p} {f}' -e normal --no-default-features | grep -qz lindera; then
@@ -207,9 +207,9 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Build
@@ -229,9 +229,9 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
           components: clippy
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -249,9 +249,9 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
           components: rustfmt
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
@@ -271,9 +271,9 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
+      - uses: dtolnay/rust-toolchain@032958afbdc797a9164d3bc0b56325c1308924a5 # 1.97.1
         with:
-          toolchain: 1.91.1
+          toolchain: 1.97.1
       - name: Cache dependencies
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Run declarative tests

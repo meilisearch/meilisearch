@@ -39,7 +39,7 @@ pub(super) fn remote_for_shard(
     network: Network,
     remote_availability: &RemoteAvailability,
 ) -> BTreeMap<String, String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let local = network.local;
 
     let remote_for_shard = {

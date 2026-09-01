@@ -11,45 +11,45 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.102"
-byte-unit = "5.2.0"
-bytes = "1.11.1"
+anyhow = "1.0.104"
+byte-unit = "5.2.5"
+bytes = "1.12.1"
 bumpalo = "3.20.3"
 convert_case = "0.9.0"
 dump = { path = "../dump" }
 enum-iterator = "2.3.0"
 file-store = { path = "../file-store" }
-flate2 = "1.1.5"
+flate2 = "1.1.9"
 hashbrown = "0.15.5"
 http-client = { path = "../http-client" }
-indexmap = "2.12.0"
+indexmap = "2.14.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-memmap2 = "0.9.9"
+memmap2 = "0.9.11"
 page_size = "0.6.0"
-rayon = "1.11.0"
-roaring = { version = "0.10.12", features = ["serde"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.150", features = ["preserve_order"] }
+rayon = "1.12.0"
+roaring = { version = "0.11.4", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
 tar = { version = "0.4.46", default-features = false }
-tempfile = "3.23.0"
-thiserror = "2.0.17"
-either = "1.15.0"
-time = { version = "0.3.47", features = [
+tempfile = "3.27.0"
+thiserror = "2.0.20"
+either = "1.17.0"
+time = { version = "0.3.55", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tracing = "0.1.41"
-uuid = { version = "1.18.1", features = ["serde", "v4"] }
+tracing = "0.1.44"
+uuid = { version = "1.24.0", features = ["serde", "v4"] }
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 rusty-s3 = "0.8.1"
-tokio = { version = "1.52.3", features = ["full"] }
+tokio = { version = "1.53.1", features = ["full"] }
 
 [dev-dependencies]
 big_s = "1.0.2"
-crossbeam-channel = "0.5.15"
+crossbeam-channel = "0.5.16"
 # fixed version due to format breakages in v1.40
 insta = { version = "=1.39.0", features = ["json", "redactions"] }
 maplit = "1.0.2"

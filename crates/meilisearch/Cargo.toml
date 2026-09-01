@@ -14,35 +14,35 @@ default-run = "meilisearch"
 
 [dependencies]
 actix-cors = "0.7.1"
-actix-http = { version = "3.12.1", default-features = false, features = [
+actix-http = { version = "3.13.3", default-features = false, features = [
     "compress-brotli",
     "compress-gzip",
     "rustls-0_23",
 ] }
-actix-web = { version = "4.13.0", default-features = false, features = [
+actix-web = { version = "4.14.1", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
     "cookies",
     "rustls-0_23",
 ] }
-anyhow = { version = "1.0.100", features = ["backtrace"] }
-bstr = "1.12.1"
-byte-unit = { version = "5.1.6", features = ["serde"] }
-bytes = "1.11.1"
-bumpalo = "3.19.0"
-clap = { version = "4.5.52", features = ["derive", "env"] }
-crossbeam-channel = "0.5.15"
+anyhow = { version = "1.0.104", features = ["backtrace"] }
+bstr = "1.13.1"
+byte-unit = { version = "5.2.5", features = ["serde"] }
+bytes = "1.12.1"
+bumpalo = "3.20.3"
+clap = { version = "4.6.6", features = ["derive", "env"] }
+crossbeam-channel = "0.5.16"
 deserr = { version = "0.6.4", features = ["actix-web"] }
 dump = { path = "../dump" }
-either = "1.15.0"
+either = "1.17.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.9"
-futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
-futures-util = "0.3.32"
+futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }
+futures-util = "0.3.34"
 index-scheduler = { path = "../index-scheduler" }
 http-client = { path = "../http-client" }
-indexmap = { version = "2.12.0", features = ["serde"] }
+indexmap = { version = "2.14.0", features = ["serde"] }
 is-terminal = "0.4.17"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = ["rust_crypto", "hmac", "sha2", "rand"] }
@@ -50,49 +50,48 @@ lazy_static = "1.5.0"
 liquid = "0.26.11"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-memmap2 = "0.9.9"
+memmap2 = "0.9.11"
 mimalloc = { workspace = true }
 mime = "0.3.17"
 num_cpus = "1.17.0"
 obkv = "0.3.0"
-once_cell = "1.21.4"
 permissive-json-pointer = { path = "../permissive-json-pointer" }
-pin-project-lite = "0.2.16"
+pin-project-lite = "0.2.17"
 platform-dirs = "0.3.0"
 prometheus = { version = "0.14.0", default-features = false, features = ["process"] }
-rand = "0.8.6"
+rand = "0.10.2"
 
-regex = "1.12.3"
-rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+regex = "1.13.1"
+rustls = { version = "0.23.43", features = ["ring"], default-features = false }
 
 rustls-pemfile = "2.2.0"
 segment = { version = "0.2.6" }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.150", features = ["preserve_order"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
 static-files = { version = "0.3.1", optional = true }
 sysinfo = { version = "0.38.4", default-features = false, features = ["system", "disk"] }
 tempfile = "3.27.0"
-thiserror = "2.0.18"
-time = { version = "0.3.47", features = [
+thiserror = "2.0.20"
+time = { version = "0.3.55", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tokio = { version = "1.52.3", features = ["full"] }
-toml = { version = "1.1.2", default-features = false, features = ["std", "serde", "parse"] }
-uuid = { version = "1.23.2", features = ["serde", "v4", "v7"] }
+tokio = { version = "1.53.1", features = ["full"] }
+toml = { version = "1.1.4", default-features = false, features = ["std", "serde", "parse"] }
+uuid = { version = "1.24.0", features = ["serde", "v4", "v7"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
-url = { version = "2.5.7", features = ["serde"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["json"] }
+url = { version = "2.5.8", features = ["serde"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
-tracing-actix-web = "0.7.19"
+tracing-actix-web = "0.7.22"
 build-info = { version = "1.7.0", path = "../build-info" }
-roaring = "0.10.12"
+roaring = "0.11.4"
 mopa-maintained = "0.2.3"
-utoipa = { version = "5.4.0", features = [
+utoipa = { version = "5.5.0", features = [
     "actix_extras",
     "macros",
     "non_strict_integers",
@@ -107,7 +106,7 @@ secrecy = "0.10.3"
 actix-web-lab = { version = "0.26.0", default-features = false }
 urlencoding = "2.1.3"
 backoff = { version = "0.4.0", features = ["tokio"] }
-humantime = { version = "2.3.0", default-features = false }
+humantime = { version = "2.4.0", default-features = false }
 cidr = { version = "0.3.2", features = ["serde"] }
 routes = { path = "../routes" }
 bumparaw-collections = "0.1.7"
@@ -115,10 +114,10 @@ fst = "0.4.7"
 
 [dev-dependencies]
 actix-rt = "2.11.0"
-brotli = "8.0.2"
+brotli = "8.0.4"
 # fixed version due to format breakages in v1.40
 insta = { version = "=1.39.0", features = ["redactions"] }
-manifest-dir-macros = "0.1.18"
+manifest-dir-macros = "0.1.20"
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }
 temp-env = "0.3.6"
@@ -126,10 +125,10 @@ wiremock = "0.6.5"
 yaup = "0.3.1"
 
 [build-dependencies]
-anyhow = { version = "1.0.100", optional = true }
+anyhow = { version = "1.0.104", optional = true }
 cargo_toml = { version = "0.22.3", optional = true }
 hex = { version = "0.4.3", optional = true }
-reqwest = { version = "0.12.24", features = [
+reqwest = { version = "0.12.28", features = [
     "blocking",
     "rustls-tls",
 ], default-features = false, optional = true }

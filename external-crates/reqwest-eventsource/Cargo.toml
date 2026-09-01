@@ -21,15 +21,15 @@ categories = [
 [dependencies]
 eventsource-stream = "0.2.3"
 http-client = { path = "../../crates/http-client" }
-futures-core = "0.3.5"
-futures-util = "0.3.31"
-pin-project-lite = "0.2.8"
-nom = "7.1.0"
-mime = "0.3.16"
-futures-timer = "3.0.2"
-thiserror = "1.0.30"
+futures-core = "0.3.34"
+futures-util = "0.3.34"
+pin-project-lite = "0.2.17"
+nom = "7.1.3"
+mime = "0.3.17"
+futures-timer = "3.0.4"
+thiserror = "1.0.69"
 
 [dev-dependencies]
-futures = { version = "0.3.32", default-features = false, features = ["std", "async-await"] }
+futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 rocket = "0.5.1"

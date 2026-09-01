@@ -38,10 +38,10 @@ use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{milli, Document, Index};
 use mime::Mime;
-use once_cell::sync::Lazy;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::LazyLock;
 use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
@@ -69,7 +69,7 @@ use crate::search::{
     ExternalDocumentId, NetworkableQuery, ProxyQuery, RetrieveVectors, VisitFacetValues,
 };
 
-static ACCEPTED_CONTENT_TYPE: Lazy<Vec<String>> = Lazy::new(|| {
+static ACCEPTED_CONTENT_TYPE: LazyLock<Vec<String>> = LazyLock::new(|| {
     vec!["application/json".to_string(), "application/x-ndjson".to_string(), "text/csv".to_string()]
 });
 use crate::search::federated::types::{
@@ -2301,7 +2301,7 @@ fn retrieve_documents<S: AsRef<str>>(
                 index,
                 rtxn,
                 fields_ids_map,
-                documents.into_iter(),
+                documents,
                 retrieve_vectors,
                 attributes_to_retrieve,
                 extra_attributes_to_retrieve,

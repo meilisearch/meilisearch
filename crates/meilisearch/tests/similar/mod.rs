@@ -1,12 +1,12 @@
 mod errors;
 
 use meili_snap::{json_string, snapshot};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use crate::common::{Server, Value};
 use crate::json;
 
-static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "title": "Shazam!",

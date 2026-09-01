@@ -2,7 +2,6 @@ use hannoy::distances::{Cosine, Hamming};
 use hannoy::{ItemId, Searched};
 use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
-use rand::SeedableRng as _;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
@@ -147,7 +146,7 @@ impl VectorStore {
         must_stop_processing: &MustStopProcessing,
         available_memory: Option<usize>,
     ) -> crate::Result<()> {
-        let mut rng = rand::rngs::StdRng::from_entropy();
+        let mut rng: rand::rngs::StdRng = rand::make_rng();
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
                 self._arroy_to_hannoy_bq::<arroy::distances::BinaryQuantizedCosine, hannoy::distances::Hamming, _>(rtxn, wtxn, &progress, &mut rng, must_stop_processing)

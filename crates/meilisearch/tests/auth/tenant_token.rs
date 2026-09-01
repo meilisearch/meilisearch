@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
@@ -23,7 +23,7 @@ fn generate_tenant_token(
         .unwrap()
 }
 
-static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
+static INVALID_RESPONSE: LazyLock<Value> = LazyLock::new(|| {
     json!({
         "message": null,
         "code": "invalid_api_key",
@@ -32,7 +32,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     })
 });
 
-static ACCEPTED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
+static ACCEPTED_KEYS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         json!({
             "indexes": ["*"],
@@ -62,7 +62,7 @@ static ACCEPTED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
     ]
 });
 
-static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
+static REFUSED_KEYS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         // no search action
         json!({
@@ -468,7 +468,7 @@ async fn error_access_forbidden_routes() {
     server.use_api_key(&web_token);
 
     for ((method, route, _), actions) in AUTHORIZATIONS.iter() {
-        let actions = actions.iter().flat_map(|(s, _)| s.iter()).copied().collect::<HashSet<_>>();
+        let actions = actions.keys().flat_map(|s| s.iter()).copied().collect::<HashSet<_>>();
         if !actions.contains("search") {
             let (mut response, code) = server.dummy_request(method, route).await;
             response["message"] = serde_json::json!(null);

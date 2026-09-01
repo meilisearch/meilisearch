@@ -17,10 +17,10 @@ hex = "0.4.3"
 hmac = "0.12.1"
 maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
-rand = "0.8.6"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
+rand = "0.10.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
 sha2 = "0.10.9"
-thiserror = "2.0.17"
-time = { version = "0.3.47", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "1.18.1", features = ["serde", "v4"] }
+thiserror = "2.0.20"
+time = { version = "0.3.55", features = ["serde-well-known", "formatting", "parsing", "macros"] }
+uuid = { version = "1.24.0", features = ["serde", "v4"] }
