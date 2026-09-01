@@ -659,7 +659,7 @@ async fn error_foreign_filter_tenant_token() {
     snapshot!(code, @"403 Forbidden");
     snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
     {
-      "message": "Inside `.queries[0]`: The provided API key is invalid.",
+      "message": "Inside `.queries[0]`: When trying to open an hydration index: The provided API key is invalid.",
       "code": "invalid_api_key",
       "type": "auth",
       "link": "https://docs.meilisearch.com/errors#invalid_api_key"
