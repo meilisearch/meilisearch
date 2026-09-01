@@ -73,7 +73,7 @@ impl DocumentSearch {
             features,
             self.is_proxy,
             progress,
-            &auth_filter,
+            auth_filter,
             Code::InvalidSearchFilter,
         )
         .await?;
@@ -94,7 +94,7 @@ impl DocumentSearch {
                 ShowFederationInfo::Always,
                 &self.personalization_service,
                 progress,
-                &auth_filter,
+                auth_filter,
             )
             .await?;
 
@@ -135,7 +135,7 @@ impl DocumentSearch {
                     ShowFederationInfo::OnNetworkOnly,
                     &self.personalization_service,
                     progress,
-                    &auth_filter,
+                    auth_filter,
                 )
                 .await
                 // Fixup the query index for the error

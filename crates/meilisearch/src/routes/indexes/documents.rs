@@ -306,7 +306,7 @@ pub async fn get_document(
     );
 
     let auth_filter = index_scheduler.filters();
-    let index = index_scheduler.user_index(&index_uid, &auth_filter)?;
+    let index = index_scheduler.user_index(&index_uid, auth_filter)?;
 
     // Try to retrieve the document locally first
     let local_result = retrieve_document(

@@ -40,6 +40,7 @@ struct ForeignFilterWithContext {
     index_filter: Option<IndexFilter>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn preprocess_filters<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
     network_partitioner: &NetworkPartitioner,
@@ -111,6 +112,7 @@ fn preprocess_filters_forbidding_foreign_keys<Q: PreprocessableQuery>(
     queries
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     index_scheduler: Data<IndexScheduler>,
     network_partitioner: &NetworkPartitioner,
