@@ -122,7 +122,7 @@ jobs:
       - name: Generate OpenAPI file
         run: |
           cd crates/openapi-generator
-          cargo run --release -- --pretty --output ../../meilisearch-openapi.json
+          cargo run --release -- --pretty --output-dir ../../
       - name: Upload OpenAPI file to Release
         # No need to upload for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
@@ -131,4 +131,13 @@ jobs:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: ./meilisearch-openapi.json
           asset_name: meilisearch-openapi.json
+          tag: ${{ github.ref }}
+      - name: Upload error code file to Release
+        # No need to upload for dry run (cron or workflow_dispatch)
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: ./meilisearch-error-codes.json
+          asset_name: meilisearch-error-codes.json
           tag: ${{ github.ref }}
