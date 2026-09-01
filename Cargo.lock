@@ -4978,7 +4978,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "enum-iterator",
  "meilisearch",
+ "meilisearch-types",
  "serde_json",
  "utoipa",
 ]

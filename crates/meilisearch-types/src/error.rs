@@ -140,7 +140,7 @@ impl fmt::Display for ErrorType {
 /// `MyErrorCode::default().error_code()`.
 macro_rules! make_error_codes {
     ($($code_ident:ident, $err_type:ident, $status:ident, $description:literal);*) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, ToSchema)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, ToSchema, enum_iterator::Sequence)]
         #[schema(rename_all = "snake_case")]
         pub enum Code {
             $($code_ident),*
