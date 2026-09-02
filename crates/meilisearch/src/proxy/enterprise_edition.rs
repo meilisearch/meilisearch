@@ -9,7 +9,7 @@ use actix_http::uri::PathAndQuery;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::HttpRequest;
 use bytes::Bytes;
-use http_client::reqwest::{ClientBuilder, StatusCode};
+use http_client::reqwest::StatusCode;
 use index_scheduler::{IndexScheduler, ReqwestRequestWrapper};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::network::{route, Remote};
@@ -189,12 +189,7 @@ where
         };
 
         let mut in_flight_remote_queries = BTreeMap::new();
-        let client = ClientBuilder::new()
-            .prepare(|inner| {
-                inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
-            })
-            .build_with_policies(index_scheduler.ip_policy().clone(), Default::default())
-            .unwrap();
+        let client = index_scheduler.web_client();
 
         let method = req.method();
 
@@ -302,13 +297,13 @@ where
 }
 
 pub async fn send_request<T, F, U>(
+    index_scheduler: &IndexScheduler,
     path_and_query: PathAndQuery,
     method: http_client::reqwest::Method,
     content_type: Option<String>,
     body: Body<T, F>,
     remote_name: &str,
     remote: &Remote,
-    ip_policy: http_client::policy::IpPolicy,
 ) -> Result<U, ProxyError>
 where
     T: serde::Serialize,
@@ -324,12 +319,7 @@ where
 
     let body = body.into_bytes(remote_name, remote).map_err(Box::new)?;
 
-    let client = ClientBuilder::new()
-        .prepare(|inner| {
-            inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
-        })
-        .build_with_policies(ip_policy, Default::default())
-        .unwrap();
+    let client = index_scheduler.web_client();
 
     let url = route::url_from_base_and_route(&remote.url, path_and_query).map_err(|err| {
         Box::new(index_scheduler::Error::InvalidRemoteUrl {
