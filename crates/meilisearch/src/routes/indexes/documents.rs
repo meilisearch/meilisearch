@@ -13,6 +13,7 @@ use deserr::Deserr;
 use futures::StreamExt;
 use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -304,7 +305,8 @@ pub async fn get_document(
         &req,
     );
 
-    let index = index_scheduler.user_index(&index_uid)?;
+    let auth_filter = index_scheduler.filters();
+    let index = index_scheduler.user_index(&index_uid, auth_filter)?;
 
     // Try to retrieve the document locally first
     let local_result = retrieve_document(
@@ -340,6 +342,7 @@ pub async fn get_document(
             // no preprocessing phase so no remote errors yet
             Default::default(),
             &network_partitioner,
+            auth_filter,
         )
         .await?;
         ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
@@ -823,8 +826,10 @@ pub async fn documents_by_query_post(
         &req,
     );
 
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     let ret =
-        documents_by_query(index_scheduler.clone(), index_uid, body, is_proxy, &progress).await;
+        documents_by_query(index_scheduler, index_uid, body, is_proxy, &progress, auth_filter)
+            .await;
     if let Some(permit) = permit {
         permit.drop().await;
     }
@@ -942,7 +947,9 @@ pub async fn get_documents(
         &req,
     );
 
-    let ret = documents_by_query(index_scheduler.clone(), index_uid, query, false, &progress).await;
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
+    let ret =
+        documents_by_query(index_scheduler, index_uid, query, false, &progress, auth_filter).await;
 
     if let Some(permit) = permit {
         permit.drop().await;
@@ -957,6 +964,7 @@ async fn documents_by_query(
     query: BrowseQuery,
     is_proxy: bool,
     progress: &Progress,
+    auth_filter: AuthFilter,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
@@ -971,6 +979,7 @@ async fn documents_by_query(
         features,
         is_proxy,
         progress,
+        &auth_filter,
         Code::InvalidDocumentFilter,
     )
     .await
@@ -979,10 +988,16 @@ async fn documents_by_query(
     let mut query = queries.pop().unwrap();
 
     let ret = if query.query.must_use_network(&network_partitioner, &features)? {
-        retrieve_documents_federated(index_scheduler, query, remote_errors, &network_partitioner)
-            .await
+        retrieve_documents_federated(
+            index_scheduler,
+            query,
+            remote_errors,
+            &network_partitioner,
+            &auth_filter,
+        )
+        .await
     } else {
-        retrieve_documents_local(index_scheduler, query, is_proxy).await
+        retrieve_documents_local(index_scheduler, query, is_proxy, auth_filter).await
     };
 
     Ok(HttpResponse::Ok().json(ret?))
@@ -993,6 +1008,7 @@ async fn retrieve_documents_federated(
     query: PreprocessedQuery<BrowseQueryWithIndex>,
     mut remote_errors: RemoteErrors,
     network_partitioner: &NetworkPartitioner,
+    auth_filter: &AuthFilter,
 ) -> Result<DocumentsResult, ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
@@ -1010,7 +1026,9 @@ async fn retrieve_documents_federated(
     // Perform local search
     let mut results = Vec::with_capacity(local_queries.len());
     for (query_id, query) in local_queries {
-        let result = retrieve_documents_local(index_scheduler.clone(), query, true).await?;
+        let result =
+            retrieve_documents_local(index_scheduler.clone(), query, true, auth_filter.clone())
+                .await?;
         results.push((query_id, result));
     }
 
@@ -1085,6 +1103,7 @@ async fn retrieve_documents_local(
     index_scheduler: Data<IndexScheduler>,
     query: PreprocessedQuery<BrowseQueryWithIndex>,
     is_proxy: bool,
+    auth_filter: AuthFilter,
 ) -> Result<DocumentsResult, ResponseError> {
     let PreprocessedQuery {
         query:
@@ -1134,7 +1153,7 @@ async fn retrieve_documents_local(
             None
         };
 
-        let index = index_scheduler.user_index(&index_uid)?;
+        let index = index_scheduler.user_index(&index_uid, &auth_filter)?;
         let rtxn = index.read_txn()?;
         let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
@@ -2014,11 +2033,12 @@ pub async fn edit_documents_by_function(
     let index_uid = index_uid.into_inner();
     let body = body.into_inner();
 
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     analytics.publish(
         EditDocumentsByFunctionAggregator {
             filtered: body.filter.is_some(),
             with_context: body.context.is_some(),
-            index_creation: index_scheduler.user_index(&index_uid).is_err(),
+            index_creation: index_scheduler.user_index(&index_uid, &auth_filter).is_err(),
         },
         &req,
     );

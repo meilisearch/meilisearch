@@ -126,7 +126,7 @@ async fn setup_indexes_with_foreign_key(server: &Server) -> (Index<'_>, Index<'_
 
 /// Same as [`setup_indexes_with_foreign_key`], but documents include profile/genre fields and both
 /// indexes expose the attributes needed for `_foreign` and local filters.
-async fn setup_indexes_with_foreign_key_and_filterable_profile(
+pub async fn setup_indexes_with_foreign_key_and_filterable_profile(
     server: &Server,
 ) -> (Index<'_>, Index<'_>) {
     let authors_index = server.unique_index();

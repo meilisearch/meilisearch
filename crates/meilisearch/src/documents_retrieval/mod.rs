@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::documents::{BrowseQueryWithIndex, DocumentsResult};
 use crate::search::federated::types::PreprocessedQuery;
@@ -45,8 +45,8 @@ impl DocumentSearch {
         progress: &Progress,
     ) -> Result<DocumentSearchResult, (ResponseError, Option<usize>)> {
         // regardless of federation, check authorization and apply search rules
+        let auth_filter = guarded_index_scheduler.filters();
         'check_authorization: {
-            let auth_filter = guarded_index_scheduler.filters();
             for (query_index, federated_query) in self.queries.iter_mut().enumerate() {
                 let index_uid = federated_query.index_uid.as_str();
                 // Check index from API key
@@ -73,6 +73,7 @@ impl DocumentSearch {
             features,
             self.is_proxy,
             progress,
+            auth_filter,
             Code::InvalidSearchFilter,
         )
         .await?;
@@ -93,6 +94,7 @@ impl DocumentSearch {
                 ShowFederationInfo::Always,
                 &self.personalization_service,
                 progress,
+                auth_filter,
             )
             .await?;
 
@@ -133,6 +135,7 @@ impl DocumentSearch {
                     ShowFederationInfo::OnNetworkOnly,
                     &self.personalization_service,
                     progress,
+                    auth_filter,
                 )
                 .await
                 // Fixup the query index for the error

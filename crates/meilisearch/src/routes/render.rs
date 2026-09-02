@@ -8,6 +8,7 @@ use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use deserr::actix_web::AwebJson;
 use index_scheduler::{IndexScheduler, RoFeatures};
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderTemplate};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
@@ -27,7 +28,7 @@ use utoipa::ToSchema;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::DoubleActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::render_analytics::RenderAggregator;
 
@@ -108,40 +109,10 @@ pub async fn render_post(
     debug!(parameters = ?query, "Render document");
     let mut aggregate = RenderAggregator::from_query(&query);
     let features = index_scheduler.features();
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     features.check_render_route("calling the /render-template route")?;
 
     let RenderQuery { template, input } = query;
-
-    let template_index_uid = template.index_uid.as_deref();
-    let input_index_uid = input.as_ref().and_then(|input| input.index_uid.as_deref());
-
-    // check index permissions
-    {
-        match (template_index_uid, input_index_uid) {
-            (None, None) => (),
-            (None, Some(index_uid)) | (Some(index_uid), None) => {
-                if !index_scheduler.filters().is_index_authorized(index_uid) {
-                    return Err(AuthenticationError::InvalidToken.into());
-                }
-            }
-            (Some(template_index_uid), Some(input_index_uid))
-                if template_index_uid == input_index_uid =>
-            {
-                // can skip second check
-                if !index_scheduler.filters().is_index_authorized(template_index_uid) {
-                    return Err(AuthenticationError::InvalidToken.into());
-                }
-            }
-            (Some(template_index_uid), Some(input_index_uid)) => {
-                // check both indexes
-                if !index_scheduler.filters().is_index_authorized(template_index_uid)
-                    || !index_scheduler.filters().is_index_authorized(input_index_uid)
-                {
-                    return Err(AuthenticationError::InvalidToken.into());
-                }
-            }
-        }
-    }
 
     let result: Result<(RenderingTemplate, Option<Value>), Error> =
         tokio::task::spawn_blocking(move || {
@@ -151,7 +122,7 @@ pub async fn render_post(
             let doc_alloc = Bump::new();
 
             let (template, template_index_rtxn) =
-                fetch_template(&index_scheduler, features, &template)?;
+                fetch_template(&index_scheduler, &auth_filter, features, &template)?;
 
             let rendered = if let Some(input) = &input {
                 let input_index;
@@ -173,9 +144,9 @@ pub async fn render_post(
                     (Some(index_uid), _) => {
                         // avoid simultaneously opening several indexes
                         drop(template_index_rtxn);
-                        input_index = index_scheduler.user_index(index_uid).map_err(|error| {
-                            Error::CannotOpenIndex { error, index: index_uid.to_string() }
-                        })?;
+                        input_index = index_scheduler.user_index(index_uid, &auth_filter).map_err(
+                            |error| Error::CannotOpenIndex { error, index: index_uid.to_string() },
+                        )?;
                         let input_index_rtxn =
                             input_index.read_txn().map_err(milli::Error::from)?;
                         let fidmap = input_index.fields_ids_map_with_metadata(&input_index_rtxn)?;
@@ -653,6 +624,7 @@ impl<'a> RenderQueryTemplateView<'a> {
 #[allow(clippy::type_complexity)] // the return type is no very beautiful but I don't see any point in hiding it
 fn fetch_template<'a>(
     index_scheduler: &'a IndexScheduler,
+    auth_filter: &'a AuthFilter,
     features: RoFeatures,
     template: &'a RenderQueryTemplate,
 ) -> Result<
@@ -695,7 +667,7 @@ fn fetch_template<'a>(
                     kind,
                     missing_param: "embedder",
                 })?;
-            let index = index_scheduler.user_index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid, auth_filter).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
@@ -740,7 +712,7 @@ fn fetch_template<'a>(
                 });
             }
 
-            let index = index_scheduler.user_index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid, auth_filter).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
@@ -790,7 +762,7 @@ fn fetch_template<'a>(
                 });
             }
 
-            let index = index_scheduler.user_index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid, auth_filter).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
@@ -833,7 +805,7 @@ fn fetch_template<'a>(
                 });
             }
 
-            let index = index_scheduler.user_index(index_uid).map_err(|error| {
+            let index = index_scheduler.user_index(index_uid, auth_filter).map_err(|error| {
                 FetchTemplateError::CannotOpenIndex {
                     error: error.into(),
                     index: index_uid.to_string(),
