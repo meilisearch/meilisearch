@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 
 use byte_unit::Byte;
 use meilisearch_types::batches::BatchId;
+use meilisearch_types::heed::types::SerdeJson;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::heed::CompactionOption;
@@ -956,7 +957,7 @@ impl IndexScheduler {
         let mut to_remove_from_statuses = HashMap::new();
         let mut to_delete_tasks = all_task_ids.clone() & matched_tasks;
         to_delete_tasks -= &**processing_tasks;
-        to_delete_tasks -= enqueued_tasks;
+        //to_delete_tasks -= enqueued_tasks;
 
         // 2. We now have a list of tasks to delete. Read their metadata to list what needs to be updated.
         let mut affected_indexes = HashSet::<Rc<str>>::new();
@@ -971,37 +972,53 @@ impl IndexScheduler {
         let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
         progress.update_progress(task_progress);
 
-        for range in consecutive_ranges(&to_delete_tasks) {
-            for task in self.queue.tasks.all_tasks.range(&rtxn, &range)? {
+        let db: Database<_, SerdeJson<serde_json::Value>> =
+            self.queue.tasks.all_tasks.remap_data_type();
+
+        for range in consecutive_ranges(to_delete_tasks.clone()) {
+            for task in db.range(&rtxn, &range)? {
                 let (task_id, task) = task?;
 
-                affected_indexes.extend(task.indexes().into_iter().map(Rc::from));
-                affected_statuses.insert(task.status);
-                affected_kinds.insert(task.kind.as_kind());
+                if let Ok(task) = serde_json::from_value::<Task>(task.clone()) {
+                    if enqueued_tasks.contains(task_id) {
+                        to_delete_tasks.remove(task_id);
+                        atomic_progress.fetch_add(1, Ordering::Relaxed);
 
-                let enqueued_at = task.enqueued_at.unix_timestamp_nanos();
-                tasks_enqueued_to_remove.entry(enqueued_at).or_default().insert(task_id);
+                        continue;
+                    }
 
-                if let Some(started_at) = task.started_at {
-                    tasks_started_to_remove
-                        .entry(started_at.unix_timestamp_nanos())
-                        .or_default()
-                        .insert(task_id);
+                    affected_indexes.extend(task.indexes().into_iter().map(Rc::from));
+                    affected_statuses.insert(task.status);
+                    affected_kinds.insert(task.kind.as_kind());
+
+                    let enqueued_at = task.enqueued_at.unix_timestamp_nanos();
+                    tasks_enqueued_to_remove.entry(enqueued_at).or_default().insert(task_id);
+
+                    if let Some(started_at) = task.started_at {
+                        tasks_started_to_remove
+                            .entry(started_at.unix_timestamp_nanos())
+                            .or_default()
+                            .insert(task_id);
+                    }
+
+                    if let Some(finished_at) = task.finished_at {
+                        tasks_finished_to_remove
+                            .entry(finished_at.unix_timestamp_nanos())
+                            .or_default()
+                            .insert(task_id);
+                    }
+
+                    if let Some(canceled_by) = task.canceled_by {
+                        affected_canceled_by.insert(canceled_by);
+                    }
+                    if let Some(batch_uid) = task.batch_uid {
+                        affected_batches.entry(batch_uid).or_default().insert(task_id);
+                    }
+                } else {
+                    tracing::error!("could not deserialize task with id {task_id}: {task}");
+                    affected_statuses.insert(Status::Enqueued);
                 }
 
-                if let Some(finished_at) = task.finished_at {
-                    tasks_finished_to_remove
-                        .entry(finished_at.unix_timestamp_nanos())
-                        .or_default()
-                        .insert(task_id);
-                }
-
-                if let Some(canceled_by) = task.canceled_by {
-                    affected_canceled_by.insert(canceled_by);
-                }
-                if let Some(batch_uid) = task.batch_uid {
-                    affected_batches.entry(batch_uid).or_default().insert(task_id);
-                }
                 atomic_progress.fetch_add(1, Ordering::Relaxed);
             }
         }
