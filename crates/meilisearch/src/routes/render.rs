@@ -11,7 +11,7 @@ use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderTemplate};
-use meilisearch_types::error::{AuthenticationError, Code, ErrorCode, ResponseError};
+use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
@@ -113,37 +113,6 @@ pub async fn render_post(
     features.check_render_route("calling the /render-template route")?;
 
     let RenderQuery { template, input } = query;
-
-    let template_index_uid = template.index_uid.as_deref();
-    let input_index_uid = input.as_ref().and_then(|input| input.index_uid.as_deref());
-
-    // check index permissions
-    {
-        match (template_index_uid, input_index_uid) {
-            (None, None) => (),
-            (None, Some(index_uid)) | (Some(index_uid), None) => {
-                if !auth_filter.is_index_authorized(index_uid) {
-                    return Err(AuthenticationError::InvalidToken.into());
-                }
-            }
-            (Some(template_index_uid), Some(input_index_uid))
-                if template_index_uid == input_index_uid =>
-            {
-                // can skip second check
-                if !auth_filter.is_index_authorized(template_index_uid) {
-                    return Err(AuthenticationError::InvalidToken.into());
-                }
-            }
-            (Some(template_index_uid), Some(input_index_uid)) => {
-                // check both indexes
-                if !auth_filter.is_index_authorized(template_index_uid)
-                    || !auth_filter.is_index_authorized(input_index_uid)
-                {
-                    return Err(AuthenticationError::InvalidToken.into());
-                }
-            }
-        }
-    }
 
     let result: Result<(RenderingTemplate, Option<Value>), Error> =
         tokio::task::spawn_blocking(move || {
