@@ -35,6 +35,7 @@ mod queue;
 mod scheduler;
 #[cfg(test)]
 mod test_utils;
+pub mod timeouts;
 pub mod upgrade;
 mod utils;
 pub mod uuid_codec;
@@ -364,6 +365,9 @@ impl IndexScheduler {
         let scheduler = Scheduler::new(&options, auth_env);
 
         let web_client = http_client::reqwest::ClientBuilder::new()
+            .prepare(|build| {
+                build.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
+            })
             .build_with_policies(scheduler.ip_policy.clone(), Default::default())
             .unwrap();
 
