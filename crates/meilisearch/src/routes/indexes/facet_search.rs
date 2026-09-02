@@ -306,12 +306,13 @@ pub async fn search(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = Progress::quiet();
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let before_search = time::OffsetDateTime::now_utc();
 
-    let permit = search_queue.try_get_search_permit().await?;
+    let permit = search_queue.try_get_search_permit(&progress).await?;
 
     let mut query = params.into_inner();
     debug!(parameters = ?query, "Facet search");

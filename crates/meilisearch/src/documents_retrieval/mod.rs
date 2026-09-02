@@ -3,8 +3,10 @@ use std::sync::Arc;
 
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
+use indexmap::IndexMap;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
@@ -42,7 +44,7 @@ impl DocumentSearch {
     pub async fn execute<const P: u8>(
         mut self,
         guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
-        progress: &Progress,
+        progress: Progress,
     ) -> Result<DocumentSearchResult, (ResponseError, Option<usize>)> {
         // regardless of federation, check authorization and apply search rules
         'check_authorization: {
@@ -72,13 +74,15 @@ impl DocumentSearch {
             self.queries,
             features,
             self.is_proxy,
-            progress,
+            &progress,
             Code::InvalidSearchFilter,
         )
         .await?;
 
         // Federated search
+
         if let Some(federation) = self.federation.take() {
+            progress.update_progress(TotalProcessingTimeStep::Process);
             let (search_result, _) = perform_federated_search(
                 index_scheduler,
                 &network_partitioner,
@@ -92,17 +96,27 @@ impl DocumentSearch {
                 self.include_metadata,
                 ShowFederationInfo::Always,
                 &self.personalization_service,
-                progress,
+                &progress,
             )
             .await?;
 
-            return Ok(DocumentSearchResult::Federated(Box::new(search_result)));
+            return Ok(DocumentSearchResult::Federated(
+                Box::new(search_result),
+                progress.accumulated_durations(),
+            ));
         }
 
         // Multi-search
         let search_results: Result<_, (ResponseError, _)> = async {
+            let mut multi_search_progress = Some(progress);
             let mut search_results = Vec::with_capacity(preprocessed_queries.len());
+            let mut progress_by_query = IndexMap::with_capacity(preprocessed_queries.len());
             for (query_index, query) in preprocessed_queries.into_iter().enumerate() {
+                // recreate the progress for each query to reset the time tracking
+                let progress = multi_search_progress.take().unwrap();
+                multi_search_progress = Some(progress.recreate());
+
+                progress.update_progress(TotalProcessingTimeStep::Process);
                 if query.query.federation_options.is_some() {
                     return Err((
                         MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
@@ -132,12 +146,14 @@ impl DocumentSearch {
                     self.include_metadata,
                     ShowFederationInfo::OnNetworkOnly,
                     &self.personalization_service,
-                    progress,
+                    &progress,
                 )
                 .await
                 // Fixup the query index for the error
                 .map_err(|(err, _)| (err, Some(query_index)))?;
 
+                progress_by_query
+                    .insert(format!("query[{}]", query_index), progress.accumulated_durations());
                 search_results.push(SearchResultWithIndex {
                     result: search_result
                         .into_search_result(q.unwrap_or_default(), index_uid.as_str()),
@@ -145,11 +161,13 @@ impl DocumentSearch {
                 });
             }
 
-            Ok(search_results)
+            Ok((search_results, progress_by_query))
         }
         .await;
 
-        search_results.map(DocumentSearchResult::Multi)
+        search_results.map(|(search_results, progress_by_query)| {
+            DocumentSearchResult::Multi(search_results, progress_by_query)
+        })
     }
 }
 
@@ -267,8 +285,8 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
 
 #[derive(Debug)]
 pub enum DocumentSearchResult {
-    Federated(Box<FederatedSearchResult>),
-    Multi(Vec<SearchResultWithIndex>),
+    Federated(Box<FederatedSearchResult>, IndexMap<String, String>),
+    Multi(Vec<SearchResultWithIndex>, IndexMap<String, IndexMap<String, String>>),
 }
 
 const MAX_IN_FLIGHT_REQUESTS: usize = 40;
@@ -286,7 +304,9 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
         network_partitioner: &NetworkPartitioner,
         params: ProxySearchParams,
         remote_queries: Vec<(T, PreprocessedQuery<BrowseQueryWithIndex>)>,
+        progress: &Progress,
     ) -> Result<Self, ResponseError> {
+        let _step = progress.update_progress_scoped(PerformRetrievalStep::SendToRemote);
         let mut errors = BTreeMap::new();
         let mut results = Vec::with_capacity(remote_queries.len());
         let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
@@ -365,7 +385,9 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
     pub async fn finish(
         self,
         index_scheduler: &IndexScheduler,
+        progress: &Progress,
     ) -> Result<(Vec<(T, DocumentsResult)>, RemoteErrors), ResponseError> {
+        let _step = progress.update_progress_scoped(PerformRetrievalStep::WaitForRemote);
         let Self { mut results, mut errors, in_flight_requests } = self;
         // Retrieve remote results
         for (task, remote_name, metadata) in in_flight_requests {

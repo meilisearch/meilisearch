@@ -566,7 +566,7 @@ fn index_documents_with_nested_fields() {
 #[test]
 fn index_documents_with_nested_primary_key() {
     let index = TempIndex::new();
-    let progress = Progress::default();
+    let progress = Progress::quiet();
 
     index
         .update_settings(|settings| {
@@ -670,7 +670,7 @@ fn retrieve_a_b_c_nested_document_id() {
 #[test]
 fn test_facets_generation() {
     let index = TempIndex::new();
-    let progress = Progress::default();
+    let progress = Progress::quiet();
 
     index
         .add_documents(documents!([
@@ -830,7 +830,7 @@ fn index_2_times_documents_split_by_zero_document_indexation() {
 #[test]
 fn test_meilisearch_1714() {
     let index = TempIndex::new();
-    let progress = Progress::default();
+    let progress = Progress::quiet();
 
     index
         .add_documents(documents!([
@@ -1240,7 +1240,7 @@ fn primary_key_must_not_contain_floats() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1293,7 +1293,7 @@ fn mixing_documents_replace_with_updates() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1312,7 +1312,7 @@ fn mixing_documents_replace_with_updates() {
         &document_changes,
         RuntimeEmbedders::default(),
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1384,7 +1384,7 @@ fn mixing_documents_replace_with_updates_even_more() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1403,7 +1403,7 @@ fn mixing_documents_replace_with_updates_even_more() {
         &document_changes,
         RuntimeEmbedders::default(),
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1575,7 +1575,7 @@ fn add_and_delete_documents_in_single_transform() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1591,7 +1591,7 @@ fn add_and_delete_documents_in_single_transform() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1641,7 +1641,7 @@ fn add_update_and_delete_documents_in_single_transform() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1657,7 +1657,7 @@ fn add_update_and_delete_documents_in_single_transform() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1698,7 +1698,7 @@ fn add_document_and_in_another_transform_update_and_delete_documents() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1714,7 +1714,7 @@ fn add_document_and_in_another_transform_update_and_delete_documents() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1754,7 +1754,7 @@ fn add_document_and_in_another_transform_update_and_delete_documents() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1770,7 +1770,7 @@ fn add_document_and_in_another_transform_update_and_delete_documents() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1812,7 +1812,7 @@ fn delete_document_and_then_add_documents_in_the_same_transform() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1828,7 +1828,7 @@ fn delete_document_and_then_add_documents_in_the_same_transform() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1875,7 +1875,7 @@ fn delete_the_same_document_multiple_time() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1891,7 +1891,7 @@ fn delete_the_same_document_multiple_time() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1931,7 +1931,7 @@ fn add_document_and_in_another_transform_delete_the_document_then_add_it_again()
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -1947,7 +1947,7 @@ fn add_document_and_in_another_transform_delete_the_document_then_add_it_again()
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -1987,7 +1987,7 @@ fn add_document_and_in_another_transform_delete_the_document_then_add_it_again()
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -2003,7 +2003,7 @@ fn add_document_and_in_another_transform_delete_the_document_then_add_it_again()
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -2206,7 +2206,7 @@ fn reproduce_the_bug() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -2222,7 +2222,7 @@ fn reproduce_the_bug() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -2269,7 +2269,7 @@ fn reproduce_the_bug() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -2285,7 +2285,7 @@ fn reproduce_the_bug() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -2329,7 +2329,7 @@ fn reproduce_the_bug() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            Progress::quiet(),
             None,
         )
         .unwrap();
@@ -2345,7 +2345,7 @@ fn reproduce_the_bug() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &Progress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -2881,7 +2881,7 @@ fn incremental_update_without_changing_facet_distribution() {
 #[test]
 fn delete_words_exact_attributes() {
     let index = TempIndex::new();
-    let progress = Progress::default();
+    let progress = Progress::quiet();
 
     index
         .update_settings(|settings| {

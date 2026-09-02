@@ -7,6 +7,7 @@ use geojson::GeoJson;
 use heed::{BytesEncode, RoTxn};
 use zerometry::Zerometry;
 
+use crate::steps::IndexingStep;
 use crate::update::new::channel::GeoJsonSender;
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
@@ -14,7 +15,6 @@ use crate::update::new::indexer::settings_change_extract;
 use crate::update::new::indexer::settings_changes::{
     DocumentsIndentifiers, SettingsChangeExtractor,
 };
-use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use enum_iterator::Sequence as _;
 use indexmap::IndexMap;
@@ -15,11 +15,77 @@ pub trait Step: 'static + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
     fn current(&self) -> u32;
     fn total(&self) -> u32;
+    fn verbosity_mode(&self) -> ProgressVerbosityMode {
+        ProgressVerbosityMode::Info
+    }
 }
 
-#[derive(Clone, Default)]
+/// The mode of a step.
+/// The order is important, the higher the mode, the more verbose the step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, PartialOrd, Ord)]
+pub enum ProgressVerbosityMode {
+    Quiet = 0,
+    #[default]
+    Info = 1,
+    Trace = 2,
+}
+
+/// The mode of the timestamp computation.
+///
+/// `Precise` is the default mode and uses the std::time::Instant type.
+/// Based on the wall clock.
+///
+/// `Fast` is a faster mode that uses the fastant::Instant type.
+/// Based on TSC on Linux x86_64/x86 but fallback to the wall clock on other platforms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ProgressTimestampMode {
+    #[default]
+    Precise,
+    Fast,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ProgressInstant {
+    Precise(std::time::Instant),
+    Fast(fastant::Instant),
+}
+
+impl ProgressInstant {
+    pub fn now(timestamp_mode: ProgressTimestampMode) -> Self {
+        match timestamp_mode {
+            ProgressTimestampMode::Precise => ProgressInstant::Precise(std::time::Instant::now()),
+            ProgressTimestampMode::Fast => ProgressInstant::Fast(fastant::Instant::now()),
+        }
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        match self {
+            ProgressInstant::Precise(instant) => instant.elapsed(),
+            ProgressInstant::Fast(instant) => instant.elapsed(),
+        }
+    }
+
+    pub fn duration_since(&self, other: ProgressInstant) -> Duration {
+        match (self, other) {
+            (ProgressInstant::Precise(instant), ProgressInstant::Precise(other)) => {
+                instant.duration_since(other)
+            }
+            (ProgressInstant::Fast(instant), ProgressInstant::Fast(other)) => {
+                instant.duration_since(other)
+            }
+            (ProgressInstant::Precise(_), ProgressInstant::Fast(_))
+            | (ProgressInstant::Fast(_), ProgressInstant::Precise(_)) => {
+                unreachable!("Cannot compute the duration between a precise and a fast instant")
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Progress {
     steps: Arc<RwLock<InnerProgress>>,
+    verbosity_mode: ProgressVerbosityMode,
+    timestamp_mode: ProgressTimestampMode,
 }
 
 #[derive(Default)]
@@ -44,15 +110,49 @@ impl std::fmt::Debug for EmbedderStats {
 #[derive(Default)]
 struct InnerProgress {
     /// The hierarchy of steps.
-    steps: Vec<(TypeId, Box<dyn Step>, Instant)>,
+    steps: Vec<(TypeId, Box<dyn Step>, ProgressInstant)>,
     /// The durations associated to each steps.
     durations: Vec<(String, Duration)>,
 }
 
 impl Progress {
+    fn new(verbosity_mode: ProgressVerbosityMode, timestamp_mode: ProgressTimestampMode) -> Self {
+        Self {
+            steps: Arc::new(RwLock::new(InnerProgress::default())),
+            verbosity_mode,
+            timestamp_mode,
+        }
+    }
+
+    /// Create a new progress with precise timestamp mode.
+    pub fn precise(verbosity_mode: ProgressVerbosityMode) -> Self {
+        Self::new(verbosity_mode, ProgressTimestampMode::Precise)
+    }
+
+    /// Create a new progress with fast timestamp mode.
+    pub fn fast(verbosity_mode: ProgressVerbosityMode) -> Self {
+        Self::new(verbosity_mode, ProgressTimestampMode::Fast)
+    }
+
+    /// Create a new progress with quiet verbosity mode.
+    /// This will not register any steps.
+    pub fn quiet() -> Self {
+        Self::new(ProgressVerbosityMode::Quiet, ProgressTimestampMode::Fast)
+    }
+
+    /// Recreate the progress with the same verbosity and timestamp mode.
+    pub fn recreate(&self) -> Self {
+        Self::new(self.verbosity_mode, self.timestamp_mode)
+    }
+
     /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
     /// Return `Failed` if the RWLock failed to lock.
     pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        // If the step is more verbose than the progress mode, we skip it.
+        if sub_progress.verbosity_mode() > self.verbosity_mode {
+            return UpdateStepStatus::Skipped;
+        }
+
         let mut inner = match self.steps.write() {
             Ok(inner) => inner,
             Err(error) => {
@@ -69,12 +169,16 @@ impl Progress {
                 return UpdateStepStatus::NotUpdated;
             }
 
-            let now = Instant::now();
+            let now = ProgressInstant::now(self.timestamp_mode);
             push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
             steps.push((step_type, Box::new(sub_progress), now));
         } else {
-            steps.push((step_type, Box::new(sub_progress), Instant::now()));
+            steps.push((
+                step_type,
+                Box::new(sub_progress),
+                ProgressInstant::now(self.timestamp_mode),
+            ));
         }
 
         UpdateStepStatus::Updated
@@ -100,7 +204,7 @@ impl Progress {
             .position(|(id, s, _)| *id == step_type && s.name() == sub_progress.name())
         {
             Some(idx) => {
-                let now = Instant::now();
+                let now = ProgressInstant::now(self.timestamp_mode);
                 push_steps_durations(steps, durations, now, idx);
                 steps.truncate(idx);
                 UpdateStepStatus::Updated
@@ -120,6 +224,7 @@ impl Progress {
                 );
                 ScopedProgressStep { progress: self, step: None }
             }
+            UpdateStepStatus::Skipped => ScopedProgressStep { progress: self, step: None },
         }
     }
 
@@ -163,7 +268,7 @@ impl Progress {
         let InnerProgress { steps, durations, .. } = &*inner;
         let mut durations = durations.clone();
 
-        let now = Instant::now();
+        let now = ProgressInstant::now(self.timestamp_mode);
         push_steps_durations(steps, &mut durations, now, 0);
 
         let mut accumulated_durations = IndexMap::new();
@@ -188,9 +293,9 @@ impl Progress {
 
 /// Generate the names associated with the durations and push them.
 fn push_steps_durations(
-    steps: &[(TypeId, Box<dyn Step>, Instant)],
+    steps: &[(TypeId, Box<dyn Step>, ProgressInstant)],
     durations: &mut Vec<(String, Duration)>,
-    now: Instant,
+    now: ProgressInstant,
     idx: usize,
 ) {
     for (i, (_, _, started_at)) in steps.iter().skip(idx).enumerate().rev() {
@@ -247,7 +352,7 @@ pub use enum_iterator as _private_enum_iterator;
 
 #[macro_export]
 macro_rules! make_enum_progress {
-    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+    ($visibility:vis enum $name:ident { $($variant:ident: $mode:ident,)+ }) => {
         #[repr(u8)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, $crate::progress::_private_enum_iterator::Sequence)]
         #[allow(clippy::enum_variant_names)]
@@ -256,6 +361,14 @@ macro_rules! make_enum_progress {
         }
 
         impl $crate::progress::Step for $name {
+            fn verbosity_mode(&self) -> $crate::progress::ProgressVerbosityMode {
+                match self {
+                    $(
+                        $name::$variant => $crate::progress::ProgressVerbosityMode::$mode,
+                    )+
+                }
+            }
+
             fn name(&self) -> std::borrow::Cow<'static, str> {
                 use $crate::progress::_private_convert_case::Casing;
 
@@ -276,6 +389,9 @@ macro_rules! make_enum_progress {
             }
         }
     };
+    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+        $crate::make_enum_progress!($visibility enum $name { $($variant: Info,)+ });
+    };
 }
 
 #[macro_export]
@@ -295,16 +411,6 @@ macro_rules! make_atomic_progress {
 make_atomic_progress!(Document alias AtomicDocumentStep => "document");
 make_atomic_progress!(Database alias AtomicDatabaseStep => "database");
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload");
-
-make_enum_progress! {
-    pub enum MergingWordCache {
-        WordDocids,
-        WordFieldIdDocids,
-        ExactWordDocids,
-        WordPositionDocids,
-        FieldIdWordCountDocids,
-    }
-}
 
 /// Real-time progress information for a batch or task that is currently
 /// being processed. Use this to display progress bars or status updates to
@@ -469,4 +575,6 @@ pub enum UpdateStepStatus {
     Updated,
     /// The step did not change.
     NotUpdated,
+    /// The step as been skipped.
+    Skipped,
 }

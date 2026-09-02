@@ -13,6 +13,7 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
+use crate::progress::Progress;
 use crate::search::facet::ascending_facet_sort;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::search::facet::value_bounds::{evaluate_equal, to_str_bounds, ValueBounds};
@@ -142,7 +143,8 @@ impl<'a> DynamicSearchRulesView<'a> {
         limit: usize,
         offset: usize,
     ) -> Result<SearchResult> {
-        let progress = Default::default();
+        // Progress is not used, we use the quiet progress to avoid logging any steps.
+        let progress = Progress::quiet();
         let mut search = self.index.search(
             self.rtxn,
             "",

@@ -10,6 +10,7 @@ use permissive_json_pointer::contained_in;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::{match_searchable_field, OneOrTwoTokenizers};
 use crate::fields_ids_map::metadata::Metadata;
+use crate::steps::IndexingStep;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::indexer::document_changes::{
@@ -19,7 +20,6 @@ use crate::update::new::indexer::settings_changes::{
     settings_change_extract, DocumentsIndentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
-use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;

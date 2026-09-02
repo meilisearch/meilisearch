@@ -8,9 +8,10 @@ use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceFieldName, SourceIndexUid};
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use meilisearch_types::milli::{
-    self, filtered_universe, FederatingResultsStep, Filter, IndexFilter, IndexFilterCondition,
-    LightToken, Token, TokenLike,
+    self, filtered_universe, Filter, IndexFilter, IndexFilterCondition, LightToken, Token,
+    TokenLike,
 };
 use meilisearch_types::{Document, ForeignKeysPerIndex};
 use serde_json::{Map, Value};
@@ -51,7 +52,8 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
     (Option<HydrationContext>, Vec<PreprocessedQuery<Q>>, RemoteErrors),
     (ResponseError, Option<usize>),
 > {
-    progress.update_progress(FederatingResultsStep::PreprocessFilters);
+    let _step = progress.update_progress_scoped(TotalProcessingTimeStep::PreprocessFilters);
+    progress.update_progress(PerformRetrievalStep::Prepare);
 
     // Document join: list of indexes in the order of the queries
     // only create the hydration cache if the foreign keys feature is enabled
@@ -219,6 +221,7 @@ async fn local_process_foreign_filters(
     foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
 ) -> Result<Vec<Vec<LightToken>>, ResponseError> {
+    let _step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
     let index_scheduler = index_scheduler.clone();
     let foreign_filters = foreign_filters.to_vec();
     let progress = progress.clone();
@@ -322,14 +325,15 @@ async fn federated_process_foreign_filters(
 
     //remote
     let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(partitioner, params, remote_queries).await?;
+        RemoteRetrieveDocuments::start(partitioner, params, remote_queries, progress).await?;
 
     // Perform local search
     let mut foreign_filters_external_docids =
         local_process_foreign_filters(index_scheduler, foreign_filters, progress).await?;
 
     // wait
-    let (remote_results, errors) = remote_retrieve_documents.finish(index_scheduler).await?;
+    let (remote_results, errors) =
+        remote_retrieve_documents.finish(index_scheduler, progress).await?;
 
     // Merge results
     for (query_id, documents) in fuse_remote_documents(remote_results) {

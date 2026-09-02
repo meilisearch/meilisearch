@@ -3,11 +3,11 @@ use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
+use indexmap::IndexMap;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::TotalProcessingTimeStep;
+use meilisearch_types::milli::progress::{Progress, ProgressVerbosityMode};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -160,10 +160,8 @@ pub async fn multi_search_with_post(
     if use_documents_retrieval {
         // Since we don't want to process half of the search requests and then get a permit refused
         // we're going to get one permit for the whole duration of the multi-search request.
-        let progress = Progress::default();
-        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-        let permit = search_queue.try_get_search_permit().await?;
-        progress.update_progress(TotalProcessingTimeStep::Search);
+        let progress = Progress::fast(ProgressVerbosityMode::Info);
+        let permit = search_queue.try_get_search_permit(&progress).await?;
         let request_uid = Uuid::now_v7();
 
         let federated_search = params.into_inner();
@@ -193,7 +191,7 @@ pub async fn multi_search_with_post(
             personalization_service: (*personalization_service).clone(),
         };
 
-        let search_results = document_retrieval.execute(index_scheduler, &progress).await;
+        let search_results = document_retrieval.execute(index_scheduler, progress).await;
 
         if search_results.is_ok() {
             multi_aggregate.succeed();
@@ -201,12 +199,6 @@ pub async fn multi_search_with_post(
 
         permit.drop().await;
         analytics.publish(multi_aggregate, &req);
-        debug!(
-            request_uid = ?request_uid,
-            returns = ?&search_results,
-            progress = ?progress.accumulated_durations(),
-            "Multi-search"
-        );
 
         let search_results = search_results.map_err(|(mut err, query_index)| {
             // Add the query index that failed as context for the error message.
@@ -219,10 +211,29 @@ pub async fn multi_search_with_post(
         })?;
 
         match search_results {
-            DocumentSearchResult::Federated(search_result) => {
+            DocumentSearchResult::Federated(search_result, progress) => {
+                debug!(
+                    request_uid = ?request_uid,
+                    returns = ?&search_result,
+                    progress = ?progress,
+                    "Federated-search"
+                );
                 Ok(HttpResponse::Ok().json(search_result))
             }
-            DocumentSearchResult::Multi(search_results) => {
+            DocumentSearchResult::Multi(search_results, progress_by_query) => {
+                debug!(
+                    request_uid = ?request_uid,
+                    returns = ?&search_results,
+                    progress = ?progress_by_query
+                    .into_iter()
+                    .flat_map(|(query_index, progress)| {
+                        progress.into_iter().map(move |(key, value)| {
+                            ([query_index.as_str().to_string(), key].join(" -> "), value)
+                        })
+                    })
+                    .collect::<IndexMap<String, String>>(),
+                    "Multi-search"
+                );
                 Ok(HttpResponse::Ok().json(SearchResults { results: search_results }))
             }
         }
@@ -249,10 +260,8 @@ pub async fn legacy_multi_search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
-    let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
+    let progress = Progress::fast(ProgressVerbosityMode::Info);
+    let permit = search_queue.try_get_search_permit(&progress).await?;
     let request_uid = Uuid::now_v7();
 
     let federated_search = params.into_inner();
