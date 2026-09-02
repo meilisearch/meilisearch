@@ -137,7 +137,7 @@ pub async fn perform_federated_search(
 
     // 2.2. concurrently execute local queries
     progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
-    let params: SearchByIndexParams = SearchByIndexParams {
+    let params = SearchByIndexParams {
         index_scheduler,
         auth_filter: auth_filter.clone(),
         local_name: network_partitioner.local().map(|local| local.to_string()),
