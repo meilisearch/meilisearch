@@ -201,6 +201,7 @@ IndexScopedApiKeyWithGlobalAction              , InvalidRequest       , BAD_REQU
 BadParameter                                   , InvalidRequest       , BAD_REQUEST;
 BadRequest                                     , InvalidRequest       , BAD_REQUEST;
 DatabaseSizeLimitReached                       , Internal             , INTERNAL_SERVER_ERROR;
+WordsDictionarySizeLimitReached                , Internal             , INTERNAL_SERVER_ERROR;
 DocumentNotFound                               , InvalidRequest       , NOT_FOUND;
 DumpAlreadyProcessing                          , InvalidRequest       , CONFLICT;
 DumpNotFound                                   , InvalidRequest       , NOT_FOUND;
@@ -513,6 +514,7 @@ impl ErrorCode for milli::Error {
                 UserError::InvalidStoreFile => Code::InvalidStoreFile,
                 UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
                 UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
+                UserError::MaxWordsFstSizeReached { .. } => Code::WordsDictionarySizeLimitReached,
                 UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                 UserError::InvalidFilter(_)
                 | UserError::InvalidFilterExpression(..)

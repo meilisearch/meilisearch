@@ -13,6 +13,7 @@ use super::document_changes::IndexingContext;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
+use crate::index::check_words_fst_size;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::progress::Progress;
 use crate::update::del_add::DelAdd;
@@ -178,9 +179,11 @@ fn compute_word_fst(
     }
 
     let (word_fst_mmap, prefix_data) = word_fst_builder.build()?;
+    check_words_fst_size(word_fst_mmap.len())?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
 
     if let Some(PrefixData { prefixes_fst_mmap }) = prefix_data {
+        check_words_fst_size(prefixes_fst_mmap.len())?;
         index.main.remap_types::<Str, Bytes>().put(
             wtxn,
             WORDS_PREFIXES_FST_KEY,
@@ -206,6 +209,7 @@ pub fn recompute_word_fst_from_word_docids_database(
         word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
     }
     let (word_fst_mmap, _) = word_fst_builder.build()?;
+    check_words_fst_size(word_fst_mmap.len())?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
 
     Ok(())

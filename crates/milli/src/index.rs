@@ -213,6 +213,17 @@ impl CreateOrOpen {
     }
 }
 
+/// A serialized FST is stored as a single LMDB value, which cannot exceed 2^31 bytes.
+pub const MAX_WORDS_FST_SIZE: usize = 1 << 31;
+
+pub(crate) fn check_words_fst_size(size: usize) -> Result<()> {
+    if size < MAX_WORDS_FST_SIZE {
+        Ok(())
+    } else {
+        Err(UserError::MaxWordsFstSizeReached { size }.into())
+    }
+}
+
 impl Index {
     pub fn new_with_creation_dates<P: AsRef<Path>>(
         mut options: heed::EnvOpenOptions<WithoutTls>,
@@ -1226,12 +1237,11 @@ impl Index {
         &self,
         wtxn: &mut RwTxn<'_>,
         fst: &fst::Set<A>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, Bytes>().put(
-            wtxn,
-            main_key::WORDS_FST_KEY,
-            fst.as_fst().as_bytes(),
-        )
+    ) -> Result<()> {
+        let bytes = fst.as_fst().as_bytes();
+        check_words_fst_size(bytes.len())?;
+        self.main.remap_types::<Str, Bytes>().put(wtxn, main_key::WORDS_FST_KEY, bytes)?;
+        Ok(())
     }
 
     /// Returns the FST which is the words dictionary of the engine.
@@ -1394,12 +1404,11 @@ impl Index {
         &self,
         wtxn: &mut RwTxn<'_>,
         fst: &fst::Set<A>,
-    ) -> heed::Result<()> {
-        self.main.remap_types::<Str, Bytes>().put(
-            wtxn,
-            main_key::WORDS_PREFIXES_FST_KEY,
-            fst.as_fst().as_bytes(),
-        )
+    ) -> Result<()> {
+        let bytes = fst.as_fst().as_bytes();
+        check_words_fst_size(bytes.len())?;
+        self.main.remap_types::<Str, Bytes>().put(wtxn, main_key::WORDS_PREFIXES_FST_KEY, bytes)?;
+        Ok(())
     }
 
     pub(crate) fn delete_words_prefixes_fst(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {

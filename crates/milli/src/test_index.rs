@@ -1468,3 +1468,18 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         .unwrap();
     assert!(results.candidates.is_empty());
 }
+
+#[test]
+fn words_fst_size_is_bounded() {
+    use crate::error::UserError;
+    use crate::index::{MAX_WORDS_FST_SIZE, check_words_fst_size};
+
+    assert!(check_words_fst_size(0).is_ok());
+    assert!(check_words_fst_size(MAX_WORDS_FST_SIZE - 1).is_ok());
+
+    let error = check_words_fst_size(MAX_WORDS_FST_SIZE).unwrap_err();
+    assert!(matches!(
+        error,
+        crate::Error::UserError(UserError::MaxWordsFstSizeReached { size }) if size == MAX_WORDS_FST_SIZE
+    ));
+}

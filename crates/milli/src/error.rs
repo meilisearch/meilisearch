@@ -295,6 +295,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidStoreFile,
     #[error("Maximum database size has been reached.")]
     MaxDatabaseSizeReached,
+    #[error("Maximum words dictionary size has been reached: the dictionary would weigh {size} bytes while it cannot exceed {} bytes. This happens when an index contains too many unique words, for example when unique identifiers are indexed as searchable text.", crate::index::MAX_WORDS_FST_SIZE)]
+    MaxWordsFstSizeReached { size: usize },
     #[error("Document doesn't have a `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
     MissingDocumentId { primary_key: String, document: Object },
     #[error("Document have too many matching `{}` attribute: `{}`.", .primary_key, serde_json::to_string(.document).unwrap())]
