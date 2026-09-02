@@ -39,7 +39,7 @@ jobs:
         run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli
 
       - name: Generate OpenAPI file
-        run: cargo run --release -p openapi-generator -- --pretty --output /tmp/meilisearch-openapi.json
+        run: cargo run --release -p openapi-generator -- --pretty --output-dir /tmp/
 
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
