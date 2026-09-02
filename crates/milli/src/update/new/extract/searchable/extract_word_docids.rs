@@ -839,7 +839,10 @@ impl WordDocidsExtractors {
             }
         }
 
-        Ok(())
+        // Without this, `fid_word_count` for the last document of this thread is never written
+        let buffer_size = size_of::<FieldId>();
+        let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
+        cached_sorter.flush_fid_word_count(&mut buffer)
     }
 }
 
