@@ -9,7 +9,7 @@ use actix_http::uri::PathAndQuery;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::HttpRequest;
 use bytes::Bytes;
-use http_client::reqwest::{ClientBuilder, StatusCode};
+use http_client::reqwest::StatusCode;
 use index_scheduler::{IndexScheduler, ReqwestRequestWrapper};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::network::{route, Remote};
@@ -25,31 +25,6 @@ use uuid::Uuid;
 use crate::error::MeilisearchHttpError;
 use crate::proxy::{Body, Endpoint, ProxyError, ReqwestErrorWithoutUrl};
 use crate::routes::SummarizedTaskView;
-
-mod timeouts {
-    use std::sync::LazyLock;
-
-    pub static CONNECT_SECONDS: LazyLock<u64> =
-        LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_PROXY_CONNECT_TIMEOUT_SECONDS", 3));
-
-    pub static BACKOFF_SECONDS: LazyLock<u64> =
-        LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_PROXY_BACKOFF_TIMEOUT_SECONDS", 25));
-
-    pub static REQUEST_SECONDS: LazyLock<u64> =
-        LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_PROXY_REQUEST_TIMEOUT_SECONDS", 30));
-
-    fn fetch_or_default(key: &str, default: u64) -> u64 {
-        match std::env::var(key) {
-            Ok(timeout) => timeout.parse().unwrap_or_else(|_| {
-                panic!("`{key}` environment variable is not parseable as an integer: {timeout}")
-            }),
-            Err(std::env::VarError::NotPresent) => default,
-            Err(std::env::VarError::NotUnicode(_)) => {
-                panic!("`{key}` environment variable is not set to a integer")
-            }
-        }
-    }
-}
 
 impl<T, F> Body<T, F>
 where
@@ -214,12 +189,7 @@ where
         };
 
         let mut in_flight_remote_queries = BTreeMap::new();
-        let client = ClientBuilder::new()
-            .prepare(|inner| {
-                inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
-            })
-            .build_with_policies(index_scheduler.ip_policy().clone(), Default::default())
-            .unwrap();
+        let client = index_scheduler.web_client();
 
         let method = req.method();
 
@@ -253,7 +223,7 @@ where
 
                     let backoff = backoff::ExponentialBackoffBuilder::new()
                         .with_max_elapsed_time(Some(std::time::Duration::from_secs(
-                            *timeouts::BACKOFF_SECONDS,
+                            *index_scheduler::timeouts::BACKOFF_SECONDS,
                         )))
                         .build();
 
@@ -327,13 +297,13 @@ where
 }
 
 pub async fn send_request<T, F, U>(
+    index_scheduler: &IndexScheduler,
     path_and_query: PathAndQuery,
     method: http_client::reqwest::Method,
     content_type: Option<String>,
     body: Body<T, F>,
     remote_name: &str,
     remote: &Remote,
-    ip_policy: http_client::policy::IpPolicy,
 ) -> Result<U, ProxyError>
 where
     T: serde::Serialize,
@@ -349,12 +319,7 @@ where
 
     let body = body.into_bytes(remote_name, remote).map_err(Box::new)?;
 
-    let client = ClientBuilder::new()
-        .prepare(|inner| {
-            inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
-        })
-        .build_with_policies(ip_policy, Default::default())
-        .unwrap();
+    let client = index_scheduler.web_client();
 
     let url = route::url_from_base_and_route(&remote.url, path_and_query).map_err(|err| {
         Box::new(index_scheduler::Error::InvalidRemoteUrl {
@@ -370,7 +335,9 @@ where
     let api_key = remote.write_api_key.clone();
 
     let backoff = backoff::ExponentialBackoffBuilder::new()
-        .with_max_elapsed_time(Some(std::time::Duration::from_secs(*timeouts::BACKOFF_SECONDS)))
+        .with_max_elapsed_time(Some(std::time::Duration::from_secs(
+            *index_scheduler::timeouts::BACKOFF_SECONDS,
+        )))
         .build();
 
     backoff::future::retry(backoff, move || {
@@ -384,8 +351,9 @@ where
 
         async move {
             let request = client.request(method, url).prepare(|request| {
-                let request =
-                    request.timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
+                let request = request.timeout(std::time::Duration::from_secs(
+                    *index_scheduler::timeouts::REQUEST_SECONDS,
+                ));
                 let request = if let Some(body) = body { request.body(body) } else { request };
                 let request = if let Some(api_key) = api_key {
                     request.bearer_auth(api_key)
@@ -473,7 +441,8 @@ async fn try_proxy(
     body: Option<Bytes>,
 ) -> Result<SummarizedTaskView, backoff::Error<ProxyError>> {
     let request = client.request(method, url).prepare(|request| {
-        let request = request.timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
+        let request = request
+            .timeout(std::time::Duration::from_secs(*index_scheduler::timeouts::REQUEST_SECONDS));
         let request = if let Some(body) = body { request.body(body) } else { request };
         let request =
             if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };

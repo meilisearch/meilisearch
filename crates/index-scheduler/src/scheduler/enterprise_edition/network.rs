@@ -488,9 +488,7 @@ impl IndexScheduler {
         in_name: String,
         origin: &Origin,
     ) -> crate::Result<()> {
-        let client = http_client::reqwest::ClientBuilder::new()
-            .build_with_policies(self.ip_policy().clone(), Default::default())
-            .unwrap();
+        let client = self.web_client();
 
         let body = route::NetworkChange {
             origin: origin.clone(),
