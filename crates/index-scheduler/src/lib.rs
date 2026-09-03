@@ -1012,7 +1012,11 @@ impl IndexScheduler {
             &mut network_task.kind
         else {
             tracing::error!("unexpected network kind for network task while registering task");
-            return Err(Error::CorruptedTaskQueue);
+            return Err(Error::CorruptedTaskQueue {
+                file: file!(),
+                message: "Unexpected network kind for network task while registering task"
+                    .to_string(),
+            });
         };
 
         let o = update_fn(network_topology_change)?;
@@ -1075,7 +1079,15 @@ impl IndexScheduler {
                                 .tasks
                                 .get_task(self.rtxn, task_id)
                                 .map_err(io::Error::other)?
-                                .ok_or_else(|| io::Error::other(Error::CorruptedTaskQueue))?;
+                                .ok_or_else(|| {
+                                    io::Error::other(Error::CorruptedTaskQueue {
+                                        file: file!(),
+                                        message: format!(
+                                            "Task content not found for uid `{}` when notifying webhooks",
+                                            task_id
+                                        ),
+                                    })
+                                })?;
 
                             serde_json::to_writer(&mut self.buffer, &TaskView::from_task(&task))?;
                             self.buffer.push(b'\n');
