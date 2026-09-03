@@ -162,8 +162,14 @@ impl IndexScheduler {
         let (atomic, update_file_progress) = AtomicUpdateFileStep::new(enqueued.len() as u32);
         progress.update_progress(update_file_progress);
         for task_id in enqueued {
-            let task =
-                self.queue.tasks.get_task(&rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let task = self.queue.tasks.get_task(&rtxn, task_id)?.ok_or_else(|| {
+                Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{task_id}` when copying the update files for snapshot creation"
+                    ),
+                }
+            })?;
             if let Some(content_uuid) = task.content_uuid() {
                 let src = self.queue.file_store.update_path(content_uuid);
                 let dst = update_files_dir.join(content_uuid.to_string());

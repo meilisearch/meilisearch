@@ -808,7 +808,12 @@ impl IndexScheduler {
 
         for task_id in tasks_to_update {
             let mut task =
-                self.queue.tasks.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+                self.queue.tasks.get_task(wtxn, task_id)?.ok_or_else(|| Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{task_id}` when updating the tasks for index swap"
+                    ),
+                })?;
             swap_index_uid_in_task(&mut task, (lhs.uid(), rhs.uid()));
             self.queue.tasks.all_tasks.put(wtxn, &task_id, &task)?;
             atomic.fetch_add(1, Ordering::Relaxed);

@@ -299,8 +299,12 @@ impl BatchQueue {
                     }
                     Ok(batch)
                 } else {
-                    self.get_batch(rtxn, batch_id)
-                        .and_then(|batch| batch.ok_or(Error::CorruptedTaskQueue))
+                    self.get_batch(rtxn, batch_id).and_then(|batch| {
+                        batch.ok_or_else(|| Error::CorruptedTaskQueue {
+                            file: file!(),
+                            message: format!("Batch content not found for uid `{batch_id}` when getting existing batches"),
+                        })
+                    })
                 }
             })
             .collect::<Result<_>>()

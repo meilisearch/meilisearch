@@ -170,8 +170,8 @@ pub enum Error {
     // Irrecoverable errors:
     #[error(transparent)]
     CreateBatch(Box<Self>),
-    #[error("Corrupted task queue.")]
-    CorruptedTaskQueue,
+    #[error("Corrupted task queue in {file}: {message}.")]
+    CorruptedTaskQueue { file: &'static str, message: String },
     #[error(transparent)]
     DatabaseUpgrade(Box<Self>),
     #[error(transparent)]
@@ -279,7 +279,7 @@ impl Error {
             | Error::RequiresEnterpriseEdition { .. }
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
-            | Error::CorruptedTaskQueue
+            | Error::CorruptedTaskQueue { .. }
             | Error::DatabaseUpgrade(_)
             | Error::UnrecoverableError(_)
             | Error::IndexSchedulerVersionMismatch { .. }
@@ -367,7 +367,7 @@ impl ErrorCode for Error {
 
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,
-            Error::CorruptedTaskQueue => Code::Internal,
+            Error::CorruptedTaskQueue { .. } => Code::Internal,
             Error::CorruptedDump => Code::Internal,
             Error::DatabaseUpgrade(_) => Code::Internal,
             Error::Export(_) => Code::Internal,
