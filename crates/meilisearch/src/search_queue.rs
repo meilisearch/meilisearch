@@ -135,6 +135,11 @@ impl SearchQueue {
                         let remove = rng.gen_range(0..queue.len());
                         let channel = queue.swap_remove(remove);
                         let _ = channel.send(Permit { sender: sender.clone() });
+                        // Granting a permit to a queued search starts a new running search,
+                        // so we must account for it here just like the immediate-admission path
+                        // below does. Otherwise `searches_running` drifts below the real count
+                        // and the admission gate over-admits.
+                        searches_running += 1;
                     }
                 },
 
