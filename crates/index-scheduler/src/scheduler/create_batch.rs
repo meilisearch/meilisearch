@@ -288,8 +288,12 @@ impl IndexScheduler {
                 must_create_index,
             })),
             BatchKind::DocumentEdition { id } => {
-                let mut task =
-                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task = self.queue.tasks.get_task(rtxn, id)?.ok_or_else(|| {
+                    Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: format!("Task content not found for uid `{}` when creating next batch index for document edition", id),
+                    }
+                })?;
                 current_batch.processing(Some(&mut task));
                 match &task.kind {
                     KindWithContent::DocumentEdition { index_uid, .. } => {
@@ -448,8 +452,12 @@ impl IndexScheduler {
                 }))
             }
             BatchKind::IndexCreation { id } => {
-                let mut task =
-                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task = self.queue.tasks.get_task(rtxn, id)?.ok_or_else(|| {
+                    Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: format!("Task content not found for uid `{}` when creating next batch index for index creation", id),
+                    }
+                })?;
                 current_batch.processing(Some(&mut task));
                 let (index_uid, primary_key) = match &task.kind {
                     KindWithContent::IndexCreation { index_uid, primary_key } => {
@@ -460,8 +468,12 @@ impl IndexScheduler {
                 Ok(Some(Batch::IndexCreation { index_uid, primary_key, task }))
             }
             BatchKind::IndexUpdate { id } => {
-                let mut task =
-                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task = self.queue.tasks.get_task(rtxn, id)?.ok_or_else(|| {
+                    Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: format!("Task content not found for uid `{}` when creating next batch index for index update", id),
+                    }
+                })?;
                 current_batch.processing(Some(&mut task));
                 let (primary_key, new_index_uid) = match &task.kind {
                     KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
@@ -481,8 +493,12 @@ impl IndexScheduler {
                 )?,
             })),
             BatchKind::IndexSwap { id } => {
-                let mut task =
-                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                let mut task = self.queue.tasks.get_task(rtxn, id)?.ok_or_else(|| {
+                    Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: format!("Task content not found for uid `{}` when creating next batch index for index swap", id),
+                    }
+                })?;
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
             }
@@ -538,8 +554,15 @@ impl IndexScheduler {
         // 0. we get the last task to cancel.
         let to_cancel = self.queue.tasks.get_kind(rtxn, Kind::TaskCancelation)? & enqueued;
         if let Some(task_id) = to_cancel.max() {
-            let mut task =
-                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task = self.queue.tasks.get_task(rtxn, task_id)?.ok_or_else(|| {
+                Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{}` when getting the last task to cancel",
+                        task_id
+                    ),
+                }
+            })?;
             current_batch.processing(Some(&mut task));
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::TaskCancelation,
@@ -602,8 +625,15 @@ impl IndexScheduler {
         // 4. we get the next task to compact
         let to_compact = self.queue.tasks.get_kind(rtxn, Kind::IndexCompaction)? & enqueued;
         if let Some(task_id) = to_compact.min() {
-            let mut task =
-                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task = self.queue.tasks.get_task(rtxn, task_id)?.ok_or_else(|| {
+                Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{}` when getting the next compact task",
+                        task_id
+                    ),
+                }
+            })?;
             current_batch.processing(Some(&mut task));
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::IndexCompaction,
@@ -638,8 +668,15 @@ impl IndexScheduler {
         // 7. we batch the dumps.
         let to_dump = self.queue.tasks.get_kind(rtxn, Kind::DumpCreation)? & enqueued;
         if let Some(to_dump) = to_dump.min() {
-            let mut task =
-                self.queue.tasks.get_task(rtxn, to_dump)?.ok_or(Error::CorruptedTaskQueue)?;
+            let mut task = self.queue.tasks.get_task(rtxn, to_dump)?.ok_or_else(|| {
+                Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{}` when getting the next dump task",
+                        to_dump
+                    ),
+                }
+            })?;
             current_batch.processing(Some(&mut task));
             current_batch.reason(BatchStopReason::TaskCannotBeBatched {
                 kind: Kind::DumpCreation,
@@ -686,7 +723,15 @@ impl IndexScheduler {
             let Some(task_id) = enqueued_it.next() else {
                 return Ok((None, current_batch));
             };
-            task = self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            task = self.queue.tasks.get_task(rtxn, task_id)?.ok_or_else(|| {
+                Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{}` when creating next batch unprioritized",
+                        task_id
+                    ),
+                }
+            })?;
 
             if skip_if(&task) {
                 continue;
@@ -738,11 +783,15 @@ impl IndexScheduler {
                 stop_reason = BatchStopReason::ReachedTaskLimit { task_limit: tasks_limit };
                 break;
             }
-            let task = self
-                .queue
-                .tasks
-                .get_task(rtxn, task_id)
-                .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))?;
+            let task = self.queue.tasks.get_task(rtxn, task_id).and_then(|task| {
+                task.ok_or_else(|| Error::CorruptedTaskQueue {
+                    file: file!(),
+                    message: format!(
+                        "Task content not found for uid `{}` when creating next batch unprioritized",
+                        task_id
+                    ),
+                })
+            })?;
 
             if skip_if(&task) {
                 continue;
@@ -900,7 +949,10 @@ impl IndexScheduler {
             NetworkTopologyState::WaitingForOthers => {
                 let Some(task_network) = &task.network else {
                     tracing::error!("network topology change task has no network");
-                    return Err(Error::CorruptedTaskQueue);
+                    return Err(Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: "Network topology change task has no network".to_string(),
+                    });
                 };
 
                 let origin;
