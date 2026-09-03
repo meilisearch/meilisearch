@@ -114,7 +114,10 @@ impl TaskQueue {
     ///
     /// - CorruptedTaskQueue: The task doesn't exist in the database
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &mut Task) -> Result<()> {
-        let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
+        let old_task = self.get_task(wtxn, task.uid)?.ok_or_else(|| Error::CorruptedTaskQueue {
+            file: file!(),
+            message: format!("Task content not found for uid `{}` when updating task", task.uid),
+        })?;
         // network topology tasks may be processed multiple times.
         let maybe_reprocessing = old_task.status != Status::Enqueued
             || task.kind.as_kind() == Kind::NetworkTopologyChange;
@@ -288,7 +291,15 @@ impl TaskQueue {
         tasks
             .into_iter()
             .map(|task_id| {
-                self.get_task(rtxn, task_id).and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                self.get_task(rtxn, task_id).and_then(|task| {
+                    task.ok_or_else(|| Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: format!(
+                            "Task content not found for uid `{}` when getting existing tasks",
+                            task_id
+                        ),
+                    })
+                })
             })
             .collect::<Result<_>>()
     }

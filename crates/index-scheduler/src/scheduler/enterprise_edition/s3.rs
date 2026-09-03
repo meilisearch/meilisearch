@@ -263,7 +263,12 @@ fn stream_tarball_into_pipe(
             .queue
             .tasks
             .get_task(&rtxn, task_id)?
-            .ok_or(Error::CorruptedTaskQueue)?;
+            .ok_or_else(|| Error::CorruptedTaskQueue {
+                file: file!(),
+                message: format!(
+                    "Task content not found for uid `{task_id}` when streaming the update files for snapshot creation"
+                ),
+            })?;
         if let Some(content_uuid) = task.content_uuid() {
             use std::fs::File;
 
