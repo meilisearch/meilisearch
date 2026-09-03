@@ -317,3 +317,56 @@ async fn geo_sort_with_words() {
     )
     .await;
 }
+
+#[actix_rt::test]
+async fn geo_asc_with_new_filterable_attribute() {
+    let documents = json!([
+      { "id": 0, "doggo": "jean", RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 0 } },
+      { "id": 1, "doggo": "intel", RESERVED_GEO_FIELD_NAME: { "lat": 88, "lng": 0 } },
+      { "id": 2, "doggo": "jean bob", RESERVED_GEO_FIELD_NAME: { "lat": -89, "lng": 0 } },
+      { "id": 3, "doggo": "jean michel", RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 178 } },
+      { "id": 4, "doggo": "bob marley", RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": -179 } },
+    ]);
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"searchableAttributes": ["id", "doggo"], "filterableAttributes": [{"attributePatterns":["_geo"], "features": { "facetSearch": true, "filter": {"equality": true, "comparison": true} }}]}),
+        &json!({"q": "jean", "filter": "_geoRadius(2, 2, 10000)"}),
+        |response, code| {
+            assert_eq!(code, 200, "{response}");
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+            {
+              "hits": [],
+              "query": "jean",
+              "processingTimeMs": "[time]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 0,
+              "requestUid": "[uuid]"
+            }
+            "###);
+        },
+    )
+    .await;
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"searchableAttributes": ["id", "doggo"], "filterableAttributes": [{"attributePatterns":["_geojson"], "features": { "facetSearch": false, "filter": {"equality": false, "comparison": false} }}]}),
+        &json!({"q": "jean", "filter": "_geoRadius(2.472735, 2.184019, 10000)"}),
+        |response, code| {
+            assert_eq!(code, 200, "{response}");
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+            {
+              "hits": [],
+              "query": "jean",
+              "processingTimeMs": "[time]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 0,
+              "requestUid": "[uuid]"
+            }
+            "###);
+        },
+    )
+    .await;
+}
