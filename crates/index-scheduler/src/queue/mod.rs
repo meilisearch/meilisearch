@@ -286,10 +286,13 @@ impl Queue {
     }
 
     /// Register a task to cleanup the task queue if needed
-    pub fn cleanup_task_queue(&self, wtxn: &mut RwTxn) -> Result<()> {
+    pub fn cleanup_task_queue(
+        &self,
+        wtxn: &mut RwTxn,
+        task_database_is_almost_full: bool,
+    ) -> Result<()> {
         let nb_tasks = self.tasks.all_task_ids(wtxn)?.len();
-        // if we have less than 1M tasks everything is fine
-        if nb_tasks < self.max_number_of_tasks as u64 {
+        if nb_tasks < self.max_number_of_tasks as u64 && !task_database_is_almost_full {
             return Ok(());
         }
 
