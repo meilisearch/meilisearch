@@ -130,6 +130,10 @@ impl SearchQueue {
                 biased;
                 _ = search_finished.recv() => {
                     searches_running = searches_running.saturating_sub(1);
+                    // Drop any waiter whose receiver has been dropped because the
+                    // search request was cancelled. Otherwise we could hand the
+                    // freed permit to a dead waiter and keep counting it as pending.
+                    queue.retain(|waiter| !waiter.is_closed());
                     if !queue.is_empty() {
                         // Can't panic: the queue wasn't empty thus the range isn't empty.
                         let remove = rng.gen_range(0..queue.len());
@@ -145,6 +149,12 @@ impl SearchQueue {
                         // and it can generate a lot of noise in the tests.
                         None => continue,
                     };
+
+                    // Drop any waiter whose receiver has been dropped because the
+                    // search request was cancelled, before the queue length drives
+                    // capacity enforcement or random eviction. A cancelled request
+                    // must not occupy a capacity slot nor evict a live waiter.
+                    queue.retain(|waiter| !waiter.is_closed());
 
                     if searches_running < usize::from(parallelism) && queue.is_empty() {
                         searches_running += 1;
@@ -202,5 +212,101 @@ impl SearchQueue {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use super::SearchQueue;
+
+    /// Yield until `cond` returns `true`, failing the test if it does not happen
+    /// within `timeout`. Avoids fixed sleeps so the test stays deterministic and
+    /// as fast as the scheduler allows.
+    async fn wait_until(timeout: Duration, mut cond: impl FnMut() -> bool) {
+        tokio::time::timeout(timeout, async {
+            while !cond() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("condition was not met within the timeout");
+    }
+
+    /// Regression test for <https://github.com/meilisearch/meilisearch/issues/6508>.
+    ///
+    /// A search request cancelled after its `oneshot::Sender<Permit>` was
+    /// transferred to the scheduler, but before a permit was delivered, used to
+    /// leave a closed sender in the scheduler queue. That stale entry kept
+    /// counting towards `queue.len()`, which drives capacity enforcement, random
+    /// eviction, permit selection and the `searches_waiting` metric. The scheduler
+    /// now prunes closed senders before those decisions, so only live waiters are
+    /// ever accounted for.
+    ///
+    /// The test is fully deterministic: the single running slot is held for the
+    /// whole test (so no `search_finished` event fires and there is no random
+    /// permit selection), and the capacity is large enough that no eviction ever
+    /// happens. Only the new-request pruning path is exercised. With the fix the
+    /// queue converges to exactly the three live waiters; without it the cancelled
+    /// waiter is never removed and the queue reports four.
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancelled_waiter_is_pruned_from_search_queue() {
+        let timeout = Duration::from_secs(5);
+        let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
+
+        // Hold the only running permit for the whole test so the running slot never
+        // frees and every later request has to wait in the queue.
+        let _running = queue
+            .try_get_search_permit()
+            .await
+            .expect("the first request should receive the running permit");
+        assert_eq!(queue.searches_waiting(), 0);
+
+        // First waiter: it will be cancelled.
+        let cancelled = {
+            let queue = Arc::clone(&queue);
+            tokio::spawn(async move { queue.try_get_search_permit().await })
+        };
+        wait_until(timeout, || queue.searches_waiting() == 1).await;
+
+        // Second waiter: stays live for the whole test.
+        let _live_a = {
+            let queue = Arc::clone(&queue);
+            tokio::spawn(async move { queue.try_get_search_permit().await })
+        };
+        wait_until(timeout, || queue.searches_waiting() == 2).await;
+
+        // Cancel the first waiter: its receiver is dropped, so the sender the
+        // scheduler still owns is now closed.
+        cancelled.abort();
+        let _ = cancelled.await;
+
+        // Two more live waiters arrive. On the fixed scheduler each new request
+        // prunes the closed sender first, so the queue converges to exactly three
+        // live waiters (live_a, live_b, live_c).
+        let _live_b = {
+            let queue = Arc::clone(&queue);
+            tokio::spawn(async move { queue.try_get_search_permit().await })
+        };
+        let _live_c = {
+            let queue = Arc::clone(&queue);
+            tokio::spawn(async move { queue.try_get_search_permit().await })
+        };
+        wait_until(timeout, || queue.searches_waiting() >= 3).await;
+
+        // Let any further scheduler turn settle: on the buggy code this is where
+        // the stale cancelled waiter would push the count to four.
+        for _ in 0..1_000 {
+            tokio::task::yield_now().await;
+        }
+
+        assert_eq!(
+            queue.searches_waiting(),
+            3,
+            "a cancelled waiter must be pruned so only live waiters are counted",
+        );
     }
 }
