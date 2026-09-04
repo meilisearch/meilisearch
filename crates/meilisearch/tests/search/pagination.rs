@@ -195,3 +195,34 @@ async fn test_issue_5274() {
     }
     "###);
 }
+
+/// testing: https://github.com/meilisearch/meilisearch/issues/6482
+#[actix_rt::test]
+async fn max_total_hits_caps_estimated_and_total_hits() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let documents = json!([
+        { "id": 1, "title": "Document 1" },
+        { "id": 2, "title": "Document 2" },
+        { "id": 3, "title": "Document 3" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_pagination(json!({ "maxTotalHits": 2 })).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Offset/limit pagination: `estimatedTotalHits` must not exceed `maxTotalHits`.
+    let (response, code) = index.search_post(json!({ "offset": 0, "limit": 1 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"].as_array().unwrap().len(), @"1");
+    snapshot!(response["estimatedTotalHits"], @"2");
+
+    // Page-based pagination: `totalHits` and `totalPages` must respect `maxTotalHits`.
+    let (response, code) = index.search_post(json!({ "page": 1, "hitsPerPage": 1 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response["hits"].as_array().unwrap().len(), @"1");
+    snapshot!(response["totalHits"], @"2");
+    snapshot!(response["totalPages"], @"2");
+}
