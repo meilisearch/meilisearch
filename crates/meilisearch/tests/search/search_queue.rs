@@ -219,3 +219,59 @@ async fn works_with_capacity_of_zero() {
         .expect("I should get a permit straight away")
         .unwrap();
 }
+
+#[actix_rt::test]
+async fn cancelled_permit_waiter_removed_from_search_queue() {
+    let queue = Arc::new(SearchQueue::new(1, NonZeroUsize::new(1).unwrap()));
+
+    // Saturate the only running-search slot so the next request must wait.
+    let active_permit = queue
+        .try_get_search_permit()
+        .await
+        .expect("the first request should receive a permit");
+    assert_eq!(queue.searches_waiting(), 0);
+
+    let waiting_queue = Arc::clone(&queue);
+    let waiting_task = tokio::spawn(async move {
+        waiting_queue.try_get_search_permit().await
+    });
+
+    // Wait until the scheduler has accepted the waiter and published the queue length.
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if queue.searches_waiting() == 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the waiter should be accepted by the scheduler");
+    assert!(
+        !waiting_task.is_finished(),
+        "the accepted waiter should still be awaiting its permit"
+    );
+
+    // The request future is cancelled while it awaits the permit.
+    // This drops its receiver, but the scheduler already owns the sender.
+    waiting_task.abort();
+    let cancellation = waiting_task
+        .await
+        .expect_err("aborting the waiter should cancel its task");
+    assert!(cancellation.is_cancelled());
+
+    // With the fix, the cancelled waiter's sender should be pruned from the queue.
+    // searches_waiting should return to 0.
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if queue.searches_waiting() == 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the cancelled waiter should be removed from the queue");
+
+    drop(active_permit);
+}
