@@ -81,7 +81,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::ops::Bound;
 
-use grenad::Merger;
 use heed::types::{Bytes, DecodeIgnore};
 use heed::BytesDecode as _;
 use roaring::RoaringBitmap;
