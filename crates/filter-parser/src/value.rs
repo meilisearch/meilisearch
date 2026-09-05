@@ -7,8 +7,8 @@ use nom::{InputIter, InputLength, InputTake, Slice};
 
 use crate::error::{ExpectedValueKind, NomErrorExt};
 use crate::{
-    parse_geo, parse_geo_bounding_box, parse_geo_distance, parse_geo_point, parse_geo_radius,
-    Error, ErrorKind, IResult, Span, Token, TokenLike,
+    Error, ErrorKind, IResult, Span, Token, TokenLike, parse_geo, parse_geo_bounding_box,
+    parse_geo_distance, parse_geo_point, parse_geo_radius,
 };
 
 /// This function goes through all characters in the [Span] if it finds any escaped character (`\`).
@@ -21,7 +21,7 @@ fn unescape(buf: Span, char_to_escape: char) -> String {
 /// Parse a value in quote. If it encounter an escaped quote it'll unescape it.
 fn quoted_by<'a, T>(quote: char, input: Span<'a>) -> IResult<'a, T>
 where
-    T: From<Span<'a>> + crate::TokenLike,
+    T: From<Span<'a>> + TokenLike,
 {
     // empty fields / values are valid in json
     if input.is_empty() {
@@ -63,26 +63,25 @@ where
 // word           = (alphanumeric | _ | - | .)+    except for reserved keywords
 pub fn word_not_keyword<'a, T>(input: Span<'a>) -> IResult<'a, T>
 where
-    T: From<Span<'a>> + crate::TokenLike,
+    T: From<Span<'a>> + TokenLike,
 {
     let (input, word): (_, _) = take_while1(is_value_component)(input)?;
-    let word = T::from(word);
     if is_keyword(word.fragment()) {
         return Err(nom::Err::Error(Error::new_from_kind(
             input.into(),
             ErrorKind::ReservedKeyword(word.fragment().to_string()),
         )));
     }
+    let word = T::from(word);
     Ok((input, word))
 }
 
 // word           = {tag}
 pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, Token> {
     move |input| {
-        let (input, word): (_, Token) =
-            take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
-        if word.fragment() == tag {
-            Ok((input, word))
+        let (next_input, word) = take_while1(is_value_component)(input)?;
+        if word.fragment() == &tag {
+            Ok((next_input, word.into()))
         } else {
             Err(nom::Err::Error(Error::new_from_kind(
                 input.into(),
@@ -168,19 +167,19 @@ where
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoRadius))
+            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoRadius));
         }
         _ => (),
     }
 
     match parse_geo_bounding_box(input) {
         Ok(_) => {
-            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox))
+            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox));
         }
         // if we encountered a failure it means the user badly wrote a _geoBoundingBox filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox))
+            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox));
         }
         _ => (),
     }
@@ -463,7 +462,11 @@ pub mod test {
             // get the inner string referenced in the error
             let value = result.finish().unwrap_err();
             let value = value.context().fragment();
-            assert_eq!(value, expected, "Filter `{}` was supposed to fail with the following value: `{}`, but it failed with: `{}`.", input, expected, value);
+            assert_eq!(
+                value, expected,
+                "Filter `{}` was supposed to fail with the following value: `{}`, but it failed with: `{}`.",
+                input, expected, value
+            );
         }
     }
 }
