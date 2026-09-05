@@ -1,10 +1,14 @@
+use std::cell::Cell;
 use std::fmt;
 use std::sync::Arc;
 
 use charabia::Language;
+use itertools::Itertools;
 use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::Lazy;
+use ordered_float::OrderedFloat;
 use roaring::bitmap::RoaringBitmap;
+use roaring::MultiOps;
 use time::OffsetDateTime;
 
 pub use self::facet::{
@@ -18,9 +22,10 @@ use crate::dynamic_search_rules::{DsrFuel, DynamicSearchRules};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
 use crate::progress::Progress;
-use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::score_details::{ScoreDetails, ScoringStrategy, WeightedScoreValue};
 use crate::search::new::{
-    extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens, QueryGraph,
+    distinct_fid, distinct_single_docid, extract_tokens, resolve_negative_phrases,
+    resolve_negative_words, ExtractedTokens, QueryGraph,
 };
 use crate::vector::{Embedder, Embedding};
 use crate::{
@@ -70,6 +75,12 @@ impl Pin for PinDoc {
     fn precedence(&self) -> Precedence {
         self.precedence
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScaleDocs {
+    pub docs: RoaringBitmap,
+    pub weight: f64,
 }
 
 pub trait Pin {
@@ -364,6 +375,9 @@ impl<'a> Search<'a> {
             ctx.attributes_to_search_on(searchable_attributes)?;
         }
 
+        let query_vector =
+            self.semantic.as_ref().and_then(|semantic| semantic.vector.as_ref()).cloned();
+
         if let Some(distinct) = &self.distinct {
             let filterable_fields = ctx.index.filterable_attributes_rules(ctx.txn)?;
             // check if the distinct field is in the filterable fields
@@ -401,69 +415,88 @@ impl<'a> Search<'a> {
             self.progress,
         )?;
 
-        let (query_terms, pins, used_negative_operator) =
-            self.build_located_query_terms(&mut ctx, self.filter.as_ref(), &mut universe)?;
+        let ResolvedQuery { query_graph_terms, pins, mut scales, used_negative_operator } =
+            self.resolve_query(&mut ctx, self.filter.as_ref(), &mut universe)?;
 
-        let mut query_vector = None;
-        let PartialSearchResult {
-            located_query_terms,
-            candidates,
-            documents_ids,
-            document_scores,
-            degraded,
-        } = match self.semantic.as_ref() {
-            Some(SemanticSearch {
-                vector: Some(vector),
-                embedder_name,
-                embedder,
-                quantized,
-                media: _,
-            }) => {
-                if self.retrieve_vectors {
-                    query_vector = Some(vector.clone());
-                }
-                execute_vector_search(
-                    &mut ctx,
-                    vector,
-                    self.scoring_strategy,
-                    self.exhaustive_number_hits,
-                    self.max_total_hits,
-                    universe,
-                    &self.sort_criteria,
-                    &self.distinct,
-                    self.geo_param,
-                    self.offset,
-                    self.limit,
-                    embedder_name,
-                    embedder,
-                    *quantized,
-                    self.deadline.clone(),
-                    self.ranking_score_threshold,
-                    self.progress,
-                    pins,
-                )?
+        let (query_graph, located_query_terms) = query_graph_terms.unzip();
+
+        // remove 0-weight scale operations (hide operations), removing corresponding documents from the universe
+        scales.retain(|scale| {
+            if scale.weight != 0.0 {
+                true
+            } else {
+                universe -= &scale.docs;
+                false
             }
-            _ => execute_search(
-                &mut ctx,
-                query_terms,
-                self.terms_matching_strategy,
-                self.scoring_strategy,
-                self.exhaustive_number_hits,
-                self.max_total_hits,
-                universe,
-                &self.sort_criteria,
-                &self.distinct,
-                self.geo_param,
-                self.offset,
-                self.limit,
-                &mut DefaultSearchLogger,
-                &mut DefaultSearchLogger,
-                self.deadline.clone(),
-                self.ranking_score_threshold,
-                self.progress,
-                pins,
-            )?,
-        };
+        });
+
+        // whether we can use the original (limit, offset) or if we need to turn it into (limit+offset, 0).
+        // whenever there are pins or scales, we'll need to merge multiple lists of results
+        // and we don't know the actual position of hits before merging, so we cannot skip `offset`.
+
+        let can_skip_hits_internally = pins.is_empty() && scales.is_empty();
+
+        let PartialSearchResult { candidates, documents_ids, document_scores, degraded } =
+            if can_skip_hits_internally {
+                // fixme: repeated in `else` case because we don't have if let chains before edition 2024
+                self.execute_single_search(
+                    &mut ctx,
+                    universe,
+                    query_graph.as_ref(),
+                    can_skip_hits_internally,
+                )?
+            } else if let Some(mut fuel) = self.dynamic_search_rules.as_ref().map(|(_, fuel)| *fuel)
+            {
+                let mut partial_results = Vec::new();
+                'scales: for k in (1..=(scales.len())).rev() {
+                    for combination in scales.iter().combinations(k) {
+                        let scale_universe =
+                            MultiOps::intersection(combination.iter().map(|c| &c.docs)) & &universe;
+
+                        let OrderedFloat::<f64>(weight) = combination
+                            .iter()
+                            .map(|scale| ordered_float::OrderedFloat(scale.weight))
+                            .product();
+
+                        let partial_result: PartialSearchResult = self.execute_single_search(
+                            &mut ctx,
+                            scale_universe,
+                            query_graph.as_ref(),
+                            can_skip_hits_internally,
+                        )?;
+                        universe -= &partial_result.candidates;
+                        let degraded = partial_result.degraded;
+                        partial_results.push((partial_result, weight));
+                        if fuel.consume_scale_combination().is_break() {
+                            break 'scales;
+                        }
+                        if degraded || universe.is_empty() {
+                            break 'scales;
+                        }
+                    }
+                }
+
+                if !universe.is_empty() {
+                    let partial_result = self.execute_single_search(
+                        &mut ctx,
+                        universe,
+                        query_graph.as_ref(),
+                        can_skip_hits_internally,
+                    )?;
+
+                    partial_results.push((partial_result, 1.0));
+                }
+
+                self.merge_partial_results(&ctx, partial_results, pins)?
+            } else {
+                // fixme: repeated from first `if` case because we don't have if let chains before edition 2024
+                self.execute_single_search(
+                    &mut ctx,
+                    universe,
+                    query_graph.as_ref(),
+                    can_skip_hits_internally,
+                )?
+            };
 
         if let Some(VectorStoreStats { total_time, total_queries, total_results }) =
             ctx.vector_store_stats
@@ -488,12 +521,70 @@ impl<'a> Search<'a> {
         })
     }
 
-    pub fn build_located_query_terms(
+    fn execute_single_search(
+        &self,
+        ctx: &mut SearchContext<'_>,
+        universe: RoaringBitmap,
+        query_graph: Option<&QueryGraph>,
+        can_skip: bool,
+    ) -> Result<PartialSearchResult, Error> {
+        let limit = if can_skip { self.limit } else { self.limit + self.offset };
+        let offset = if can_skip { self.offset } else { 0 };
+
+        match self.semantic.as_ref() {
+            Some(SemanticSearch {
+                vector: Some(vector),
+                embedder_name,
+                embedder,
+                quantized,
+                media: _,
+            }) => execute_vector_search(
+                ctx,
+                vector,
+                self.scoring_strategy,
+                self.exhaustive_number_hits,
+                self.max_total_hits,
+                universe,
+                &self.sort_criteria,
+                &self.distinct,
+                self.geo_param,
+                offset,
+                limit,
+                embedder_name,
+                embedder,
+                *quantized,
+                self.deadline.clone(),
+                self.ranking_score_threshold,
+                self.progress,
+            ),
+            _ => execute_search(
+                ctx,
+                query_graph,
+                self.terms_matching_strategy,
+                self.scoring_strategy,
+                self.exhaustive_number_hits,
+                self.max_total_hits,
+                universe,
+                &self.sort_criteria,
+                &self.distinct,
+                self.geo_param,
+                offset,
+                limit,
+                &mut DefaultSearchLogger,
+                &mut DefaultSearchLogger,
+                self.deadline.clone(),
+                self.ranking_score_threshold,
+                self.progress,
+            ),
+        }
+    }
+
+    pub fn resolve_query(
         &self,
         ctx: &mut SearchContext<'_>,
         filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
-    ) -> Result<(Option<(QueryGraph, Vec<new::LocatedQueryTerm>)>, Vec<PinDoc>, bool), Error> {
+    ) -> Result<ResolvedQuery, Error> {
         let mut used_negative_operator = false;
 
         let mut ignored = RoaringBitmap::new();
@@ -520,10 +611,10 @@ impl<'a> Search<'a> {
                 None
             };
 
-        let pins = self
+        let (pins, scales) = self
             .dynamic_search_rules
             .map(|(dsrs, fuel)| {
-                dsrs.resolve_pins(
+                dsrs.resolve_actions(
                     query_graph_terms.as_ref().map(|(_, terms)| terms.as_slice()).unwrap_or(&[]),
                     filter,
                     universe,
@@ -536,7 +627,108 @@ impl<'a> Search<'a> {
 
         *universe -= ignored;
 
-        Ok((query_graph_terms, pins, used_negative_operator))
+        Ok(ResolvedQuery { query_graph_terms, pins, scales, used_negative_operator })
+    }
+
+    /// Merge the hits in `partial_results` depending on their weight and score details, inject pins, and produce
+    /// a `PartialSearchResult` with the merged hits and merged metadata
+    ///
+    /// also reapplies distinct because any sharded application must happen here again
+    fn merge_partial_results(
+        &self,
+        ctx: &SearchContext<'_>,
+        partial_results: Vec<(PartialSearchResult, f64)>,
+        pins: Vec<PinDoc>,
+    ) -> Result<PartialSearchResult> {
+        let distinct_fid =
+            distinct_fid(self.distinct.as_deref(), ctx.index, ctx.txn, ctx.fields_ids_map)?;
+
+        let mut candidates =
+            MultiOps::union(partial_results.iter().map(|(result, _)| &result.candidates));
+
+        let degraded = partial_results.iter().any(|(result, _)| result.degraded);
+
+        let mut indistinct = RoaringBitmap::new();
+        let organic_it = itertools::kmerge_by(
+            partial_results.into_iter().map(|(result, weight)| {
+                result
+                    .documents_ids
+                    .into_iter()
+                    .zip(result.document_scores)
+                    .zip(std::iter::repeat(weight))
+            }),
+            |left: &((u32, Vec<ScoreDetails>), f64), right: &((u32, Vec<ScoreDetails>), f64)| {
+                let ((_, left_scores), left_weight) = left;
+                let ((_, right_scores), right_weight) = right;
+
+                let left = ScoreDetails::weighted_score_values(left_scores.iter(), *left_weight);
+                let right = ScoreDetails::weighted_score_values(right_scores.iter(), *right_weight);
+
+                // is_ge because the greater score goes first
+                WeightedScoreValue::compare_partial(left, right).is_some_and(|i| i.is_ge())
+            },
+        )
+        .filter_map(|((id, mut scores), weight)| {
+            // rejects indistinct docs
+            if indistinct.contains(id) {
+                return None;
+            }
+
+            // populate indistinct docs
+            if let Some(distinct_fid) = &distinct_fid {
+                if let Err(err) =
+                    distinct_single_docid(ctx.index, ctx.txn, *distinct_fid, id, &mut indistinct)
+                {
+                    return Some(Err(err));
+                }
+            }
+
+            // insert the scale detail: this will be used by federated search to take the weight into account when comparing scores
+            scores.insert(0, ScoreDetails::Scale { weight });
+            Some(Ok((id, scores)))
+        });
+
+        // any successful addition to the list of documents will increment the rank
+        // we use the rank to decide whether we should take a pin or an organic result.
+        let rank = Cell::new(0u32);
+
+        let doc_it = itertools::merge_join_by(organic_it, pins.iter(), |_, right| {
+            right.position > rank.get()
+        })
+        .map(|doc| {
+            rank.update(|rank| rank + 1);
+
+            match doc {
+                either::Either::Left(result) => result,
+                either::Either::Right(PinDoc {
+                    position,
+                    precedence: Precedence(precedence),
+                    id,
+                }) => Ok((
+                    *id,
+                    vec![ScoreDetails::Pin { position: *position, precedence: *precedence }],
+                )),
+            }
+        });
+
+        let res: Result<(Vec<_>, Vec<_>), _> = doc_it.skip(self.offset).take(self.limit).collect();
+
+        // remove excluded candidates from universe
+        // this must be done after `organic_it` is consumed to prevent the double borrow of `indistinct` (and make sure it has its last value)
+        candidates -= &indistinct;
+
+        // pinned docs are always in candidates
+        //
+        // order matters: pinned docs could be indistinct docs, we decide to always pin them anyway
+        // should we decide differently, we should reject indistinct docs in `doc_it` to also reject pins,
+        // and add the pins to candidates before removing indistinct docs.
+        for PinDoc { id, position: _, precedence: _ } in &pins {
+            candidates.insert(*id);
+        }
+
+        let (documents_ids, document_scores) = res?;
+
+        Ok(PartialSearchResult { candidates, documents_ids, document_scores, degraded })
     }
 }
 
@@ -595,6 +787,13 @@ impl fmt::Debug for Search<'_> {
             .field("candidates", candidates)
             .finish()
     }
+}
+
+pub struct ResolvedQuery {
+    pub query_graph_terms: Option<(QueryGraph, Vec<new::LocatedQueryTerm>)>,
+    pub pins: Vec<PinDoc>,
+    pub scales: Vec<ScaleDocs>,
+    pub used_negative_operator: bool,
 }
 
 #[derive(Default, Debug)]

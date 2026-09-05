@@ -14,7 +14,8 @@ use meilisearch_types::error::deserr_codes::{
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::SearchResult;
+use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::{Filter, IndexFilter, SearchResult};
 use meilisearch_types::tasks::{DsrUpdate, KindWithContent};
 use serde::Serialize;
 
@@ -312,12 +313,17 @@ async fn update_or_create_rule(
     index_scheduler
         .features()
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
+
+    let rule = body.into_inner();
+
+    check_rule(&rule)?;
+
     let network = index_scheduler.network();
 
     let CustomMetadataQuery { custom_metadata } = query.into_inner();
 
     let uid = uid.into_inner();
-    let rule = body.into_inner();
+
     let task_network = task_network_and_check_leader_and_version(&req, &network)?;
 
     let mut task = {
@@ -339,6 +345,31 @@ async fn update_or_create_rule(
     tracing::debug!(returns = ?task, "Update DSR");
 
     Ok(HttpResponse::Accepted().json(task))
+}
+
+fn check_rule(rule: &DynamicSearchRuleUpdateRequest) -> Result<(), ResponseError> {
+    if let Setting::Set(actions) = &rule.actions {
+        for (action_index, scale) in actions.scale.iter().enumerate() {
+            let Some(filter) = &scale.filter else {
+                continue;
+            };
+            let Some(filter) = Filter::from_json(filter)? else {
+                continue;
+            };
+
+            let _ = IndexFilter::from_filter_without_foreign(filter).map_err(|(fid, _)| {
+                let error = fid.to_external_error(
+                    "filter condition `_foreign` is not supported in dynamic search rule actions.",
+                );
+                ResponseError::from_msg(
+                    format!("invalid .actions.scale[{action_index}]: {error}"),
+                    Code::InvalidDynamicSearchRuleActions,
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Delete a search rule
