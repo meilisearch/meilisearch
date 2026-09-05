@@ -12,10 +12,9 @@ use http_client::ureq::http::header::AUTHORIZATION;
 use meilisearch_types::error::Code;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
-use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::update::{request_threads, Setting};
-use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
+use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{self, obkv_to_json, InternalError};
 use meilisearch_types::network::route;
 use meilisearch_types::settings::{self, SecretPolicy};
@@ -309,7 +308,6 @@ impl IndexScheduler {
                     let mut document =
                         obkv_to_json(&all_fields, &fields_ids_map, document).map_err(err)?;
 
-                    // TODO definitely factorize this code
                     'inject_vectors: {
                         let embeddings = ctx.index.embeddings(&index_rtxn, docid).map_err(err)?;
 
@@ -319,49 +317,34 @@ impl IndexScheduler {
 
                         let vectors = document
                             .entry(RESERVED_VECTORS_FIELD_NAME)
-                            .or_insert(serde_json::Value::Object(Default::default()));
+                            .or_insert_with(|| serde_json::Value::Object(Default::default()));
 
-                        let serde_json::Value::Object(vectors) = vectors else {
+                        let resolve_external_docid = || {
+                            ctx.index
+                                .external_id_of(
+                                    &index_rtxn,
+                                    &fields_ids_map,
+                                    std::iter::once(docid),
+                                )
+                                .ok()
+                                .and_then(|iter| iter.into_iter().next())
+                                .and_then(|res| res.ok())
+                                .unwrap_or_else(|| format!("internal docid={docid}"))
+                        };
+                        let Some(vectors) = vectors.as_object_mut() else {
                             return Err(err(milli::Error::UserError(
                                 milli::UserError::InvalidVectorsMapType {
-                                    document_id: {
-                                        if let Ok(Some(Ok(index))) = ctx
-                                            .index
-                                            .external_id_of(
-                                                &index_rtxn,
-                                                &fields_ids_map,
-                                                std::iter::once(docid),
-                                            )
-                                            .map(|it| it.into_iter().next())
-                                        {
-                                            index
-                                        } else {
-                                            format!("internal docid={docid}")
-                                        }
-                                    },
+                                    document_id: resolve_external_docid(),
                                     value: vectors.clone(),
                                 },
                             )));
                         };
 
-                        for (
-                            embedder_name,
-                            EmbeddingsWithMetadata { embeddings, regenerate, has_fragments },
-                        ) in embeddings
-                        {
-                            let embeddings = ExplicitVectors {
-                                embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
-                                    embeddings,
-                                )),
-                                regenerate: regenerate &&
-                                // Meilisearch does not handle well dumps with fragments, because as the fragments
-                                // are marked as user-provided,
-                                // all embeddings would be regenerated on any settings change or document update.
-                                // To prevent this, we mark embeddings has non regenerate in this case.
-                                !has_fragments,
-                            };
-                            vectors
-                                .insert(embedder_name, serde_json::to_value(embeddings).unwrap());
+                        for (embedder_name, metadata) in embeddings {
+                            let embeddings = ExplicitVectors::from(metadata);
+                            if let Ok(value) = serde_json::to_value(embeddings) {
+                                vectors.insert(embedder_name, value);
+                            }
                         }
                     }
 

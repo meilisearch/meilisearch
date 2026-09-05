@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-
+use crate::index::EmbeddingsWithMetadata;
 use deserr::{take_cf_content, DeserializeError, Deserr, Sequence};
 use obkv::KvReader;
 use serde_json::value::RawValue;
@@ -335,7 +335,15 @@ pub struct ExplicitVectors {
     pub embeddings: Option<VectorOrArrayOfVectors>,
     pub regenerate: bool,
 }
-
+impl From<EmbeddingsWithMetadata> for ExplicitVectors {
+    fn from(meta: EmbeddingsWithMetadata) -> Self {
+        Self {
+            embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(meta.embeddings)),
+            // Meilisearch does not handle well dumps with fragments...
+            regenerate: meta.regenerate && !meta.has_fragments,
+        }
+    }
+}
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RawExplicitVectors<'doc> {
