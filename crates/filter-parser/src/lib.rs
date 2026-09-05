@@ -48,7 +48,7 @@ mod value;
 
 use std::fmt::Debug;
 
-pub use condition::{parse_condition, parse_to, Condition};
+pub use condition::{Condition, parse_condition, parse_to};
 use condition::{
     parse_contains, parse_exists, parse_is_empty, parse_is_not_empty, parse_is_not_null,
     parse_is_null, parse_not_contains, parse_not_exists, parse_not_starts_with, parse_starts_with,
@@ -57,8 +57,8 @@ pub use constraint::{
     ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraintFuel,
     FilterConstraints,
 };
-use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
+use error::{ExpectedValueKind, NomErrorExt, cut_with_err};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0};
@@ -79,10 +79,13 @@ type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error>;
 
 const MAX_FILTER_DEPTH: usize = 150;
 
+use std::sync::Arc;
+
 #[derive(Debug, Clone)]
 pub struct OwnedSpan {
-    span: LocatedSpan<String, String>,
-    utf8_column: usize,
+    fragment: String,
+    extra: Arc<str>,
+    offset: usize,
 }
 
 pub trait TokenLike {
@@ -144,8 +147,11 @@ impl TokenLike for LightToken {
     }
 
     fn span(&self) -> OwnedSpan {
-        let span = LocatedSpan::new_extra(self.fragment.to_string(), String::new());
-        OwnedSpan { span, utf8_column: self.utf8_column }
+        OwnedSpan {
+            fragment: self.fragment.clone(),
+            extra: Arc::from(self.fragment.as_str()),
+            offset: 0,
+        }
     }
 }
 
@@ -153,7 +159,7 @@ impl From<Span<'_>> for LightToken {
     fn from(span: Span) -> Self {
         LightToken {
             fragment: span.fragment().to_string(),
-            utf8_column: span.get_utf8_column(),
+            utf8_column: span.location_offset(),
             modified_fragment: None,
         }
     }
@@ -161,37 +167,48 @@ impl From<Span<'_>> for LightToken {
 
 impl OwnedSpan {
     pub fn fragment(&self) -> &str {
-        self.span.fragment()
+        &self.fragment
     }
 
     pub fn extra(&self) -> &str {
-        self.span.extra.as_str()
+        &self.extra
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
     }
 
     pub fn get_utf8_column(&self) -> usize {
-        self.utf8_column
+        let before = match self.extra.get(..self.offset) {
+            Some(s) => s,
+            None => &self.extra,
+        };
+        let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+        before[line_start..].chars().count() + 1
     }
 }
 
 impl From<Span<'_>> for OwnedSpan {
     fn from(span: Span) -> Self {
-        let utf8_column = span.get_utf8_column();
-        let span = LocatedSpan::new_extra(span.fragment().to_string(), span.extra.to_string());
-        OwnedSpan { span, utf8_column }
+        let fragment = span.fragment().to_string();
+        let extra: Arc<str> = Arc::from(span.extra);
+        let offset = span.location_offset();
+        OwnedSpan { fragment, extra, offset }
     }
 }
 
 /// Allow [CowSpan] to be constructed from &[str]
 impl From<&str> for OwnedSpan {
     fn from(s: &str) -> Self {
-        OwnedSpan::from(Span::new_extra(s, s))
+        OwnedSpan { fragment: s.to_string(), extra: Arc::from(s), offset: 0 }
     }
 }
 
 /// Allow [CowSpan] to be constructed from String
 impl From<String> for OwnedSpan {
     fn from(s: String) -> Self {
-        OwnedSpan::from(Span::new_extra(&s, &s))
+        let extra: Arc<str> = Arc::from(s.as_str());
+        OwnedSpan { fragment: s, extra, offset: 0 }
     }
 }
 
@@ -508,7 +525,7 @@ impl<'a> Iterator for FidIter<'a, FilterCondition> {
 
             match current {
                 FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
-                    return Some(fid)
+                    return Some(fid);
                 }
 
                 FilterCondition::Not(next) if depth > 0 => {
