@@ -61,11 +61,23 @@ impl FilterableAttributesRule {
     /// or `index.is_geo_sorting_enabled` to check if the geo feature is
     /// enabled.
     pub fn has_geo(&self) -> bool {
-        matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
+        match self {
+            FilterableAttributesRule::Field(field_name) => field_name == RESERVED_GEO_FIELD_NAME,
+            FilterableAttributesRule::Pattern(patterns) => {
+                patterns.match_str(RESERVED_GEO_FIELD_NAME) == PatternMatch::Match
+            }
+        }
     }
 
     pub fn has_geojson(&self) -> bool {
-        matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEOJSON_FIELD_NAME)
+        match self {
+            FilterableAttributesRule::Field(field_name) => {
+                field_name == RESERVED_GEOJSON_FIELD_NAME
+            }
+            FilterableAttributesRule::Pattern(patterns) => {
+                patterns.match_str(RESERVED_GEOJSON_FIELD_NAME) == PatternMatch::Match
+            }
+        }
     }
 
     /// Get the features of the rule.
