@@ -329,6 +329,8 @@ fn compute_facet_level_database(
     // We move all bulks at the front and incrementals (others) at the end.
     deltas.sort_by_key(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { 0 } else { 1 });
 
+    let span = tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "strings");
+    let _entered = span.enter();
     for (fid, delta) in deltas {
         // skip field ids that should not be facet leveled
         let Some(metadata) = global_fields_ids_map.metadata(fid) else {
@@ -347,6 +349,8 @@ fn compute_facet_level_database(
         match delta {
             FacetFieldIdDelta::Bulk => {
                 progress.update_progress(PostProcessingFacets::StringsBulk);
+                let span = tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "bulk_string", %fid);
+                let _entered = span.enter();
                 tracing::debug!(%fid, "bulk string facet processing in parallel");
                 generate_facet_levels(index, wtxn, fid, FacetType::String)?
             }
@@ -371,6 +375,8 @@ fn compute_facet_level_database(
     // We move all bulks at the front and incrementals (others) at the end.
     deltas.sort_by_key(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { 0 } else { 1 });
 
+    let span = tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "numbers");
+    let _entered = span.enter();
     for (fid, delta) in deltas {
         let span =
             tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "number");
@@ -378,6 +384,8 @@ fn compute_facet_level_database(
         match delta {
             FacetFieldIdDelta::Bulk => {
                 progress.update_progress(PostProcessingFacets::NumbersBulk);
+                let span = tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "bulk_number", %fid);
+                let _entered = span.enter();
                 tracing::debug!(%fid, "bulk number facet processing");
                 FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::Number)
                     .execute(wtxn)?

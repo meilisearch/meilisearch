@@ -21,6 +21,7 @@ use crate::{CboRoaringBitmapCodec, FieldId, Index};
 /// The function will generate all the group levels from
 /// the group 1 to the level n until the number of group
 /// is smaller than the minimum required size.
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::facet_bulk")]
 pub fn generate_facet_levels(
     index: &Index,
     wtxn: &mut RwTxn,
