@@ -1,5 +1,6 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
 use either::Either;
@@ -14,6 +15,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
+use crate::index::PrefixSearch;
 use crate::progress::Progress;
 use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
@@ -52,9 +54,55 @@ pub(super) fn post_process(
     )?;
     compute_facet_search_database(index, wtxn, global_fields_ids_map, indexing_context.progress)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
-    if let Some(prefix_data) = compute_word_fst(index, wtxn, word_delta, indexing_context.progress)?
-    {
-        compute_prefix_database(index, wtxn, word_delta, &prefix_data, indexing_context.progress)?;
+
+    // Early-exit: if no word was globally added to or deleted from the index, the words FST
+    // and the prefixes FST are already up-to-date, and rebuilding them would stream the whole
+    // vocabulary only to produce byte-identical outputs. We skip both rebuilds and only
+    // refresh the prefix docids databases, as the bitmaps of modified words may have changed.
+    if word_delta.added_or_deleted_words().next().is_none() {
+        let prefix_settings = index.prefix_settings(wtxn)?;
+        if prefix_settings.compute_prefixes == PrefixSearch::IndexingTime {
+            let prefixes_fst = index.words_prefixes_fst(wtxn)?.map_data(Cow::into_owned)?;
+            compute_prefix_database(
+                index,
+                wtxn,
+                word_delta,
+                &prefixes_fst,
+                indexing_context.progress,
+            )?;
+        }
+        return Ok(());
+    }
+
+    match compute_word_fst(index, wtxn, word_delta, indexing_context.progress)? {
+        WordFstOutput::Rebuilt(Some(prefix_data)) => {
+            let prefixes_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
+            compute_prefix_database(
+                index,
+                wtxn,
+                word_delta,
+                &prefixes_fst,
+                indexing_context.progress,
+            )?;
+        }
+        WordFstOutput::Rebuilt(None) => (),
+        WordFstOutput::Segmented => {
+            // The prefixes FST is intentionally kept as-is until the next merge: new
+            // words only impact the prefix set once enough of them accumulate, which
+            // is also what triggers a merge. The prefix docids databases must still
+            // be refreshed as the bitmaps of modified words may have changed.
+            let prefix_settings = index.prefix_settings(wtxn)?;
+            if prefix_settings.compute_prefixes == PrefixSearch::IndexingTime {
+                let prefixes_fst = index.words_prefixes_fst(wtxn)?.map_data(Cow::into_owned)?;
+                compute_prefix_database(
+                    index,
+                    wtxn,
+                    word_delta,
+                    &prefixes_fst,
+                    indexing_context.progress,
+                )?;
+            }
+        }
     }
 
     Ok(())
@@ -66,17 +114,16 @@ pub(super) fn post_process(
     target = "indexing::post_processing",
     name = "prefix"
 )]
-fn compute_prefix_database(
+fn compute_prefix_database<D: AsRef<[u8]>>(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
-    prefix_data: &PrefixData,
+    prefixes_fst: &fst::Set<D>,
     progress: &Progress,
 ) -> Result<()> {
     progress.update_progress(PostProcessingWords::ComputePrefixes);
-    let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
-    let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
-    let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
+    let modified = compute_prefixes(prefixes_fst, word_delta.added_or_modified_words())?;
+    let deleted = compute_prefixes(prefixes_fst, word_delta.deleted_words())?;
 
     compute_prefix_database_from_sources(index, wtxn, &modified, &deleted, progress)
 }
@@ -110,9 +157,10 @@ pub(crate) fn compute_prefix_database_from_sources(
 }
 
 /// The words must be sorted.
-fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<MiniString>>
+fn compute_prefixes<'a, I, D>(prefix_fst: &fst::Set<D>, words: I) -> Result<BTreeSet<MiniString>>
 where
     I: IntoIterator<Item = &'a str>,
+    D: AsRef<[u8]>,
 {
     let mut iter = words.into_iter();
     let mut prefix_stream = prefix_fst.stream();
@@ -151,34 +199,119 @@ where
     Ok(output)
 }
 
+/// Below this base-vocabulary size the words FST is always fully rebuilt:
+/// the segmentation overhead isn't worth it, and this preserves the
+/// historical behavior for small indexes.
+const SEGMENT_MIN_BASE_LEN: usize = 100_000;
+
+/// A merge of the pending segments into the base words FST is triggered when
+/// the pending entries (delta + tombstones + batch changes) exceed
+/// `base_len / SEGMENT_MERGE_DIVISOR`.
+const SEGMENT_MERGE_DIVISOR: usize = 10;
+
+enum WordFstOutput {
+    /// The base words FST (and the prefixes FST when enabled) was fully rebuilt
+    /// and the pending segments were merged into it.
+    Rebuilt(Option<PrefixData>),
+    /// Only the delta and tombstones FSTs were rewritten, in O(pending)
+    /// instead of O(vocabulary). The base and prefixes FSTs are untouched.
+    Segmented,
+}
+
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
 fn compute_word_fst(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
     progress: &Progress,
-) -> Result<Option<PrefixData>> {
+) -> Result<WordFstOutput> {
     progress.update_progress(PostProcessingWords::WordFst);
 
     let words_fst = index.words_fst(wtxn)?;
-    let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-    let prefix_settings = index.prefix_settings(wtxn)?;
-    word_fst_builder.with_prefix_settings(prefix_settings);
+    let delta_fst = index.words_delta_fst(wtxn)?;
+    let tombstones_fst = index.words_tombstones_fst(wtxn)?;
 
+    let base_len = words_fst.len();
+    let pending = delta_fst.len()
+        + tombstones_fst.len()
+        + word_delta.added.len()
+        + word_delta.deleted.len();
+
+    if base_len >= SEGMENT_MIN_BASE_LEN && pending <= base_len / SEGMENT_MERGE_DIVISOR {
+        // Segmented path: rewrite only the two small segment FSTs in
+        // O(pending) instead of streaming the whole vocabulary.
+        let mut delta_words = BTreeSet::new();
+        let mut stream = delta_fst.stream();
+        while let Some(word) = stream.next() {
+            delta_words.insert(word.to_vec());
+        }
+        let mut tombstones = BTreeSet::new();
+        let mut stream = tombstones_fst.stream();
+        while let Some(word) = stream.next() {
+            tombstones.insert(word.to_vec());
+        }
+
+        for either in word_delta.added_or_deleted_words() {
+            match either {
+                Either::Left(added_word) => {
+                    // A re-added word cancels its tombstone; it only needs to
+                    // live in the delta segment when absent from the base FST.
+                    tombstones.remove(added_word.as_bytes());
+                    if !words_fst.contains(added_word) {
+                        delta_words.insert(added_word.as_bytes().to_vec());
+                    }
+                }
+                Either::Right(deleted_word) => {
+                    delta_words.remove(deleted_word.as_bytes());
+                    if words_fst.contains(deleted_word) {
+                        tombstones.insert(deleted_word.as_bytes().to_vec());
+                    }
+                }
+            }
+        }
+
+        index.put_words_delta_fst(wtxn, &build_small_fst(&delta_words)?)?;
+        index.put_words_tombstones_fst(wtxn, &build_small_fst(&tombstones)?)?;
+
+        return Ok(WordFstOutput::Segmented);
+    }
+
+    // Full merge: rebuild the base FST from the current base, the pending
+    // segments and the batch delta, then clear the segments. The batch delta
+    // overrides the pending segments on conflicting words.
+    let mut registrations = BTreeMap::new();
+    let mut stream = delta_fst.stream();
+    while let Some(word) = stream.next() {
+        registrations.insert(word.to_vec(), DelAdd::Addition);
+    }
+    let mut stream = tombstones_fst.stream();
+    while let Some(word) = stream.next() {
+        registrations.insert(word.to_vec(), DelAdd::Deletion);
+    }
     // we ignore modifications when rebuilding the FST
     for either in word_delta.added_or_deleted_words() {
         match either {
             Either::Left(added_word) => {
-                word_fst_builder.register_word(DelAdd::Addition, added_word.as_ref())?;
+                registrations.insert(added_word.as_bytes().to_vec(), DelAdd::Addition);
             }
             Either::Right(deleted_word) => {
-                word_fst_builder.register_word(DelAdd::Deletion, deleted_word.as_ref())?;
+                registrations.insert(deleted_word.as_bytes().to_vec(), DelAdd::Deletion);
             }
         }
     }
 
+    let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
+    let prefix_settings = index.prefix_settings(wtxn)?;
+    word_fst_builder.with_prefix_settings(prefix_settings);
+
+    for (word, deladd) in &registrations {
+        word_fst_builder.register_word(*deladd, word)?;
+    }
+
     let (word_fst_mmap, prefix_data) = word_fst_builder.build()?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
+    index.delete_words_delta_fst(wtxn)?;
+    index.delete_words_tombstones_fst(wtxn)?;
 
     if let Some(PrefixData { prefixes_fst_mmap }) = prefix_data {
         index.main.remap_types::<Str, Bytes>().put(
@@ -186,10 +319,18 @@ fn compute_word_fst(
             WORDS_PREFIXES_FST_KEY,
             &prefixes_fst_mmap,
         )?;
-        Ok(Some(PrefixData { prefixes_fst_mmap }))
+        Ok(WordFstOutput::Rebuilt(Some(PrefixData { prefixes_fst_mmap })))
     } else {
-        Ok(None)
+        Ok(WordFstOutput::Rebuilt(None))
     }
+}
+
+fn build_small_fst(words: &BTreeSet<Vec<u8>>) -> Result<fst::Set<Vec<u8>>> {
+    let mut builder = fst::SetBuilder::memory();
+    for word in words {
+        builder.insert(word)?;
+    }
+    Ok(builder.into_set())
 }
 
 pub fn recompute_word_fst_from_word_docids_database(
@@ -207,6 +348,9 @@ pub fn recompute_word_fst_from_word_docids_database(
     }
     let (word_fst_mmap, _) = word_fst_builder.build()?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
+    // The base FST is now an exact view of the dictionary: clear the segments.
+    index.delete_words_delta_fst(wtxn)?;
+    index.delete_words_tombstones_fst(wtxn)?;
 
     Ok(())
 }
