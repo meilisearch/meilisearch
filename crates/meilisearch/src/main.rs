@@ -37,7 +37,10 @@ fn default_log_route_layer() -> LogRouteType {
 fn default_log_stderr_layer(opt: &Opt) -> LogStderrType {
     let layer = tracing_subscriber::fmt::layer()
         .with_writer(|| LineWriter::new(std::io::stderr()))
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+        .with_ansi(false)
+        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+        .with_file(true)
+        .with_line_number(true);
 
     let layer = match opt.experimental_logs_mode {
         LogMode::Human => Box::new(layer)
