@@ -604,7 +604,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
                 // since we can't compare a BTreeSet with an FST we are going to convert the
                 // BTreeSet to an FST and then compare bytes per bytes the two FSTs.
-                let fst = fst::Set::from_iter(stop_words.into_iter())?;
+                let fst = fst::Set::from_iter(stop_words)?;
 
                 // Does the new FST differ from the previous one?
                 if current
@@ -1133,9 +1133,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             .collect();
         let mut updated_configs = BTreeMap::new();
         let mut embedder_actions = BTreeMap::new();
-        for joined in old_configs
-            .into_iter()
-            .merge_join_by(configs.into_iter(), |(left, _), (right, _)| left.cmp(right))
+        for joined in
+            old_configs.into_iter().merge_join_by(configs, |(left, _), (right, _)| left.cmp(right))
         {
             match joined {
                 // updated config

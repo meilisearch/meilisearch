@@ -160,8 +160,8 @@ pub async fn get_metrics(
         crate::routes::indexes::Size::Human(_) => 0,
     };
 
-    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(database_size as i64);
-    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(used_database_size as i64);
+    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(database_size);
+    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(used_database_size);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
     crate::metrics::MEILISEARCH_SEARCH_QUEUE_SIZE.set(search_queue.capacity() as i64);

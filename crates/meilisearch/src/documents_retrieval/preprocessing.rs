@@ -153,7 +153,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     Ok((
         queries
             .into_iter()
-            .zip(filters.into_iter())
+            .zip(filters)
             .map(|(query, filter)| PreprocessedQuery { query, filter })
             .collect(),
         remote_errors,
@@ -265,7 +265,7 @@ async fn local_process_foreign_filters(
             .iter()
             .fold(roaring::RoaringBitmap::new(), |bitmap, docids| bitmap | docids);
         if docids_to_fetch.len() > MAX_FOREIGN_FILTER_DOCIDS {
-            return Err(milli::Error::UserError(milli::UserError::InvalidFilter(
+            Err(milli::Error::UserError(milli::UserError::InvalidFilter(
                 format!("Foreign filter is retrieving too many documents, foreign filters can't retrieve more than {MAX_FOREIGN_FILTER_DOCIDS} documents per index"),
             )))?;
         }
@@ -279,7 +279,7 @@ async fn local_process_foreign_filters(
         }
 
         // Build the In filter for each filter
-        for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids.into_iter())
+        for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids)
         {
             let inner: Result<Vec<_>, _> = foreign_index.external_id_of(&foreign_rtxn, &fields_ids_map, docids)?.into_iter().map(|id| id.map(|id| id.into())).collect();
 
@@ -436,7 +436,7 @@ async fn filters_into_index_filters(
     };
 
     // build the index filters replacing the foreign filters with a IN filter containing the retrieved external docids
-    let mut in_iter = foreign_filters.into_iter().zip(foreign_filters_external_docids.into_iter());
+    let mut in_iter = foreign_filters.into_iter().zip(foreign_filters_external_docids);
     filters
         .into_iter()
         .map(|(_index_uid, filter)| {
