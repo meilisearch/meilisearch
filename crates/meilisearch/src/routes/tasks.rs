@@ -12,7 +12,7 @@ use meilisearch_types::batches::BatchId;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{InvalidTaskDateError, ResponseError};
+use meilisearch_types::error::{Code, InvalidTaskDateError, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::star_or::{OptionStarOr, OptionStarOrList};
 use meilisearch_types::task_view::TaskView;
@@ -804,7 +804,22 @@ async fn get_task_documents_file(
                 // disk but it's really (really) complex to do with the current state of async Rust.
                 let mut content = String::new();
                 tfile.read_to_string(&mut content).await?;
-                Ok(HttpResponse::Ok().content_type("application/x-ndjson").body(content))
+
+                // The update file can store the documents as concatenated JSON objects
+                // (when they were added from a JSON array or CSV payload) rather than
+                // newline-delimited JSON. Re-serialize each object followed by a newline
+                // so the response body actually matches the declared `application/x-ndjson`
+                // content type instead of returning invalid NDJSON.
+                let mut ndjson = String::with_capacity(content.len());
+                let mut deserializer = serde_json::Deserializer::from_str(&content);
+                for value in deserializer.into_iter::<serde_json::Value>() {
+                    let value = value
+                        .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))?;
+                    serde_json::to_writer(&mut ndjson, &value)
+                        .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))?;
+                    ndjson.push('\n');
+                }
+                Ok(HttpResponse::Ok().content_type("application/x-ndjson").body(ndjson))
             }
             None => Err(index_scheduler::Error::TaskFileNotFound(task_uid).into()),
         }
