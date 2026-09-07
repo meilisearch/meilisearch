@@ -124,56 +124,62 @@ impl Filter {
             let view = |span: &Span| SpanView::from_sources(*span, &self.sources).unwrap();
             let point_view = |spans: &[Span; 2]| [view(&spans[0]), view(&spans[1])];
 
-            match &terminal.kind {
-                TerminalKind::VectorExists { embedder, filter } => semantics.vector_exists(
+            match terminal {
+                Terminal::VectorExists { embedder, filter } => semantics.vector_exists(
                     embedder.as_ref().map(view),
                     VectorFilterView::from_sources(*filter, &self.sources).unwrap(),
                 )?,
-                TerminalKind::GeoLowerThan { point, radius, resolution } => semantics
+                Terminal::GeoLowerThan { point, radius, resolution } => semantics
                     .geo_lower_than(
                         point_view(point),
                         view(radius),
                         resolution.as_ref().map(view),
                     )?,
-                TerminalKind::GeoBoundingBox { top_right_point, bottom_left_point } => semantics
+                Terminal::GeoBoundingBox { top_right_point, bottom_left_point } => semantics
                     .geo_bounding_box(point_view(top_right_point), point_view(bottom_left_point))?,
-                TerminalKind::GeoPolygon { points } => semantics
+                Terminal::GeoPolygon { points } => semantics
                     .geo_polygon(points.iter().map(|point| point_view(point)), points.len())?,
-                TerminalKind::GreaterThan { left, right } => {
+                Terminal::GreaterThan { left, right } => {
                     semantics.greater_than(view(left), view(right))?
                 }
-                TerminalKind::GreaterThanOrEqual { left, right } => {
+                Terminal::GreaterThanOrEqual { left, right } => {
                     semantics.greater_than_or_equal(view(left), view(right))?;
                 }
-                TerminalKind::Equal { left, right } => {
+                Terminal::Equal { left, right } => {
                     semantics.equal(view(left), view(right))?;
                 }
-                TerminalKind::Null { operand } => {
+                Terminal::Null { operand } => {
                     semantics.null(view(operand))?;
                 }
-                TerminalKind::Empty { operand } => {
+                Terminal::Empty { operand } => {
                     semantics.empty(view(operand))?;
                 }
-                TerminalKind::Exists { operand } => {
+                Terminal::Exists { operand } => {
                     semantics.exists(view(operand))?;
                 }
-                TerminalKind::LowerThan { left, right } => {
+                Terminal::LowerThan { left, right } => {
                     semantics.lower_than(view(left), view(right))?;
                 }
-                TerminalKind::LowerThanOrEqual { left, right } => {
+                Terminal::LowerThanOrEqual { left, right } => {
                     semantics.lower_than_or_equal(view(left), view(right))?;
                 }
-                TerminalKind::Between { operand, lower, upper } => {
+                Terminal::Between { operand, lower, upper } => {
                     semantics.between(view(operand), view(lower), view(upper))?;
                 }
-                TerminalKind::Contains { left, right } => {
+                Terminal::Contains { left, right } => {
                     semantics.contains(view(left), view(right))?;
                 }
-                TerminalKind::StartsWith { left, right } => {
+                Terminal::StartsWith { left, right } => {
                     semantics.starts_with(view(left), view(right))?;
                 }
-                TerminalKind::ForeignGroup { foreign_field, foreign_source } => {
+                Terminal::ForeignGroup { foreign_field, foreign_source } => {
                     semantics.foreign(view(foreign_field), view(foreign_source))?;
+                }
+                Terminal::In {
+                    operand,
+                    values,
+                } => {
+                    semantics.in_range(view(operand), values.iter().map(|value| view(value)))?;
                 }
             }
 
@@ -264,6 +270,8 @@ pub trait Semantics {
     ) -> Result<(), Self::Error>;
     fn contains(&mut self, left: SpanView<'_>, right: SpanView<'_>) -> Result<(), Self::Error>;
     fn starts_with(&mut self, left: SpanView<'_>, right: SpanView<'_>) -> Result<(), Self::Error>;
+
+    fn in_range<'a, I: Iterator<Item=SpanView<'a>>>(&mut self, operand: SpanView<'a>, values: I) -> Result<(), Self::Error>;
     fn foreign(
         &mut self,
         foreign_field: SpanView<'_>,
@@ -287,15 +295,6 @@ fn parse_expression(
     source: &FilterSource,
     source_handle: SourceHandle,
 ) {
-}
-
-#[derive(Debug, Clone)]
-enum ParsingState<'a> {
-    Terminal,
-    Operator { left_operand: SpanView<'a> },
-    In { left_operand: SpanView<'a>, next_link: Link },
-    Link { terminal: Terminal },
-    To { left_operand: SpanView<'a> },
 }
 
 struct OpenParen<'a> {
@@ -323,13 +322,7 @@ struct SourceParser<'a> {
 
 impl<'a> ParsingContext<'a> {
     fn new(parse: SpanView<'a>) -> Self {
-        Self {
-            polarity: true,
-            state: ParsingState::Terminal,
-            previous_link: Link::And,
-            in_foreign: false,
-            next: parse,
-        }
+        Self { previous_link: Link::And, input: parse, ..wip::wip!() }
     }
 }
 
@@ -344,9 +337,301 @@ impl<'a> SourceParser<'a> {
     }
 
     fn advance_to_next_token(&mut self) -> Token<'a> {
-        let ParseOutput { parsed_token, remaining_input } = Token::parse_next(self.current.next);
-        self.current.next = remaining_input;
+        let ParseOutput { parsed_token, remaining_input } = Token::parse_next(self.current.input);
+        self.current.input = remaining_input;
         parsed_token
+    }
+
+    fn parse_next_instruction_or_eof(
+        &mut self,
+    ) -> Result<Option<Instruction>, ParseInstructionError> {
+        let Some(terminal) = self.parse_next_terminal_or_eof()? else {
+            // eof
+            if !self.current.allows_empty_terminal {
+                return Err(ParseInstructionError::DanglingLink);
+            }
+            self.check_eof()?;
+
+            return Ok(None);
+        };
+
+        let Some(forward_link) = self.parse_next_link_or_eof()? else {
+            self.check_eof()?;
+            return Ok(None);
+        };
+
+        let previous_link = std::mem::replace(&mut self.current.previous_link, forward_link);
+
+        let next_instruction =
+            Instruction { origin: wip::wip!(), terminal, previous_link, next_down: wip::wip!() };
+        wip::fixme!("push and save state as necessary");
+        Ok(Some(next_instruction))
+    }
+
+    fn check_eof(&self) -> Result<(), ParseInstructionError> {
+        if !self.current.open_parens.is_empty() {
+            return Err(ParseInstructionError::UnmatchedParens);
+        }
+        if !self.current.open_brackets.is_empty() {
+            return Err(ParseInstructionError::UnmatchedBracket);
+        }
+        wip::fixme!("what about nested?");
+        wip::fixme!("add token data of the unmatched parens/bracket to the error variant");
+        Ok(())
+    }
+
+    fn parse_next_terminal_or_eof(&mut self) -> Result<Option<PolarizedTerminal>, ParseInstructionError> {
+        let mut polarity = true;
+        let terminal = loop {
+            let next_token = self.advance_to_next_token();
+            match next_token.kind {
+            TokenKind::Value | TokenKind::FloatValue => {
+                break self.parse_next_operator_or_second_value(next_token, polarity)?
+            },
+            TokenKind::IllegalSingleQuoted => {
+                wip::wip!("illegal single quoted")
+            },
+            TokenKind::IllegalDoubleQuoted => wip::wip!("illegal double quoted"),
+            TokenKind::IllegalCharacter => wip::wip!("illegal character"),
+            TokenKind::LeftParens => {
+                wip::fixme!("push state");
+                continue;
+            }
+            TokenKind::RightParens => wip::wip!("legal or not? would imagine not... if legal, pop state"),
+            TokenKind::LeftSquareBracket => wip::wip!("illegal bracket, dym ("),
+            TokenKind::RightSquareBracket => wip::wip!("illegal bracket, dym )"),
+            TokenKind::Not => {self.current.allows_empty_terminal = false;
+                polarity = !polarity ;
+        continue;},
+            TokenKind::Or |
+            TokenKind::And |
+            TokenKind::In |
+            TokenKind::Exists |
+            TokenKind::Is |
+            TokenKind::Null |
+            TokenKind::Equal |
+            TokenKind::Different |
+            TokenKind::GreaterThan |
+            TokenKind::GreaterOrEqual |
+            TokenKind::LowerThan |
+            TokenKind::LowerOrEqual |
+            TokenKind::To => wip::wip!("illegal operator/link, put a value first! if your intended value is a keyword, quote it"),
+            TokenKind::GeoRadius => break self.parse_next_geo_radius(next_token, polarity)?,
+            TokenKind::GeoBoundingBox => break self.parse_next_geo_bounding_box(next_token, polarity)?,
+            TokenKind::GeoPolygon => break self.parse_next_geo_polygon(next_token, polarity)?,
+            TokenKind::Vectors => break self.parse_next_vectors(next_token, polarity)?,
+            TokenKind::Foreign => break self.parse_next_foreign(next_token, polarity)?,
+            TokenKind::Comma => wip::wip!("illegal comma"),
+            TokenKind::Eof => return Ok(None),
+        }
+        };
+        Ok(Some(terminal))
+    }
+
+    fn parse_next_link_or_eof(&mut self) -> Result<Option<Link>, ParseInstructionError> {
+        wip::wip!()
+    }
+
+    fn parse_next_operator_or_second_value(
+        &mut self,
+        first_value: Token<'a>,
+        polarity: bool,
+    ) -> Result<PolarizedTerminal, ParseInstructionError> {
+        wip::fixme!("missing token kind: CONTAINS, STARTS, WITH");
+        let next_token = self.advance_to_next_token();
+        Ok(match next_token.kind {
+            TokenKind::Value | TokenKind::FloatValue => {
+                self.parse_next_to(first_value, next_token, polarity)?
+            }
+            TokenKind::IllegalSingleQuoted => wip::wip!("illegal"),
+            TokenKind::IllegalDoubleQuoted => wip::wip!("illegal"),
+            TokenKind::IllegalCharacter => wip::wip!("illegal"),
+            TokenKind::LeftParens => wip::wip!("illegal"),
+            TokenKind::RightParens => {
+                wip::wip!("illegal, either stray paren or missing an operator etc")
+            }
+            TokenKind::LeftSquareBracket => wip::wip!("illegal"),
+            TokenKind::RightSquareBracket => wip::wip!("illegal, either stray or plain illegal"),
+            TokenKind::Not => self.parse_not_operator(first_value, next_token, polarity)?,
+            TokenKind::In => self.parse_next_in(first_value, next_token, polarity)?,
+            TokenKind::Exists => PolarizedTerminal { polarity, terminal: Terminal::Exists { operand: first_value.span_view.span() } },
+            TokenKind::Or | TokenKind::And => wip::wip!("illegal, missing thing"),
+            TokenKind::Is => self.parse_next_is(first_value, next_token, polarity)?,
+            TokenKind::Null => wip::wip!("illegal, missing IS"),
+            TokenKind::To => wip::wip!("illegal, missing second value"),
+            TokenKind::GeoRadius |
+            TokenKind::GeoBoundingBox |
+            TokenKind::GeoPolygon |
+            TokenKind::Vectors |
+            TokenKind::Foreign => wip::wip!("illegal, if second value use quotes"),,
+            TokenKind::Comma => wip::wip!("illegal"),
+            TokenKind::Equal |
+            TokenKind::Different |
+            TokenKind::GreaterThan |
+            TokenKind::GreaterOrEqual |
+            TokenKind::LowerThan |
+            TokenKind::LowerOrEqual => self.parse_next_right_hand(first_value, next_token, polarity)?,
+            TokenKind::Eof => wip::wip!("illegal, missing operator"),
+        })
+    }
+
+    fn parse_next_geo_radius(
+        &mut self,
+        reserved_field: Token<'a>,
+        polarity: bool
+    ) -> Result<PolarizedTerminal, ParseInstructionError> {
+        wip::wip!()
+    }
+
+    fn parse_next_geo_bounding_box(
+        &mut self,
+        reserved_field: Token<'a>,
+        polarity: bool
+    ) -> Result<PolarizedTerminal, ParseInstructionError> {
+        wip::wip!()
+    }
+
+    fn parse_next_geo_polygon(
+        &mut self,
+        reserved_field: Token<'a>,
+        polarity: bool
+    ) -> Result<PolarizedTerminal, ParseInstructionError> {
+        wip::wip!()
+    }
+
+    fn parse_next_vectors(
+        &mut self,
+        reserved_field: Token<'a>,
+        polarity: bool
+    ) -> Result<PolarizedTerminal, ParseInstructionError> {
+        wip::wip!()
+    }
+
+    fn parse_next_foreign(
+        &mut self,
+        reserved_field: Token<'a>,
+        polarity: bool
+    ) -> Result<PolarizedTerminal, ParseInstructionError> {
+        wip::wip!()
+    }
+
+    fn parse_next_to(&mut self, first_value: Token<'a>, from_value: Token<'a>,
+polarity: bool) -> Result<PolarizedTerminal, ParseInstructionError> {
+        let to_token = self.advance_to_next_token();
+        if let TokenKind::To = to_token.kind {
+            let to_value = self.advance_to_next_token();
+            if !to_value.kind.is_value() {
+                wip::wip!("explain value value TO value syntax")
+            }
+            Ok(PolarizedTerminal { polarity, terminal: Terminal::Between { operand: first_value.span(), lower: from_value.span(), upper: to_value.span() } })
+        } else {
+            wip::wip!("check first_value == from_value, if so might be accidental repetition. Otherwise explains the value value TO value syntax")
+        }
+    }
+
+    fn parse_not_operator(&mut self, first_value: Token<'a>, not_keyword: Token<'a>, polarity: bool) -> Result<PolarizedTerminal, ParseInstructionError> {
+        let operator = self.advance_to_next_token();
+        Ok(match operator.kind {
+            TokenKind::Value |
+            TokenKind::FloatValue => wip::wip!("illegal value"),
+            TokenKind::Not => wip::wip!("duplicate not"),
+            TokenKind::Or |
+            TokenKind::And => wip::wip!("duplicate and"),
+            TokenKind::In => self.parse_next_in(first_value, operator, !polarity)?,
+            TokenKind::Exists => PolarizedTerminal { polarity: !polarity, terminal: Terminal::Exists { operand: first_value.span() } },
+            TokenKind::Is => wip::wip!("incorrect syntax: dym value IS NOT _"),
+            TokenKind::Null => wip::wip!("correct syntax: IS NOT NULL, missing IS"),
+            TokenKind::To => wip::wip!("incorrect syntax: NOT value value TO value"),
+            TokenKind::Equal => wip::wip!("incorrect: dym value != _"),
+            TokenKind::Different => wip::wip!("incorrect: dym value = _?"),
+            TokenKind::GreaterThan |
+            TokenKind::GreaterOrEqual |
+            TokenKind::LowerThan |
+            TokenKind::LowerOrEqual => wip::wip!("incorrect: dym NOT value <OP> _?"),
+            TokenKind::LeftParens => wip::wip!("illegal parens here"),
+            TokenKind::RightParens => wip::wip!("illegal parens here"),
+            TokenKind::LeftSquareBracket => wip::wip!("illegal bracket here"),
+            TokenKind::RightSquareBracket => wip::wip!("illegal bracket here"),
+            TokenKind::Comma => wip::wip!("illegal comma here"),
+            TokenKind::GeoRadius |
+            TokenKind::GeoBoundingBox |
+            TokenKind::GeoPolygon |
+            TokenKind::Vectors |
+            TokenKind::Foreign => wip::wip!("illegal reserved field. extraneous value or did you mean to use it as a value?"),
+            TokenKind::IllegalSingleQuoted |
+            TokenKind::IllegalDoubleQuoted |
+            TokenKind::IllegalCharacter => wip::wip!("illegal character"),
+            TokenKind::Eof => wip::wip!("truncated input"),
+        })
+    }
+
+    fn parse_next_in(&mut self, first_value: Token<'a>, in_keyword: Token<'a>, polarity: bool) -> Result<PolarizedTerminal, ParseInstructionError> {
+        let left_bracket = self.advance_to_next_token();
+        if left_bracket.kind != TokenKind::LeftSquareBracket {
+            wip::wip!("expected left bracket: _ IN [ _, _, _ ]");
+        }
+        let mut values = vec![];
+        loop {
+            let value_or_bracket = self.advance_to_next_token();
+            if value_or_bracket.kind == TokenKind::RightSquareBracket {
+                break;
+            }
+            if value_or_bracket.kind == TokenKind::Comma {
+                wip::wip!("missing value")
+            }
+            if !value_or_bracket.kind.is_value() {
+                wip::wip!("expected value")
+            }
+            values.push(value_or_bracket.span());
+            let comma_or_bracket = self.advance_to_next_token();
+            if comma_or_bracket.kind == TokenKind::RightSquareBracket {
+                break;
+            }
+            if comma_or_bracket.kind.is_value() {
+                wip::wip!("missing comma")
+            }
+            if comma_or_bracket.kind != TokenKind::Comma {
+                wip::wip!("expected comma")
+            }
+        }
+
+        Ok(PolarizedTerminal { terminal: Terminal::In { operand: first_value.span(), values }, polarity })
+    }
+
+    fn parse_next_is(&mut self, first_value: Token<'a>, is_keyword: Token<'a>, polarity: bool) -> Result<PolarizedTerminal, ParseInstructionError>  {
+        let next_token = self.advance_to_next_token();
+        Ok(match next_token.kind {
+            TokenKind::Value => _,
+            TokenKind::FloatValue => _,
+            TokenKind::Not => _,
+            TokenKind::Or => _,
+            TokenKind::And => _,
+            TokenKind::In => _,
+            TokenKind::Exists => _,
+            TokenKind::Is => _,
+            TokenKind::Null => _,
+            TokenKind::To => _,
+            TokenKind::Equal => _,
+            TokenKind::Different => _,
+            TokenKind::GreaterThan => _,
+            TokenKind::GreaterOrEqual => _,
+            TokenKind::LowerThan => _,
+            TokenKind::LowerOrEqual => _,
+            TokenKind::LeftParens => _,
+            TokenKind::RightParens => _,
+            TokenKind::LeftSquareBracket => _,
+            TokenKind::RightSquareBracket => _,
+            TokenKind::Comma => _,
+            TokenKind::GeoRadius => _,
+            TokenKind::GeoBoundingBox => _,
+            TokenKind::GeoPolygon => _,
+            TokenKind::Vectors => _,
+            TokenKind::Foreign => _,
+            TokenKind::IllegalSingleQuoted => _,
+            TokenKind::IllegalDoubleQuoted => _,
+            TokenKind::IllegalCharacter => _,
+            TokenKind::Eof => _,
+        })
     }
 }
 
@@ -355,6 +640,11 @@ impl<'a> Iterator for SourceParser<'a> {
 
     /// Parses the next instruction
     fn next(&mut self) -> Option<Self::Item> {
+        wip::fixme!(
+            "review 'switch polarity' verbiage when the link can indicate absolute polarity"
+        );
+        wip::fixme!("address distributivy, associativity and de morgan's law: NOT (a AND b) <=> NOT a OR NOT b");
+        self.parse_next_instruction_or_eof().transpose()
         // 1. parse terminal
         // 2. parse forward link or eof
         // 3. forcefully push state if:
@@ -369,10 +659,7 @@ impl<'a> Iterator for SourceParser<'a> {
         // 5. allow eof if:
         //    1. no unclosed stuff
         //    2. in link context or instead of an empty source
-        wip::fixme!(
-            "review 'switch polarity' verbiage when the link can indicate absolute polarity"
-        );
-        wip::fixme!("address distributivy, associativity and de morgan's law: NOT (a AND b) <=> NOT a OR NOT b");
+
         // NOT (a AND b OR c) <=> NOT (a AND (b OR c)) <=> NOT a OR NOT (b OR c) <=> NOT a OR (NOT b AND NOT c)
         // => it seems to work as follow: 1. de morgan's still replace semantics of AND to OR, but not associations
         // in terms of implementation, just need to know about the parens' polarity, and can proceed as usual
@@ -380,155 +667,16 @@ impl<'a> Iterator for SourceParser<'a> {
         // double polarity: cancels as expected
         //
         // NOT (a AND NOT (b OR c)) <=> NOT a OR NOT NOT (b OR c) <=> NOT a OR NOT (NOT b AND NOT c) <=> NOT a OR (NOT NOT b OR NOT NOT c) <=> NOT a OR (b OR c)
-        let next_token = self.advance_to_next_token();
-        match (&mut self.current.state, next_token.kind) {
-            (
-                _,
-                illegal @ (TokenKind::IllegalSingleQuoted
-                | TokenKind::IllegalDoubleQuoted
-                | TokenKind::IllegalCharacter),
-            ) => wip::wip!("return error here"),
-            (ParsingState::Terminal, TokenKind::Value | TokenKind::FloatValue) => wip::wip!("Operand state"),
-            (ParsingState::Terminal, TokenKind::LeftParens) => wip::wip!("Terminal state, upstack"),
-            (ParsingState::Terminal, TokenKind::RightParens) => wip::wip!("Unsure which contexts this is allowed?"),
-            (ParsingState::Terminal, TokenKind::Not) => wip::wip!("Terminal state, inverted polarity"),
-            (
-                ParsingState::Terminal,
-                TokenKind::LeftSquareBracket
-                | TokenKind::RightSquareBracket
-                | TokenKind::Or
-                | TokenKind::And
-                | TokenKind::In
-                | TokenKind::Exists
-                | TokenKind::Is
-                | TokenKind::Null
-                | TokenKind::To
-                | TokenKind::Comma
-                | TokenKind::Equal
-                | TokenKind::Different
-                | TokenKind::GreaterThan
-                | TokenKind::GreaterOrEqual
-                | TokenKind::LowerThan
-                | TokenKind::LowerOrEqual,
-            ) => wip::wip!("error unexpected token"),
-            (ParsingState::Terminal, TokenKind::GeoRadius) => todo!(),
-            (ParsingState::Terminal, TokenKind::GeoBoundingBox) => todo!(),
-            (ParsingState::Terminal, TokenKind::GeoPolygon) => todo!(),
-            (ParsingState::Terminal, TokenKind::Vectors) => todo!(),
-            (ParsingState::Terminal, TokenKind::Foreign) => todo!(),
-            (ParsingState::Terminal, TokenKind::Eof) => wip::wip!("behavior depends on context: no open paren, no open bracket, no standing previous link"),
-            (ParsingState::Operator { left_operand }, TokenKind::Value | TokenKind::FloatValue) => wip::wip!("TO state"),
-            (ParsingState::Operator { left_operand }, TokenKind::LeftParens | TokenKind::RightParens | TokenKind::LeftSquareBracket | TokenKind::RightSquareBracket) => wip::wip!("error"),
-            (ParsingState::Operator { left_operand }, TokenKind::Or) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::And) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Not) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::In) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Exists) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Is) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Null) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::To) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::GeoRadius) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::GeoBoundingBox) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::GeoPolygon) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Vectors) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Foreign) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Comma) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Equal) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Different) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::GreaterThan) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::GreaterOrEqual) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::LowerThan) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::LowerOrEqual) => todo!(),
-            (ParsingState::Operator { left_operand }, TokenKind::Eof) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Value) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::FloatValue) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::LeftParens) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::RightParens) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::LeftSquareBracket) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::RightSquareBracket) => {
-                todo!()
-            }
-            (ParsingState::In { left_operand, next_link }, TokenKind::Or) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::And) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Not) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::In) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Exists) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Is) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Null) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::To) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::GeoRadius) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::GeoBoundingBox) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::GeoPolygon) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Vectors) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Foreign) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Comma) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Equal) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Different) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::GreaterThan) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::GreaterOrEqual) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::LowerThan) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::LowerOrEqual) => todo!(),
-            (ParsingState::In { left_operand, next_link }, TokenKind::Eof) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Value) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::FloatValue) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::LeftParens) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::RightParens) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::LeftSquareBracket) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::RightSquareBracket) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Or) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::And) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Not) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::In) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Exists) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Is) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Null) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::To) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::GeoRadius) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::GeoBoundingBox) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::GeoPolygon) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Vectors) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Foreign) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Comma) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Equal) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Different) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::GreaterThan) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::GreaterOrEqual) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::LowerThan) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::LowerOrEqual) => todo!(),
-            (ParsingState::Link { terminal }, TokenKind::Eof) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Value) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::FloatValue) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::LeftParens) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::RightParens) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::LeftSquareBracket) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::RightSquareBracket) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Or) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::And) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Not) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::In) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Exists) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Is) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Null) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::To) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::GeoRadius) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::GeoBoundingBox) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::GeoPolygon) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Vectors) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Foreign) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Comma) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Equal) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Different) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::GreaterThan) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::GreaterOrEqual) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::LowerThan) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::LowerOrEqual) => todo!(),
-            (ParsingState::To { left_operand }, TokenKind::Eof) => todo!(),
-        }
+
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum ParseInstructionError {}
+pub enum ParseInstructionError {
+    DanglingLink,
+    UnmatchedParens,
+    UnmatchedBracket,
+}
 
 /// A filter instruction
 ///
@@ -598,15 +746,17 @@ impl Link {
     }
 }
 
-struct Terminal {
-    kind: TerminalKind,
+#[derive(Debug, Clone)]
+struct PolarizedTerminal {
+    terminal: Terminal,
+    polarity: bool,
 }
 
 /// A terminal typically represents the leaf objects of a filter
 ///
 /// In Meilisearch's case, it generally resolves to roaring bitmaps representing lists of docids.
 #[derive(Debug, Clone)]
-enum TerminalKind {
+enum Terminal {
     VectorExists { embedder: Option<Span>, filter: VectorFilter },
     GeoLowerThan { point: [Span; 2], radius: Span, resolution: Option<Span> },
     GeoBoundingBox { top_right_point: [Span; 2], bottom_left_point: [Span; 2] },
@@ -623,6 +773,7 @@ enum TerminalKind {
     Contains { left: Span, right: Span },
     StartsWith { left: Span, right: Span },
     ForeignGroup { foreign_field: Span, foreign_source: Span },
+    In {operand: Span, values: Vec<Span> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

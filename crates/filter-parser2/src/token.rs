@@ -1,4 +1,4 @@
-use crate::SpanView;
+use crate::{Span, SpanView};
 use itertools::Itertools;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
@@ -10,13 +10,13 @@ use nom::{IResult, Input, Parser};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Token<'a> {
-    pub span: SpanView<'a>,
+    pub span_view: SpanView<'a>,
     pub kind: TokenKind,
 }
 
 pub struct ParseOutput<'a> {
-    parsed_token: Token<'a>,
-    remaining_input: SpanView<'a>,
+    pub parsed_token: Token<'a>,
+    pub remaining_input: SpanView<'a>,
 }
 
 impl<'a> Token<'a> {
@@ -40,6 +40,10 @@ impl<'a> Token<'a> {
             Some(token)
         })
         .take_while_inclusive(|token| !matches!(token.kind, TokenKind::Eof))
+    }
+
+    pub fn span(&self) -> Span {
+        self.span_view.span()
     }
 }
 
@@ -66,7 +70,7 @@ fn parse_token<'a>(
 
 fn parse_illegal<'a>(input: SpanView<'a>) -> IResult<SpanView<'a>, Token<'a>> {
     let (remaining, illegal) = input.take_split(1);
-    Ok((remaining, Token { span: illegal, kind: TokenKind::IllegalCharacter }))
+    Ok((remaining, Token { span_view: illegal, kind: TokenKind::IllegalCharacter }))
 }
 
 fn parse_keywords<'a>(
@@ -128,7 +132,7 @@ fn parse_keyword<'a>(
                 )));
             }
         }
-        Ok((rest, Token { span: parsed, kind: keyword_kind }))
+        Ok((rest, Token { span_view: parsed, kind: keyword_kind }))
     }
 }
 
@@ -139,7 +143,7 @@ fn parse_syntax<'a>(
 ) -> impl Fn(SpanView<'_>) -> IResult<SpanView<'_>, Token<'_>> + '_ {
     move |input| {
         let (rest, parsed) = nom::bytes::complete::tag(c)(input)?;
-        Ok((rest, Token { span: parsed, kind }))
+        Ok((rest, Token { span_view: parsed, kind }))
     }
 }
 
@@ -159,23 +163,23 @@ fn parse_reserved_field<'a>(
                 )));
             }
         }
-        Ok((rest, Token { span: parsed, kind }))
+        Ok((rest, Token { span_view: parsed, kind }))
     }
 }
 
 fn parse_eof<'a>(input: SpanView<'a>) -> IResult<SpanView<'a>, Token<'a>> {
     let (rest, parsed) = nom::combinator::eof(input)?;
-    Ok((rest, Token { span: parsed, kind: TokenKind::Eof }))
+    Ok((rest, Token { span_view: parsed, kind: TokenKind::Eof }))
 }
 
 fn parse_value<'a>(input: SpanView<'a>) -> IResult<SpanView<'a>, Token<'a>> {
     let value = nom::combinator::map(take_while1(is_value_component), |span| Token {
-        span,
+        span_view: span,
         kind: TokenKind::Value,
     });
 
     let float_value =
-        nom::combinator::map(recognize_float, |span| Token { span, kind: TokenKind::FloatValue });
+        nom::combinator::map(recognize_float, |span| Token { span_view: span, kind: TokenKind::FloatValue });
 
     let (rest, parsed) =
         terminated(alt((float_value, value, parse_quoted_value)), multispace0).parse(input)?;
@@ -232,35 +236,28 @@ fn parse_quoted_value<'a>(input: SpanView<'a>) -> IResult<SpanView<'a>, Token<'a
 
     let parsed = SpanView::earliest_end(input, third);
 
-    Ok((rest, Token { span: parsed, kind: token_kind }))
+    Ok((rest, Token { span_view: parsed, kind: token_kind }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
+    // values
     /// field name, directly or single or double quoted
     Value,
-    /// Single quoted value containing illegal characters
-    IllegalSingleQuoted,
-    /// Double quoted value containing illegal characters
-    IllegalDoubleQuoted,
-    /// Illegal character
-    IllegalCharacter,
     /// number
     FloatValue,
-    /// (
-    LeftParens,
-    /// )
-    RightParens,
-    /// [
-    LeftSquareBracket,
-    /// ]
-    RightSquareBracket,
+
+    // not
+    /// NOT
+    Not,
+
+    // link
     /// OR
     Or,
     /// AND
     And,
-    /// NOT
-    Not,
+
+    // operators
     /// IN
     In,
     /// EXISTS
@@ -271,18 +268,6 @@ pub enum TokenKind {
     Null,
     /// TO
     To,
-    /// _geoRadius
-    GeoRadius,
-    /// _geoBoundingBox
-    GeoBoundingBox,
-    /// _geoPolygon
-    GeoPolygon,
-    /// _vectors
-    Vectors,
-    /// _foreign
-    Foreign,
-    /// ,
-    Comma,
     /// =
     Equal,
     /// !=
@@ -295,8 +280,48 @@ pub enum TokenKind {
     LowerThan,
     /// <=
     LowerOrEqual,
+
+    // syntax
+    /// (
+    LeftParens,
+    /// )
+    RightParens,
+    /// [
+    LeftSquareBracket,
+    /// ]
+    RightSquareBracket,
+    /// ,
+    Comma,
+
+    // reserved fields
+    /// _geoRadius
+    GeoRadius,
+    /// _geoBoundingBox
+    GeoBoundingBox,
+    /// _geoPolygon
+    GeoPolygon,
+    /// _vectors
+    Vectors,
+    /// _foreign
+    Foreign,
+
+    // illegal
+    /// Single quoted value containing illegal characters
+    IllegalSingleQuoted,
+    /// Double quoted value containing illegal characters
+    IllegalDoubleQuoted,
+    /// Illegal character
+    IllegalCharacter,
+
+    // eof
     /// End of input
     Eof,
+}
+
+impl TokenKind {
+    pub(crate) fn is_value(self) -> bool {
+        self == TokenKind::Value || self == TokenKind::FloatValue
+    }
 }
 
 #[cfg(test)]

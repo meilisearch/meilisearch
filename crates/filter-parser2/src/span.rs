@@ -137,7 +137,11 @@ impl<'a> Input for SpanView<'a> {
     }
 
     fn take(&self, index: usize) -> Self {
-        let split: u32 = self.span.start + u32::try_from(index).unwrap_wip();
+        // unwrap: the semantics for `take` is to panic if `index > length`.
+        // since `length` here is max `u32::MAX` (span from 0 to `u32::MAX`),
+        // an index that doens't cleanly convert to `u32` is higher than `length` and
+        // a cause for panic.
+        let split: u32 = self.span.start + u32::try_from(index).unwrap();
         Self {
             text: Input::take(&self.text, index),
             span: Span { source: self.span.source, start: self.span.start, end: split },
@@ -145,7 +149,8 @@ impl<'a> Input for SpanView<'a> {
     }
 
     fn take_from(&self, index: usize) -> Self {
-        let split: u32 = self.span.start + u32::try_from(index).unwrap_wip();
+        // unwrap: see rationale in `take`
+        let split: u32 = self.span.start + u32::try_from(index).unwrap();
         Self {
             text: Input::take_from(&self.text, index),
             span: Span { source: self.span.source, start: split, end: self.span.end },
@@ -153,7 +158,8 @@ impl<'a> Input for SpanView<'a> {
     }
 
     fn take_split(&self, index: usize) -> (Self, Self) {
-        let split: u32 = self.span.start + u32::try_from(index).unwrap_wip();
+        // unwrap: see rationale in `take`
+        let split: u32 = self.span.start + u32::try_from(index).unwrap();
         let (after, before) = Input::take_split(&self.text, index);
         (
             Self {
