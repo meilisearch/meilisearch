@@ -1209,7 +1209,7 @@ async fn vector_filter_regenerate() {
 
     let (value, _code) = index
         .search_post(json!({
-            "filter": format!("_vectors.rest.regenerate EXISTS"),
+            "filter": "_vectors.rest.regenerate EXISTS".to_string(),
             "attributesToRetrieve": ["name"]
         }))
         .await;

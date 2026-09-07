@@ -68,10 +68,6 @@ jobs:
           fetch-depth: 0 # fetch full history to be able to get main commit sha
           ref: ${{ steps.permission.outputs.head_sha }}
 
-      - uses: dtolnay/rust-toolchain@38ae5351029910ad7674ccfad89c37cbd636f3c4 # 1.91.1
-        with:
-          toolchain: 1.91.1
-
       - name: Run benchmarks on PR ${{ github.event.issue.id }}
         env:
           BENCH_ARGS: ${{ steps.command.outputs.command-arguments }}

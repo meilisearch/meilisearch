@@ -13,7 +13,6 @@ This issue is about updating Meilisearch dependencies:
     - [ ] Finally, [Meilisearch](https://github.com/meilisearch/MeiliSearch)
   - [ ] If new Rust versions have been released, update the minimal Rust version in use at Meilisearch:
     - [ ] in this [GitHub Action file](https://github.com/meilisearch/meilisearch/blob/main/.github/workflows/test-suite.yml), by changing the `toolchain` field of the `rustfmt` job to the latest available nightly (of the day before or the current day).
-    - [ ] in every [GitHub Action files](https://github.com/meilisearch/meilisearch/blob/main/.github/workflows), by changing all the `dtolnay/rust-toolchain@` references to use the latest stable version.
     - [ ] in this [`rust-toolchain.toml`](https://github.com/meilisearch/meilisearch/blob/main/rust-toolchain.toml), by changing the `channel` field to the latest stable version.
     - [ ] in the [Dockerfile](https://github.com/meilisearch/meilisearch/blob/main/Dockerfile), by changing the base image to `rust:<target_rust_version>-alpine<alpine_version>`. Check that the image exists on [Dockerhub](https://hub.docker.com/_/rust/tags?page=1&name=alpine). Also, build and run the image to check everything still works!
 

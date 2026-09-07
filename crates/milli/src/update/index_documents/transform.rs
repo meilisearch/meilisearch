@@ -225,7 +225,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             // Insertion in a obkv need to be done with keys ordered. For now they are ordered
             // according to the document addition key order, so we sort it according to the
             // fieldids map keys order.
-            field_buffer_cache.sort_unstable_by(|(f1, _), (f2, _)| f1.cmp(f2));
+            field_buffer_cache.sort_unstable_by_key(|(f1, _)| *f1);
 
             // Build the new obkv document.
             let mut writer = KvWriter::new(&mut obkv_buffer);
@@ -920,8 +920,8 @@ impl<'a, 'i> Transform<'a, 'i> {
                     &settings_diff,
                     injected_vectors,
                     old_vectors_fid,
-                    Some(&mut original_obkv_buffer).filter(|_| original_sorter.is_some()),
-                    Some(&mut flattened_obkv_buffer).filter(|_| flattened_sorter.is_some()),
+                    original_sorter.is_some().then_some(&mut original_obkv_buffer),
+                    flattened_sorter.is_some().then_some(&mut flattened_obkv_buffer),
                 )?;
 
                 if let Some(original_sorter) = original_sorter.as_mut() {

@@ -296,7 +296,7 @@ pub async fn perform_federated_search(
                     return None;
                 }
 
-                distinct_values.extend(facet_values.into_iter());
+                distinct_values.extend(facet_values);
             }
             Some(hit)
         })
@@ -1624,7 +1624,7 @@ impl SearchByIndex {
             let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
-            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
+            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores) {
                 if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
                     let mut hit = result_by_query
                         .hit_maker

@@ -2945,7 +2945,7 @@ async fn batch_several_documents_addition() {
     let (response, _code) = index.filtered_tasks(&[], &["failed"], &[]).await;
 
     // Check if only the 6th task failed
-    println!("{}", &response);
+    println!("{}", response);
     assert_eq!(response["results"].as_array().unwrap().len(), 5);
 
     // Check if there are exactly 120 documents (150 - 30) in the index;

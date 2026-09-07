@@ -435,7 +435,7 @@ impl NetworkTopologyChange {
                         ImportState::Ongoing { import_index_state: left_import, total_indexes: left_total_indexes },
                         ImportState::Ongoing { import_index_state: right_import, total_indexes: right_total_indexes },
                     ) => {
-                        let import_index_state = left_import.into_iter().merge_join_by(right_import.into_iter(), |(k,_), (x, _)|k.cmp(x)).map(|eob|
+                        let import_index_state = left_import.into_iter().merge_join_by(right_import, |(k,_), (x, _)|k.cmp(x)).map(|eob|
                             match eob {
                                 EitherOrBoth::Both((name, left), (_, right)) => {
                                     let newer = merge_import_index_state(left, right);

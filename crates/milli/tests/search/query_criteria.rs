@@ -244,7 +244,7 @@ fn criteria_mixup() {
 
     let config = IndexerConfig::default();
     for criteria in criteria_mix {
-        eprintln!("Testing with criteria order: {:?}", &criteria);
+        eprintln!("Testing with criteria order: {:?}", criteria);
         //update criteria
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
@@ -395,7 +395,7 @@ fn criteria_ascdesc() {
     let documents = index.all_documents(&rtxn).unwrap().map(|doc| doc.unwrap()).collect::<Vec<_>>();
 
     for criterion in [Asc(S("name")), Desc(S("name")), Asc(S("age")), Desc(S("age"))] {
-        eprintln!("Testing with criterion: {:?}", &criterion);
+        eprintln!("Testing with criterion: {:?}", criterion);
 
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
