@@ -1002,11 +1002,11 @@ async fn documents_by_query(
             remote_errors,
             &network_partitioner,
             &auth_filter,
-            progress
+            progress,
         )
         .await
     } else {
-        retrieve_documents_local(index_scheduler, query, is_proxy, auth_filter).await
+        retrieve_documents_local(index_scheduler, query, is_proxy, auth_filter, progress).await
     };
 
     Ok(HttpResponse::Ok().json(ret?))
@@ -1037,9 +1037,14 @@ async fn retrieve_documents_federated(
     // Perform local search
     let mut results = Vec::with_capacity(local_queries.len());
     for (query_id, query) in local_queries {
-        let result =
-            retrieve_documents_local(index_scheduler.clone(), query, true, auth_filter.clone(), progress)
-                .await?;
+        let result = retrieve_documents_local(
+            index_scheduler.clone(),
+            query,
+            true,
+            auth_filter.clone(),
+            progress,
+        )
+        .await?;
         results.push((query_id, result));
     }
 

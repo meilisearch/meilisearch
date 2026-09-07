@@ -361,9 +361,6 @@ async fn process_search_request(
     // Progress is not used, we use the quiet progress to avoid logging any steps.
     let progress = Progress::quiet();
     let permit = search_queue.try_get_search_permit(&progress).await?;
-    let index = index_scheduler.user_index(query.index_uid.as_str())?;
-    let rtxn = index.static_read_txn()?;
-    let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
     tracing::debug!("LLM query: {:?}", query);
 

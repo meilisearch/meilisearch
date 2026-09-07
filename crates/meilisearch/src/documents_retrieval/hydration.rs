@@ -314,16 +314,8 @@ async fn federated_fetch_hydration_documents(
             .await?;
 
     // Perform local search
-    for (index_uid, docids) in hydration_docids.iter() {
-        local_fetch_hydration_documents(
-            index_scheduler,
-            index_uid,
-            docids,
-            &mut hydration_documents,
-            auth_filter,
-            progress
-        )?;
-    }
+    let mut hydration_documents =
+        local_fetch_hydration_documents(index_scheduler, &hydration_docids, auth_filter, progress)?;
 
     // wait
     let (remote_results, errors) =
@@ -368,21 +360,16 @@ impl FederatedHydrationFormatter {
                 network_partitioner,
                 hydration_docids.clone(),
                 auth_filter,
-                progress
+                progress,
             )
             .await?
         } else {
-            let mut hydration_documents = HashMap::new();
-            for (index_uid, docids) in hydration_docids {
-                local_fetch_hydration_documents(
-                    index_scheduler,
-                    &index_uid,
-                    &docids,
-                    &mut hydration_documents,
-                    auth_filter,
-                    progress
-                )?;
-            }
+            let hydration_documents = local_fetch_hydration_documents(
+                index_scheduler,
+                &hydration_docids,
+                auth_filter,
+                progress,
+            )?;
 
             (hydration_documents, Default::default())
         };
