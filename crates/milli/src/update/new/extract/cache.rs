@@ -586,10 +586,7 @@ unsafe impl<'a, 'bump: 'a, B: 'static> Freezable<'a> for DelAddBbbul<'bump, B> {
         let DelAddBbbul { del, add } = self;
         let del = del.as_mut().map(|del| del.freeze());
         let add = add.as_mut().map(|add| add.freeze());
-        Self::Frozen {
-            del,
-            add,
-        }
+        Self::Frozen { del, add }
     }
 }
 
@@ -600,7 +597,8 @@ pub struct FrozenDelAddBbbul<'a, 'bump, B> {
 
 impl<'a, B> FrozenDelAddBbbul<'a, '_, B> {
     fn is_empty(&self) -> bool {
-        self.del.is_none() && self.add.is_none()
+        self.del.as_ref().is_none_or(|del| del.is_empty())
+            && self.add.as_ref().is_none_or(|add| add.is_empty())
     }
 }
 
@@ -650,7 +648,7 @@ impl DelAddRoaringBitmap {
     pub fn union_and_clear_bbbul<B: BitPacker>(&mut self, bbbul: FrozenDelAddBbbul<'_, '_, B>) {
         let FrozenDelAddBbbul { mut del, mut add } = bbbul;
 
-        if let Some(ref mut bbbul) = del.take() {
+        if let Some(ref mut bbbul) = del.take().filter(|del| !del.is_empty()) {
             let del = self.del.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
@@ -658,7 +656,7 @@ impl DelAddRoaringBitmap {
             }
         }
 
-        if let Some(ref mut bbbul) = add.take() {
+        if let Some(ref mut bbbul) = add.take().filter(|add| !add.is_empty()) {
             let add = self.add.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
