@@ -25,6 +25,7 @@ use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
 use crate::facet_values_sort::FacetValuesSort;
 use crate::locales::LocalizedAttributesRuleView;
+use crate::tasks::TaskId;
 
 /// The maximum number of results that the engine
 /// will be able to return in one search call.
@@ -507,6 +508,66 @@ impl Settings<Checked> {
         }
     }
 
+    pub fn difference(&mut self, other: &Self) {
+        let Self {
+            displayed_attributes,
+            searchable_attributes,
+            filterable_attributes,
+            foreign_keys,
+            sortable_attributes,
+            ranking_rules,
+            stop_words,
+            synonyms,
+            non_separator_tokens,
+            separator_tokens,
+            dictionary,
+            distinct_attribute,
+            proximity_precision,
+            typo_tolerance,
+            faceting,
+            pagination,
+            embedders,
+            search_cutoff_ms,
+            localized_attributes,
+            facet_search,
+            prefix_search,
+            chat,
+            _kind,
+        } = self;
+
+        displayed_attributes.difference(&other.displayed_attributes);
+        searchable_attributes.difference(&other.searchable_attributes);
+        filterable_attributes.difference(&other.filterable_attributes);
+        foreign_keys.difference(&other.foreign_keys);
+        sortable_attributes.difference(&other.sortable_attributes);
+        ranking_rules.difference(&other.ranking_rules);
+        stop_words.difference(&other.stop_words);
+        synonyms.difference(&other.synonyms);
+        non_separator_tokens.difference(&other.non_separator_tokens);
+        separator_tokens.difference(&other.separator_tokens);
+        dictionary.difference(&other.dictionary);
+        distinct_attribute.difference(&other.distinct_attribute);
+        proximity_precision.difference(&other.proximity_precision);
+        typo_tolerance.difference(&other.typo_tolerance);
+        faceting.difference(&other.faceting);
+        pagination.difference(&other.pagination);
+        embedders.difference(&other.embedders);
+        if let (Setting::Set(embedders), Setting::Set(other_embedders)) =
+            (embedders, &other.embedders)
+        {
+            for (embedder_name, embedder) in embedders {
+                if let Some(other_embedder) = other_embedders.get(embedder_name) {
+                    embedder.inner.difference(&other_embedder.inner);
+                }
+            }
+        }
+        search_cutoff_ms.difference(&other.search_cutoff_ms);
+        localized_attributes.difference(&other.localized_attributes);
+        facet_search.difference(&other.facet_search);
+        prefix_search.difference(&other.prefix_search);
+        chat.difference(&other.chat);
+    }
+
     pub fn into_unchecked(self) -> Settings<Unchecked> {
         let Self {
             displayed_attributes,
@@ -974,6 +1035,7 @@ pub fn apply_settings_to_builder(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum SecretPolicy {
     RevealSecrets,
     HideSecrets,
@@ -1308,6 +1370,12 @@ impl std::ops::Deref for WildcardSetting {
     }
 }
 
+impl std::ops::DerefMut for WildcardSetting {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 #[routes::request(setting, override_error = DeserrJsonError<InvalidSettingsPrefixSearch>)]
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrefixSearchSettings {
@@ -1331,6 +1399,26 @@ impl From<PrefixSearchSettings> for PrefixSearch {
             PrefixSearchSettings::Disabled => PrefixSearch::Disabled,
         }
     }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct SettingsTarget {
+    /// Settings object representing the currently processed state of the settings.
+    ///
+    /// `null` if the index doesn't currently exist.
+    pub current: Option<Settings<Checked>>,
+    /// Settings object representing the target processing state of the settings, as obtained by processed all related tasks.
+    ///
+    /// Only contains the fields that will be modified by the related tasks.
+    ///
+    /// `null` if the index will not exist after processing all related tasks.
+    pub target: Option<Settings<Checked>>,
+    /// List of the ids of the pending tasks related to the settings of this index.
+    pub task_ids: Vec<TaskId>,
+    /// Set to `true` if there is at least one task that will update the settings of this index.
+    pub needs_processing: bool,
 }
 
 #[cfg(test)]
