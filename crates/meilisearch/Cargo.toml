@@ -89,7 +89,7 @@ tracing-subscriber = { version = "0.3.23", features = ["json"] }
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 tracing-actix-web = "0.7.22"
 build-info = { version = "1.7.0", path = "../build-info" }
-roaring = "0.11.4"
+roaring = "0.11.5"
 mopa-maintained = "0.2.3"
 utoipa = { version = "5.5.0", features = [
     "actix_extras",
