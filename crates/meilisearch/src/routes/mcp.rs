@@ -13,18 +13,21 @@ use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::deserr::{DeserrError, DeserrJson, DeserrJsonError};
 use meilisearch_types::error::deserr_codes::BadRequest;
 use meilisearch_types::error::ResponseError;
-use serde::Serialize;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::keys::actions;
+use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref, Schema};
 use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
 use utoipa::{OpenApi as _, ToSchema};
 
 use crate::analytics::Analytics;
+use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::MeilisearchApi;
 use crate::search_queue::SearchQueue;
 
-static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(|| MeilisearchApi::openapi());
+static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::openapi);
 
 #[routes::routes(
     tag = "MCP connection",
@@ -149,7 +152,7 @@ async fn mcp(
                 content: None,
                 structured_content: None,
                 tools: None,
-                resources: Some(vec![]),
+                resources: Some(vec![]), // no resources
                 prompts: None,
                 supported_versions: None,
                 meta: None,
@@ -170,7 +173,7 @@ async fn mcp(
                 structured_content: None,
                 tools: None,
                 resources: None,
-                prompts: Some(vec![]),
+                prompts: Some(vec![]), // no prompts
                 supported_versions: None,
                 meta: None,
                 capabilities: None,
@@ -364,7 +367,7 @@ async fn mcp(
                     _ => panic!("Invalid arguments: expected Object found something else"),
                 };
 
-                // // TODO don't unwrap
+                // TODO don't unwrap
                 let mut payload = actix_web::dev::Payload::None;
                 let guarded_index_scheduler =
                     GuardedData::from_request(&request, &mut payload).await.unwrap();
@@ -429,9 +432,118 @@ async fn mcp(
                     },
                 }
             }
+            Some(tool_name::DESCRIBE_INDEX) => {
+                let DescribeIndex { index_uid } = match params.arguments.take() {
+                    Some(value) => {
+                        serde_json::from_value(value).unwrap()
+                    }
+                    _ => panic!("Arguments required: Found no arguments"),
+                };
+
+                // expose:
+                // - index description (?)
+                // - a couple of documents
+                // - sortable attributes (?)
+                // - filterable/facetable attributes (?)
+                // - displayed attributes
+
+                // TODO use a tokio spawn ?
+                // TODO don't unwrap
+                let query = serde_json::to_vec(&serde_json::json!({
+                    "limit": 5,
+                    "attributesToCrop": r#"["*"]"#,
+                })).unwrap();
+                let mut payload = actix_web::dev::Payload::from(query);
+
+                // // TODO don't unwrap
+                let guarded_index_scheduler =
+                    GuardedData::from_request(&request, &mut payload).await.unwrap();
+                // TODO don't unwrap
+                let params = AwebJson::from_request(&request, &mut payload).await.unwrap();
+
+                let result = super::indexes::documents::documents_by_query_post(
+                    guarded_index_scheduler,
+                    index_uid.into_inner().into(),
+                    params,
+                    search_queue,
+                    request,
+                    analytics,
+                )
+                .await;
+
+                let sample_hits = match result {
+                    Ok(response) => {
+                        let body = response.into_body();
+                        // TODO do not unwrap
+                        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        // let text = String::from_utf8_lossy(&bytes).into_owned();
+                        // TODO this blocks and would have been better to have a serde_json
+                        //      RawValue to avoid allocating too much and simply pass through
+                        let mut content: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        content.remove("hits")
+                    }
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        let response = McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(McpResult {
+                                result_type: RESULT_TYPE_COMPLETE,
+                                is_error: None,
+                                tools: None,
+                                resources: None,
+                                prompts: None,
+                                structured_content: Some(serde_json::to_value(&response).unwrap()),
+                                content: Some(vec![McpTextContentOutput::from(response.message)]),
+                                supported_versions: None,
+                                meta: None,
+                                capabilities: None,
+                                instructions: None,
+                                ttl_ms: 0, // immediately stale
+                                cache_scope: cache_scope::PRIVATE,
+                            }),
+                            error: None,
+                        };
+
+                        return Ok(HttpResponse::Ok().json(response));
+                    },
+                };
+
+                #[derive(Debug, Clone, Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct IndexDescription {
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    sample_hits: Option<serde_json::Value>,
+                }
+
+                let description = IndexDescription { sample_hits };
+                let content = serde_json::to_value(&description).unwrap();
+                let text = serde_json::to_string(&content).unwrap();
+
+                McpResponse {
+                    jsonrpc,
+                    id,
+                    result: Some(McpResult {
+                        result_type: RESULT_TYPE_COMPLETE,
+                        is_error: None,
+                        tools: None,
+                        resources: None,
+                        prompts: None,
+                        content: Some(vec![McpTextContentOutput::from(text)]),
+                        structured_content: Some(content),
+                        supported_versions: None,
+                        meta: None,
+                        capabilities: None,
+                        instructions: None,
+                        ttl_ms: 300_000, // 5min
+                        cache_scope: cache_scope::PRIVATE,
+                    }),
+                    error: None,
+                }
+            }
             // TODO <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling>
             Some(_unknown) => todo!("Unknown tool. What to do?"),
-            None => todo!("no params name. what do to?"),
+            None => todo!("no params name. what should we do?"),
         },
         _otherwise => {
             todo!("unwkown method: {_otherwise}")
@@ -453,13 +565,12 @@ pub mod method {
 
 pub mod tool_name {
     pub const LIST_INDEXES: &str = "listIndexes";
-    pub const DESCRIBE_INDEXES: &str = "describeIndexes";
+    pub const DESCRIBE_INDEX: &str = "describeIndex";
     pub const SEARCH_IN_INDEXES: &str = "searchInIndexes";
     pub const FACET_SEARCH: &str = "facetSearch";
 }
 
 pub mod cache_scope {
-    pub const PUBLIC: &str = "public";
     pub const PRIVATE: &str = "private";
 }
 
@@ -532,6 +643,7 @@ fn list_tools() -> Vec<McpToolDefinition> {
             let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
             let operation = paths.get.as_ref().unwrap();
 
+            // We retrieve the offset and limit from the query parameters
             let mut properties = ObjectBuilder::new();
             for parameter in operation.parameters.as_ref().unwrap() {
                 let ref_or_schema = parameter.schema.as_ref().unwrap().clone();
@@ -551,7 +663,40 @@ fn list_tools() -> Vec<McpToolDefinition> {
                 input_schema: schema,
             }
         },
+        {
+            // describe index
+            let mut schemas = Vec::new();
+            <DescribeIndex as ToSchema>::schemas(&mut schemas);
+
+            let mut properties = ObjectBuilder::new();
+            for (property_name, schema) in schemas {
+                let schema = match schema {
+                    RefOr::Ref(_) => unreachable!(),
+                    RefOr::T(schema) => schema,
+                };
+                properties = properties.property(&property_name, schema);
+            }
+
+            let schema = Schema::from(properties);
+
+            McpToolDefinition {
+                name: tool_name::DESCRIBE_INDEX.to_string(),
+                title: "Describe an index".to_string(),
+                description:
+                    "Describes an index to understand what's stored inside and what's its purpose."
+                        .to_string(),
+                input_schema: schema,
+            }
+        },
     ]
+}
+
+#[routes::request]
+#[derive(Debug, Clone, Deserialize)]
+/// Describes an index
+pub struct DescribeIndex {
+    #[request(required)]
+    index_uid: IndexUid,
 }
 
 #[routes::request]
@@ -567,35 +712,33 @@ pub struct McpQuery {
     params: ParamsWithMeta,
 }
 
-// TODO Note that I would have rather refused unknown fields
-//      but online playgrounds provide more fields than expected
-//      <https://mcpplaygroundonline.com>
-#[routes::request(allow_unknown_fields)]
+// Note that I would have rather refused unknown fields
+// but online playgrounds provide more fields than expected
+// <https://mcpplaygroundonline.com>
 #[derive(Debug, Clone)]
+#[routes::request(allow_unknown_fields)]
 pub struct ParamsWithMeta {
-    // TODO Note that this field MUST be provided but most playground don't
-    //      <https://mcpplaygroundonline.com>
     #[request(default, rename = "_meta")]
-    meta: Option<McpClientMeta>,
+    _meta: Option<McpClientMeta>,
     #[request(default)]
     name: Option<String>, // get_weather
     #[request(default)]
     arguments: Option<serde_json::Value>, // RawValue would have been better
 }
 
-#[routes::request(allow_unknown_fields)]
 #[derive(Debug, Clone)]
+#[routes::request(allow_unknown_fields)]
 pub struct McpClientMeta {
     #[request(required, rename = "io.modelcontextprotocol/protocolVersion")]
-    protocol_version: String, // "2026-07-28"
+    _protocol_version: String, // "2026-07-28"
     #[request(required, rename = "io.modelcontextprotocol/clientInfo")]
-    client_info: ClientServerInfo,
+    _client_info: ClientServerInfo,
     #[request(default, rename = "io.modelcontextprotocol/clientCapabilities")]
-    client_capabilities: serde_json::Value,
+    _client_capabilities: serde_json::Value,
 }
 
-#[routes::request]
 #[derive(Debug, Clone, Serialize)]
+#[routes::request]
 pub struct ClientServerInfo {
     #[request(required)]
     name: String, // "ExampleClient"
@@ -681,10 +824,10 @@ pub struct McpResult {
     supported_versions: Option<&'static [&'static str]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<McpToolDefinition>>,
-    // Note that for know we will simply return an empty list of resources
+    // Note that for now we will simply return an empty list of resources
     #[serde(skip_serializing_if = "Option::is_none")]
     resources: Option<Vec<()>>,
-    // Note that for know we will simply return an empty list of prompt
+    // Note that for now we will simply return an empty list of prompt
     #[serde(skip_serializing_if = "Option::is_none")]
     prompts: Option<Vec<()>>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
