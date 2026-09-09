@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::ALL_ACTIONS;
@@ -23,7 +23,7 @@ fn generate_tenant_token(
         .unwrap()
 }
 
-static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "title": "Shazam!",
@@ -53,7 +53,7 @@ static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
-static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static NESTED_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "id": 852,
@@ -123,7 +123,7 @@ fn invalid_response(query_index: Option<usize>) -> Value {
     })
 }
 
-static ACCEPTED_KEYS_SINGLE: Lazy<Vec<Value>> = Lazy::new(|| {
+static ACCEPTED_KEYS_SINGLE: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         json!({
             "indexes": ["*"],
@@ -153,7 +153,7 @@ static ACCEPTED_KEYS_SINGLE: Lazy<Vec<Value>> = Lazy::new(|| {
     ]
 });
 
-static ACCEPTED_KEYS_BOTH: Lazy<Vec<Value>> = Lazy::new(|| {
+static ACCEPTED_KEYS_BOTH: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         json!({
             "indexes": ["*"],
@@ -183,7 +183,7 @@ static ACCEPTED_KEYS_BOTH: Lazy<Vec<Value>> = Lazy::new(|| {
     ]
 });
 
-static SINGLE_REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
+static SINGLE_REFUSED_KEYS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         // no search action
         json!({
@@ -215,7 +215,7 @@ static SINGLE_REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
     ]
 });
 
-static BOTH_REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
+static BOTH_REFUSED_KEYS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         // no search action
         json!({

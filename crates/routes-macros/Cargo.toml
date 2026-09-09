@@ -12,7 +12,7 @@ license.workspace = true
 proc-macro = true
 
 [dependencies]
-utoipa = { version = "5.4.0", features = [
+utoipa = { version = "5.5.0", features = [
     "actix_extras",
     "macros",
     "non_strict_integers",

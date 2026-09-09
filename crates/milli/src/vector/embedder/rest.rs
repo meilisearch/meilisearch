@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 
 use deserr::Deserr;
-use rand::Rng;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
 use serde::{Deserialize, Serialize};
@@ -503,7 +502,7 @@ where
         let retry_duration = retry_duration.min(data.max_retry_duration); // don't wait more than the max duration
 
         // randomly divide the retry duration by up to two
-        let retry_duration = retry_duration.mul_f32(rand::thread_rng().gen_range(0.5f32..=1.0f32));
+        let retry_duration = retry_duration.mul_f32(rand::random_range(0.5f32..=1.0f32));
 
         tracing::warn!("Attempt #{}, retrying after {}ms.", attempt, retry_duration.as_millis());
         std::thread::sleep(retry_duration);

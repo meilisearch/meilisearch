@@ -127,7 +127,7 @@ pub(crate) fn get_highest_level<'t, DC>(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt as _, SeedableRng};
     use roaring::RoaringBitmap;
 
     use crate::heed_codec::facet::OrderedF64Codec;
@@ -150,7 +150,7 @@ pub(crate) mod tests {
         let mut txn = index.env.write_txn().unwrap();
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
 
-        for key in std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128) {
+        for key in std::iter::from_fn(|| Some(rng.random_range(0..256))).take(128) {
             let mut bitmap = RoaringBitmap::new();
             bitmap.insert(key);
             bitmap.insert(key + 100);
@@ -178,7 +178,7 @@ pub(crate) mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         let keys =
-            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
+            std::iter::from_fn(|| Some(rng.random_range(0..256))).take(128).collect::<Vec<u32>>();
         for fid in 0..2 {
             for &key in &keys {
                 let mut bitmap = RoaringBitmap::new();
@@ -213,7 +213,7 @@ pub(crate) mod tests {
 
         let mut rng = rand::rngs::SmallRng::from_seed([0; 32]);
         let keys =
-            std::iter::from_fn(|| Some(rng.gen_range(0..256))).take(128).collect::<Vec<u32>>();
+            std::iter::from_fn(|| Some(rng.random_range(0..256))).take(128).collect::<Vec<u32>>();
         for fid in 0..2 {
             for &key in &keys {
                 let mut bitmap = RoaringBitmap::new();

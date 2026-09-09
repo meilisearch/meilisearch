@@ -1,12 +1,12 @@
 use meili_snap::snapshot;
 use meilisearch::Opt;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tempfile::TempDir;
 
 use crate::common::{default_settings, Server, Value, NESTED_DOCUMENTS};
 use crate::json;
 
-static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "title": "Shazam!",
