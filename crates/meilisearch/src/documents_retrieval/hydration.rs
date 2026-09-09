@@ -242,7 +242,13 @@ fn local_fetch_hydration_documents(
 
     let mut hydration_documents = HashMap::new();
     for (index_uid, docids) in hydration_docids {
-        let index = index_scheduler.user_index(index_uid.as_ref(), auth_filter)?;
+        let index = index_scheduler
+            .user_index(index_uid.as_ref(), auth_filter)
+            .map_err(ResponseError::from)
+            .map_err(|mut e| {
+                e.message = format!("When trying to open an hydration index: {}", e.message);
+                e
+            })?;
         let rtxn = index.read_txn()?;
         let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let document_maker = IndexDocumentMaker::new(&index, &rtxn, &fields_ids_map)?;

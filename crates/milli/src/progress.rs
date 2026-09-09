@@ -81,9 +81,9 @@ impl ProgressInstant {
     }
 }
 
-#[derive(Clone)]
 pub struct Progress {
     steps: Arc<RwLock<InnerProgress>>,
+    local_steps: InnerProgress,
     verbosity_mode: ProgressVerbosityMode,
     timestamp_mode: ProgressTimestampMode,
 }
@@ -119,6 +119,7 @@ impl Progress {
     fn new(verbosity_mode: ProgressVerbosityMode, timestamp_mode: ProgressTimestampMode) -> Self {
         Self {
             steps: Arc::new(RwLock::new(InnerProgress::default())),
+            local_steps: InnerProgress::default(),
             verbosity_mode,
             timestamp_mode,
         }
