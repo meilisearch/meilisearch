@@ -799,9 +799,9 @@ dependencies = [
 
 [[package]]
 name = "bumparaw-collections"
-version = "0.1.7"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34e44a2b18eed9c2756442a0a16bf95e91ae2130a5d79d12e4323c634ba37012"
+checksum = "70f48c7abe7cdda75e2cb117056d266560af98f750a8ea519ba1718178e512cb"
 dependencies = [
  "allocator-api2",
  "bitpacking",

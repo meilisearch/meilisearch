@@ -98,7 +98,7 @@ url = "2.5.8"
 hashbrown = "0.15.5"
 routes = { path = "../routes" }
 bumpalo = "3.20.3"
-bumparaw-collections = "0.1.7"
+bumparaw-collections = "0.2.0"
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.10"
 rustc-hash = "2.1.3"
