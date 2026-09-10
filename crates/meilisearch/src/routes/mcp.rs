@@ -14,7 +14,6 @@ use meilisearch_types::deserr::{DeserrError, DeserrJson, DeserrJsonError};
 use meilisearch_types::error::deserr_codes::BadRequest;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::keys::actions;
 use meilisearch_types::milli;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
@@ -23,7 +22,6 @@ use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
 use utoipa::{OpenApi as _, ToSchema};
 
 use crate::analytics::Analytics;
-use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::MeilisearchApi;
 use crate::search_queue::SearchQueue;
@@ -364,15 +362,28 @@ async fn mcp(
                     error: None,
                 }
             }
-            // TODO <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling>
-            Some(_unknown) => todo!("Unknown tool. What to do?"),
-            None => todo!("no params name. what should we do?"),
+            Some(unknown_tool_name) => McpResponse {
+                jsonrpc,
+                id,
+                result: None,
+                error: Some(McpError::unknow_tool(unknown_tool_name)),
+            },
+            None => McpResponse {
+                jsonrpc,
+                id,
+                result: None,
+                error: Some(McpError::invalid_params("missing tool name")),
+            },
         },
-        _otherwise => {
-            todo!("unwkown method: {_otherwise}")
-        }
+        unknow_method_name => McpResponse {
+            jsonrpc,
+            id,
+            result: None,
+            error: Some(McpError::unknow_method(unknow_method_name)),
+        },
     };
 
+    // TODO remove me
     eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
 
     Ok(HttpResponse::Ok().json(response))
@@ -861,9 +872,28 @@ impl fmt::Debug for McpToolDefinition {
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct McpError {
-    code: u64,
+    code: i64,
     message: String,
-    data: McpErrorData, // Can be any JSON value
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<McpErrorData>, // Can be any JSON value
+}
+
+impl McpError {
+    fn unknow_tool(invalid_tool_name: &str) -> McpError {
+        McpError { code: -32602, message: format!("Unknown tool: {invalid_tool_name}"), data: None }
+    }
+
+    fn unknow_method(unknow_method_name: &str) -> McpError {
+        McpError {
+            code: -32601,
+            message: format!("Unknow method: {unknow_method_name}"),
+            data: None,
+        }
+    }
+
+    fn invalid_params(message: &str) -> McpError {
+        McpError { code: -32602, message: format!("Invalid params: {message}"), data: None }
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
