@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
@@ -70,7 +71,7 @@ pub fn fill_cache(
     ascending: bool,
     target_point: [f64; 2],
     field_ids: &Option<[u16; 2]>,
-    rtree: &mut Option<RTree<GeoPoint>>,
+    rtree: &mut Option<Arc<RTree<GeoPoint>>>,
     geo_candidates: &RoaringBitmap,
     cached_sorted_docids: &mut VecDeque<(u32, [f64; 2])>,
 ) -> crate::Result<()> {
@@ -79,7 +80,7 @@ pub fn fill_cache(
     // lazily initialize the rtree if needed by the strategy, and cache it in `self.rtree`
     let rtree = if strategy.use_rtree(geo_candidates.len() as usize) {
         if let Some(rtree) = rtree.as_ref() {
-            // get rtree from cache
+            // get rtree from per-search cache (already an Arc shared with Index)
             Some(rtree)
         } else {
             let rtree2 = index.geo_rtree(txn)?.expect("geo candidates but no rtree");
@@ -141,7 +142,7 @@ pub fn next_bucket(
     ascending: bool,
     target_point: [f64; 2],
     field_ids: &Option<[u16; 2]>,
-    rtree: &mut Option<RTree<GeoPoint>>,
+    rtree: &mut Option<Arc<RTree<GeoPoint>>>,
     cached_sorted_docids: &mut VecDeque<(u32, [f64; 2])>,
     geo_candidates: &RoaringBitmap,
     parameter: GeoSortParameter,
