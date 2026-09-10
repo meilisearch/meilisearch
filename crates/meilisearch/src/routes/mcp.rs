@@ -17,12 +17,12 @@ use meilisearch_types::error::Code::BadParameter;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Number;
 use utoipa::openapi::path::Operation;
 use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref, Schema};
 use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
-use utoipa::{OpenApi as _, ToSchema};
+use utoipa::{OpenApi as _, PartialSchema, ToSchema};
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
@@ -945,19 +945,14 @@ impl McpResult {
             },
             {
                 // describe index
-                let mut schemas = Vec::new();
-                <DescribeIndex as ToSchema>::schemas(&mut schemas);
+                let components = MEILISEARCH_OPEN_API
+                    .components
+                    .as_ref()
+                    .context("retrieving the Meilisearch components")?;
+                let ref_or_schema = <DescribeIndex as PartialSchema>::schema();
 
-                let mut properties = ObjectBuilder::new();
-                for (property_name, schema) in schemas {
-                    let schema = match schema {
-                        RefOr::Ref(_) => unreachable!(),
-                        RefOr::T(schema) => schema,
-                    };
-                    properties = properties.property(&property_name, schema);
-                }
-
-                let schema = Schema::from(properties);
+                let schema = clean_refs_from_schema(components, ref_or_schema)
+                    .context("cleaning the refs from the schema")?;
 
                 McpToolDefinition {
                     name: tool_name::DESCRIBE_INDEX.to_string(),
