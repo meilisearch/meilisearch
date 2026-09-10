@@ -492,6 +492,10 @@ where
         // Once we merged all of the spilled bitmaps we must also
         // fetch the entries from the non-spilled entries (the HashMaps).
         for (source_id, map) in maps.iter_mut() {
+            debug_assert!(
+                !(map.get_mut(first_key).is_some() && first_entry.source_id == *source_id),
+                "A thread should not have spiled a key that has been inserted in the cache"
+            );
             if first_entry.source_id != *source_id {
                 if let Some(new) = map.get_mut(first_key) {
                     output.union_and_clear_bbbul(new);
