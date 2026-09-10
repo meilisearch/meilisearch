@@ -32,7 +32,7 @@ byte-unit = { version = "5.2.5", features = ["serde"] }
 bytes = "1.12.1"
 bumpalo = "3.20.3"
 clap = { version = "4.6.6", features = ["derive", "env"] }
-crossbeam-channel = "0.5.16"
+crossbeam-channel = "0.5.17"
 deserr = { version = "0.6.4", features = ["actix-web"] }
 dump = { path = "../dump" }
 either = "1.17.0"

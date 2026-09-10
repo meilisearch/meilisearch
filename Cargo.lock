@@ -1500,9 +1500,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
+checksum = "e71406cd8807725f7ac2f999a4cdd32e98f829fdf65f528343cebf945e41df1e"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-deque",
@@ -1513,9 +1513,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.16"
+version = "0.5.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+checksum = "98b0cc327b5bc766e7fda9c9260cc0fa81b43a8e240440422dff70788e3f9ef1"
 dependencies = [
  "crossbeam-utils",
 ]
