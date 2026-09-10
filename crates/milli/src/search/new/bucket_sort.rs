@@ -7,7 +7,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::{
     apply_distinct_rule, distinct_fid, distinct_single_docid, DistinctOutput,
 };
-use crate::{merge_positioned_hits_into_page, Deadline, PinDoc, Result};
+use crate::{Deadline, Result};
 
 pub struct BucketSortOutput {
     pub docids: Vec<u32>,
@@ -34,7 +34,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
-    pins: Vec<PinDoc>,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -42,32 +41,20 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn, ctx.fields_ids_map)?;
 
-    // When pins are present we need the organic prefix up to the end of the
-    // requested page. Injecting the surviving pins into that prefix and slicing
-    // afterwards preserves the target positions and naturally "pumps" pins
-    // forward when there are fewer organic results than the requested limit.
-    let (ranked_from, ranked_length) =
-        if pins.is_empty() { (from, length) } else { (0, from.saturating_add(length)) };
-
-    if universe.len() < ranked_from as u64 {
-        return Ok(inject_pins(
-            pins,
-            from,
-            length,
-            BucketSortOutput {
-                docids: vec![],
-                scores: vec![],
-                all_candidates: universe.clone(),
-                degraded: false,
-            },
-        ));
+    if universe.len() < from as u64 {
+        return Ok(BucketSortOutput {
+            docids: vec![],
+            scores: vec![],
+            all_candidates: universe.clone(),
+            degraded: false,
+        });
     }
     if ranking_rules.is_empty() {
         if let Some(distinct_fid) = distinct_fid {
             let mut excluded = RoaringBitmap::new();
             let mut results = vec![];
             for docid in universe.iter() {
-                if results.len() >= ranked_from + ranked_length {
+                if results.len() >= from + length {
                     break;
                 }
                 if excluded.contains(docid) {
@@ -83,36 +70,26 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             // drain the results of the skipped elements
             // this **must** be done **after** writing the entire results in `all_candidates` to ensure
             // e.g. estimatedTotalHits is correct.
-            if results.len() >= ranked_from {
-                results.drain(..ranked_from);
+            if results.len() >= from {
+                results.drain(..from);
             } else {
                 results.clear();
             }
 
-            return Ok(inject_pins(
-                pins,
-                from,
-                length,
-                BucketSortOutput {
-                    scores: vec![Default::default(); results.len()],
-                    docids: results,
-                    all_candidates,
-                    degraded: false,
-                },
-            ));
+            return Ok(BucketSortOutput {
+                scores: vec![Default::default(); results.len()],
+                docids: results,
+                all_candidates,
+                degraded: false,
+            });
         } else {
-            let docids: Vec<u32> = universe.iter().skip(ranked_from).take(ranked_length).collect();
-            return Ok(inject_pins(
-                pins,
-                from,
-                length,
-                BucketSortOutput {
-                    scores: vec![Default::default(); docids.len()],
-                    docids,
-                    all_candidates: universe.clone(),
-                    degraded: false,
-                },
-            ));
+            let docids: Vec<u32> = universe.iter().skip(from).take(length).collect();
+            return Ok(BucketSortOutput {
+                scores: vec![Default::default(); docids.len()],
+                docids,
+                all_candidates: universe.clone(),
+                degraded: false,
+            });
         };
     }
 
@@ -167,8 +144,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         ($candidates:expr) => {
             maybe_add_to_results(
                 ctx,
-                ranked_from,
-                ranked_length,
+                from,
+                length,
                 logger,
                 &mut valid_docids,
                 &mut valid_scores,
@@ -187,7 +164,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     let max_len_to_evaluate =
         match (max_total_hits, exhaustive_number_hits && ranking_score_threshold.is_some()) {
             (Some(max_total_hits), true) => max_total_hits,
-            _ => ranked_length,
+            _ => length,
         };
 
     while valid_docids.len() < max_len_to_evaluate {
@@ -234,17 +211,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                         ranking_rule_scores.pop();
 
                         if cur_ranking_rule_index == 0 {
-                            return Ok(inject_pins(
-                                pins,
-                                from,
-                                length,
-                                BucketSortOutput {
-                                    scores: valid_scores,
-                                    docids: valid_docids,
-                                    all_candidates,
-                                    degraded: true,
-                                },
-                            ));
+                            return Ok(BucketSortOutput {
+                                scores: valid_scores,
+                                docids: valid_docids,
+                                all_candidates,
+                                degraded: true,
+                            });
                         }
 
                         // This is a copy/paste/adapted of the ugly back!() macro
@@ -299,7 +271,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
         if cur_ranking_rule_index == ranking_rules_len - 1
             || (scoring_strategy == ScoringStrategy::Skip && next_bucket.candidates.len() <= 1)
-            || cur_offset + (next_bucket.candidates.len() as usize) < ranked_from
+            || cur_offset + (next_bucket.candidates.len() as usize) < from
             || is_below_threshold
         {
             if is_below_threshold {
@@ -329,57 +301,12 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         )?;
     }
 
-    Ok(inject_pins(
-        pins,
-        from,
-        length,
-        BucketSortOutput {
-            docids: valid_docids,
-            scores: valid_scores,
-            all_candidates,
-            degraded: false,
-        },
-    ))
-}
-
-/// Inject all surviving pins into the organic prefix, then slice the requested
-/// page out of the combined list using a linear merge. This naturally pumps
-/// pins forward when there are fewer organic results than the requested limit
-/// without repeatedly shifting the organic hits vector.
-fn inject_pins(
-    pins: Vec<PinDoc>,
-    from: usize,
-    length: usize,
-    output: BucketSortOutput,
-) -> BucketSortOutput {
-    if pins.is_empty() {
-        return output;
-    }
-
-    let BucketSortOutput { docids, scores, mut all_candidates, degraded } = output;
-
-    for pin in &pins {
-        all_candidates.insert(pin.id);
-    }
-
-    let organic_hits = docids.into_iter().zip(scores).collect();
-    let merged_hits = merge_positioned_hits_into_page(
-        pins.len(),
-        pins,
-        from,
-        length,
-        organic_hits,
-        |pin| pin.position,
-        |pin| {
-            (
-                pin.id,
-                vec![ScoreDetails::Pin { position: pin.position, precedence: pin.precedence.0 }],
-            )
-        },
-    );
-    let (merged_docids, merged_scores): (Vec<_>, Vec<_>) = merged_hits.into_iter().unzip();
-
-    BucketSortOutput { docids: merged_docids, scores: merged_scores, all_candidates, degraded }
+    Ok(BucketSortOutput {
+        docids: valid_docids,
+        scores: valid_scores,
+        all_candidates,
+        degraded: false,
+    })
 }
 
 /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`

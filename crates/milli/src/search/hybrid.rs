@@ -117,12 +117,13 @@ impl ScoreWithRatioResult {
 
         for results in [&mut keyword_results.document_scores, &mut vector_results.document_scores] {
             results.retain(|(doc_id, (scores, _))| {
-                if let Some(ScoreDetails::Pin { position, precedence }) = scores.first() {
+                if let Some(ScoreDetails::Pin { position, precedence, rule_uid }) = scores.first() {
                     if pinned_doc_ids.insert(*doc_id) {
                         pins.push(PinDoc {
                             position: *position,
                             precedence: Precedence(*precedence),
                             id: *doc_id,
+                            rule_uid: rule_uid.clone(),
                         });
                     }
                     false
@@ -261,7 +262,11 @@ fn merge_pins_into_page(
         |pin| {
             (
                 pin.id,
-                vec![ScoreDetails::Pin { position: pin.position, precedence: pin.precedence.0 }],
+                vec![ScoreDetails::Pin {
+                    position: pin.position,
+                    precedence: pin.precedence.0,
+                    rule_uid: pin.rule_uid.clone(),
+                }],
             )
         },
     );

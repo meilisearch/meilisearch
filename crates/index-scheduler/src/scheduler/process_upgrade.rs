@@ -1,7 +1,8 @@
 use meilisearch_types::index_uid::{DsrIndex, UserIndex};
-use meilisearch_types::milli;
+use meilisearch_types::milli::dynamic_search_rules::upgrade_dsrs;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
-use meilisearch_types::milli::update::upgrade::must_upgrade_dsr;
+use meilisearch_types::milli::update::upgrade::must_upgrade_dsr_settings;
+use meilisearch_types::milli::{self, MustStopProcessing};
 
 use crate::index_mapper::IndexUid as _;
 use crate::processing::UpgradeIndexesProgress;
@@ -61,56 +62,84 @@ impl IndexScheduler {
             }
         }
 
+        self.process_dsr_upgrade(db_version, progress, must_stop_processing)?;
+
+        Ok(())
+    }
+
+    fn process_dsr_upgrade(
+        &self,
+        db_version: (u32, u32, u32),
+        progress: Progress,
+        must_stop_processing: &MustStopProcessing,
+    ) -> Result<()> {
+        let err = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_string()));
+        let rtxn = self.env.read_txn()?;
+        let index = match self.index_mapper.index(&rtxn, DsrIndex) {
+            Ok(dsr_index) => dsr_index,
+            Err(Error::IndexNotFound(_)) => return Ok(()),
+            Err(err) => return Err(err),
+        };
+
         progress.update_progress(UpgradeIndexesProgress::UpgradingDsrIndex);
 
-        'dsr_update: {
-            let err = |err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_string()));
-            let rtxn = self.env.read_txn()?;
-            let index = match self.index_mapper.index(&rtxn, DsrIndex) {
-                Ok(dsr_index) => dsr_index,
-                Err(Error::IndexNotFound(_)) => break 'dsr_update,
-                Err(err) => return Err(err),
-            };
+        // 1. upgrade index structure
+        let mut index_wtxn = index.write_txn()?;
+
+        // get initial version **before** upgrade, which overwrites it
+        let initial_version = index.get_version(&index_wtxn)?.unwrap_or(db_version);
+
+        let regen_stats = milli::update::upgrade::upgrade(
+            &mut index_wtxn,
+            &index,
+            db_version,
+            milli::update::upgrade::UpgradeParams {
+                must_stop_processing,
+                progress: &progress,
+                shards: None,
+            },
+        )
+        .map_err(err)?;
+
+        if regen_stats {
+            let stats = crate::index_mapper::IndexStats::new(&index, &index_wtxn).map_err(err)?;
+            index_wtxn.commit()?;
+
+            // Release wtxn as soon as possible because it stops us from registering tasks
+            let mut index_schd_wtxn = self.env.write_txn()?;
+            self.index_mapper.store_stats_of(&mut index_schd_wtxn, DsrIndex, &stats)?;
+            index_schd_wtxn.commit()?;
+        } else {
+            index_wtxn.commit()?;
+        }
+
+        // 2. upgrade DSR index settings
+        if must_upgrade_dsr_settings(initial_version).map_err(err)? {
+            tracing::warn!(
+                "Upgrading DSR settings: rollbacking the DSR index will not be possible."
+            );
+
             let mut index_wtxn = index.write_txn()?;
 
-            // get initial version **before** upgrade, which overwrites it
-            let initial_version = index.get_version(&index_wtxn)?.unwrap_or(db_version);
-
-            let regen_stats = milli::update::upgrade::upgrade(
+            self.apply_dsr_settings(
                 &mut index_wtxn,
                 &index,
-                db_version,
-                milli::update::upgrade::UpgradeParams {
-                    must_stop_processing,
-                    progress: &progress,
-                    shards: shards.as_ref(),
-                },
-            )
-            .map_err(err)?;
+                &progress,
+                must_stop_processing,
+                Default::default(),
+            )?;
 
-            if must_upgrade_dsr(initial_version).map_err(err)? {
-                self.apply_dsr_settings(
-                    &mut index_wtxn,
-                    &index,
-                    &progress,
-                    must_stop_processing,
-                    Default::default(),
-                )?;
-            }
-
-            if regen_stats {
-                let stats =
-                    crate::index_mapper::IndexStats::new(&index, &index_wtxn).map_err(err)?;
-                index_wtxn.commit()?;
-
-                // Release wtxn as soon as possible because it stops us from registering tasks
-                let mut index_schd_wtxn = self.env.write_txn()?;
-                self.index_mapper.store_stats_of(&mut index_schd_wtxn, DsrIndex, &stats)?;
-                index_schd_wtxn.commit()?;
-            } else {
-                index_wtxn.commit()?;
-            }
+            index_wtxn.commit()?;
         }
+
+        upgrade_dsrs(
+            &index,
+            &progress,
+            self.indexer_config(),
+            must_stop_processing,
+            self.ip_policy(),
+        )
+        .map_err(err)?;
 
         Ok(())
     }

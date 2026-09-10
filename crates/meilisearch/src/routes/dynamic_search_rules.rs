@@ -14,7 +14,8 @@ use meilisearch_types::error::deserr_codes::{
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::SearchResult;
+use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::{Filter, IndexFilter, SearchResult};
 use meilisearch_types::tasks::{DsrUpdate, KindWithContent};
 use serde::Serialize;
 
@@ -134,12 +135,15 @@ impl Aggregate for DeleteDynamicSearchRuleAnalytics {
                             "end": "2025-11-28T23:59:59Z"
                         }
                     },
-                    "actions": [
-                        {
-                            "selector": { "indexUid": "products", "id": "123" },
-                            "action": { "type": "pin", "position": 1 }
-                        }
-                    ]
+                    "actions": {
+                        "pin": [
+                            {
+                                "indexUid": "products",
+                                "id": "123",
+                                "position": 1
+                            }
+                        ]
+                    }
                 }
             ],
             "offset": 0,
@@ -196,7 +200,7 @@ async fn list_rules(
     } = dsrs.search_in_description_and_words(query, &rule_ids, limit, offset)?;
 
     let rules = dsrs
-        .rules_from_rule_ids(rule_ids)
+        .rules_from_rule_ids(rule_ids)?
         .map_ok(|doc| {
             DynamicSearchRule::try_from_meili_doc(
                 doc,
@@ -234,12 +238,15 @@ async fn list_rules(
                     "end": "2025-11-28T23:59:59Z"
                 }
             },
-            "actions": [
-                {
-                    "selector": { "indexUid": "products", "id": "123" },
-                    "action": { "type": "pin", "position": 1 }
-                }
-            ]
+            "actions": {
+                "pin": [
+                    {
+                        "indexUid": "products",
+                        "id": "123",
+                        "position": 1
+                    }
+                ]
+            }
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The Authorization header is missing. It must use the bearer authorization method.",
@@ -312,12 +319,27 @@ async fn update_or_create_rule(
     index_scheduler
         .features()
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
+
+    let rule = body.into_inner();
+
+    check_rule(&rule)?;
+
     let network = index_scheduler.network();
 
     let CustomMetadataQuery { custom_metadata } = query.into_inner();
 
     let uid = uid.into_inner();
-    let rule = body.into_inner();
+
+    if uid.as_str() == meilisearch_types::milli::dynamic_search_rules::METADATA_UID {
+        return Err(ResponseError::from_msg(
+            format!(
+                "`{}` is reserved and cannot be used as a rule uid. Use a different uid.",
+                uid.as_str()
+            ),
+            Code::InvalidDynamicSearchRuleUid,
+        ));
+    }
+
     let task_network = task_network_and_check_leader_and_version(&req, &network)?;
 
     let mut task = {
@@ -339,6 +361,31 @@ async fn update_or_create_rule(
     tracing::debug!(returns = ?task, "Update DSR");
 
     Ok(HttpResponse::Accepted().json(task))
+}
+
+fn check_rule(rule: &DynamicSearchRuleUpdateRequest) -> Result<(), ResponseError> {
+    if let Setting::Set(actions) = &rule.actions {
+        for (action_index, scale) in actions.scale.iter().enumerate() {
+            let Some(filter) = &scale.filter else {
+                continue;
+            };
+            let Some(filter) = Filter::from_json(filter)? else {
+                continue;
+            };
+
+            let _ = IndexFilter::from_filter_without_foreign(filter).map_err(|(fid, _)| {
+                let error = fid.to_external_error(
+                    "filter condition `_foreign` is not supported in dynamic search rule actions.",
+                );
+                ResponseError::from_msg(
+                    format!("invalid .actions.scale[{action_index}]: {error}"),
+                    Code::InvalidDynamicSearchRuleActions,
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Delete a search rule

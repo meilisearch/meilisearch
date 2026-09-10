@@ -43,6 +43,7 @@ time = { version = "0.3.55", features = [
     "parsing",
     "macros",
 ] }
+tracing = "0.1.44"
 urlencoding = "2.1.3"
 utoipa = { version = "5.5.0", features = [
     "macros",
@@ -53,6 +54,7 @@ utoipa = { version = "5.5.0", features = [
     "openapi_extensions",
 ] }
 uuid = { version = "1.24.0", features = ["serde", "v4"] }
+wip = "0.2.0"
 
 [dev-dependencies]
 # fixed version due to format breakages in v1.40

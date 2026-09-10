@@ -887,7 +887,7 @@ async fn foreign_filter_rejects_nested_foreign() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Nested foreign filters are not supported\n10:16 _foreign(author, id = a1 AND _foreign(related_authors, id = a2))",
+      "message": "Nested foreign filters are not supported\n39:54 _foreign(related_authors, id = a2))",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -898,7 +898,7 @@ async fn foreign_filter_rejects_nested_foreign() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
     {
-      "message": "Nested foreign filters are not supported\n10:16 _foreign(author, id = a1 AND _foreign(related_authors, id = a2))",
+      "message": "Nested foreign filters are not supported\n39:54 _foreign(related_authors, id = a2))",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
