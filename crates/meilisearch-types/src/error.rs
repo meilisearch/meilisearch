@@ -645,7 +645,7 @@ FacetSearchDisabled                            , InvalidRequest       , BAD_REQU
 r#"The [`/facet-search`](/reference/api/facet-search/search-for-facet-values) route has been queried while [the `facetSearch` index setting](/reference/api/settings/get-facetsearch) is set to `false`."#;
 
 InvalidSearchVector                            , InvalidRequest       , BAD_REQUEST,
-"The [`vector`](/reference/api/search/search-with-post#body-vector) parameter is invalid. It should be an array of numbers." ;
+"The [`vector`](/reference/api/search/search-with-post#body-vector-one-of-0) parameter is invalid. It should be an array of numbers." ;
 
 InvalidSearchMedia                             , InvalidRequest       , BAD_REQUEST,
 "The value passed to [`media`](/reference/api/search/search-with-post#body-media) is not a valid JSON object." ;
@@ -696,7 +696,7 @@ InvalidSearchPersonalize                       , InvalidRequest       , BAD_REQU
  "The [`personalizeUserContext`](/reference/api/search/search-with-get#parameter-personalize-user-context) query parameter is invalid. It should be a string" ;
 
 InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST,
-"The search query contains non-`null` values for both [`media`](/reference/api/search/search-with-post#body-media) and [`vector`](/reference/api/search/search-with-post#body-vector). These two parameters are mutually exclusive, since `media` generates vector embeddings via the embedder configured in `hybrid`." ;
+"The search query contains non-`null` values for both [`media`](/reference/api/search/search-with-post#body-media) and [`vector`](/reference/api/search/search-with-post#body-vector-one-of-0). These two parameters are mutually exclusive, since `media` generates vector embeddings via the embedder configured in `hybrid`." ;
 
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST,
 "The value of [displayed attributes](/capabilities/full_text_search/how_to/configure_displayed_attributes#displayed-fields) is invalid. It should be an empty array, an array of strings, or set to `null`." ;
