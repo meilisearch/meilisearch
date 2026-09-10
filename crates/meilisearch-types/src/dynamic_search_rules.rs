@@ -133,7 +133,12 @@ impl DynamicSearchRule {
         };
 
         let actions = match doc.top_level_field(dsr_fields::ACTIONS)? {
-            Some(actions) => serde_json::from_str(actions.get()).map_err(to_milli_error)?,
+            Some(actions) => serde_json::from_str(actions.get())
+                // note: allow "corrupted" actions with a log, required during instance upgrade
+                .inspect_err(|err| {
+                    tracing::warn!("Could not deserialize action for rule `{uid}`: {err}")
+                })
+                .unwrap_or(Default::default()),
             None => Default::default(),
         };
 
