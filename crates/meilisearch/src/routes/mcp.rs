@@ -538,8 +538,8 @@ pub mod ttl_ms {
     pub const STATIC_RESULT: usize = QUICKLY_STALE; // TODO 86_400_000, // 24h
 }
 
-#[routes::request]
-#[derive(Debug, Clone, Deserialize)]
+#[routes::request(db)]
+#[derive(Debug, Clone)]
 /// Describes an index
 pub struct DescribeIndex {
     #[request(required)]
