@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use roaring::RoaringBitmap;
 use rstar::RTree;
@@ -18,7 +19,7 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
     ascending: bool,
     point: [f64; 2],
     field_ids: Option<[u16; 2]>,
-    rtree: Option<RTree<GeoPoint>>,
+    rtree: Option<Arc<RTree<GeoPoint>>>,
 
     cached_sorted_docids: VecDeque<(u32, [f64; 2])>,
     geo_candidates: RoaringBitmap,

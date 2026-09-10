@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
+use std::hash::{DefaultHasher, Hasher};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use cellulite::Cellulite;
 use charabia::Tokenizer;
@@ -125,6 +127,13 @@ pub mod db_name {
 }
 const NUMBER_OF_DBS: u32 = 27 + Cellulite::nb_dbs();
 
+/// In-memory cache of the deserialized geo RTree, keyed by a hash of the LMDB bytes.
+/// Concurrent searches share one `Arc` instead of each deserializing a full copy.
+struct CachedGeoRTree {
+    content_hash: u64,
+    rtree: Arc<RTree<GeoPoint>>,
+}
+
 #[derive(Clone)]
 pub struct Index {
     /// The LMDB environment which this index is associated with.
@@ -200,6 +209,9 @@ pub struct Index {
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
+
+    /// Shared deserialized geo RTree. Invalidated when the LMDB bytes change.
+    geo_rtree_cache: Arc<Mutex<Option<CachedGeoRTree>>>,
 }
 
 pub enum CreateOrOpen {
@@ -304,6 +316,7 @@ impl Index {
             shard_docids,
             cellulite,
             documents,
+            geo_rtree_cache: Arc::new(Mutex::new(None)),
         };
 
         if let CreateOrOpen::Create { shards } = create_or_open {
@@ -730,6 +743,8 @@ impl Index {
         wtxn: &mut RwTxn<'_>,
         rtree: &RTree<GeoPoint>,
     ) -> heed::Result<()> {
+        // Drop any cached tree; the next read will re-hydrate from LMDB.
+        *self.geo_rtree_cache.lock().unwrap() = None;
         self.main.remap_types::<Str, SerdeBincode<RTree<GeoPoint>>>().put(
             wtxn,
             main_key::GEO_RTREE_KEY,
@@ -739,19 +754,45 @@ impl Index {
 
     /// Delete the `rtree` which associates coordinates to documents ids.
     pub(crate) fn delete_geo_rtree(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        *self.geo_rtree_cache.lock().unwrap() = None;
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::GEO_RTREE_KEY)
     }
 
     /// Returns the `rtree` which associates coordinates to documents ids.
-    pub fn geo_rtree(&self, rtxn: &RoTxn<'_>) -> Result<Option<RTree<GeoPoint>>> {
-        match self
+    ///
+    /// Concurrent callers share a single deserialized `Arc` when the LMDB payload
+    /// is unchanged (content-addressed cache). Writers that mutate the tree must
+    /// clone out of the `Arc` before modifying it.
+    pub fn geo_rtree(&self, rtxn: &RoTxn<'_>) -> Result<Option<Arc<RTree<GeoPoint>>>> {
+        let Some(bytes) = self
             .main
-            .remap_types::<Str, SerdeBincode<RTree<GeoPoint>>>()
+            .remap_types::<Str, Bytes>()
             .get(rtxn, main_key::GEO_RTREE_KEY)?
+        else {
+            *self.geo_rtree_cache.lock().unwrap() = None;
+            return Ok(None);
+        };
+
+        let mut hasher = DefaultHasher::new();
+        hasher.write(bytes);
+        let content_hash = hasher.finish();
+
         {
-            Some(rtree) => Ok(Some(rtree)),
-            None => Ok(None),
+            let cache = self.geo_rtree_cache.lock().unwrap();
+            if let Some(cached) = cache.as_ref() {
+                if cached.content_hash == content_hash {
+                    return Ok(Some(Arc::clone(&cached.rtree)));
+                }
+            }
         }
+
+        let rtree: RTree<GeoPoint> = bincode::deserialize(bytes)?;
+        let rtree = Arc::new(rtree);
+        *self.geo_rtree_cache.lock().unwrap() = Some(CachedGeoRTree {
+            content_hash,
+            rtree: Arc::clone(&rtree),
+        });
+        Ok(Some(rtree))
     }
 
     /* geo faceted */
@@ -1953,6 +1994,7 @@ impl Index {
             shard_docids,
             cellulite,
             documents,
+            geo_rtree_cache: _,
         } = self;
 
         fn compute_size(stats: DatabaseStat) -> usize {

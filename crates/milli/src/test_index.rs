@@ -1235,6 +1235,32 @@ fn bug_3007() {
 }
 
 #[test]
+fn geo_rtree_cache_returns_shared_arc() {
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|settings| {
+            settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                RESERVED_GEO_FIELD_NAME.to_string(),
+            )]);
+        })
+        .unwrap();
+    index
+        .add_documents(documents!([
+            { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 0 } },
+            { "id": 1, RESERVED_GEO_FIELD_NAME: { "lat": 10, "lng": 10 } },
+        ]))
+        .unwrap();
+
+    let rtxn = index.read_txn().unwrap();
+    let first = index.geo_rtree(&rtxn).unwrap().expect("rtree present");
+    let second = index.geo_rtree(&rtxn).unwrap().expect("rtree present");
+    assert!(
+        std::sync::Arc::ptr_eq(&first, &second),
+        "second geo_rtree load must reuse the cached Arc"
+    );
+}
+
 fn unexpected_extra_fields_in_geo_field() {
     let index = TempIndex::new();
 

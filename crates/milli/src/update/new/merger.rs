@@ -26,7 +26,7 @@ pub fn merge_and_send_rtree<'extractor>(
     geo_sender: GeoSender<'_, '_>,
     must_stop_processing: &MustStopProcessing,
 ) -> Result<()> {
-    let mut rtree = index.geo_rtree(rtxn)?.unwrap_or_default();
+    let mut rtree = index.geo_rtree(rtxn)?.map(|arc| (*arc).clone()).unwrap_or_default();
     let mut faceted = index.geo_faceted_documents_ids(rtxn)?;
 
     for data in datastore {

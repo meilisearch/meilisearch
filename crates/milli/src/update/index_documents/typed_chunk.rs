@@ -592,7 +592,7 @@ pub(crate) fn write_typed_chunk_into_index(
             }
             let merger = builder.build();
 
-            let mut rtree = index.geo_rtree(wtxn)?.unwrap_or_default();
+            let mut rtree = index.geo_rtree(wtxn)?.map(|arc| (*arc).clone()).unwrap_or_default();
             let mut geo_faceted_docids = index.geo_faceted_documents_ids(wtxn)?;
 
             let mut iter = merger.into_stream_merger_iter()?;
