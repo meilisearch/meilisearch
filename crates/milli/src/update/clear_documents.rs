@@ -52,6 +52,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             cellulite,
             documents,
             shard_docids: _,
+            ..
         } = self.index;
 
         let empty_roaring = RoaringBitmap::default();

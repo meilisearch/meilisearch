@@ -786,7 +786,11 @@ impl Index {
             }
         }
 
-        let rtree: RTree<GeoPoint> = bincode::deserialize(bytes)?;
+        let rtree: RTree<GeoPoint> = bincode::deserialize(bytes).map_err(|_| {
+            crate::Error::InternalError(InternalError::Serialization(
+                crate::error::SerializationError::Decoding { db_name: Some("main") },
+            ))
+        })?;
         let rtree = Arc::new(rtree);
         *self.geo_rtree_cache.lock().unwrap() = Some(CachedGeoRTree {
             content_hash,
