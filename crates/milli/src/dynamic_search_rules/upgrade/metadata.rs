@@ -39,7 +39,7 @@ impl Metadata {
         Ok(Self { version })
     }
 
-    pub const LAST_VERSION_WITHOUT_METADATA: (u32, u32, u32) = (1, 54, 0);
+    pub const LAST_VERSION_WITHOUT_METADATA: (u32, u32, u32) = (1, 53, 2);
 }
 
 /// Creates the metadata for the specified DSR index with the specified version triple.
