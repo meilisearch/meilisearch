@@ -5,6 +5,7 @@ use std::{fmt, mem};
 
 use actix_web::web::{self, Data};
 use actix_web::{FromRequest, HttpRequest, HttpResponse};
+use anyhow::Context as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{Deserr, IntoValue, Value, ValuePointerRef};
 use either::Either;
@@ -12,11 +13,13 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::deserr::{DeserrError, DeserrJson, DeserrJsonError};
 use meilisearch_types::error::deserr_codes::BadRequest;
+use meilisearch_types::error::Code::BadParameter;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
+use utoipa::openapi::path::Operation;
 use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref, Schema};
 use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
 use utoipa::{OpenApi as _, ToSchema};
@@ -27,6 +30,25 @@ use crate::routes::MeilisearchApi;
 use crate::search_queue::SearchQueue;
 
 static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::openapi);
+
+macro_rules! r#try_or_internal_error {
+    ($jsonrpc:ident, $id:ident, $expr:expr $(,)?) => {
+        try_or_internal_error!($jsonrpc, $id, $expr, internal_error)
+    };
+    ($jsonrpc:ident, $id:ident, $expr:expr, $error_type:ident $(,)?) => {
+        match $expr {
+            ::std::result::Result::Ok(val) => val,
+            ::std::result::Result::Err(err) => {
+                return Ok(::actix_web::HttpResponse::Ok().json(McpResponse {
+                    $jsonrpc,
+                    $id,
+                    result: None,
+                    error: Some(McpError::$error_type(err)),
+                }));
+            }
+        }
+    };
+}
 
 #[routes::routes(
     tag = "MCP connection",
@@ -95,7 +117,13 @@ async fn mcp(
             McpResponse { jsonrpc, id, result: Some(McpResult::discover()), error: None }
         }
         method::TOOLS_LIST => {
-            McpResponse { jsonrpc, id, result: Some(McpResult::list_tools()), error: None }
+            let list_tools = try_or_internal_error!(
+                jsonrpc,
+                id,
+                McpResult::list_tools(),
+                internal_error_from_anyhow,
+            );
+            McpResponse { jsonrpc, id, result: Some(list_tools), error: None }
         }
         method::RESOURCES_LIST => {
             McpResponse { jsonrpc, id, result: Some(McpResult::empty_resources()), error: None }
@@ -105,16 +133,24 @@ async fn mcp(
         }
         method::TOOLS_CALL => match params.name.as_deref() {
             Some(tool_name::SEARCH_IN_INDEXES) => {
-                // request
-                // TODO it cannot fail, right? right!?
-                let query = serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
-                let mut payload = actix_web::dev::Payload::from(query);
+                let query = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    serde_json::to_vec(&params.arguments.unwrap_or_default())
+                );
 
-                // // TODO don't unwrap
-                let guarded_index_scheduler =
-                    GuardedData::from_request(&request, &mut payload).await.unwrap();
-                // TODO don't unwrap
-                let params = AwebJson::from_request(&request, &mut payload).await.unwrap();
+                let mut payload = actix_web::dev::Payload::from(query);
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+
+                let params = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    AwebJson::from_request(&request, &mut payload).await
+                );
 
                 let result = super::multi_search::multi_search_with_post(
                     guarded_index_scheduler,
@@ -129,56 +165,98 @@ async fn mcp(
                 match result {
                     Ok(response) => {
                         let body = response.into_body();
-                        // TODO do not unwrap
-                        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn
+                        );
                         let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // TODO this blocks and would have been better to have a serde_json
-                        //      RawValue to avoid allocating too much and simply pass through
-                        let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        // Note: This blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let content = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
+
                         McpResponse {
                             jsonrpc,
                             id,
                             result: Some(McpResult::from_content_text_and_ttl(
-                                content, text, 0, // immediately stale
+                                content,
+                                text,
+                                ttl_ms::IMMEDIATELY_STALE,
                             )),
                             error: None,
                         }
                     }
                     Err(response) => {
                         tracing::error!("{response:?}");
-                        McpResponse {
+                        let result = try_or_internal_error!(
                             jsonrpc,
                             id,
-                            result: Some(McpResult::from_response_error(response).unwrap()),
-                            error: None,
-                        }
+                            McpResult::from_response_error(response)
+                        );
+                        McpResponse { jsonrpc, id, result: Some(result), error: None }
                     }
                 }
             }
             Some(tool_name::FACET_SEARCH) => {
-                // request
-                // TODO it cannot fail, right? right!?
                 let index_uid = match params.arguments.as_mut() {
                     Some(serde_json::Value::Object(object)) => {
                         // We remove the extra indexUid parameter to make sure the route accepts the payload
-                        object
-                            .remove("indexUid")
-                            .expect("missing indexUid parameter")
-                            .as_str()
-                            .unwrap()
-                            .to_owned()
+                        let index_uid = match object.remove("indexUid") {
+                            Some(uid) => uid,
+                            None => {
+                                return Ok(HttpResponse::Ok().json(McpResponse {
+                                    jsonrpc,
+                                    id,
+                                    result: None,
+                                    error: Some(McpError::invalid_params("missing indexUid")),
+                                }))
+                            }
+                        };
+                        match index_uid.as_str() {
+                            Some(s) => s.to_owned(),
+                            None => {
+                                return Ok(HttpResponse::Ok().json(McpResponse {
+                                    jsonrpc,
+                                    id,
+                                    result: None,
+                                    error: Some(McpError::invalid_params(
+                                        "expected the indexUid to be a string",
+                                    )),
+                                }))
+                            }
+                        }
                     }
-                    _ => panic!("Invalid arguments: expected Object found something else"),
+                    _ => {
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError::invalid_params("expected JSON Object")),
+                        }))
+                    }
                 };
 
-                let query = serde_json::to_vec(&params.arguments.unwrap_or_default()).unwrap();
+                let query = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    serde_json::to_vec(&params.arguments.unwrap_or_default())
+                );
                 let mut payload = actix_web::dev::Payload::from(query);
-
-                // TODO don't unwrap
-                let guarded_index_scheduler =
-                    GuardedData::from_request(&request, &mut payload).await.unwrap();
-                // TODO don't unwrap
-                let params = AwebJson::from_request(&request, &mut payload).await.unwrap();
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+                let params = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    AwebJson::from_request(&request, &mut payload).await
+                );
 
                 let result = super::indexes::facet_search::search(
                     guarded_index_scheduler,
@@ -193,29 +271,39 @@ async fn mcp(
                 match result {
                     Ok(response) => {
                         let body = response.into_body();
-                        // TODO do not unwrap
-                        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn,
+                        );
                         let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // TODO this blocks and would have been better to have a serde_json
-                        //      RawValue to avoid allocating too much and simply pass through
-                        let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        // Note: This blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let content = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
                         McpResponse {
                             jsonrpc,
                             id,
                             result: Some(McpResult::from_content_text_and_ttl(
-                                content, text, 0, // immediately stale
+                                content,
+                                text,
+                                ttl_ms::IMMEDIATELY_STALE,
                             )),
                             error: None,
                         }
                     }
                     Err(response) => {
                         tracing::error!("{response:?}");
-                        McpResponse {
+                        let result = try_or_internal_error!(
                             jsonrpc,
                             id,
-                            result: Some(McpResult::from_response_error(response).unwrap()),
-                            error: None,
-                        }
+                            McpResult::from_response_error(response),
+                        );
+                        McpResponse { jsonrpc, id, result: Some(result), error: None }
                     }
                 }
             }
@@ -232,80 +320,107 @@ async fn mcp(
                 let pagination = match params.arguments.as_mut() {
                     Some(serde_json::Value::Object(object)) => {
                         // We remove the extra indexUid parameter to make sure the route accepts the payload
-                        // TODO better error message in case the time is invalid
                         let offset = object.remove("offset").and_then(|off| off.as_u64());
                         let limit = object.remove("limit").and_then(|limit| limit.as_u64());
                         Pagination { offset, limit }
                     }
-                    _ => panic!("Invalid arguments: expected Object found something else"),
+                    _ => {
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError::invalid_params("expected JSON Object")),
+                        }))
+                    }
                 };
 
-                // TODO don't unwrap
                 let mut payload = actix_web::dev::Payload::None;
-                let guarded_index_scheduler =
-                    GuardedData::from_request(&request, &mut payload).await.unwrap();
-                let query = serde_urlencoded::to_string(&pagination).unwrap();
-                // TODO don't unwrap
-                let paginate = AwebQueryParameter::from_query(&query).unwrap();
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+                let query =
+                    try_or_internal_error!(jsonrpc, id, serde_urlencoded::to_string(&pagination));
+                let paginate =
+                    try_or_internal_error!(jsonrpc, id, AwebQueryParameter::from_query(&query));
 
                 let result = super::indexes::list_indexes(guarded_index_scheduler, paginate).await;
 
                 match result {
                     Ok(response) => {
                         let body = response.into_body();
-                        // TODO do not unwrap
-                        let bytes = actix_web::body::to_bytes(body).await.unwrap();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn,
+                        );
                         let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // TODO this blocks and would have been better to have a serde_json
-                        //      RawValue to avoid allocating too much and simply pass through
-                        let content = serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        // Note: this blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let content = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
                         McpResponse {
                             jsonrpc,
                             id,
                             result: Some(McpResult::from_content_text_and_ttl(
-                                content, text, 300_000, // 5 min
+                                content,
+                                text,
+                                ttl_ms::QUICKLY_STALE,
                             )),
                             error: None,
                         }
                     }
                     Err(response) => {
                         tracing::error!("{response:?}");
-                        McpResponse {
+                        let result = try_or_internal_error!(
                             jsonrpc,
                             id,
-                            result: Some(McpResult::from_response_error(response).unwrap()),
-                            error: None,
-                        }
+                            McpResult::from_response_error(response),
+                        );
+                        McpResponse { jsonrpc, id, result: Some(result), error: None }
                     }
                 }
             }
             Some(tool_name::DESCRIBE_INDEX) => {
                 let DescribeIndex { index_uid } = match params.arguments.take() {
-                    Some(value) => serde_json::from_value(value).unwrap(),
-                    _ => panic!("Arguments required: Found no arguments"),
+                    Some(value) => try_or_internal_error!(
+                        jsonrpc,
+                        id,
+                        serde_json::from_value(value).map_err(|err| err.to_string()),
+                        invalid_params,
+                    ),
+                    _ => {
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError::invalid_params("expected arguments found none")),
+                        }))
+                    }
                 };
 
-                // expose:
-                // - index description (?)
-                // - a couple of documents
-                // - sortable attributes (?)
-                // - filterable/facetable attributes (?)
-                // - displayed attributes
-
-                // TODO use a tokio spawn ?
-                // TODO don't unwrap
                 let query = serde_json::to_vec(&serde_json::json!({
                     "limit": 5,
                     "attributesToCrop": r#"["*"]"#,
                 }))
-                .unwrap();
+                .expect("The json macro to correctly serialize");
                 let mut payload = actix_web::dev::Payload::from(query);
 
-                // // TODO don't unwrap
-                let guarded_index_scheduler =
-                    GuardedData::from_request(&request, &mut payload).await.unwrap();
-                // TODO don't unwrap
-                let params = AwebJson::from_request(&request, &mut payload).await.unwrap();
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+                let params = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    AwebJson::from_request(&request, &mut payload).await
+                );
 
                 let result = super::indexes::documents::documents_by_query_post(
                     guarded_index_scheduler,
@@ -320,25 +435,34 @@ async fn mcp(
                 let sample_hits = match result {
                     Ok(response) => {
                         let body = response.into_body();
-                        // TODO do not unwrap
-                        let bytes = actix_web::body::to_bytes(body).await.unwrap();
-                        // let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // TODO this blocks and would have been better to have a serde_json
-                        //      RawValue to avoid allocating too much and simply pass through
-                        let mut content: serde_json::Map<String, serde_json::Value> =
-                            serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn,
+                        );
+                        // Note: This blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let mut content: serde_json::Map<String, serde_json::Value> = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
                         content.remove("hits")
                     }
                     Err(response) => {
                         tracing::error!("{response:?}");
-                        let response = McpResponse {
+                        let result = try_or_internal_error!(
                             jsonrpc,
                             id,
-                            result: Some(McpResult::from_response_error(response).unwrap()), // don't unwrap
+                            McpResult::from_response_error(response)
+                        );
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(result),
                             error: None,
-                        };
-
-                        return Ok(HttpResponse::Ok().json(response));
+                        }));
                     }
                 };
 
@@ -350,14 +474,17 @@ async fn mcp(
                 }
 
                 let description = IndexDescription { sample_hits };
-                let content = serde_json::to_value(&description).unwrap();
-                let text = serde_json::to_string(&content).unwrap();
+                let content =
+                    try_or_internal_error!(jsonrpc, id, serde_json::to_value(&description));
+                let text = try_or_internal_error!(jsonrpc, id, serde_json::to_string(&content));
 
                 McpResponse {
                     jsonrpc,
                     id,
                     result: Some(McpResult::from_content_text_and_ttl(
-                        content, text, 300_000, // 5 min
+                        content,
+                        text,
+                        ttl_ms::QUICKLY_STALE,
                     )),
                     error: None,
                 }
@@ -366,7 +493,7 @@ async fn mcp(
                 jsonrpc,
                 id,
                 result: None,
-                error: Some(McpError::unknow_tool(unknown_tool_name)),
+                error: Some(McpError::unknown_tool(unknown_tool_name)),
             },
             None => McpResponse {
                 jsonrpc,
@@ -382,9 +509,6 @@ async fn mcp(
             error: Some(McpError::unknow_method(unknow_method_name)),
         },
     };
-
-    // TODO remove me
-    eprintln!("{}", serde_json::to_string_pretty(&response).unwrap());
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -406,6 +530,12 @@ pub mod tool_name {
 
 pub mod cache_scope {
     pub const PRIVATE: &str = "private";
+}
+
+pub mod ttl_ms {
+    pub const IMMEDIATELY_STALE: usize = 0;
+    pub const QUICKLY_STALE: usize = 500_000; // 5 mins
+    pub const STATIC_RESULT: usize = QUICKLY_STALE; // TODO 86_400_000, // 24h
 }
 
 #[routes::request]
@@ -478,9 +608,22 @@ impl Deserr<DeserrError<DeserrJson, BadRequest>> for RequestId {
         let inner = match value {
             Value::Integer(x) => Either::Left(Number::from(x)),
             Value::NegativeInteger(x) => Either::Left(Number::from(x)),
-            Value::Float(x) => Either::Left(Number::from_f64(x).unwrap()), // TODO don't unwrap
+            Value::Float(x) => match Number::from_f64(x) {
+                Some(f) => Either::Left(f),
+                None => {
+                    return Err(DeserrError::new(
+                        format!("Invalid type: expected non-infinite nor NaN number found: {x}"),
+                        BadParameter,
+                    ))
+                }
+            },
             Value::String(string) => Either::Right(string),
-            _otherwise => todo!(),
+            _otherwise => {
+                return Err(DeserrError::new(
+                    "Invalid type: expected integer or string".to_string(),
+                    BadParameter,
+                ))
+            }
         };
 
         Ok(RequestId { inner })
@@ -525,10 +668,9 @@ pub struct McpResponse {
 // manual impl: not sure why we need the Serialize derive
 impl routes::RequestBody for RequestId {}
 
-// TODO prefer using an enum, but utoipa is not cool with it
+// Note I would have rather prefered to use an enum, but utoipa is not cool with it
 const RESULT_TYPE_COMPLETE: &str = "complete";
 const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28"];
-// const RESULT_TYPE_INPUT_REQUIRED: &str = "input_required";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -560,7 +702,7 @@ pub struct McpResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     instructions: Option<String>,
     // <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#cacheable-model>
-    ttl_ms: usize,             // 300000
+    ttl_ms: usize,             // 300_000
     cache_scope: &'static str, // public | private
 }
 
@@ -578,7 +720,7 @@ impl McpResult {
             meta: None,
             capabilities: None,
             instructions: None,
-            ttl_ms: 0, // immediately stale
+            ttl_ms: ttl_ms::IMMEDIATELY_STALE,
             cache_scope: cache_scope::PRIVATE,
         })
     }
@@ -632,7 +774,7 @@ impl McpResult {
                 You can find more information about available embedders for a given index when describing an index.\
                 We recommend you to use the listIndexes, describeIndex, and searchInIndexes tools, in this order to fetch the right informations from the available indexes.".to_string()
             ),
-            ttl_ms: 300_000, // 5min
+            ttl_ms: ttl_ms::QUICKLY_STALE,
             cache_scope: cache_scope::PRIVATE,
         }
     }
@@ -650,7 +792,7 @@ impl McpResult {
             meta: None,
             capabilities: None,
             instructions: None,
-            ttl_ms: 300_000, // TODO 86_400_000, // 24h
+            ttl_ms: ttl_ms::STATIC_RESULT,
             cache_scope: cache_scope::PRIVATE,
         }
     }
@@ -668,28 +810,49 @@ impl McpResult {
             meta: None,
             capabilities: None,
             instructions: None,
-            ttl_ms: 300_000, // TODO 86_400_000, // 24h
+            ttl_ms: ttl_ms::STATIC_RESULT,
             cache_scope: cache_scope::PRIVATE,
         }
     }
 
-    fn list_tools() -> McpResult {
+    fn list_tools() -> anyhow::Result<McpResult> {
+        fn retrieve_schema(
+            route: &str,
+        ) -> anyhow::Result<(Schema, &'static Components, &'static Operation)> {
+            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).context("retrieving paths")?;
+            let components = MEILISEARCH_OPEN_API
+                .components
+                .as_ref()
+                .context("retrieving the Meilisearch components")?;
+            let operation = paths.post.as_ref().context("retrieving the POST data")?;
+            let request_body =
+                operation.request_body.as_ref().context("retrieving the request body")?;
+            let content = request_body
+                .content
+                .get("application/json")
+                .context("retrieving the body content")?;
+            let ref_or_schema = content.schema.clone().context("retrieving the schema")?;
+            clean_refs_from_schema(components, ref_or_schema)
+                .context("cleaning the refs from the schema")
+                .map(|schema| (schema, components, operation))
+        }
+
         let tools = vec![
             {
                 // search in indexes
-                let route = "/multi-search";
-                let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-                let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-                let operation = paths.post.as_ref().unwrap();
-                let request_body = operation.request_body.as_ref().unwrap();
-                let content = request_body.content.get("application/json").unwrap();
-                let ref_or_schema = content.schema.clone().unwrap();
-                let schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                let (schema, _, operation) = retrieve_schema("/multi-search")
+                    .context("while extracting the /multi-search OpenAPI schema")?;
 
                 McpToolDefinition {
                     name: tool_name::SEARCH_IN_INDEXES.to_string(),
-                    title: operation.summary.clone().unwrap(),
-                    description: operation.description.clone().unwrap(),
+                    title: operation
+                        .summary
+                        .clone()
+                        .context("reading the summary of the /multi-search route")?,
+                    description: operation
+                        .description
+                        .clone()
+                        .context("reading the description of the /multi-search route")?,
                     // TODO maybe add more information about how to do filtering and such?
                     //      It is probably better to explain it in the OpenAPI description or examples maybe?
                     input_schema: schema,
@@ -697,32 +860,26 @@ impl McpResult {
             },
             {
                 // facet search
-                let route = "/indexes/{index_uid}/facet-search";
-                let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-                let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-                let operation = paths.post.as_ref().unwrap();
-                let request_body = operation.request_body.as_ref().unwrap();
-                let content = request_body.content.get("application/json").unwrap();
-                let ref_or_schema = content.schema.clone().unwrap();
-                let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                let (mut schema, components, operation) = retrieve_schema(
+                    "/indexes/{index_uid}/facet-search",
+                )
+                .context("while extracting the /indexes/{index_uid}/facet-search OpenAPI schema")?;
 
                 // We modify the schema's properties a bit to expose
                 // the original-in-the-path index uid.
-                if let Some(param) = operation
-                    .parameters
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .find(|param| param.name == "index_uid")
-                {
+                let params =
+                    operation.parameters.as_ref().context("extracting operation parameters")?;
+                if let Some(param) = params.iter().find(|param| param.name == "index_uid") {
                     if let Schema::Object(object) = &mut schema {
                         let field_name = "indexUid";
-                        let ref_or_schema = param.schema.clone().unwrap();
-                        let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                        let ref_or_schema =
+                            param.schema.clone().context("extracting the indexUid schema")?;
+                        let mut schema = clean_refs_from_schema(components, ref_or_schema)
+                            .context("cleaning refs from schema")?;
                         if let Schema::Object(object) = &mut schema {
                             object.description = param.description.clone();
                         }
-                        // Insert this new mandatory field at the begining
+                        // Insert this new mandatory field at the beginning
                         object.properties.insert_before(
                             0,
                             field_name.to_string(),
@@ -734,23 +891,37 @@ impl McpResult {
 
                 McpToolDefinition {
                     name: tool_name::FACET_SEARCH.to_string(),
-                    title: operation.summary.clone().unwrap(),
-                    description: operation.description.clone().unwrap(),
+                    title: operation
+                        .summary
+                        .clone()
+                        .context("Extracting the summary from the schema")?,
+                    description: operation
+                        .description
+                        .clone()
+                        .context("Extracting the description from the schema")?,
                     input_schema: schema,
                 }
             },
             {
                 // list indexes
                 let route = "/indexes";
-                let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-                let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-                let operation = paths.get.as_ref().unwrap();
+                let paths =
+                    MEILISEARCH_OPEN_API.paths.paths.get(route).context("retrieving paths")?;
+                let components = MEILISEARCH_OPEN_API
+                    .components
+                    .as_ref()
+                    .context("retrieving the Meilisearch components")?;
+                let operation = paths.get.as_ref().context("retrieving the GET data")?;
 
                 // We retrieve the offset and limit from the query parameters
                 let mut properties = ObjectBuilder::new();
-                for parameter in operation.parameters.as_ref().unwrap() {
-                    let ref_or_schema = parameter.schema.as_ref().unwrap().clone();
-                    let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                for parameter in
+                    operation.parameters.as_ref().context("retrieving the parameters")?
+                {
+                    let ref_or_schema =
+                        parameter.schema.as_ref().context("retrieving the schema")?.clone();
+                    let mut schema = clean_refs_from_schema(components, ref_or_schema)
+                        .context("cleaning the refs from the schema")?;
                     if let Schema::Object(object) = &mut schema {
                         object.description = parameter.description.clone();
                     }
@@ -761,8 +932,14 @@ impl McpResult {
 
                 McpToolDefinition {
                     name: tool_name::LIST_INDEXES.to_string(),
-                    title: operation.summary.clone().unwrap(),
-                    description: operation.description.clone().unwrap(),
+                    title: operation
+                        .summary
+                        .clone()
+                        .context("Extracting the summary from the schema")?,
+                    description: operation
+                        .description
+                        .clone()
+                        .context("Extracting the description from the schema")?,
                     input_schema: schema,
                 }
             },
@@ -793,7 +970,7 @@ impl McpResult {
             },
         ];
 
-        McpResult {
+        Ok(McpResult {
             result_type: RESULT_TYPE_COMPLETE,
             is_error: None,
             content: None,
@@ -805,9 +982,9 @@ impl McpResult {
             meta: None,
             capabilities: None,
             instructions: None,
-            ttl_ms: 300_000, // TODO 86_400_000, // 24h
+            ttl_ms: ttl_ms::STATIC_RESULT,
             cache_scope: cache_scope::PRIVATE,
-        }
+        })
     }
 }
 
@@ -879,7 +1056,7 @@ pub struct McpError {
 }
 
 impl McpError {
-    fn unknow_tool(invalid_tool_name: &str) -> McpError {
+    fn unknown_tool(invalid_tool_name: &str) -> McpError {
         McpError { code: -32602, message: format!("Unknown tool: {invalid_tool_name}"), data: None }
     }
 
@@ -891,8 +1068,24 @@ impl McpError {
         }
     }
 
-    fn invalid_params(message: &str) -> McpError {
-        McpError { code: -32602, message: format!("Invalid params: {message}"), data: None }
+    fn invalid_params(message: impl AsRef<str>) -> McpError {
+        McpError {
+            code: -32602,
+            message: format!("Invalid params: {}", message.as_ref()),
+            data: None,
+        }
+    }
+
+    fn internal_error(error: impl std::error::Error) -> McpError {
+        McpError { code: -32603, message: format!("Internal error: {error}"), data: None }
+    }
+
+    fn internal_error_from_anyhow(error: anyhow::Error) -> McpError {
+        McpError { code: -32603, message: format!("Internal error: {error}"), data: None }
+    }
+
+    fn internal_error_from_box_dyn(error: Box<dyn std::error::Error + 'static>) -> McpError {
+        McpError { code: -32603, message: format!("Internal error: {error}"), data: None }
     }
 }
 
