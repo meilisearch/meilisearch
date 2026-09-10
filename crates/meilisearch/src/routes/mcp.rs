@@ -404,11 +404,8 @@ async fn mcp(
                     }
                 };
 
-                let query = serde_json::to_vec(&serde_json::json!({
-                    "limit": 5,
-                    "attributesToCrop": r#"["*"]"#,
-                }))
-                .expect("The json macro to correctly serialize");
+                let query = serde_json::to_vec(&serde_json::json!({ "limit": 5 }))
+                    .expect("The json macro to correctly serialize");
                 let mut payload = actix_web::dev::Payload::from(query);
 
                 let guarded_index_scheduler = try_or_internal_error!(
@@ -448,7 +445,7 @@ async fn mcp(
                             id,
                             serde_json::from_reader(Cursor::new(bytes))
                         );
-                        content.remove("hits")
+                        content.remove("results")
                     }
                     Err(response) => {
                         tracing::error!("{response:?}");
