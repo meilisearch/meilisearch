@@ -15,6 +15,7 @@ use meilisearch_types::error::deserr_codes::BadRequest;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref, Schema};
@@ -92,97 +93,18 @@ async fn mcp(
     let McpQuery { jsonrpc, id, method, mut params } = dbg!(body);
 
     let response = match method.as_str() {
-        method::SERVER_DISCOVERY => McpResponse {
-            jsonrpc,
-            id,
-            result: Some(McpResult {
-                result_type: RESULT_TYPE_COMPLETE,
-                is_error: None,
-                supported_versions: Some(SUPPORTED_VERSIONS),
-                tools: None,
-                resources: None,
-                prompts: None,
-                meta: Some(McpServerMeta {
-                    // TODO what's my name and version?
-                    server_info: ClientServerInfo {
-                        name: "Meilisearch".to_string(),
-                        version: "1.53.0".to_string(),
-                    },
-                }),
-                capabilities: Some(McpCapabilities { tools: Some(BTreeMap::new()), resources: None }),
-                content: None,
-                structured_content: None,
-                instructions: Some(
-                    "Meilisearch is a prefix search engine that supports filtering, sorting, federated searching (mixing results from different indexes).\
-                    Meilisearch support classic keyword search but may also support semantic search throught the use of the hybrid search parameter.
-                    You can find more information about available embedders for a given index when describing an index.\
-                    We recommend you to use the listIndexes, describeIndex, and searchInIndexes tools, in this order to fetch the right informations from the available indexes.".to_string()
-                ),
-                ttl_ms: 300_000, // 5min
-                cache_scope: cache_scope::PRIVATE,
-            }),
-            error: None,
-        },
-        method::TOOLS_LIST => McpResponse {
-            jsonrpc,
-            id,
-            result: Some(McpResult {
-                result_type: RESULT_TYPE_COMPLETE,
-                is_error: None,
-                content: None,
-                structured_content: None,
-                tools: Some(list_tools()),
-                resources: None,
-                prompts: None,
-                supported_versions: None,
-                meta: None,
-                capabilities: None,
-                instructions: None,
-                ttl_ms: 300_000, // TODO 86_400_000, // 24h
-                cache_scope: cache_scope::PRIVATE,
-            }),
-            error: None,
-        },
-        method::RESOURCES_LIST => McpResponse {
-            jsonrpc,
-            id,
-            result: Some(McpResult {
-                result_type: RESULT_TYPE_COMPLETE,
-                is_error: None,
-                content: None,
-                structured_content: None,
-                tools: None,
-                resources: Some(vec![]), // no resources
-                prompts: None,
-                supported_versions: None,
-                meta: None,
-                capabilities: None,
-                instructions: None,
-                ttl_ms: 300_000, // TODO 86_400_000, // 24h
-                cache_scope: cache_scope::PRIVATE,
-            }),
-            error: None,
-        },
-        method::PROMPTS_LIST => McpResponse {
-            jsonrpc,
-            id,
-            result: Some(McpResult {
-                result_type: RESULT_TYPE_COMPLETE,
-                is_error: None,
-                content: None,
-                structured_content: None,
-                tools: None,
-                resources: None,
-                prompts: Some(vec![]), // no prompts
-                supported_versions: None,
-                meta: None,
-                capabilities: None,
-                instructions: None,
-                ttl_ms: 300_000, // TODO 86_400_000, // 24h
-                cache_scope: cache_scope::PRIVATE,
-            }),
-            error: None,
-        },
+        method::SERVER_DISCOVERY => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::discover()), error: None }
+        }
+        method::TOOLS_LIST => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::list_tools()), error: None }
+        }
+        method::RESOURCES_LIST => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::empty_resources()), error: None }
+        }
+        method::PROMPTS_LIST => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::empty_prompts()), error: None }
+        }
         method::TOOLS_CALL => match params.name.as_deref() {
             Some(tool_name::SEARCH_IN_INDEXES) => {
                 // request
@@ -218,21 +140,9 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult {
-                                result_type: RESULT_TYPE_COMPLETE,
-                                is_error: None,
-                                tools: None,
-                                resources: None,
-                                prompts: None,
-                                content: Some(vec![McpTextContentOutput::from(text)]),
-                                structured_content: Some(content),
-                                supported_versions: None,
-                                meta: None,
-                                capabilities: None,
-                                instructions: None,
-                                ttl_ms: 0, // immediately stale
-                                cache_scope: cache_scope::PRIVATE,
-                            }),
+                            result: Some(McpResult::from_content_text_and_ttl(
+                                content, text, 0, // immediately stale
+                            )),
                             error: None,
                         }
                     }
@@ -241,24 +151,10 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult {
-                                result_type: RESULT_TYPE_COMPLETE,
-                                is_error: None,
-                                tools: None,
-                                resources: None,
-                                prompts: None,
-                                structured_content: Some(serde_json::to_value(&response).unwrap()),
-                                content: Some(vec![McpTextContentOutput::from(response.message)]),
-                                supported_versions: None,
-                                meta: None,
-                                capabilities: None,
-                                instructions: None,
-                                ttl_ms: 0, // immediately stale
-                                cache_scope: cache_scope::PRIVATE,
-                            }),
+                            result: Some(McpResult::from_response_error(response).unwrap()),
                             error: None,
                         }
-                    },
+                    }
                 }
             }
             Some(tool_name::FACET_SEARCH) => {
@@ -267,7 +163,12 @@ async fn mcp(
                 let index_uid = match params.arguments.as_mut() {
                     Some(serde_json::Value::Object(object)) => {
                         // We remove the extra indexUid parameter to make sure the route accepts the payload
-                        object.remove("indexUid").expect("missing indexUid parameter").as_str().unwrap().to_owned()
+                        object
+                            .remove("indexUid")
+                            .expect("missing indexUid parameter")
+                            .as_str()
+                            .unwrap()
+                            .to_owned()
                     }
                     _ => panic!("Invalid arguments: expected Object found something else"),
                 };
@@ -303,47 +204,21 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult {
-                                result_type: RESULT_TYPE_COMPLETE,
-                                is_error: None,
-                                tools: None,
-                                resources: None,
-                                prompts: None,
-                                content: Some(vec![McpTextContentOutput::from(text)]),
-                                structured_content: Some(content),
-                                supported_versions: None,
-                                meta: None,
-                                capabilities: None,
-                                instructions: None,
-                                ttl_ms: 0, // immediately stale
-                                cache_scope: cache_scope::PRIVATE,
-                            }),
+                            result: Some(McpResult::from_content_text_and_ttl(
+                                content, text, 0, // immediately stale
+                            )),
                             error: None,
                         }
                     }
                     Err(response) => {
                         tracing::error!("{response:?}");
                         McpResponse {
-                        jsonrpc,
-                        id,
-                        result: Some(McpResult {
-                            result_type: RESULT_TYPE_COMPLETE,
-                            is_error: None,
-                            tools: None,
-                            resources: None,
-                            prompts: None,
-                            structured_content: Some(serde_json::to_value(&response).unwrap()),
-                            content: Some(vec![McpTextContentOutput::from(response.message)]),
-                            supported_versions: None,
-                            meta: None,
-                            capabilities: None,
-                            instructions: None,
-                            ttl_ms: 0, // immediately stale
-                            cache_scope: cache_scope::PRIVATE,
-                        }),
-                        error: None,
+                            jsonrpc,
+                            id,
+                            result: Some(McpResult::from_response_error(response).unwrap()),
+                            error: None,
+                        }
                     }
-                    },
                 }
             }
             Some(tool_name::LIST_INDEXES) => {
@@ -389,21 +264,9 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult {
-                                result_type: RESULT_TYPE_COMPLETE,
-                                is_error: None,
-                                tools: None,
-                                resources: None,
-                                prompts: None,
-                                content: Some(vec![McpTextContentOutput::from(text)]),
-                                structured_content: Some(content),
-                                supported_versions: None,
-                                meta: None,
-                                capabilities: None,
-                                instructions: None,
-                                ttl_ms: 300_000, // 5min
-                                cache_scope: cache_scope::PRIVATE,
-                            }),
+                            result: Some(McpResult::from_content_text_and_ttl(
+                                content, text, 300_000, // 5 min
+                            )),
                             error: None,
                         }
                     }
@@ -412,31 +275,15 @@ async fn mcp(
                         McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult {
-                                result_type: RESULT_TYPE_COMPLETE,
-                                is_error: None,
-                                tools: None,
-                                resources: None,
-                                prompts: None,
-                                structured_content: Some(serde_json::to_value(&response).unwrap()),
-                                content: Some(vec![McpTextContentOutput::from(response.message)]),
-                                supported_versions: None,
-                                meta: None,
-                                capabilities: None,
-                                instructions: None,
-                                ttl_ms: 0, // immediately stale
-                                cache_scope: cache_scope::PRIVATE,
-                            }),
+                            result: Some(McpResult::from_response_error(response).unwrap()),
                             error: None,
                         }
-                    },
+                    }
                 }
             }
             Some(tool_name::DESCRIBE_INDEX) => {
                 let DescribeIndex { index_uid } = match params.arguments.take() {
-                    Some(value) => {
-                        serde_json::from_value(value).unwrap()
-                    }
+                    Some(value) => serde_json::from_value(value).unwrap(),
                     _ => panic!("Arguments required: Found no arguments"),
                 };
 
@@ -452,7 +299,8 @@ async fn mcp(
                 let query = serde_json::to_vec(&serde_json::json!({
                     "limit": 5,
                     "attributesToCrop": r#"["*"]"#,
-                })).unwrap();
+                }))
+                .unwrap();
                 let mut payload = actix_web::dev::Payload::from(query);
 
                 // // TODO don't unwrap
@@ -479,7 +327,8 @@ async fn mcp(
                         // let text = String::from_utf8_lossy(&bytes).into_owned();
                         // TODO this blocks and would have been better to have a serde_json
                         //      RawValue to avoid allocating too much and simply pass through
-                        let mut content: serde_json::Map<String, serde_json::Value> = serde_json::from_reader(Cursor::new(bytes)).unwrap();
+                        let mut content: serde_json::Map<String, serde_json::Value> =
+                            serde_json::from_reader(Cursor::new(bytes)).unwrap();
                         content.remove("hits")
                     }
                     Err(response) => {
@@ -487,26 +336,12 @@ async fn mcp(
                         let response = McpResponse {
                             jsonrpc,
                             id,
-                            result: Some(McpResult {
-                                result_type: RESULT_TYPE_COMPLETE,
-                                is_error: None,
-                                tools: None,
-                                resources: None,
-                                prompts: None,
-                                structured_content: Some(serde_json::to_value(&response).unwrap()),
-                                content: Some(vec![McpTextContentOutput::from(response.message)]),
-                                supported_versions: None,
-                                meta: None,
-                                capabilities: None,
-                                instructions: None,
-                                ttl_ms: 0, // immediately stale
-                                cache_scope: cache_scope::PRIVATE,
-                            }),
+                            result: Some(McpResult::from_response_error(response).unwrap()), // don't unwrap
                             error: None,
                         };
 
                         return Ok(HttpResponse::Ok().json(response));
-                    },
+                    }
                 };
 
                 #[derive(Debug, Clone, Serialize)]
@@ -523,21 +358,9 @@ async fn mcp(
                 McpResponse {
                     jsonrpc,
                     id,
-                    result: Some(McpResult {
-                        result_type: RESULT_TYPE_COMPLETE,
-                        is_error: None,
-                        tools: None,
-                        resources: None,
-                        prompts: None,
-                        content: Some(vec![McpTextContentOutput::from(text)]),
-                        structured_content: Some(content),
-                        supported_versions: None,
-                        meta: None,
-                        capabilities: None,
-                        instructions: None,
-                        ttl_ms: 300_000, // 5min
-                        cache_scope: cache_scope::PRIVATE,
-                    }),
+                    result: Some(McpResult::from_content_text_and_ttl(
+                        content, text, 300_000, // 5 min
+                    )),
                     error: None,
                 }
             }
@@ -574,123 +397,6 @@ pub mod cache_scope {
     pub const PRIVATE: &str = "private";
 }
 
-fn list_tools() -> Vec<McpToolDefinition> {
-    vec![
-        {
-            // search in indexes
-            let route = "/multi-search";
-            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-            let operation = paths.post.as_ref().unwrap();
-            let request_body = operation.request_body.as_ref().unwrap();
-            let content = request_body.content.get("application/json").unwrap();
-            let ref_or_schema = content.schema.clone().unwrap();
-            let schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
-
-            McpToolDefinition {
-                name: tool_name::SEARCH_IN_INDEXES.to_string(),
-                title: operation.summary.clone().unwrap(),
-                description: operation.description.clone().unwrap(),
-                // TODO maybe add more information about how to do filtering and such?
-                //      It is probably better to explain it in the OpenAPI description or examples maybe?
-                input_schema: schema,
-            }
-        },
-        {
-            // facet search
-            let route = "/indexes/{index_uid}/facet-search";
-            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-            let operation = paths.post.as_ref().unwrap();
-            let request_body = operation.request_body.as_ref().unwrap();
-            let content = request_body.content.get("application/json").unwrap();
-            let ref_or_schema = content.schema.clone().unwrap();
-            let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
-
-            // We modify the schema's properties a bit to expose
-            // the original-in-the-path index uid.
-            if let Some(param) = operation
-                .parameters
-                .as_ref()
-                .unwrap()
-                .iter()
-                .find(|param| param.name == "index_uid")
-            {
-                if let Schema::Object(object) = &mut schema {
-                    let field_name = "indexUid";
-                    let ref_or_schema = param.schema.clone().unwrap();
-                    let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
-                    if let Schema::Object(object) = &mut schema {
-                        object.description = param.description.clone();
-                    }
-                    // Insert this new mandatory field at the begining
-                    object.properties.insert_before(0, field_name.to_string(), RefOr::T(schema));
-                    object.required.push(field_name.to_string());
-                }
-            }
-
-            McpToolDefinition {
-                name: tool_name::FACET_SEARCH.to_string(),
-                title: operation.summary.clone().unwrap(),
-                description: operation.description.clone().unwrap(),
-                input_schema: schema,
-            }
-        },
-        {
-            // list indexes
-            let route = "/indexes";
-            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
-            let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
-            let operation = paths.get.as_ref().unwrap();
-
-            // We retrieve the offset and limit from the query parameters
-            let mut properties = ObjectBuilder::new();
-            for parameter in operation.parameters.as_ref().unwrap() {
-                let ref_or_schema = parameter.schema.as_ref().unwrap().clone();
-                let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
-                if let Schema::Object(object) = &mut schema {
-                    object.description = parameter.description.clone();
-                }
-                properties = properties.property(&parameter.name, schema);
-            }
-
-            let schema = Schema::from(properties);
-
-            McpToolDefinition {
-                name: tool_name::LIST_INDEXES.to_string(),
-                title: operation.summary.clone().unwrap(),
-                description: operation.description.clone().unwrap(),
-                input_schema: schema,
-            }
-        },
-        {
-            // describe index
-            let mut schemas = Vec::new();
-            <DescribeIndex as ToSchema>::schemas(&mut schemas);
-
-            let mut properties = ObjectBuilder::new();
-            for (property_name, schema) in schemas {
-                let schema = match schema {
-                    RefOr::Ref(_) => unreachable!(),
-                    RefOr::T(schema) => schema,
-                };
-                properties = properties.property(&property_name, schema);
-            }
-
-            let schema = Schema::from(properties);
-
-            McpToolDefinition {
-                name: tool_name::DESCRIBE_INDEX.to_string(),
-                title: "Describe an index".to_string(),
-                description:
-                    "Describes an index to understand what's stored inside and what's its purpose."
-                        .to_string(),
-                input_schema: schema,
-            }
-        },
-    ]
-}
-
 #[routes::request]
 #[derive(Debug, Clone, Deserialize)]
 /// Describes an index
@@ -721,7 +427,7 @@ pub struct ParamsWithMeta {
     #[request(default, rename = "_meta")]
     _meta: Option<McpClientMeta>,
     #[request(default)]
-    name: Option<String>, // get_weather
+    name: Option<String>, // e.g. get_weather
     #[request(default)]
     arguments: Option<serde_json::Value>, // RawValue would have been better
 }
@@ -845,6 +551,253 @@ pub struct McpResult {
     // <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#cacheable-model>
     ttl_ms: usize,             // 300000
     cache_scope: &'static str, // public | private
+}
+
+impl McpResult {
+    fn from_response_error(response: ResponseError) -> serde_json::Result<McpResult> {
+        Ok(McpResult {
+            result_type: RESULT_TYPE_COMPLETE,
+            is_error: Some(true),
+            tools: None,
+            resources: None,
+            prompts: None,
+            structured_content: Some(serde_json::to_value(&response)?),
+            content: Some(vec![McpTextContentOutput::from(response.message)]),
+            supported_versions: None,
+            meta: None,
+            capabilities: None,
+            instructions: None,
+            ttl_ms: 0, // immediately stale
+            cache_scope: cache_scope::PRIVATE,
+        })
+    }
+
+    fn from_content_text_and_ttl(
+        content: serde_json::Value,
+        text: String,
+        ttl_ms: usize,
+    ) -> McpResult {
+        McpResult {
+            result_type: RESULT_TYPE_COMPLETE,
+            is_error: None,
+            tools: None,
+            resources: None,
+            prompts: None,
+            structured_content: Some(content),
+            content: Some(vec![McpTextContentOutput::from(text)]),
+            supported_versions: None,
+            meta: None,
+            capabilities: None,
+            instructions: None,
+            ttl_ms,
+            cache_scope: cache_scope::PRIVATE,
+        }
+    }
+
+    fn discover() -> McpResult {
+        let major = milli::constants::VERSION_MAJOR;
+        let minor = milli::constants::VERSION_MINOR;
+        let patch = milli::constants::VERSION_PATCH;
+
+        McpResult {
+            result_type: RESULT_TYPE_COMPLETE,
+            is_error: None,
+            supported_versions: Some(SUPPORTED_VERSIONS),
+            tools: None,
+            resources: None,
+            prompts: None,
+            meta: Some(McpServerMeta {
+                server_info: ClientServerInfo {
+                    name: "Meilisearch".to_string(),
+                    version: format!("{major}.{minor}.{patch}"),
+                },
+            }),
+            capabilities: Some(McpCapabilities { tools: Some(BTreeMap::new()), resources: None }),
+            content: None,
+            structured_content: None,
+            instructions: Some(
+                "Meilisearch is a prefix search engine that supports filtering, sorting, federated searching (mixing results from different indexes).\
+                Meilisearch support classic keyword search but may also support semantic search throught the use of the hybrid search parameter.
+                You can find more information about available embedders for a given index when describing an index.\
+                We recommend you to use the listIndexes, describeIndex, and searchInIndexes tools, in this order to fetch the right informations from the available indexes.".to_string()
+            ),
+            ttl_ms: 300_000, // 5min
+            cache_scope: cache_scope::PRIVATE,
+        }
+    }
+
+    fn empty_prompts() -> McpResult {
+        McpResult {
+            result_type: RESULT_TYPE_COMPLETE,
+            is_error: None,
+            content: None,
+            structured_content: None,
+            tools: None,
+            resources: None,
+            prompts: Some(vec![]), // no prompts
+            supported_versions: None,
+            meta: None,
+            capabilities: None,
+            instructions: None,
+            ttl_ms: 300_000, // TODO 86_400_000, // 24h
+            cache_scope: cache_scope::PRIVATE,
+        }
+    }
+
+    fn empty_resources() -> McpResult {
+        McpResult {
+            result_type: RESULT_TYPE_COMPLETE,
+            is_error: None,
+            content: None,
+            structured_content: None,
+            tools: None,
+            resources: Some(vec![]), // no resources
+            prompts: None,
+            supported_versions: None,
+            meta: None,
+            capabilities: None,
+            instructions: None,
+            ttl_ms: 300_000, // TODO 86_400_000, // 24h
+            cache_scope: cache_scope::PRIVATE,
+        }
+    }
+
+    fn list_tools() -> McpResult {
+        let tools = vec![
+            {
+                // search in indexes
+                let route = "/multi-search";
+                let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
+                let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
+                let operation = paths.post.as_ref().unwrap();
+                let request_body = operation.request_body.as_ref().unwrap();
+                let content = request_body.content.get("application/json").unwrap();
+                let ref_or_schema = content.schema.clone().unwrap();
+                let schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+
+                McpToolDefinition {
+                    name: tool_name::SEARCH_IN_INDEXES.to_string(),
+                    title: operation.summary.clone().unwrap(),
+                    description: operation.description.clone().unwrap(),
+                    // TODO maybe add more information about how to do filtering and such?
+                    //      It is probably better to explain it in the OpenAPI description or examples maybe?
+                    input_schema: schema,
+                }
+            },
+            {
+                // facet search
+                let route = "/indexes/{index_uid}/facet-search";
+                let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
+                let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
+                let operation = paths.post.as_ref().unwrap();
+                let request_body = operation.request_body.as_ref().unwrap();
+                let content = request_body.content.get("application/json").unwrap();
+                let ref_or_schema = content.schema.clone().unwrap();
+                let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+
+                // We modify the schema's properties a bit to expose
+                // the original-in-the-path index uid.
+                if let Some(param) = operation
+                    .parameters
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .find(|param| param.name == "index_uid")
+                {
+                    if let Schema::Object(object) = &mut schema {
+                        let field_name = "indexUid";
+                        let ref_or_schema = param.schema.clone().unwrap();
+                        let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                        if let Schema::Object(object) = &mut schema {
+                            object.description = param.description.clone();
+                        }
+                        // Insert this new mandatory field at the begining
+                        object.properties.insert_before(
+                            0,
+                            field_name.to_string(),
+                            RefOr::T(schema),
+                        );
+                        object.required.push(field_name.to_string());
+                    }
+                }
+
+                McpToolDefinition {
+                    name: tool_name::FACET_SEARCH.to_string(),
+                    title: operation.summary.clone().unwrap(),
+                    description: operation.description.clone().unwrap(),
+                    input_schema: schema,
+                }
+            },
+            {
+                // list indexes
+                let route = "/indexes";
+                let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).unwrap();
+                let components = MEILISEARCH_OPEN_API.components.as_ref().unwrap();
+                let operation = paths.get.as_ref().unwrap();
+
+                // We retrieve the offset and limit from the query parameters
+                let mut properties = ObjectBuilder::new();
+                for parameter in operation.parameters.as_ref().unwrap() {
+                    let ref_or_schema = parameter.schema.as_ref().unwrap().clone();
+                    let mut schema = clean_refs_from_schema(components, ref_or_schema).unwrap();
+                    if let Schema::Object(object) = &mut schema {
+                        object.description = parameter.description.clone();
+                    }
+                    properties = properties.property(&parameter.name, schema);
+                }
+
+                let schema = Schema::from(properties);
+
+                McpToolDefinition {
+                    name: tool_name::LIST_INDEXES.to_string(),
+                    title: operation.summary.clone().unwrap(),
+                    description: operation.description.clone().unwrap(),
+                    input_schema: schema,
+                }
+            },
+            {
+                // describe index
+                let mut schemas = Vec::new();
+                <DescribeIndex as ToSchema>::schemas(&mut schemas);
+
+                let mut properties = ObjectBuilder::new();
+                for (property_name, schema) in schemas {
+                    let schema = match schema {
+                        RefOr::Ref(_) => unreachable!(),
+                        RefOr::T(schema) => schema,
+                    };
+                    properties = properties.property(&property_name, schema);
+                }
+
+                let schema = Schema::from(properties);
+
+                McpToolDefinition {
+                    name: tool_name::DESCRIBE_INDEX.to_string(),
+                    title: "Describe an index".to_string(),
+                    description:
+                        "Describes an index to understand what's stored inside and what's its purpose."
+                            .to_string(),
+                    input_schema: schema,
+                }
+            },
+        ];
+
+        McpResult {
+            result_type: RESULT_TYPE_COMPLETE,
+            is_error: None,
+            content: None,
+            structured_content: None,
+            tools: Some(tools),
+            resources: None,
+            prompts: None,
+            supported_versions: None,
+            meta: None,
+            capabilities: None,
+            instructions: None,
+            ttl_ms: 300_000, // TODO 86_400_000, // 24h
+            cache_scope: cache_scope::PRIVATE,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
