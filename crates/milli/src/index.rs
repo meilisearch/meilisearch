@@ -761,8 +761,10 @@ impl Index {
     /// Returns the `rtree` which associates coordinates to documents ids.
     ///
     /// Concurrent callers share a single deserialized `Arc` when the LMDB payload
-    /// is unchanged (content-addressed cache). Writers that mutate the tree must
-    /// clone out of the `Arc` before modifying it.
+    /// is unchanged (content-addressed cache). Cold-cache misses are single-flighted:
+    /// the mutex is held across deserialize so only one thread materializes the tree
+    /// for a given content hash. Writers that mutate the tree must clone out of the
+    /// `Arc` before modifying it.
     pub fn geo_rtree(&self, rtxn: &RoTxn<'_>) -> Result<Option<Arc<RTree<GeoPoint>>>> {
         let Some(bytes) = self
             .main
@@ -777,12 +779,12 @@ impl Index {
         hasher.write(bytes);
         let content_hash = hasher.finish();
 
-        {
-            let cache = self.geo_rtree_cache.lock().unwrap();
-            if let Some(cached) = cache.as_ref() {
-                if cached.content_hash == content_hash {
-                    return Ok(Some(Arc::clone(&cached.rtree)));
-                }
+        // Hold the lock for both the cache lookup and a cold miss deserialize so
+        // concurrent first-hit callers cannot each build a full RTree copy.
+        let mut cache = self.geo_rtree_cache.lock().unwrap();
+        if let Some(cached) = cache.as_ref() {
+            if cached.content_hash == content_hash {
+                return Ok(Some(Arc::clone(&cached.rtree)));
             }
         }
 
@@ -792,7 +794,7 @@ impl Index {
             ))
         })?;
         let rtree = Arc::new(rtree);
-        *self.geo_rtree_cache.lock().unwrap() = Some(CachedGeoRTree {
+        *cache = Some(CachedGeoRTree {
             content_hash,
             rtree: Arc::clone(&rtree),
         });

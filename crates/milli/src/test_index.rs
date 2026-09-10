@@ -1286,8 +1286,7 @@ fn geo_rtree_cache_shared_under_concurrency() {
         ]))
         .unwrap();
 
-    // Warm the content-addressed cache once so concurrent callers hit the shared Arc
-    // (cold concurrent misses can race-deserialize; production traffic stays on cache hits).
+    // Warm the content-addressed cache once so concurrent callers hit the shared Arc.
     {
         let rtxn = index.read_txn().unwrap();
         let _ = index.geo_rtree(&rtxn).unwrap().expect("rtree present");
@@ -1322,6 +1321,58 @@ fn geo_rtree_cache_shared_under_concurrency() {
         assert!(
             Arc::ptr_eq(first, arc),
             "concurrent geo_rtree load #{i} must reuse the same cached Arc"
+        );
+    }
+}
+
+/// Cold cache: N threads all miss at once. Single-flight must yield one shared Arc
+/// (no pre-warm), matching the first-burst OOM case from #6596.
+#[test]
+fn geo_rtree_cache_single_flight_on_cold_concurrent_miss() {
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|settings| {
+            settings.set_filterable_fields(vec![FilterableAttributesRule::Field(
+                RESERVED_GEO_FIELD_NAME.to_string(),
+            )]);
+        })
+        .unwrap();
+    index
+        .add_documents(documents!([
+            { "id": 0, RESERVED_GEO_FIELD_NAME: { "lat": 0, "lng": 0 } },
+            { "id": 1, RESERVED_GEO_FIELD_NAME: { "lat": 10, "lng": 10 } },
+            { "id": 2, RESERVED_GEO_FIELD_NAME: { "lat": -5, "lng": 20 } },
+            { "id": 3, RESERVED_GEO_FIELD_NAME: { "lat": 45, "lng": -30 } },
+        ]))
+        .unwrap();
+
+    // Intentionally do NOT warm the cache.
+    let shared_index = index.inner.clone();
+    let thread_count = 10;
+    let barrier = Arc::new(Barrier::new(thread_count));
+
+    let handles: Vec<_> = (0..thread_count)
+        .map(|_| {
+            let index = shared_index.clone();
+            let barrier = Arc::clone(&barrier);
+            thread::spawn(move || {
+                barrier.wait();
+                let rtxn = index.read_txn().unwrap();
+                index.geo_rtree(&rtxn).unwrap().expect("rtree present")
+            })
+        })
+        .collect();
+
+    let arcs: Vec<_> = handles.into_iter().map(|h| h.join().expect("thread panicked")).collect();
+    let first = &arcs[0];
+    for (i, arc) in arcs.iter().enumerate().skip(1) {
+        assert!(
+            Arc::ptr_eq(first, arc),
+            "cold concurrent miss #{i} must single-flight to the same Arc"
         );
     }
 }
