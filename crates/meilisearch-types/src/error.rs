@@ -210,7 +210,7 @@ ApiKeyNotFound                                 , InvalidRequest       , NOT_FOUN
 r#"The requested API key could not be found."# ;
 
 IndexScopedApiKeyWithGlobalAction              , InvalidRequest       , BAD_REQUEST,
-r#"This errors occurs when calling an endpoint that requires a global API key with an API key that is scoped to a subset of index.
+r#"This error occurs when calling an endpoint that requires a global API key with an API key that is scoped to a subset of indexes.
 
 Call the endpoint with an API key that has `"indexes": ["*"]`
 "#;
@@ -398,7 +398,7 @@ InvalidDocumentRetrieve                     , InvalidRequest       , BAD_REQUEST
 "This error code is no longer emitted and can be found in tasks imported from a dump created using a previous version of Meilisearch.";
 
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST,
-"The provided `_geo` field of one or more documents is invalid. Meilisearch expects `_geo` to be an object with two fields, `lat` and `lng`, each containing geographic coordinates expressed as a string or floating point number. Read more about `_geo` and how to troubleshoot it in [our dedicated guide](/capabilities/geo_search/getting_started)." ;
+"The provided `_geo` field of one or more documents is invalid. Meilisearch expects `_geo` to be an object with two fields, `lat` and `lng`, each containing geographic coordinates expressed as a string or floating-point number. Read more about `_geo` and how to troubleshoot it in [our dedicated guide](/capabilities/geo_search/getting_started)." ;
 
 InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST,
 "The `geojson` field in one or more documents is invalid or doesn't match the [GeoJSON specification](https://datatracker.ietf.org/doc/html/rfc7946)." ;
@@ -487,7 +487,7 @@ InvalidMultiSearchQueryFacets                  , InvalidRequest       , BAD_REQU
 "A query in the queries array contains `facets` when federation is present and non-`null`." ;
 
 InvalidMultiSearchDistinct                     , InvalidRequest       , BAD_REQUEST,
-"This error occurs when both `federation.distinct` and `distinct` inside of a queries are specified. Remove one of these parameters" ;
+"This error occurs when both `federation.distinct` and the `distinct` parameter of a query are specified. Remove one of these parameters." ;
 
 InvalidMultiSearchQueryPagination              , InvalidRequest       , BAD_REQUEST,
 "A multi-search query contains `page`, `hitsPerPage`, `limit` or `offset`, but the top-level federation object is not `null`." ;
@@ -696,7 +696,7 @@ InvalidSearchPersonalize                       , InvalidRequest       , BAD_REQU
  "The [`personalizeUserContext`](/reference/api/search/search-with-get#parameter-personalize-user-context) query parameter is invalid. It should be a string" ;
 
 InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST,
-"The search query contains non-`null` values for both [`media`](/reference/api/search/search-with-post#body-media) and [`vector`](/reference/api/search/search-with-post#body-media). These two parameters are mutually exclusive, since `media` generates vector embeddings via the embedder configured in `hybrid`." ;
+"The search query contains non-`null` values for both [`media`](/reference/api/search/search-with-post#body-media) and [`vector`](/reference/api/search/search-with-post#body-vector-one-of-0). These two parameters are mutually exclusive, since `media` generates vector embeddings via the embedder configured in `hybrid`." ;
 
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST,
 "The value of [displayed attributes](/capabilities/full_text_search/how_to/configure_displayed_attributes#displayed-fields) is invalid. It should be an empty array, an array of strings, or set to `null`." ;
@@ -705,7 +705,7 @@ InvalidSettingsDistinctAttribute               , InvalidRequest       , BAD_REQU
 "The value of [distinct attributes](/capabilities/full_text_search/how_to/configure_distinct_attribute) is invalid. It should be a string or set to `null`." ;
 
 InvalidSettingsProximityPrecision              , InvalidRequest       , BAD_REQUEST,
-"[`proximityPrecision`](/reference/api/settings/update-proximityprecision#update-proximityprecision) does not have one of allowed values" ;
+"[`proximityPrecision`](/reference/api/settings/update-proximityprecision#update-proximityprecision) does not have one of the allowed values." ;
 
 InvalidSettingsFacetSearch                     , InvalidRequest       , BAD_REQUEST,
 "The [`facetSearch`](/reference/api/settings/get-facetsearch) index setting value is invalid." ;
@@ -1038,7 +1038,7 @@ UnimplementedMultiChoiceChatCompletions        , InvalidRequest       , NOT_IMPL
 "Unsupported value of the `n` parameter. The only supported value is `1`." ;
 
 ChatNotFound                                   , InvalidRequest       , NOT_FOUND,
-"There is not configured chat corresponding to the specified workspace uid."   ;
+"No chat is configured for the specified workspace UID."   ;
 
 InvalidChatSettingDocumentTemplate             , InvalidRequest       , BAD_REQUEST,
 "Rendering a document using the document template configured in the chat settings for this index failed. Make sure that the configured document template can render any document from the index." ;
@@ -1092,10 +1092,10 @@ InvalidIndexFieldsFilterAttributePatterns      , InvalidRequest       , BAD_REQU
 "Invalid [`filter.attributePatterns`](/reference/api/indexes/list-index-fields#body-filter-one-of-1-attribute-patterns-one-of-1) parameter. It should be an array of strings." ;
 
 InvalidIndexFieldsFilterDisplayed              , InvalidRequest       , BAD_REQUEST,
-"Invalid [`filter.displayed](/reference/api/indexes/list-index-fields#body-filter-one-of-1-displayed-one-of-0) parameter. It should be a boolean." ;
+"Invalid [`filter.displayed`](/reference/api/indexes/list-index-fields#body-filter-one-of-1-displayed-one-of-0) parameter. It should be a boolean." ;
 
 InvalidIndexFieldsFilterSearchable             , InvalidRequest       , BAD_REQUEST,
-"Invalid [`filter.searchable](/reference/api/indexes/list-index-fields#body-filter-one-of-1-searchable-one-of-0) parameter. It should be a boolean." ;
+"Invalid [`filter.searchable`](/reference/api/indexes/list-index-fields#body-filter-one-of-1-searchable-one-of-0) parameter. It should be a boolean." ;
 
 InvalidIndexFieldsFilterSortable               , InvalidRequest       , BAD_REQUEST,
 "Invalid [`filter.sortable`](/reference/api/indexes/list-index-fields#body-filter-one-of-1-sortable-one-of-0) parameter. It should be a boolean." ;
