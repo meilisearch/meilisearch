@@ -273,7 +273,9 @@ pub(crate) mod test {
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::RuntimeTogglableFeatures;
+    use meilisearch_types::features::{
+        ChatCompletionSettings, ChatCompletionSource, RuntimeTogglableFeatures,
+    };
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
@@ -554,6 +556,13 @@ pub(crate) mod test {
         let network = create_test_network();
         dump.create_network(network).unwrap();
 
+        // ========== chat completions settings
+        let chat_settings = create_test_chat_settings();
+        let mut chat_writer = dump.create_chat_completions_settings().unwrap();
+        for (name, settings) in &chat_settings {
+            chat_writer.push_settings(name, settings).unwrap();
+        }
+
         (dump, batch_queue)
     }
 
@@ -581,6 +590,37 @@ pub(crate) mod test {
             version: Default::default(),
             shards: maplit::btreemap! {"shard".to_string() => Shard { remotes: maplit::btreeset!["other".to_string()]} },
         }
+    }
+
+    fn create_test_chat_settings() -> Vec<(String, ChatCompletionSettings)> {
+        vec![
+            (
+                "default".to_string(),
+                ChatCompletionSettings {
+                    source: ChatCompletionSource::OpenAi,
+                    org_id: Some("org-test".to_string()),
+                    project_id: None,
+                    api_version: None,
+                    deployment_id: None,
+                    base_url: Some("https://api.openai.com/v1/".to_string()),
+                    api_key: Some("sk-test-key-12345678".to_string()),
+                    prompts: Default::default(),
+                },
+            ),
+            (
+                "custom".to_string(),
+                ChatCompletionSettings {
+                    source: ChatCompletionSource::Mistral,
+                    org_id: None,
+                    project_id: None,
+                    api_version: None,
+                    deployment_id: None,
+                    base_url: Some("https://api.mistral.ai/v1/".to_string()),
+                    api_key: Some("mistral-key-abcdefgh".to_string()),
+                    prompts: Default::default(),
+                },
+            ),
+        ]
     }
 
     #[test]
@@ -638,5 +678,16 @@ pub(crate) mod test {
         expected.leader = None;
         expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
+
+        // ==== checking the chat completions settings
+        let mut expected_chat = create_test_chat_settings();
+        expected_chat.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut chat_settings = dump
+            .chat_completions_settings()
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        chat_settings.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(chat_settings, expected_chat);
     }
 }
