@@ -219,3 +219,41 @@ async fn works_with_capacity_of_zero() {
         .expect("I should get a permit straight away")
         .unwrap();
 }
+
+// Regression test for https://github.com/meilisearch/meilisearch/issues/6577
+// When a permit is released and the freed slot is refilled by granting it to a
+// queued request, that queued request becomes a running search. The refill path
+// must therefore keep `searches_running` accurate, exactly like the
+// immediate-admission path does. Before the fix it decremented on release but
+// never re-incremented on the refill grant, so the counter drifted below the
+// real number of running searches and the admission gate over-admitted.
+#[actix_rt::test]
+async fn searches_running_stays_accurate_after_refill() {
+    // parallelism = 1, so at most one search may run at a time.
+    let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
+
+    // Occupy the single slot.
+    let permit1 = queue.try_get_search_permit().await.unwrap();
+
+    // Queue a second request; with the slot busy it has to wait in the queue.
+    let q = queue.clone();
+    let permit2 = tokio::task::spawn(async move { q.try_get_search_permit().await });
+    // Give the scheduler time to enqueue the waiting request.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Release the first permit via the implicit `Drop` (a single release signal),
+    // so the scheduler decrements then refills by granting the slot to the queued
+    // request. Using the explicit `Permit::drop` here would send two release
+    // signals (see #6578) and confuse this test.
+    drop(permit1);
+    let _permit2 = permit2.await.unwrap().unwrap();
+
+    // Let the scheduler loop publish the updated metric.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    assert_eq!(
+        queue.searches_running(),
+        1,
+        "a refill grant must keep `searches_running` accurate; got an undercount (#6577)"
+    );
+}
