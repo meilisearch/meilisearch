@@ -199,7 +199,10 @@ fn make_layer<
 
             let fmt_layer = tracing_subscriber::fmt::layer()
                 .with_writer(move || LogWriter { sender: sender.clone() })
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+                .with_ansi(false)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_file(true)
+                .with_line_number(true);
 
             let stream = byte_stream(receiver, guard);
             (Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>, Box::pin(stream))
@@ -210,7 +213,9 @@ fn make_layer<
             let fmt_layer = tracing_subscriber::fmt::layer()
                 .with_writer(move || LogWriter { sender: sender.clone() })
                 .json()
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE);
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
+                .with_file(true)
+                .with_line_number(true);
 
             let stream = byte_stream(receiver, guard);
             (Box::new(fmt_layer) as Box<dyn Layer<S> + Send + Sync>, Box::pin(stream))
