@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -10,6 +9,7 @@ use itertools::{merge_join_by, EitherOrBoth};
 
 use super::{OneTypoTerm, Phrase, QueryTerm, ZeroTypoTerm};
 use crate::heed_codec::SynonymsKeyCodec;
+use crate::index::WordsFstSegments;
 use crate::search::fst_utils::{Complement, Intersection, StartsWith, Union};
 use crate::search::new::interner::{DedupInterner, Interned};
 use crate::search::new::query_term::{Lazy, TwoTypoTerm};
@@ -78,28 +78,33 @@ fn find_one_typo_derivations(
     is_prefix: bool,
     one_typo_words: &mut BTreeSet<Interned<String>>,
 ) -> Result<()> {
-    let fst = ctx.get_words_fst()?;
+    let segments = ctx.get_words_fst_segments()?;
     let word = ctx.word_interner.get(word_interned).to_owned();
     let word = word.as_str();
 
     let dfa = build_dfa(word, 1, is_prefix);
-    let starts = StartsWith(Str::new(get_first(word)));
-    let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
+    'segments: for fst in segments.segments() {
+        let starts = StartsWith(Str::new(get_first(word)));
+        let mut stream = fst.search_with_state(Intersection(starts, &dfa)).into_stream();
 
-    while let Some((derived_word, state)) = stream.next() {
-        let d = dfa.distance(state.1);
-        match d.to_u8() {
-            0 => (),
-            1 => {
-                let derived_word = std::str::from_utf8(derived_word)?;
-                let derived_word = ctx.word_interner.insert(derived_word.to_owned());
-                one_typo_words.insert(derived_word);
-                if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT {
-                    break;
-                }
+        while let Some((derived_word, state)) = stream.next() {
+            if segments.is_deleted(derived_word) {
+                continue;
             }
-            _ => {
-                unreachable!("One typo dfa produced multiple typos")
+            let d = dfa.distance(state.1);
+            match d.to_u8() {
+                0 => (),
+                1 => {
+                    let derived_word = std::str::from_utf8(derived_word)?;
+                    let derived_word = ctx.word_interner.insert(derived_word.to_owned());
+                    one_typo_words.insert(derived_word);
+                    if one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT {
+                        break 'segments;
+                    }
+                }
+                _ => {
+                    unreachable!("One typo dfa produced multiple typos")
+                }
             }
         }
     }
@@ -109,7 +114,7 @@ fn find_one_typo_derivations(
 fn find_one_two_typo_derivations(
     word_interned: Interned<String>,
     is_prefix: bool,
-    fst: fst::Set<Cow<'_, [u8]>>,
+    segments: WordsFstSegments<'_>,
     word_interner: &mut DedupInterner<String>,
     one_typo_words: &mut BTreeSet<Interned<String>>,
     two_typo_words: &mut BTreeSet<Interned<String>>,
@@ -117,50 +122,56 @@ fn find_one_two_typo_derivations(
     let word = word_interner.get(word_interned).to_owned();
     let word = word.as_str();
 
-    let starts = StartsWith(Str::new(get_first(word)));
-    let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
     let second_dfa = build_dfa(word, 2, is_prefix);
-    let second = Intersection(&second_dfa, &starts);
-    let automaton = Union(first, &second);
 
-    let mut stream = fst.search_with_state(automaton).into_stream();
+    'segments: for fst in segments.segments() {
+        let starts = StartsWith(Str::new(get_first(word)));
+        let first = Intersection(build_dfa(word, 1, is_prefix), Complement(&starts));
+        let second = Intersection(&second_dfa, &starts);
+        let automaton = Union(first, &second);
 
-    while let Some((derived_word, state)) = stream.next() {
-        let finished_one_typo_words = one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT;
-        let finished_two_typo_words = two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT;
-        if finished_one_typo_words && finished_two_typo_words {
-            // No chance we will add either one- or two-typo derivations anymore, stop iterating.
-            break;
-        }
-        let derived_word = std::str::from_utf8(derived_word)?;
-        // No need to intern here
-        // in the case the typo is on the first letter, we know the number of typo
-        // is two
-        if get_first(derived_word) != get_first(word) && !finished_two_typo_words {
-            let derived_word_interned = word_interner.insert(derived_word.to_owned());
-            two_typo_words.insert(derived_word_interned);
-            continue;
-        } else {
-            // Else, we know that it is the second dfa that matched and compute the
-            // correct distance
-            let d = second_dfa.distance((state.1).0);
-            match d.to_u8() {
-                0 => (),
-                1 => {
-                    if finished_one_typo_words {
-                        continue;
+        let mut stream = fst.search_with_state(automaton).into_stream();
+
+        while let Some((derived_word, state)) = stream.next() {
+            let finished_one_typo_words = one_typo_words.len() >= limits::MAX_ONE_TYPO_COUNT;
+            let finished_two_typo_words = two_typo_words.len() >= limits::MAX_TWO_TYPOS_COUNT;
+            if finished_one_typo_words && finished_two_typo_words {
+                // No chance we will add either one- or two-typo derivations anymore, stop iterating.
+                break 'segments;
+            }
+            if segments.is_deleted(derived_word) {
+                continue;
+            }
+            let derived_word = std::str::from_utf8(derived_word)?;
+            // No need to intern here
+            // in the case the typo is on the first letter, we know the number of typo
+            // is two
+            if get_first(derived_word) != get_first(word) && !finished_two_typo_words {
+                let derived_word_interned = word_interner.insert(derived_word.to_owned());
+                two_typo_words.insert(derived_word_interned);
+                continue;
+            } else {
+                // Else, we know that it is the second dfa that matched and compute the
+                // correct distance
+                let d = second_dfa.distance((state.1).0);
+                match d.to_u8() {
+                    0 => (),
+                    1 => {
+                        if finished_one_typo_words {
+                            continue;
+                        }
+                        let derived_word_interned = word_interner.insert(derived_word.to_owned());
+                        one_typo_words.insert(derived_word_interned);
                     }
-                    let derived_word_interned = word_interner.insert(derived_word.to_owned());
-                    one_typo_words.insert(derived_word_interned);
-                }
-                2 => {
-                    if finished_two_typo_words {
-                        continue;
+                    2 => {
+                        if finished_two_typo_words {
+                            continue;
+                        }
+                        let derived_word_interned = word_interner.insert(derived_word.to_owned());
+                        two_typo_words.insert(derived_word_interned);
                     }
-                    let derived_word_interned = word_interner.insert(derived_word.to_owned());
-                    two_typo_words.insert(derived_word_interned);
+                    _ => unreachable!("2 typos DFA produced a distance greater than 2"),
                 }
-                _ => unreachable!("2 typos DFA produced a distance greater than 2"),
             }
         }
     }
@@ -324,18 +335,24 @@ impl Interned<QueryTerm> {
             max_levenshtein_distance: max_nbr_typos,
             ..
         } = self_mut;
-        let original_str = ctx.word_interner.get(*original).to_owned();
+        // Copy the values out to release the borrow on the term interner
+        // before fetching the words FST segments from the search context.
+        let original = *original;
+        let is_prefix = *is_prefix;
+        let max_nbr_typos = *max_nbr_typos;
         if two_typo.is_init() {
             return Ok(());
         }
+        let original_str = ctx.word_interner.get(original).to_owned();
         let mut one_typo_words = BTreeSet::new();
         let mut two_typo_words = BTreeSet::new();
 
-        if *max_nbr_typos > 0 {
+        if max_nbr_typos > 0 {
+            let segments = ctx.get_words_fst_segments()?;
             find_one_two_typo_derivations(
-                *original,
-                *is_prefix,
-                ctx.index.words_fst(ctx.txn)?,
+                original,
+                is_prefix,
+                segments,
                 &mut ctx.word_interner,
                 &mut one_typo_words,
                 &mut two_typo_words,
