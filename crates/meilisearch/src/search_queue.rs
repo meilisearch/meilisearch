@@ -52,6 +52,7 @@ impl Permit {
     pub async fn drop(self) {
         // if the channel is closed then the whole instance is down
         let _ = self.sender.send(()).await;
+        std::mem::forget(self);
     }
 }
 
@@ -202,5 +203,24 @@ impl SearchQueue {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_permit_explicit_drop_single_release() {
+        let (sender, mut receiver) = mpsc::channel(10);
+        let permit = Permit { sender };
+        permit.drop().await;
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let mut count = 0;
+        while receiver.try_recv().is_ok() {
+            count += 1;
+        }
+        assert_eq!(count, 1, "explicit drop must send exactly one release signal");
     }
 }
