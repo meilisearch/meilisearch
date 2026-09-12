@@ -1,4 +1,4 @@
-name: Publish images to Docker Hub
+name: Publish images to Docker Hub and GitHub Container Registry
 
 on:
   push:
@@ -28,12 +28,15 @@ jobs:
             runner: ubuntu-24.04-arm
           - edition: community
             registry: getmeili/meilisearch
+            ghcr-registry: ghcr.io/${{ github.repository_owner }}/meilisearch
             feature-flag: ""
           - edition: enterprise
             registry: getmeili/meilisearch-enterprise
+            ghcr-registry: ghcr.io/${{ github.repository_owner }}/meilisearch-enterprise
             feature-flag: "--features enterprise"
 
-    permissions: {}
+    permissions:
+      packages: write # This is needed to push the images to GitHub Container Registry
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -52,6 +55,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker meta
         id: meta
@@ -74,7 +84,10 @@ jobs:
         with:
           platforms: linux/${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ matrix.registry }}
+          # A single build is pushed by digest to both registries
+          tags: |
+            ${{ matrix.registry }}
+            ${{ matrix.ghcr-registry }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           build-args: |
             COMMIT_SHA=${{ github.sha }}
@@ -104,13 +117,16 @@ jobs:
         include:
           - edition: community
             registry: getmeili/meilisearch
+            ghcr-registry: ghcr.io/${{ github.repository_owner }}/meilisearch
           - edition: enterprise
             registry: getmeili/meilisearch-enterprise
+            ghcr-registry: ghcr.io/${{ github.repository_owner }}/meilisearch-enterprise
     needs:
       - build
 
     permissions:
       id-token: write # This is needed to use Cosign in keyless mode
+      packages: write # This is needed to push the images to GitHub Container Registry
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -170,6 +186,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
@@ -177,7 +200,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
-          images: ${{ matrix.registry }}
+          images: |
+            ${{ matrix.registry }}
+            ${{ matrix.ghcr-registry }}
           # Prevent `latest` to be updated for each new tag pushed.
           # We need latest and `vX.Y` tags to only be pushed for the stable Meilisearch releases.
           flavor: latest=false
@@ -191,6 +216,9 @@ jobs:
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
+          # The same digests were pushed to both registries by the `build` job,
+          # so the manifest list is tagged (via the Docker meta output) on
+          # Docker Hub and GitHub Container Registry alike.
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ matrix.registry }}@sha256:%s ' *)
 
