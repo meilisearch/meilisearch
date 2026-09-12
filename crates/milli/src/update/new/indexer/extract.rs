@@ -44,7 +44,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC>(
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
     embedder_stats: &EmbedderStats,
-) -> Result<(FacetFieldIdsDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
+) -> Result<(FacetFieldIdsDelta, WordDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
 {
@@ -89,6 +89,7 @@ where
 
     let facet_field_ids_delta;
     let word_delta;
+    let exact_word_delta;
 
     {
         let caches = {
@@ -186,11 +187,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::ExactWordDocids);
 
-            merge_and_send_docids(
+            exact_word_delta = merge_scan_and_send_docids(
                 exact_word_docids,
                 index.exact_word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<ExactWordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 indexing_context.must_stop_processing,
             )?;
         }
@@ -358,7 +371,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, Ordering::Relaxed);
 
-    Result::Ok((facet_field_ids_delta, word_delta, index_embeddings))
+    Result::Ok((facet_field_ids_delta, word_delta, exact_word_delta, index_embeddings))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -372,7 +385,7 @@ pub(super) fn extract_all_settings_changes<SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
-) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta, FacetFieldIdsDelta)>
+) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta, WordDelta, FacetFieldIdsDelta)>
 where
     SD: SettingsDelta + Sync,
 {
@@ -388,6 +401,7 @@ where
     let _entered = span.enter();
 
     let word_delta;
+    let exact_word_delta;
     let facet_field_ids_delta;
 
     update_database_documents(
@@ -496,11 +510,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::ExactWordDocids);
 
-            merge_and_send_docids(
+            exact_word_delta = merge_scan_and_send_docids(
                 exact_word_docids,
                 index.exact_word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<ExactWordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 indexing_context.must_stop_processing,
             )?;
         }
@@ -688,7 +714,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, Ordering::Relaxed);
 
-    Result::Ok((index_embeddings, word_delta, facet_field_ids_delta))
+    Result::Ok((index_embeddings, word_delta, exact_word_delta, facet_field_ids_delta))
 }
 
 fn primary_key_from_db<'indexer>(

@@ -1,4 +1,5 @@
-use std::{collections::BTreeSet, ops::BitOr};
+use std::collections::BTreeSet;
+use std::ops::BitOr;
 
 use either::Either;
 use itertools::{EitherOrBoth, Itertools};

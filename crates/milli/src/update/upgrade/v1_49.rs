@@ -6,6 +6,9 @@ use heed::RwTxn;
 
 use super::{UpgradeIndex, UpgradeParams};
 use crate::index::AssociatedSynonyms;
+use crate::update::new::indexer::{
+    recompute_all_prefix_databases_from_database, recompute_word_fst_from_word_docids_database,
+};
 use crate::update::settings::normalize;
 use crate::{Index, Result, MAX_LMDB_KEY_LENGTH};
 
@@ -78,5 +81,29 @@ impl UpgradeIndex for MigrateSynonymsToDedicatedDatabase {
 
     fn description(&self) -> &'static str {
         "Migrate synonyms to dedicated database"
+    }
+}
+
+/// Recompute the words FST to unify exact and tolerant words, and rebuild prefix databases.
+pub(super) struct RecomputeWordFstAndPrefixes();
+
+impl UpgradeIndex for RecomputeWordFstAndPrefixes {
+    fn upgrade(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &Index,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
+    ) -> Result<bool> {
+        recompute_word_fst_from_word_docids_database(index, wtxn, progress)?;
+        recompute_all_prefix_databases_from_database(index, wtxn, progress)?;
+        Ok(false)
+    }
+
+    fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
+        initial_version < (1, 49, 0)
+    }
+
+    fn description(&self) -> &'static str {
+        "Recomputing words FST (unifying exact and tolerant) and prefix databases"
     }
 }
