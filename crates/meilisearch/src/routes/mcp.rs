@@ -28,3 +28,21 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::MeilisearchApi;
 use crate::search_queue::SearchQueue;
+macro_rules! r#try_or_internal_error {
+    ($jsonrpc:ident, $id:ident, $expr:expr $(,)?) => {
+        try_or_internal_error!($jsonrpc, $id, $expr, internal_error)
+    };
+    ($jsonrpc:ident, $id:ident, $expr:expr, $error_type:ident $(,)?) => {
+        match $expr {
+            ::std::result::Result::Ok(val) => val,
+            ::std::result::Result::Err(err) => {
+                return Ok(::actix_web::HttpResponse::Ok().json(McpResponse {
+                    $jsonrpc,
+                    $id,
+                    result: None,
+                    error: Some(McpError::$error_type(err)),
+                }));
+            }
+        }
+    };
+}
