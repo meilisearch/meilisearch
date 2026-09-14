@@ -808,7 +808,7 @@ pub fn execute_vector_search(
 #[tracing::instrument(level = "trace", skip_all, target = "search::main")]
 pub fn execute_search(
     ctx: &mut SearchContext<'_>,
-    query_graph_terms: Option<(QueryGraph, Vec<LocatedQueryTerm>)>,
+    query_graph: Option<&QueryGraph>,
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     exhaustive_number_hits: bool,
@@ -838,7 +838,7 @@ pub fn execute_search(
         universe &= resolve_universe(
             ctx,
             &universe,
-            &query_graph,
+            query_graph,
             terms_matching_strategy,
             query_graph_logger,
             progress,
@@ -848,7 +848,7 @@ pub fn execute_search(
         bucket_sort(
             ctx,
             ranking_rules,
-            &query_graph,
+            query_graph,
             distinct.as_deref(),
             &universe,
             from,
@@ -902,7 +902,6 @@ pub fn execute_search(
         candidates: all_candidates,
         document_scores: scores,
         documents_ids: docids,
-        located_query_terms,
         degraded,
     })
 }
@@ -1043,7 +1042,6 @@ pub(crate) fn check_sort_criteria(
 }
 
 pub struct PartialSearchResult {
-    pub located_query_terms: Option<Vec<LocatedQueryTerm>>,
     pub candidates: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,
