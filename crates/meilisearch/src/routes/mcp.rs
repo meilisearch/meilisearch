@@ -47,6 +47,31 @@ macro_rules! r#try_or_internal_error {
     };
 }
 
+
+pub mod method {
+    pub const SERVER_DISCOVERY: &str = "server/discover";
+    pub const TOOLS_CALL: &str = "tools/call";
+    pub const TOOLS_LIST: &str = "tools/list";
+    pub const RESOURCES_LIST: &str = "resources/list";
+    pub const PROMPTS_LIST: &str = "prompts/list";
+}
+
+pub mod tool_name {
+    pub const LIST_INDEXES: &str = "listIndexes";
+    pub const DESCRIBE_INDEX: &str = "describeIndex";
+    pub const SEARCH_IN_INDEXES: &str = "searchInIndexes";
+    pub const FACET_SEARCH: &str = "facetSearch";
+}
+
+pub mod cache_scope {
+    pub const PRIVATE: &str = "private";
+}
+
+pub mod ttl_ms {
+    pub const IMMEDIATELY_STALE: usize = 0;
+    pub const QUICKLY_STALE: usize = 500_000; // 5 mins
+    pub const STATIC_RESULT: usize = 86_400_000; // 24 hours
+}
 #[routes::request(db)]
 #[derive(Debug, Clone)]
 /// Describes an index
