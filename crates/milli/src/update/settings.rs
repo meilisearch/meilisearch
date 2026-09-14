@@ -29,7 +29,7 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::{EmbedderStats, Progress};
+use crate::progress::{ConcurrentProgress, EmbedderStats};
 use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::steps::SettingsIndexerStep;
@@ -1537,7 +1537,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     pub fn execute<'indexer>(
         mut self,
         must_stop_processing: &'indexer MustStopProcessing,
-        progress: &'indexer Progress,
+        progress: &'indexer ConcurrentProgress,
         ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>> {

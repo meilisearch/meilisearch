@@ -33,7 +33,7 @@ use crate::database_stats::DatabaseStats;
 use crate::documents::{obkv_to_object, DocumentsBatchReader};
 use crate::error::{Error, InternalError};
 use crate::index::{PrefixSearch, PrefixSettings};
-use crate::progress::{EmbedderStats, Progress};
+use crate::progress::{ConcurrentProgress, EmbedderStats};
 pub use crate::update::index_documents::helpers::CursorClonableMmap;
 use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
@@ -533,7 +533,7 @@ where
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share
-                    Progress::quiet(),
+                    ConcurrentProgress::quiet(),
                     &mut rng,
                     dimension,
                     is_quantizing,
@@ -545,7 +545,11 @@ where
             .map_err(InternalError::from)??;
         }
 
-        self.index.cellulite.build(self.wtxn, &|| self.should_abort.get(), &Progress::quiet())?;
+        self.index.cellulite.build(
+            self.wtxn,
+            &|| self.should_abort.get(),
+            &ConcurrentProgress::quiet(),
+        )?;
 
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),
@@ -562,7 +566,7 @@ where
             self.index,
             &*settings_diff,
             self.should_abort,
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
         )?;
 
         Ok(number_of_documents)

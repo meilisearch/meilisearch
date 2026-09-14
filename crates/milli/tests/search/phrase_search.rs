@@ -1,5 +1,5 @@
 use http_client::policy::IpPolicy;
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::update::{IndexerConfig, Settings};
 use milli::{Criterion, Index, MustStopProcessing, Search, TermsMatchingStrategy};
 
@@ -15,7 +15,7 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -34,7 +34,7 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let txn = index.read_txn().unwrap();
     let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let mut search = Search::new(
         &txn,
         &index,

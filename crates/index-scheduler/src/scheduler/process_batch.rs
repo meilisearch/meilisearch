@@ -10,7 +10,7 @@ use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex};
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{ConcurrentProgress, VariableNameStep};
 use meilisearch_types::milli::{self, CboRoaringBitmapCodec, ChannelCongestion};
 use meilisearch_types::network::Network;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
@@ -54,7 +54,7 @@ impl IndexScheduler {
         &self,
         batch: Batch,
         current_batch: &mut ProcessingBatch,
-        progress: Progress,
+        progress: ConcurrentProgress,
         network: &Network,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         #[cfg(test)]
@@ -691,7 +691,7 @@ impl IndexScheduler {
     fn apply_compaction<'a>(
         &self,
         rtxn: &RoTxn,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         index_uid: impl IndexUid<'a>,
     ) -> Result<(u64, u64)> {
         // 1. Verify that the index exists
@@ -778,7 +778,7 @@ impl IndexScheduler {
     fn apply_index_swap(
         &self,
         wtxn: &mut RwTxn,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         task_id: u32,
         lhs: UserIndex<'_>,
         rhs: UserIndex<'_>,
@@ -851,7 +851,7 @@ impl IndexScheduler {
     fn delete_matched_tasks(
         &self,
         matched_tasks: &RoaringBitmap,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
     ) -> Result<RoaringBitmap> {
         fn remove_task_datetimes(
             wtxn: &mut RwTxn<'_>,
@@ -1200,7 +1200,7 @@ impl IndexScheduler {
         cancel_task_id: TaskId,
         current_batch: &mut ProcessingBatch,
         matched_tasks: &RoaringBitmap,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
     ) -> Result<Vec<Task>> {
         progress.update_progress(TaskCancelationProgress::RetrievingTasks);
         let mut tasks_to_cancel = RoaringBitmap::new();
@@ -1330,7 +1330,7 @@ impl IndexScheduler {
     fn process_index_deletion<'a>(
         &self,
         index_uid: impl IndexUid<'a>,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         index_has_been_created: bool,
     ) -> Result<u64> {
         progress.update_progress(DeleteIndexProgress::DeletingTheIndex);

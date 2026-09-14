@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, InternalError};
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
-use crate::progress::Progress;
+use crate::progress::ConcurrentProgress;
 use crate::search::facet::IndexFilter;
 use crate::update::new::indexer;
 use crate::update::settings::InnerIndexSettings;
@@ -31,7 +31,7 @@ pub(crate) struct TempIndex {
     pub inner: Index,
     pub indexer_config: IndexerConfig,
     pub index_documents_config: IndexDocumentsConfig,
-    pub progress: Progress,
+    pub progress: ConcurrentProgress,
     _tempdir: TempDir,
 }
 
@@ -54,7 +54,7 @@ impl TempIndex {
             Index::new(options, _tempdir.path(), CreateOrOpen::create_without_shards()).unwrap();
         let indexer_config = IndexerConfig::default();
         let index_documents_config = IndexDocumentsConfig::default();
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
 
         Self { inner, indexer_config, index_documents_config, progress, _tempdir }
     }
@@ -102,7 +102,7 @@ impl TempIndex {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::quiet(),
+            ConcurrentProgress::quiet(),
             None,
         )?;
 
@@ -122,7 +122,7 @@ impl TempIndex {
                 &document_changes,
                 embedders,
                 &MustStopProcessing::default(),
-                &Progress::quiet(),
+                &ConcurrentProgress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
@@ -159,7 +159,7 @@ impl TempIndex {
         update(&mut builder);
         builder.execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -201,7 +201,7 @@ impl TempIndex {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::quiet(),
+            ConcurrentProgress::quiet(),
             None,
         )?;
 
@@ -221,7 +221,7 @@ impl TempIndex {
                 &document_changes,
                 embedders,
                 &MustStopProcessing::default(),
-                &Progress::quiet(),
+                &ConcurrentProgress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
@@ -290,7 +290,7 @@ fn aborting_indexation() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::quiet(),
+            ConcurrentProgress::quiet(),
             None,
         )
         .unwrap();
@@ -310,7 +310,7 @@ fn aborting_indexation() {
                 &document_changes,
                 embedders,
                 &should_abort,
-                &Progress::quiet(),
+                &ConcurrentProgress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),

@@ -13,7 +13,7 @@ use meilisearch_types::error::Code;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{ConcurrentProgress, VariableNameStep};
 use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, obkv_to_json, InternalError};
@@ -41,7 +41,7 @@ impl IndexScheduler {
         api_key: Option<&str>,
         payload_size: Option<&Byte>,
         indexes: &BTreeMap<IndexUidPattern, ExportIndexSettings>,
-        progress: Progress,
+        progress: ConcurrentProgress,
     ) -> Result<BTreeMap<IndexUidPattern, DetailsExportIndexSettings>> {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessExport)?;
@@ -479,7 +479,7 @@ impl IndexScheduler {
         index_count: u64,
         export_old_remote_name: &str,
         network_change_origin: &Origin,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         agent: &http_client::ureq::Agent,
         must_stop_processing: &MustStopProcessing,
     ) -> Result<u64, Error> {
@@ -870,7 +870,7 @@ pub(super) struct ExportContext<'a> {
     pub(super) index: &'a meilisearch_types::milli::Index,
     pub(super) index_rtxn: &'a milli::heed::RoTxn<'a>,
     pub(super) universe: &'a RoaringBitmap,
-    pub(super) progress: &'a Progress,
+    pub(super) progress: &'a ConcurrentProgress,
     pub(super) agent: &'a http_client::ureq::Agent,
     pub(super) must_stop_processing: &'a MustStopProcessing,
     pub(super) features: RoFeatures,

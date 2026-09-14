@@ -1,6 +1,6 @@
 use either::{Either, Left, Right};
 use filter_parser::{FilterCondition, IndexFilterCondition};
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::{Criterion, Filter, IndexFilter, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
 

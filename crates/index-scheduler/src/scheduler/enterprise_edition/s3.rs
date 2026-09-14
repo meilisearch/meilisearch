@@ -6,7 +6,7 @@
 use meilisearch_types::heed::Env;
 use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::ConcurrentProgress;
 use meilisearch_types::tasks::{Status, Task};
 
 use crate::{Error, IndexScheduler, Result};
@@ -97,7 +97,7 @@ impl IndexScheduler {
 
     pub(in crate::scheduler) async fn process_snapshot_to_s3(
         &self,
-        progress: Progress,
+        progress: ConcurrentProgress,
         opts: meilisearch_types::milli::update::S3SnapshotOptions,
         mut tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
@@ -211,7 +211,7 @@ struct StsResponse {
 
 /// Streams a tarball of the database content into a pipe.
 fn stream_tarball_into_pipe(
-    progress: Progress,
+    progress: ConcurrentProgress,
     level: u32,
     writer: std::io::PipeWriter,
     index_scheduler: IndexScheduler,

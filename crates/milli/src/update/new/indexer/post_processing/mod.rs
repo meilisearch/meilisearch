@@ -14,7 +14,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
-use crate::progress::Progress;
+use crate::progress::ConcurrentProgress;
 use crate::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
@@ -71,7 +71,7 @@ fn compute_prefix_database(
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
     prefix_data: &PrefixData,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     progress.update_progress(PostProcessingWords::ComputePrefixes);
     let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
@@ -92,7 +92,7 @@ pub(crate) fn compute_prefix_database_from_sources(
     wtxn: &mut RwTxn,
     modified: &BTreeSet<MiniString>,
     deleted: &BTreeSet<MiniString>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
     compute_word_prefix_docids(wtxn, index, modified, deleted)?;
@@ -156,7 +156,7 @@ fn compute_word_fst(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<Option<PrefixData>> {
     progress.update_progress(PostProcessingWords::WordFst);
 
@@ -195,7 +195,7 @@ fn compute_word_fst(
 pub fn recompute_word_fst_from_word_docids_database(
     index: &Index,
     wtxn: &mut RwTxn,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     progress.update_progress(PostProcessingWords::WordFst);
     let fst = fst::Set::default().map_data(std::borrow::Cow::Owned)?;
@@ -221,7 +221,7 @@ fn compute_facet_search_database(
     index: &Index,
     wtxn: &mut RwTxn,
     global_fields_ids_map: GlobalFieldsIdsMap,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingFacets::FacetSearch);
@@ -322,7 +322,7 @@ fn compute_facet_level_database(
     wtxn: &mut RwTxn,
     mut facet_field_ids_delta: FacetFieldIdsDelta,
     global_fields_ids_map: &mut GlobalFieldsIdsMap,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     let filterable_attributes_rules = index.filterable_attributes_rules(wtxn)?;
     let mut deltas: Vec<_> = facet_field_ids_delta.consume_facet_string_delta().collect();

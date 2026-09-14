@@ -6,7 +6,7 @@ use heed::EnvOpenOptions;
 use http_client::policy::IpPolicy;
 use itertools::Itertools;
 use maplit::hashset;
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
@@ -252,7 +252,7 @@ fn criteria_mixup() {
         builder
             .execute(
                 &MustStopProcessing::default(),
-                &Progress::quiet(),
+                &ConcurrentProgress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 Default::default(),
@@ -263,7 +263,7 @@ fn criteria_mixup() {
         let rtxn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &rtxn,
             &index,
@@ -309,7 +309,7 @@ fn criteria_ascdesc() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -366,7 +366,7 @@ fn criteria_ascdesc() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::quiet(),
+            ConcurrentProgress::quiet(),
             None,
         )
         .unwrap();
@@ -382,7 +382,7 @@ fn criteria_ascdesc() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::quiet(),
+        &ConcurrentProgress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -403,7 +403,7 @@ fn criteria_ascdesc() {
         builder
             .execute(
                 &MustStopProcessing::default(),
-                &Progress::quiet(),
+                &ConcurrentProgress::quiet(),
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 Default::default(),
@@ -414,7 +414,7 @@ fn criteria_ascdesc() {
         let rtxn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &rtxn,
             &index,

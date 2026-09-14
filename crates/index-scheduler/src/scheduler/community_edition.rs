@@ -1,4 +1,4 @@
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::ConcurrentProgress;
 use meilisearch_types::network::Remote;
 use meilisearch_types::tasks::network::Origin;
 use meilisearch_types::tasks::Task;
@@ -26,7 +26,7 @@ impl IndexScheduler {
         _network_task: Task,
         _inner_batch: Box<Batch>,
         _current_batch: &mut ProcessingBatch,
-        _progress: Progress,
+        _progress: ConcurrentProgress,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         Err(Error::RequiresEnterpriseEdition { action: "processing a network task" })
     }
@@ -34,7 +34,7 @@ impl IndexScheduler {
     pub(super) fn process_network_ready(
         &self,
         _task: Task,
-        _progress: Progress,
+        _progress: ConcurrentProgress,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         Err(Error::RequiresEnterpriseEdition { action: "processing a network task" })
     }
@@ -60,7 +60,7 @@ impl IndexScheduler {
     #[cfg(unix)]
     pub(super) async fn process_snapshot_to_s3(
         &self,
-        _progress: Progress,
+        _progress: ConcurrentProgress,
         _opts: meilisearch_types::milli::update::S3SnapshotOptions,
         _tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {

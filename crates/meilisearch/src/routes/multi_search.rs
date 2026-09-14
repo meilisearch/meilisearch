@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::progress::{Progress, ProgressVerbosityMode};
+use meilisearch_types::milli::progress::{ProgressVerbosityMode, SequencialProgress};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -160,8 +160,8 @@ pub async fn multi_search_with_post(
     if use_documents_retrieval {
         // Since we don't want to process half of the search requests and then get a permit refused
         // we're going to get one permit for the whole duration of the multi-search request.
-        let progress = Progress::new(ProgressVerbosityMode::Info);
-        let permit = search_queue.try_get_search_permit(&progress).await?;
+        let progress = SequencialProgress::new(ProgressVerbosityMode::Info);
+        let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
         let request_uid = Uuid::now_v7();
 
         let federated_search = params.into_inner();
@@ -260,8 +260,8 @@ pub async fn legacy_multi_search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
-    let progress = Progress::new(ProgressVerbosityMode::Info);
-    let permit = search_queue.try_get_search_permit(&progress).await?;
+    let progress = SequencialProgress::new(ProgressVerbosityMode::Info);
+    let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
     let request_uid = Uuid::now_v7();
 
     let federated_search = params.into_inner();
@@ -312,13 +312,13 @@ pub async fn legacy_multi_search_with_post(
         .get(PROXY_SEARCH_HEADER)
         .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
 
-    let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
+    let (hydration_cache, preprocessed_queries, remote_errors, progress) = preprocess_filters(
         index_scheduler.clone(),
         &network_partitioner,
         queries,
         features,
         is_proxy,
-        &progress,
+        progress,
         &auth_filter,
         Code::InvalidSearchFilter,
     )
@@ -349,7 +349,7 @@ pub async fn legacy_multi_search_with_post(
                 include_metadata,
                 ShowFederationInfo::Always,
                 &personalization_service,
-                &progress,
+                progress,
                 &auth_filter,
             )
             .await;
@@ -361,6 +361,17 @@ pub async fn legacy_multi_search_with_post(
 
             analytics.publish(multi_aggregate, &req);
 
+            let (search_result, _, progress) =
+                search_result.map_err(|(mut err, query_index)| {
+                    // Add the query index that failed as context for the error message.
+                    // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+                    // of result and we can benefit from static typing.
+                    if let Some(query_index) = query_index {
+                        err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+                    }
+                    err
+                })?;
+
             debug!(
                 request_uid = ?request_uid,
                 returns = ?search_result,
@@ -368,15 +379,6 @@ pub async fn legacy_multi_search_with_post(
                 "Federated-search"
             );
 
-            let (search_result, _) = search_result.map_err(|(mut err, query_index)| {
-                // Add the query index that failed as context for the error message.
-                // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
-                // of result and we can benefit from static typing.
-                if let Some(query_index) = query_index {
-                    err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
-                }
-                err
-            })?;
             HttpResponse::Ok().json(search_result)
         }
         None => {
@@ -385,6 +387,7 @@ pub async fn legacy_multi_search_with_post(
             // changes.
             let search_results: Result<_, (ResponseError, usize)> = async {
                 let mut search_results = Vec::with_capacity(preprocessed_queries.len());
+                let mut progress = Some(progress);
                 for (query_index, (index_uid, query, federation_options)) in preprocessed_queries
                     .into_iter()
                     .map(PreprocessedQuery::into_inner_preprocessed)
@@ -398,26 +401,29 @@ pub async fn legacy_multi_search_with_post(
                         ));
                     }
 
-                    let search_result = crate::routes::indexes::search::legacy_search(
-                        query,
-                        index_scheduler.clone(),
-                        index_uid.clone(),
-                        request_uid,
-                        include_metadata,
-                        &progress,
-                        &auth_filter,
-                        &personalization_service,
-                        StatusCode::BAD_REQUEST,
-                    )
-                    .await
-                    .with_index(query_index)?;
+                    let (search_result, progress_inner) =
+                        crate::routes::indexes::search::legacy_search(
+                            query,
+                            index_scheduler.clone(),
+                            index_uid.clone(),
+                            request_uid,
+                            include_metadata,
+                            progress.take().unwrap(),
+                            &auth_filter,
+                            &personalization_service,
+                            StatusCode::BAD_REQUEST,
+                        )
+                        .await
+                        .with_index(query_index)?;
+
+                    progress = Some(progress_inner);
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),
                         result: search_result,
                     });
                 }
-                Ok(search_results)
+                Ok((search_results, progress.take().unwrap()))
             }
             .await;
             permit.drop().await;
@@ -427,7 +433,7 @@ pub async fn legacy_multi_search_with_post(
             }
             analytics.publish(multi_aggregate, &req);
 
-            let search_results = search_results.map_err(|(mut err, query_index)| {
+            let (search_results, progress) = search_results.map_err(|(mut err, query_index)| {
                 // Add the query index that failed as context for the error message.
                 // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
                 // of result and we can benefit from static typing.

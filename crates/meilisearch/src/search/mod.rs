@@ -19,9 +19,9 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::steps::RetrieveIndexDataStep;
+use meilisearch_types::milli::steps::{RetrieveIndexDataStep, TotalProcessingTimeStep};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
@@ -1648,7 +1648,7 @@ pub fn prepare_search<'t>(
     search_kind: &SearchKind,
     deadline: Deadline,
     features: RoFeatures,
-    progress: &'t Progress,
+    progress: &'t SequencialProgress,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
@@ -1794,7 +1794,7 @@ pub fn perform_search(
     params: SearchParams,
     index_scheduler: &IndexScheduler,
     index: &Index,
-    progress: &Progress,
+    progress: &SequencialProgress,
     auth_filter: &AuthFilter,
 ) -> Result<(SearchResult, Deadline), ResponseError> {
     let SearchParams {
@@ -2501,7 +2501,7 @@ fn make_hits<'a>(
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
-    progress: &Progress,
+    progress: &SequencialProgress,
 ) -> milli::Result<Vec<SearchHit>> {
     let _step = progress.update_progress_scoped(RetrieveIndexDataStep::Format);
     let mut documents = Vec::new();
@@ -2595,10 +2595,11 @@ pub fn perform_similar(
     index_scheduler: &IndexScheduler,
     index_uid: IndexUid,
     query: SimilarQuery,
-    progress: &Progress,
+    progress: &SequencialProgress,
     auth_filter: &AuthFilter,
     search_rules: Option<IndexSearchRules>,
 ) -> Result<SimilarResult, ResponseError> {
+    let _step = progress.update_progress_scoped(TotalProcessingTimeStep::Process);
     let before_search = Instant::now();
     let features = index_scheduler.features();
     let index = index_scheduler.user_index(&index_uid, auth_filter)?;

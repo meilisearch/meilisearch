@@ -5,7 +5,7 @@ use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceIndexUid};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::steps::PerformRetrievalStep;
 use meilisearch_types::milli::{
     self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
@@ -236,7 +236,7 @@ fn local_fetch_hydration_documents(
     index_scheduler: &IndexScheduler,
     hydration_docids: &HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     auth_filter: &AuthFilter,
-    progress: &Progress,
+    progress: &SequencialProgress,
 ) -> Result<HydrationDocuments, ResponseError> {
     let _step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
 
@@ -266,9 +266,13 @@ async fn federated_fetch_hydration_documents(
     network_partitioner: &NetworkPartitioner,
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
     auth_filter: &AuthFilter,
-    progress: &Progress,
+    progress: SequencialProgress,
 ) -> Result<
-    (HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>, RemoteErrors),
+    (
+        HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>,
+        RemoteErrors,
+        SequencialProgress,
+    ),
     ResponseError,
 > {
     let params =
@@ -315,16 +319,20 @@ async fn federated_fetch_hydration_documents(
     }
 
     //remote
-    let remote_retrieve_documents =
+    let (remote_retrieve_documents, progress) =
         RemoteRetrieveDocuments::start(network_partitioner, params, remote_queries, progress)
             .await?;
 
     // Perform local search
-    let mut hydration_documents =
-        local_fetch_hydration_documents(index_scheduler, &hydration_docids, auth_filter, progress)?;
+    let mut hydration_documents = local_fetch_hydration_documents(
+        index_scheduler,
+        &hydration_docids,
+        auth_filter,
+        &progress,
+    )?;
 
     // wait
-    let (remote_results, errors) =
+    let (remote_results, errors, progress) =
         remote_retrieve_documents.finish(index_scheduler, progress).await?;
 
     // Merge results
@@ -345,7 +353,7 @@ async fn federated_fetch_hydration_documents(
         })
         .collect();
 
-    Ok((hydration_documents, remote_errors))
+    Ok((hydration_documents, remote_errors, progress))
 }
 
 impl FederatedHydrationFormatter {
@@ -354,13 +362,13 @@ impl FederatedHydrationFormatter {
         index_scheduler: &IndexScheduler,
         network_partitioner: &NetworkPartitioner,
         auth_filter: &AuthFilter,
-        progress: &Progress,
-    ) -> Result<(Self, RemoteErrors), ResponseError> {
+        progress: SequencialProgress,
+    ) -> Result<(Self, RemoteErrors, SequencialProgress), ResponseError> {
         let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
 
         // Fetch the documents from the foreign indexes
-        let (hydration_documents, remote_errors) = if network_partitioner.sharding() {
+        let (hydration_documents, remote_errors, progress) = if network_partitioner.sharding() {
             federated_fetch_hydration_documents(
                 index_scheduler,
                 network_partitioner,
@@ -374,13 +382,17 @@ impl FederatedHydrationFormatter {
                 index_scheduler,
                 &hydration_docids,
                 auth_filter,
-                progress,
+                &progress,
             )?;
 
-            (hydration_documents, Default::default())
+            (hydration_documents, Default::default(), progress)
         };
 
-        Ok((Self { index_by_query_index, hydration_settings, hydration_documents }, remote_errors))
+        Ok((
+            Self { index_by_query_index, hydration_settings, hydration_documents },
+            remote_errors,
+            progress,
+        ))
     }
 
     pub fn hydrate_documents(

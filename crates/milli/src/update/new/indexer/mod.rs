@@ -31,7 +31,7 @@ use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::heed_codec::StrBEU16Codec;
 use crate::index::PrefixSearch;
-use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
+use crate::progress::{AtomicDatabaseStep, ConcurrentProgress, EmbedderStats};
 use crate::proximity::ProximityPrecision;
 use crate::steps::IndexingStep;
 use crate::steps::{PostProcessingWords, SettingsIndexerStep};
@@ -76,7 +76,7 @@ pub fn index<'pl, 'indexer, 'index, DC>(
     document_changes: &DC,
     embedders: RuntimeEmbedders,
     must_stop_processing: &'indexer MustStopProcessing,
-    progress: &'indexer Progress,
+    progress: &'indexer ConcurrentProgress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: &'indexer EmbedderStats,
 ) -> Result<ChannelCongestion>
@@ -253,7 +253,7 @@ pub fn reindex<'indexer, 'index, SD>(
     grenad_parameters: GrenadParameters,
     settings_delta: &'indexer SD,
     must_stop_processing: &'indexer MustStopProcessing,
-    progress: &'indexer Progress,
+    progress: &'indexer ConcurrentProgress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: Arc<EmbedderStats>,
 ) -> Result<ChannelCongestion>
@@ -566,7 +566,7 @@ fn delete_old_geo_databases<SD>(
     index: &Index,
     settings_delta: &SD,
     must_stop_processing: &MustStopProcessing,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
@@ -731,7 +731,7 @@ pub fn delete_old_fid_from_facet_databases<SD>(
     index: &Index,
     settings_delta: &SD,
     must_stop_processing: &MustStopProcessing,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
@@ -917,7 +917,7 @@ pub fn delete_old_fid_based_databases<SD>(
     index: &Index,
     settings_delta: &SD,
     must_stop_processing: &MustStopProcessing,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()>
 where
     SD: SettingsDelta + Sync,
@@ -963,7 +963,7 @@ pub fn delete_old_fid_based_databases_from_fids(
     index: &Index,
     must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     let bounds = compute_fst_bounds(wtxn, index)?;
 
