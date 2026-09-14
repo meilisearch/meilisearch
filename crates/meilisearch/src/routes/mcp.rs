@@ -624,3 +624,73 @@ impl From<&ResponseError> for McpErrorData {
         }
     }
 }
+
+fn ref_to_schema<'a>(components: &'a Components, r#ref: &Ref) -> Option<&'a Schema> {
+    let location = r#ref.ref_location.strip_prefix("#/components/schemas/")?;
+    match components.schemas.get(location)? {
+        RefOr::Ref(r#ref) => ref_to_schema(components, r#ref),
+        RefOr::T(schema) => Some(schema),
+    }
+}
+
+fn clean_refs_from_schema(components: &Components, schema: RefOr<Schema>) -> Option<Schema> {
+    let mut schema = match schema {
+        RefOr::Ref(r#ref) => ref_to_schema(components, &r#ref)?.clone(),
+        RefOr::T(schema) => schema,
+    };
+
+    match schema {
+        Schema::Array(ref mut array) => {
+            array.items = match mem::replace(&mut array.items, ArrayItems::False) {
+                ArrayItems::RefOrSchema(ref_or_schema) => {
+                    let schema = clean_refs_from_schema(components, *ref_or_schema)?;
+                    ArrayItems::RefOrSchema(Box::new(RefOr::T(schema)))
+                }
+                ArrayItems::False => ArrayItems::False,
+            };
+        }
+        Schema::Object(ref mut object) => {
+            object.properties = mem::take(&mut object.properties)
+                .into_iter()
+                .map(|(property, schema)| {
+                    clean_refs_from_schema(components, schema)
+                        .map(|schema| (property, RefOr::T(schema)))
+                })
+                .collect::<Option<_>>()?;
+
+            object.additional_properties = match mem::take(&mut object.additional_properties) {
+                Some(props) => match *props {
+                    AdditionalProperties::RefOr(r#ref) => {
+                        let schema = clean_refs_from_schema(components, r#ref)?;
+                        Some(Box::new(AdditionalProperties::RefOr(RefOr::T(schema))))
+                    }
+                    AdditionalProperties::FreeForm(yes) => {
+                        Some(Box::new(AdditionalProperties::FreeForm(yes)))
+                    }
+                },
+                None => None,
+            };
+        }
+        Schema::OneOf(ref mut one_of) => {
+            one_of.items = mem::take(&mut one_of.items)
+                .into_iter()
+                .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
+                .collect::<Option<_>>()?;
+        }
+        Schema::AllOf(ref mut all_of) => {
+            all_of.items = mem::take(&mut all_of.items)
+                .into_iter()
+                .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
+                .collect::<Option<_>>()?;
+        }
+        Schema::AnyOf(ref mut any_of) => {
+            any_of.items = mem::take(&mut any_of.items)
+                .into_iter()
+                .map(|schema| clean_refs_from_schema(components, schema).map(RefOr::T))
+                .collect::<Option<_>>()?;
+        }
+        _ => return None,
+    };
+
+    Some(schema)
+}
