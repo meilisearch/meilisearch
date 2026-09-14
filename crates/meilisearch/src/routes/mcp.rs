@@ -46,6 +46,15 @@ macro_rules! r#try_or_internal_error {
         }
     };
 }
+
+#[routes::request(db)]
+#[derive(Debug, Clone)]
+/// Describes an index
+pub struct DescribeIndex {
+    #[request(required)]
+    index_uid: IndexUid,
+}
+
 #[routes::request]
 #[derive(Debug, Clone)]
 pub struct McpQuery {
