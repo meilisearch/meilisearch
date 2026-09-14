@@ -28,6 +28,9 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::MeilisearchApi;
 use crate::search_queue::SearchQueue;
+
+static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::openapi);
+
 macro_rules! r#try_or_internal_error {
     ($jsonrpc:ident, $id:ident, $expr:expr $(,)?) => {
         try_or_internal_error!($jsonrpc, $id, $expr, internal_error)
@@ -47,6 +50,473 @@ macro_rules! r#try_or_internal_error {
     };
 }
 
+#[routes::routes(
+    tag = "MCP connection",
+    routes(
+        "" => post(mcp)
+    ),
+    tags((
+        name = "MCP",
+        description = "Model Context Protocol (MCP) is an open protocol that enables seamless integration between LLM applications and external data sources and tools.",
+    )),
+)]
+pub struct McpApi;
+
+/// Stream batches changes
+///
+/// The `/batches/stream` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
+///
+/// Batches are sent throught an SSE stream any time their progress or status changes, i.e., enqueued, processing, succeeded, failed.
+#[routes::path(
+    security(),
+    request_body = McpQuery,
+    responses(
+        (status = 200, description = "Stream of batches changes.", body = BatchView, content_type = "application/x-ndjson", example = json!(
+            {
+                "uid": 0,
+                "details": {
+                    "receivedDocuments": 1,
+                    "indexedDocuments": 1
+                },
+                "progress": null,
+                "stats": {
+                    "totalNbTasks": 1,
+                    "status": {
+                        "succeeded": 1
+                    },
+                    "types": {
+                        "documentAdditionOrUpdate": 1
+                    },
+                    "indexUids": {
+                        "INDEX_NAME": 1
+                    }
+                },
+                "duration": "PT0.364788S",
+                "startedAt": "2024-12-10T15:48:49.672141Z",
+                "finishedAt": "2024-12-10T15:48:50.036929Z",
+                "batchStrategy": "batched all enqueued tasks"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+async fn mcp(
+    request: HttpRequest,
+    index_scheduler: Data<IndexScheduler>,
+    search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    body: AwebJson<McpQuery, DeserrJsonError>,
+    analytics: web::Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_mcp_route("calling the /mcp route")?;
+
+    let body = body.into_inner();
+    let McpQuery { jsonrpc, id, method, mut params } = body;
+
+    let response = match method.as_str() {
+        method::SERVER_DISCOVERY => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::discover()), error: None }
+        }
+        method::TOOLS_LIST => {
+            let list_tools = try_or_internal_error!(
+                jsonrpc,
+                id,
+                McpResult::list_tools(),
+                internal_error_from_anyhow,
+            );
+            McpResponse { jsonrpc, id, result: Some(list_tools), error: None }
+        }
+        method::RESOURCES_LIST => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::empty_resources()), error: None }
+        }
+        method::PROMPTS_LIST => {
+            McpResponse { jsonrpc, id, result: Some(McpResult::empty_prompts()), error: None }
+        }
+        method::TOOLS_CALL => match params.name.as_deref() {
+            Some(tool_name::SEARCH_IN_INDEXES) => {
+                let query = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    serde_json::to_vec(&params.arguments.unwrap_or_default())
+                );
+
+                let mut payload = actix_web::dev::Payload::from(query);
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+
+                let params = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    AwebJson::from_request(&request, &mut payload).await
+                );
+
+                let result = super::multi_search::multi_search_with_post(
+                    guarded_index_scheduler,
+                    search_queue,
+                    personalization_service,
+                    params,
+                    request,
+                    analytics,
+                )
+                .await;
+
+                match result {
+                    Ok(response) => {
+                        let body = response.into_body();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn
+                        );
+                        let text = String::from_utf8_lossy(&bytes).into_owned();
+                        // Note: This blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let content = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
+
+                        McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(McpResult::from_content_text_and_ttl(
+                                content,
+                                text,
+                                ttl_ms::IMMEDIATELY_STALE,
+                            )),
+                            error: None,
+                        }
+                    }
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        let result = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            McpResult::from_response_error(response)
+                        );
+                        McpResponse { jsonrpc, id, result: Some(result), error: None }
+                    }
+                }
+            }
+            Some(tool_name::FACET_SEARCH) => {
+                let index_uid = match params.arguments.as_mut() {
+                    Some(serde_json::Value::Object(object)) => {
+                        // We remove the extra indexUid parameter to make sure the route accepts the payload
+                        let index_uid = match object.remove("indexUid") {
+                            Some(uid) => uid,
+                            None => {
+                                return Ok(HttpResponse::Ok().json(McpResponse {
+                                    jsonrpc,
+                                    id,
+                                    result: None,
+                                    error: Some(McpError::invalid_params("missing indexUid")),
+                                }))
+                            }
+                        };
+                        match index_uid.as_str() {
+                            Some(s) => s.to_owned(),
+                            None => {
+                                return Ok(HttpResponse::Ok().json(McpResponse {
+                                    jsonrpc,
+                                    id,
+                                    result: None,
+                                    error: Some(McpError::invalid_params(
+                                        "expected the indexUid to be a string",
+                                    )),
+                                }))
+                            }
+                        }
+                    }
+                    _ => {
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError::invalid_params("expected JSON Object")),
+                        }))
+                    }
+                };
+
+                let query = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    serde_json::to_vec(&params.arguments.unwrap_or_default())
+                );
+                let mut payload = actix_web::dev::Payload::from(query);
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+                let params = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    AwebJson::from_request(&request, &mut payload).await
+                );
+
+                let result = super::indexes::facet_search::search(
+                    guarded_index_scheduler,
+                    search_queue,
+                    index_uid.into(),
+                    params,
+                    request,
+                    analytics,
+                )
+                .await;
+
+                match result {
+                    Ok(response) => {
+                        let body = response.into_body();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn,
+                        );
+                        let text = String::from_utf8_lossy(&bytes).into_owned();
+                        // Note: This blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let content = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
+                        McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(McpResult::from_content_text_and_ttl(
+                                content,
+                                text,
+                                ttl_ms::IMMEDIATELY_STALE,
+                            )),
+                            error: None,
+                        }
+                    }
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        let result = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            McpResult::from_response_error(response),
+                        );
+                        McpResponse { jsonrpc, id, result: Some(result), error: None }
+                    }
+                }
+            }
+            Some(tool_name::LIST_INDEXES) => {
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct Pagination {
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    offset: Option<u64>,
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    limit: Option<u64>,
+                }
+
+                let pagination = match params.arguments.as_mut() {
+                    Some(serde_json::Value::Object(object)) => {
+                        // We remove the extra indexUid parameter to make sure the route accepts the payload
+                        let offset = object.remove("offset").and_then(|off| off.as_u64());
+                        let limit = object.remove("limit").and_then(|limit| limit.as_u64());
+                        Pagination { offset, limit }
+                    }
+                    _ => {
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError::invalid_params("expected JSON Object")),
+                        }))
+                    }
+                };
+
+                let mut payload = actix_web::dev::Payload::None;
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+                let query =
+                    try_or_internal_error!(jsonrpc, id, serde_urlencoded::to_string(&pagination));
+                let paginate =
+                    try_or_internal_error!(jsonrpc, id, AwebQueryParameter::from_query(&query));
+
+                let result = super::indexes::list_indexes(guarded_index_scheduler, paginate).await;
+
+                match result {
+                    Ok(response) => {
+                        let body = response.into_body();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn,
+                        );
+                        let text = String::from_utf8_lossy(&bytes).into_owned();
+                        // Note: this blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let content = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
+                        McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(McpResult::from_content_text_and_ttl(
+                                content,
+                                text,
+                                ttl_ms::QUICKLY_STALE,
+                            )),
+                            error: None,
+                        }
+                    }
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        let result = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            McpResult::from_response_error(response),
+                        );
+                        McpResponse { jsonrpc, id, result: Some(result), error: None }
+                    }
+                }
+            }
+            Some(tool_name::DESCRIBE_INDEX) => {
+                let DescribeIndex { index_uid } = match params.arguments.take() {
+                    Some(value) => try_or_internal_error!(
+                        jsonrpc,
+                        id,
+                        serde_json::from_value(value).map_err(|err| err.to_string()),
+                        invalid_params,
+                    ),
+                    _ => {
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: None,
+                            error: Some(McpError::invalid_params("expected arguments found none")),
+                        }))
+                    }
+                };
+
+                let query = serde_json::to_vec(&serde_json::json!({ "limit": 5 }))
+                    .expect("The json macro to correctly serialize");
+                let mut payload = actix_web::dev::Payload::from(query);
+
+                let guarded_index_scheduler = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    GuardedData::from_request(&request, &mut payload).await
+                );
+                let params = try_or_internal_error!(
+                    jsonrpc,
+                    id,
+                    AwebJson::from_request(&request, &mut payload).await
+                );
+
+                let result = super::indexes::documents::documents_by_query_post(
+                    guarded_index_scheduler,
+                    index_uid.into_inner().into(),
+                    params,
+                    search_queue,
+                    request,
+                    analytics,
+                )
+                .await;
+
+                let sample_hits = match result {
+                    Ok(response) => {
+                        let body = response.into_body();
+                        let bytes = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            actix_web::body::to_bytes(body).await,
+                            internal_error_from_box_dyn,
+                        );
+                        // Note: This blocks and would have been better to have a serde_json
+                        //       RawValue to avoid allocating too much and simply pass through
+                        let mut content: serde_json::Map<String, serde_json::Value> = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            serde_json::from_reader(Cursor::new(bytes))
+                        );
+                        content.remove("results")
+                    }
+                    Err(response) => {
+                        tracing::error!("{response:?}");
+                        let result = try_or_internal_error!(
+                            jsonrpc,
+                            id,
+                            McpResult::from_response_error(response)
+                        );
+                        return Ok(HttpResponse::Ok().json(McpResponse {
+                            jsonrpc,
+                            id,
+                            result: Some(result),
+                            error: None,
+                        }));
+                    }
+                };
+
+                #[derive(Debug, Clone, Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct IndexDescription {
+                    #[serde(skip_serializing_if = "Option::is_none")]
+                    sample_hits: Option<serde_json::Value>,
+                }
+
+                let description = IndexDescription { sample_hits };
+                let content =
+                    try_or_internal_error!(jsonrpc, id, serde_json::to_value(&description));
+                let text = try_or_internal_error!(jsonrpc, id, serde_json::to_string(&content));
+
+                McpResponse {
+                    jsonrpc,
+                    id,
+                    result: Some(McpResult::from_content_text_and_ttl(
+                        content,
+                        text,
+                        ttl_ms::QUICKLY_STALE,
+                    )),
+                    error: None,
+                }
+            }
+            Some(unknown_tool_name) => McpResponse {
+                jsonrpc,
+                id,
+                result: None,
+                error: Some(McpError::unknown_tool(unknown_tool_name)),
+            },
+            None => McpResponse {
+                jsonrpc,
+                id,
+                result: None,
+                error: Some(McpError::invalid_params("missing tool name")),
+            },
+        },
+        unknow_method_name => McpResponse {
+            jsonrpc,
+            id,
+            result: None,
+            error: Some(McpError::unknow_method(unknow_method_name)),
+        },
+    };
+
+    Ok(HttpResponse::Ok().json(response))
+}
 
 pub mod method {
     pub const SERVER_DISCOVERY: &str = "server/discover";
@@ -72,6 +542,7 @@ pub mod ttl_ms {
     pub const QUICKLY_STALE: usize = 500_000; // 5 mins
     pub const STATIC_RESULT: usize = 86_400_000; // 24 hours
 }
+
 #[routes::request(db)]
 #[derive(Debug, Clone)]
 /// Describes an index
