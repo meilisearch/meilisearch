@@ -19,12 +19,14 @@ use crate::{
 mod action;
 mod condition;
 mod fuel;
+mod upgrade;
 
 /// Fields used in DSR documents
 pub mod fields;
 
 pub use action::{PinAction, RuleActions, ScaleAction};
 pub use fuel::DsrFuel;
+pub use upgrade::{create_metadata, upgrade_dsrs, METADATA_UID};
 
 /// Internal identifier of a rule.
 ///
@@ -42,6 +44,12 @@ pub type RuleId = u32;
 /// - Find applicable actions for a given query.
 ///
 /// If you don't want to relinquish ownership of a transaction and/or an index, use [`DynamicSearchRulesView`].
+///
+/// # Metadata
+///
+/// The DSR index includes a special "metadata" document. The implementation ensures that it is not returned as a normal rule.
+/// This document is responsible to hold the internal schema version, and is updated on version upgrades.
+/// It should also be created when creating the index (see [`create_metadata`]).
 pub struct DynamicSearchRules {
     index: Index,
     rtxn: RoTxn<'static, WithoutTls>,
@@ -55,6 +63,12 @@ pub struct DynamicSearchRules {
 /// - Find applicable actions for a given query.
 ///
 /// If you want to store this view in a struct without a lifetime, consider [`DynamicSearchRules`].
+///
+/// # Metadata
+///
+/// The DSR index includes a special "metadata" document. The implementation ensures that it is not returned as a normal rule.
+/// This document is responsible to hold the internal schema version, and is updated on version upgrades.
+/// It should also be created when creating the index (see [`create_metadata`]).
 #[derive(Clone, Copy)]
 pub struct DynamicSearchRulesView<'a> {
     index: &'a Index,
@@ -72,8 +86,16 @@ impl<'a> DynamicSearchRulesView<'a> {
         Self { index, rtxn, db_fields_ids_map }
     }
 
+    fn metadata_internal_id(self) -> Result<Option<DocumentId>> {
+        Ok(self.index.external_documents_ids().get(self.rtxn, METADATA_UID)?)
+    }
+
     /// Get the raw representation of a rule from its UID.
     pub fn get(self, rule_uid: &str) -> Result<Option<DocumentFromDb<'a, FieldsIdsMap>>> {
+        if rule_uid == METADATA_UID {
+            return Ok(None);
+        }
+
         let Some(docid) = self.index.external_documents_ids().get(self.rtxn, rule_uid)? else {
             return Ok(None);
         };
@@ -81,13 +103,13 @@ impl<'a> DynamicSearchRulesView<'a> {
         self.get_from_internal_id(docid)
     }
 
-    /// Get the raw representation of a rule from its internal ID.
+    /// Get the raw representation of a rule or the index metadata, from its internal ID.
     pub fn get_from_internal_id(
         self,
-        rule_id: RuleId,
+        rule_or_metadata_id: DocumentId,
     ) -> Result<Option<DocumentFromDb<'a, FieldsIdsMap>>> {
         let Some(doc) = DocumentFromDb::new(
-            rule_id,
+            rule_or_metadata_id,
             self.rtxn,
             self.index,
             self.db_fields_ids_map,
@@ -156,7 +178,9 @@ impl<'a> DynamicSearchRulesView<'a> {
     where
         I: IntoIterator<Item = RuleId>,
     {
-        Ok(rule_ids.into_iter().map(
+        let metadata_id = self.metadata_internal_id()?;
+
+        Ok(rule_ids.into_iter().filter(move |rule_id| Some(*rule_id) != metadata_id).map(
             move |rule_id| {
                 self.get_from_internal_id(rule_id)
                     .transpose()
@@ -191,14 +215,20 @@ impl<'a> DynamicSearchRulesView<'a> {
     }
 
     /// A bitmap of all the rule internal ids.
+    ///
+    /// The internal ID of the special "metadata" document is excluded from the returned list.
     pub fn all_rule_ids(&self) -> Result<RoaringBitmap> {
-        Ok(self.index.documents_ids(self.rtxn)?)
+        let mut all_rules = self.index.documents_ids(self.rtxn)?;
+        if let Some(metadata_id) = self.metadata_internal_id()? {
+            all_rules.remove(metadata_id);
+        }
+        Ok(all_rules)
     }
 
     /// Performs a search query against the rules specified in `universe` according to the following parameters:
     ///
     /// - `query`: String to look for (with a `Last` word matching strategy) in description and `query.words`
-    /// - `universe`: List of internal rule ids.
+    /// - `universe`: List of internal rule ids. It must not contain the internal id for the special "metadata" document.
     pub fn search_in_description_and_words(
         &self,
         query: Option<String>,
@@ -339,6 +369,8 @@ impl DynamicSearchRules {
     }
 
     /// A bitmap of all the rule internal ids.
+    ///
+    /// The internal ID of the special "metadata" document is excluded from the returned list.
     pub fn all_rule_ids(&self) -> Result<RoaringBitmap> {
         self.as_view().all_rule_ids()
     }
