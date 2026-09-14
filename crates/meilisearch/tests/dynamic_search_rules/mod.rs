@@ -3040,3 +3040,1668 @@ async fn multi_search_lower_precedence_pin_wins() {
     }
     "###);
 }
+
+#[actix_web::test]
+async fn search_removes_hidden_documents() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "keep-doc-1" },
+                { "id": "hidden-doc-1" },
+                { "id": "keep-doc-2" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // regular search shows all three docs
+    let (value, code) = index.search_post(json!({ "q": "doc", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "keep-doc-1"
+      },
+      {
+        "id": "hidden-doc-1"
+      },
+      {
+        "id": "keep-doc-2"
+      }
+    ]
+    "###);
+
+    // add a rule to hide a doc when looking for "doc"
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "hide-hidden",
+            json!({
+                "active": true,
+                "conditions": {
+                  "query": {
+                    "words": "doc"
+                  }
+                },
+                "actions": {
+                  "scale": [
+                    {"ids": ["hidden-doc-1"], "weight": 0.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // searching for "doc" hides the hidden doc
+    let (value, code) = index.search_post(json!({ "q": "doc", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "keep-doc-1"
+      },
+      {
+        "id": "keep-doc-2"
+      }
+    ]
+    "###);
+
+    // placeholder search still show the doc
+    let (value, code) = index.search_post(json!({ "q": "", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "keep-doc-1"
+      },
+      {
+        "id": "hidden-doc-1"
+      },
+      {
+        "id": "keep-doc-2"
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
+async fn bad_scale_action() {
+    let server = dynamic_search_rules_server().await;
+
+    let (response, code) = server
+        .create_dynamic_search_rule(
+            "no-filter-or-id",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"weight": 42.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "invalid `.actions.scale[0]`: one of `filter` or `ids` must be a non-empty valid value.",
+      "code": "invalid_dynamic_search_rule_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
+    }
+    "###);
+
+    let (response, code) = server
+        .create_dynamic_search_rule(
+            "empty-filter",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"filter": "", "weight": 42.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "invalid `.actions.scale[0]`: one of `filter` or `ids` must be a non-empty valid value.",
+      "code": "invalid_dynamic_search_rule_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
+    }
+    "###);
+
+    let (response, code) = server
+        .create_dynamic_search_rule(
+            "bad-filter",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"filter": "genres OR", "weight": 42.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "invalid `.actions.scale[0].filter`: Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `genres OR`.\n1:10 genres OR",
+      "code": "invalid_dynamic_search_rule_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
+    }
+    "###);
+
+    let (response, code) = server
+        .create_dynamic_search_rule(
+            "empty-ids",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"ids": [], "weight": 42.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "invalid `.actions.scale[0]`: one of `filter` or `ids` must be a non-empty valid value.",
+      "code": "invalid_dynamic_search_rule_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
+    }
+    "###);
+
+    let (response, code) = server
+        .create_dynamic_search_rule(
+            "foreign-filters",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"filter": "_foreign(f, genres = Adventure)", "weight": 42.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(response, @r###"
+    {
+      "message": "invalid `.actions.scale[0].filter`: filter condition `_foreign` is not supported in dynamic search rule actions.\n10:11 _foreign(f, genres = Adventure)",
+      "code": "invalid_dynamic_search_rule_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
+    }
+    "###);
+}
+
+#[actix_web::test]
+async fn search_boost_deboost_hide() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["kind"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "boosted-doc", "kind": "boost" },
+                { "id": "deboosted-doc-with-optional", "kind": "deboost", },
+                { "id": "hidden-doc-with-optional", "kind": "hide", },
+                { "id": "unchanged-doc-with-optional", "kind": "unchanged" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // "natural" search without a DSR
+    let (value, code) = index.search_post(json!({ "q": "doc optional", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "deboosted-doc-with-optional",
+        "kind": "deboost"
+      },
+      {
+        "id": "hidden-doc-with-optional",
+        "kind": "hide"
+      },
+      {
+        "id": "unchanged-doc-with-optional",
+        "kind": "unchanged"
+      },
+      {
+        "id": "boosted-doc",
+        "kind": "boost"
+      }
+    ]
+    "###);
+
+    // add scaling rule depending on kind
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "scale-kind",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"filter": "kind = boost", "weight": 2.5},
+                    {"filter": "kind = deboost", "weight": 0.5},
+                    {"filter": "kind = hide", "weight": 0.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // same search with the DSR
+    let (value, code) = index.search_post(json!({ "q": "doc optional", "showRankingScore": true, "showRankingScoreDetails": true, "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "boosted-doc",
+        "kind": "boost",
+        "_rankingScore": 0.4621212121212121,
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "scale-kind",
+                "weight": 2.5
+              }
+            ],
+            "totalWeight": 2.5
+          },
+          "words": {
+            "order": 1,
+            "matchingWords": 1,
+            "maxMatchingWords": 2,
+            "score": 0.5
+          },
+          "typo": {
+            "order": 2,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 3,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 4,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 5,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 6,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      },
+      {
+        "id": "unchanged-doc-with-optional",
+        "kind": "unchanged",
+        "_rankingScore": 0.951058201058201,
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 2,
+            "maxMatchingWords": 2,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 2,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 0.75
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.8571428571428571
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 2,
+            "maxMatchingWords": 2,
+            "score": 0.3333333333333333
+          }
+        }
+      },
+      {
+        "id": "deboosted-doc-with-optional",
+        "kind": "deboost",
+        "_rankingScore": 0.951058201058201,
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "scale-kind",
+                "weight": 0.5
+              }
+            ],
+            "totalWeight": 0.5
+          },
+          "words": {
+            "order": 1,
+            "matchingWords": 2,
+            "maxMatchingWords": 2,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 2,
+            "typoCount": 0,
+            "maxTypoCount": 2,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 3,
+            "score": 0.75
+          },
+          "attributeRank": {
+            "order": 4,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 5,
+            "score": 0.8571428571428571
+          },
+          "exactness": {
+            "order": 6,
+            "matchType": "noExactMatch",
+            "matchingWords": 2,
+            "maxMatchingWords": 2,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
+async fn search_scale_combination() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) =
+        index.update_settings(json!({ "filterableAttributes": ["category", "color"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "red-shorts", "category": "shorts", "color": "red" },
+                { "id": "blue-shorts", "category": "shorts", "color": "blue" },
+                { "id": "green-pants", "category": "pants", "color": "green" },
+                { "id": "blue-pants", "category": "pants", "color": "blue" },
+                { "id": "orange-pants", "category": "pants", "color": "orange" },
+                { "id": "red-pants", "category": "pants", "color": "red" },
+                { "id": "green-shirt", "category": "shirt", "color": "green" },
+                { "id": "blue-shirt", "category": "shirt", "color": "blue" },
+                { "id": "orange-shirt", "category": "shirt", "color": "orange" },
+                { "id": "red-shirt", "category": "shirt", "color": "red" },
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // "natural" search without a DSR
+    let (value, code) = index.search_post(json!({ "q": "", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "red-shorts",
+        "category": "shorts",
+        "color": "red"
+      },
+      {
+        "id": "blue-shorts",
+        "category": "shorts",
+        "color": "blue"
+      },
+      {
+        "id": "green-pants",
+        "category": "pants",
+        "color": "green"
+      },
+      {
+        "id": "blue-pants",
+        "category": "pants",
+        "color": "blue"
+      },
+      {
+        "id": "orange-pants",
+        "category": "pants",
+        "color": "orange"
+      },
+      {
+        "id": "red-pants",
+        "category": "pants",
+        "color": "red"
+      },
+      {
+        "id": "green-shirt",
+        "category": "shirt",
+        "color": "green"
+      },
+      {
+        "id": "blue-shirt",
+        "category": "shirt",
+        "color": "blue"
+      },
+      {
+        "id": "orange-shirt",
+        "category": "shirt",
+        "color": "orange"
+      },
+      {
+        "id": "red-shirt",
+        "category": "shirt",
+        "color": "red"
+      }
+    ]
+    "###);
+
+    // scale rules depending on user preference
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "color-pref",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    // this user likes red best
+                    {"filter": "color = red", "weight": 1.5},
+                    // this user likes orange least
+                    {"filter": "color = orange", "weight": 0.8}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "cat-pref",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    // this user likes shirt best
+                    {"filter": "category = shirt", "weight": 1.2},
+                    // this user never wants to see shorts
+                    {"filter": "category = shorts", "weight": 0.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // search with the DSRs
+    let (value, code) =
+        index.search_post(json!({ "q": "", "showRankingScoreDetails": true,"limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "red-shirt",
+        "category": "shirt",
+        "color": "red",
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "color-pref",
+                "weight": 1.5
+              },
+              {
+                "ruleUid": "cat-pref",
+                "weight": 1.2
+              }
+            ],
+            "totalWeight": 1.7999999999999998
+          }
+        }
+      },
+      {
+        "id": "red-pants",
+        "category": "pants",
+        "color": "red",
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "color-pref",
+                "weight": 1.5
+              }
+            ],
+            "totalWeight": 1.5
+          }
+        }
+      },
+      {
+        "id": "green-shirt",
+        "category": "shirt",
+        "color": "green",
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "cat-pref",
+                "weight": 1.2
+              }
+            ],
+            "totalWeight": 1.2
+          }
+        }
+      },
+      {
+        "id": "blue-shirt",
+        "category": "shirt",
+        "color": "blue",
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "cat-pref",
+                "weight": 1.2
+              }
+            ],
+            "totalWeight": 1.2
+          }
+        }
+      },
+      {
+        "id": "green-pants",
+        "category": "pants",
+        "color": "green",
+        "_rankingScoreDetails": {}
+      },
+      {
+        "id": "blue-pants",
+        "category": "pants",
+        "color": "blue",
+        "_rankingScoreDetails": {}
+      },
+      {
+        "id": "orange-shirt",
+        "category": "shirt",
+        "color": "orange",
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "color-pref",
+                "weight": 0.8
+              },
+              {
+                "ruleUid": "cat-pref",
+                "weight": 1.2
+              }
+            ],
+            "totalWeight": 0.96
+          }
+        }
+      },
+      {
+        "id": "orange-pants",
+        "category": "pants",
+        "color": "orange",
+        "_rankingScoreDetails": {
+          "scale": {
+            "order": 0,
+            "actions": [
+              {
+                "ruleUid": "color-pref",
+                "weight": 0.8
+              }
+            ],
+            "totalWeight": 0.8
+          }
+        }
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
+async fn search_pin_wins_over_boost() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "boosted-and-pinned-doc" },
+                { "id": "organic-premier-doc-1" },
+                { "id": "organic-premier-doc-2" },
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // add a rule with pin and boost
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "boost-and-pin",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"ids": ["boosted-and-pinned-doc"], "weight": 10.0} // major boost should guarantee it is first
+                  ],
+                  "pin": [
+                    {"id": "boosted-and-pinned-doc", "position": 1} // will be number 2
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // search that should put organic docs first
+    let (value, code) = index
+        .search_post(
+            json!({ "q": "doc premier organic", "limit": 10, "showRankingScoreDetails": true }),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "organic-premier-doc-1",
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 3,
+            "maxMatchingWords": 3,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 3,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 0.7142857142857143
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.8709677419354839
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 3,
+            "maxMatchingWords": 3,
+            "score": 0.3333333333333333
+          }
+        }
+      },
+      {
+        "id": "boosted-and-pinned-doc",
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 1,
+            "precedence": null,
+            "ruleUid": "boost-and-pin"
+          }
+        }
+      },
+      {
+        "id": "organic-premier-doc-2",
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 3,
+            "maxMatchingWords": 3,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 3,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 0.7142857142857143
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.8709677419354839
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 3,
+            "maxMatchingWords": 3,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
+async fn search_ids_and_filter() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["kind"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "actually-keep", "kind": "hide" },
+                { "id": "really-hidden", "kind": "hide", },
+                { "id": "not-hidden", "kind": "keep", }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // add a rule with ids AND filter
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "hide-hidden",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"ids": ["really-hidden"], "filter": "kind = hide", "weight": 0.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // placeholder search keeps document that is in filter but not in ids
+    let (value, code) = index.search_post(json!({ "q": "", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "actually-keep",
+        "kind": "hide"
+      },
+      {
+        "id": "not-hidden",
+        "kind": "keep"
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
+async fn search_pin_wins_over_hide() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["kind"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "keep-doc-1", "kind": "keep" },
+                { "id": "hidden-and-pinned-doc-1", "kind": "hide", },
+                { "id": "hidden-doc-1", "kind": "hide", },
+                { "id": "keep-doc-2", "kind": "keep" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // add a rule to hide a doc
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "hide-hidden",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"filter": "kind = hide", "weight": 0.0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // another rule to pin a hidden doc
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "pin-hidden",
+            json!({
+                "conditions": {
+                  "query": {
+                    "words": "doc"
+                  }
+                },
+                "active": true,
+                "actions": {
+                  "pin": [
+                    {"id": "hidden-and-pinned-doc-1", "position": 0}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // placeholder search hides all hidden docs
+    let (value, code) = index.search_post(json!({ "q": "", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "keep-doc-1",
+        "kind": "keep"
+      },
+      {
+        "id": "keep-doc-2",
+        "kind": "keep"
+      }
+    ]
+    "###);
+
+    // search on doc which has both rules active keeps the hidden doc because it is pinned
+    let (value, code) =
+        index.search_post(json!({ "q": "doc", "limit": 10, "showRankingScoreDetails":true })).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value["hits"]), @r###"
+    [
+      {
+        "id": "hidden-and-pinned-doc-1",
+        "kind": "hide",
+        "_rankingScoreDetails": {
+          "pin": {
+            "order": 0,
+            "position": 0,
+            "precedence": null,
+            "ruleUid": "pin-hidden"
+          }
+        }
+      },
+      {
+        "id": "keep-doc-1",
+        "kind": "keep",
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      },
+      {
+        "id": "keep-doc-2",
+        "kind": "keep",
+        "_rankingScoreDetails": {
+          "words": {
+            "order": 0,
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 1.0
+          },
+          "typo": {
+            "order": 1,
+            "typoCount": 0,
+            "maxTypoCount": 1,
+            "score": 1.0
+          },
+          "proximity": {
+            "order": 2,
+            "score": 1.0
+          },
+          "attributeRank": {
+            "order": 3,
+            "score": 1.0
+          },
+          "wordPosition": {
+            "order": 4,
+            "score": 0.9090909090909092
+          },
+          "exactness": {
+            "order": 5,
+            "matchType": "noExactMatch",
+            "matchingWords": 1,
+            "maxMatchingWords": 1,
+            "score": 0.3333333333333333
+          }
+        }
+      }
+    ]
+    "###);
+}
+
+#[actix_web::test]
+async fn multi_search_boost() {
+    let server = dynamic_search_rules_server().await;
+    let movies_index = server.index("movies");
+    let comics_index = server.index("comics");
+
+    let (task, code) = movies_index
+        .add_documents(
+            json!([
+                { "id": "dark-knight-1", "title": "The Dark Knight Returns Part 1" },
+                { "id": "dark-knight-2", "title": "The Dark Knight Returns Part 2" },
+                { "id": "batman-returns", "title": "Batman Returns" },
+                { "id": "superman-returns", "title": "Superman Returns" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = comics_index
+        .add_documents(
+            json!([
+                { "id": "batman-returns", "title": "Batman Returns (Comics)" },
+                { "id": "superman-returns", "title": "Superman Returns - The Prequels" },
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .multi_search(json!({
+          "federation": {},
+          "queries": [
+           { "q": "Returns Superman Prequel", "indexUid": "movies", "showRankingScore": true },
+           { "q": "Returns Superman Prequel", "indexUid": "comics", "showRankingScore": true }
+          ]
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    // doc is only pinned once at the location (1) decided by the rule with earliest precedence
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "superman-returns",
+          "title": "Superman Returns - The Prequels",
+          "_federation": {
+            "indexUid": "comics",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9628456221198156
+          },
+          "_rankingScore": 0.9628456221198156
+        },
+        {
+          "id": "superman-returns",
+          "title": "Superman Returns",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.6353615520282186
+          },
+          "_rankingScore": 0.6353615520282186
+        },
+        {
+          "id": "batman-returns",
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.30808080808080807
+          },
+          "_rankingScore": 0.30808080808080807
+        },
+        {
+          "id": "batman-returns",
+          "title": "Batman Returns (Comics)",
+          "_federation": {
+            "indexUid": "comics",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.30808080808080807
+          },
+          "_rankingScore": 0.30808080808080807
+        },
+        {
+          "id": "dark-knight-1",
+          "title": "The Dark Knight Returns Part 1",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.29292929292929293
+          },
+          "_rankingScore": 0.29292929292929293
+        },
+        {
+          "id": "dark-knight-2",
+          "title": "The Dark Knight Returns Part 2",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.29292929292929293
+          },
+          "_rankingScore": 0.29292929292929293
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
+    }
+    "###);
+
+    // add DSRs
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "batman-festival",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"ids": ["dark-knight-1", "dark-knight-2", "batman-returns"], "weight": 2.5}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = server
+        .create_dynamic_search_rule(
+            "batman-returns-sales",
+            json!({
+                "active": true,
+                "actions": {
+                  "scale": [
+                    {"ids": ["batman-returns"], "weight": 1.5}
+                  ]
+                }
+            }),
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .multi_search(json!({
+          "federation": {},
+          "queries": [
+           { "q": "Returns Superman Prequel", "indexUid": "movies", "showRankingScore": true, "showRankingScoreDetails": true },
+           { "q": "Returns Superman Prequel", "indexUid": "comics", "showRankingScore": true, "showRankingScoreDetails": true }
+          ]
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "batman-returns",
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.30808080808080807
+          },
+          "_rankingScore": 0.30808080808080807,
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                },
+                {
+                  "ruleUid": "batman-returns-sales",
+                  "weight": 1.5
+                }
+              ],
+              "totalWeight": 3.75
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 3,
+              "score": 0.3333333333333333
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.9090909090909092
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "id": "batman-returns",
+          "title": "Batman Returns (Comics)",
+          "_federation": {
+            "indexUid": "comics",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.30808080808080807
+          },
+          "_rankingScore": 0.30808080808080807,
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                },
+                {
+                  "ruleUid": "batman-returns-sales",
+                  "weight": 1.5
+                }
+              ],
+              "totalWeight": 3.75
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 3,
+              "score": 0.3333333333333333
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.9090909090909092
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "id": "superman-returns",
+          "title": "Superman Returns - The Prequels",
+          "_federation": {
+            "indexUid": "comics",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.9628456221198156
+          },
+          "_rankingScore": 0.9628456221198156,
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 3,
+              "maxMatchingWords": 3,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 0,
+              "maxTypoCount": 3,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 2,
+              "score": 0.5714285714285714
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.9032258064516128
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 2,
+              "maxMatchingWords": 3,
+              "score": 0.25
+            }
+          }
+        },
+        {
+          "id": "dark-knight-1",
+          "title": "The Dark Knight Returns Part 1",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.29292929292929293
+          },
+          "_rankingScore": 0.29292929292929293,
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                }
+              ],
+              "totalWeight": 2.5
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 3,
+              "score": 0.3333333333333333
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "id": "dark-knight-2",
+          "title": "The Dark Knight Returns Part 2",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.29292929292929293
+          },
+          "_rankingScore": 0.29292929292929293,
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                }
+              ],
+              "totalWeight": 2.5
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 3,
+              "score": 0.3333333333333333
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "id": "superman-returns",
+          "title": "Superman Returns",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.6353615520282186
+          },
+          "_rankingScore": 0.6353615520282186,
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 2,
+              "maxMatchingWords": 3,
+              "score": 0.6666666666666666
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 0,
+              "maxTypoCount": 2,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 2,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 0.3333333333333333
+            }
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
+    }
+    "###);
+
+    // placeholder still applies the scaling
+    let (value, code) = server
+        .multi_search(json!({
+          "federation": {},
+          "queries": [
+           { "q": "", "indexUid": "movies", "showRankingScoreDetails": true },
+           { "q": "", "indexUid": "comics", "showRankingScoreDetails": true }
+          ]
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "batman-returns",
+          "title": "Batman Returns",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                },
+                {
+                  "ruleUid": "batman-returns-sales",
+                  "weight": 1.5
+                }
+              ],
+              "totalWeight": 3.75
+            }
+          }
+        },
+        {
+          "id": "batman-returns",
+          "title": "Batman Returns (Comics)",
+          "_federation": {
+            "indexUid": "comics",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                },
+                {
+                  "ruleUid": "batman-returns-sales",
+                  "weight": 1.5
+                }
+              ],
+              "totalWeight": 3.75
+            }
+          }
+        },
+        {
+          "id": "dark-knight-1",
+          "title": "The Dark Knight Returns Part 1",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                }
+              ],
+              "totalWeight": 2.5
+            }
+          }
+        },
+        {
+          "id": "dark-knight-2",
+          "title": "The Dark Knight Returns Part 2",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "batman-festival",
+                  "weight": 2.5
+                }
+              ],
+              "totalWeight": 2.5
+            }
+          }
+        },
+        {
+          "id": "superman-returns",
+          "title": "Superman Returns",
+          "_federation": {
+            "indexUid": "movies",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScoreDetails": {}
+        },
+        {
+          "id": "superman-returns",
+          "title": "Superman Returns - The Prequels",
+          "_federation": {
+            "indexUid": "comics",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScoreDetails": {}
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
+    }
+    "###);
+}
