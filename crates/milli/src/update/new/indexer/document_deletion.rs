@@ -104,10 +104,10 @@ mod test {
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
+    use crate::steps::IndexingStep;
     use crate::update::new::document::DocumentContext;
     use crate::update::new::indexer::document_changes::{extract, Extractor, IndexingContext};
     use crate::update::new::indexer::DocumentDeletion;
-    use crate::update::new::steps::IndexingStep;
     use crate::update::new::thread_local::{MostlySend, ThreadLocal};
     use crate::update::new::DocumentChange;
     use crate::{DocumentId, MustStopProcessing};

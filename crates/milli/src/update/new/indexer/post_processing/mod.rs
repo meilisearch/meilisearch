@@ -15,13 +15,13 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::progress::Progress;
+use crate::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::update::new::facet_search_builder::FacetSearchBuilder;
 use crate::update::new::indexer::{MiniString, WordDelta};
 use crate::update::new::merger::FacetFieldIdDelta;
-use crate::update::new::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::new::word_fst_builder::{PrefixData, WordFstBuilder};
 use crate::update::new::words_prefix_docids::{
     compute_exact_word_prefix_docids, compute_word_prefix_docids, compute_word_prefix_fid_docids,

@@ -8,15 +8,15 @@ use tracing::Span;
 
 use super::super::channel::*;
 use super::super::extract::*;
-use super::super::steps::IndexingStep;
 use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{FieldIdMapper, PrimaryKey};
-use crate::progress::{EmbedderStats, MergingWordCache};
+use crate::progress::EmbedderStats;
 use crate::proximity::ProximityPrecision;
+use crate::steps::{IndexingStep, MergingWordCache};
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;

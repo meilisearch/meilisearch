@@ -60,7 +60,7 @@ use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::search::steps::SearchStep;
+use crate::steps::RetrieveIndexDataStep;
 use crate::vector::Embedder;
 use crate::{
     AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, PinDoc, Result,
@@ -309,7 +309,7 @@ fn resolve_universe(
     logger: &mut dyn SearchLogger<QueryGraph>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {
-    let _step = progress.update_progress_scoped(SearchStep::EvaluateQuery);
+    let _step = progress.update_progress_scoped(RetrieveIndexDataStep::EvaluateQuery);
     resolve_maximally_reduced_query_graph(
         ctx,
         initial_universe,
@@ -728,11 +728,11 @@ pub fn filtered_universe(
         (None, None) => index.documents_ids(txn)?,
         (None, Some(candidates)) => candidates.clone(),
         (Some(filters), None) => {
-            let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
+            let _step = progress.update_progress_scoped(RetrieveIndexDataStep::EvaluateFilter);
             filters.evaluate(txn, index, fields_ids_map)?
         }
         (Some(filters), Some(candidates)) => {
-            let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
+            let _step = progress.update_progress_scoped(RetrieveIndexDataStep::EvaluateFilter);
             let mut filtered = filters.evaluate(txn, index, fields_ids_map)?;
             filtered &= candidates;
             filtered
@@ -780,7 +780,7 @@ pub fn execute_vector_search(
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
         &mut placeholder_search_logger;
 
-    let _step = progress.update_progress_scoped(SearchStep::SemanticRanking);
+    let _step = progress.update_progress_scoped(RetrieveIndexDataStep::SemanticRanking);
     let BucketSortOutput { docids, scores, all_candidates, degraded } = bucket_sort(
         ctx,
         ranking_rules,
@@ -850,7 +850,7 @@ pub fn execute_search(
             progress,
         )?;
 
-        let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
+        let _step = progress.update_progress_scoped(RetrieveIndexDataStep::KeywordRanking);
         bucket_sort(
             ctx,
             ranking_rules,
@@ -870,7 +870,7 @@ pub fn execute_search(
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
-        let _step = progress.update_progress_scoped(SearchStep::PlaceholderRanking);
+        let _step = progress.update_progress_scoped(RetrieveIndexDataStep::PlaceholderRanking);
         bucket_sort(
             ctx,
             ranking_rules,
