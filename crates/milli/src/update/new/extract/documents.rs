@@ -281,7 +281,7 @@ where
         indexing_context,
         extractor_allocs,
         &datastore,
-        crate::update::new::steps::IndexingStep::ExtractingDocuments,
+        crate::steps::IndexingStep::ExtractingDocuments,
     )?;
 
     Ok(())

@@ -12,7 +12,7 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use super::{UpgradeIndex, UpgradeParams};
 use crate::heed_codec::StrBEU16Codec;
 use crate::progress::Progress;
-use crate::update::new::steps::SettingsIndexerStep;
+use crate::steps::SettingsIndexerStep;
 use crate::vector::VectorStore;
 use crate::{
     make_enum_progress, Error, Index, InternalError, MustStopProcessing, PatternMatch, Result,
