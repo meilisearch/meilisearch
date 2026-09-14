@@ -24,11 +24,11 @@ use super::document_changes::DocumentChanges;
 use super::guess_primary_key::retrieve_or_guess_primary_key;
 use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
-use crate::progress::{AtomicPayloadStep, Progress};
+use crate::progress::{AtomicPayloadStep, ConcurrentProgress};
 use crate::sharding::{Shard, Shards};
+use crate::steps::IndexingStep;
 use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::extract::DelAddRoaringBitmap;
-use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
@@ -99,10 +99,10 @@ impl<'pl> IndexOperations<'pl> {
         primary_key_from_op: Option<&'pl str>,
         new_fields_ids_map: &mut FieldsIdsMap,
         must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        progress: ConcurrentProgress,
         shards: Option<&'pl Shards>,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)> {
-        progress.update_progress(IndexingStep::PreparingPayloads);
+        progress.update_progress_scoped(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
 
         let db_fields_ids_map = index.fields_ids_map(rtxn)?;

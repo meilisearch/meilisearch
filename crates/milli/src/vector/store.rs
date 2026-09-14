@@ -5,7 +5,7 @@ use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
-use crate::progress::Progress;
+use crate::progress::ConcurrentProgress;
 use crate::vector::Embeddings;
 use crate::{Deadline, MustStopProcessing};
 
@@ -142,7 +142,7 @@ impl VectorStore {
         self,
         rtxn: &RoTxn,
         wtxn: &mut RwTxn,
-        progress: Progress,
+        progress: ConcurrentProgress,
         must_stop_processing: &MustStopProcessing,
         available_memory: Option<usize>,
     ) -> crate::Result<()> {
@@ -206,7 +206,7 @@ impl VectorStore {
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
-        progress: Progress,
+        progress: ConcurrentProgress,
         rng: &mut R,
         dimension: usize,
         quantizing: bool,
@@ -271,7 +271,7 @@ impl VectorStore {
     pub fn rebuild_graph<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
-        progress: Progress,
+        progress: ConcurrentProgress,
         rng: &mut R,
         dimension: usize,
         cancel: &MustStopProcessing,
@@ -1107,15 +1107,17 @@ impl VectorStore {
         self.database.remap_data_type()
     }
 
-    fn _arroy_to_hannoy_bq<AD: arroy::Distance, HD: hannoy::Distance, R>(
+    fn _arroy_to_hannoy_bq<AD, HD, R>(
         self,
         arroy_rtxn: &RoTxn,
         hannoy_wtxn: &mut RwTxn,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         rng: &mut R,
         cancel: &MustStopProcessing,
     ) -> crate::Result<()>
     where
+        AD: arroy::Distance,
+        HD: hannoy::Distance,
         R: rand::Rng + rand::SeedableRng,
     {
         // No work if distances are the same
@@ -1152,16 +1154,18 @@ impl VectorStore {
         Ok(())
     }
 
-    fn _hannoy_to_arroy_bq<HD: hannoy::Distance, AD: arroy::Distance, R>(
+    fn _hannoy_to_arroy_bq<HD, AD, R>(
         self,
         hannoy_rtxn: &RoTxn,
         arroy_wtxn: &mut RwTxn,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         rng: &mut R,
         available_memory: Option<usize>,
         cancel: &MustStopProcessing,
     ) -> crate::Result<()>
     where
+        AD: arroy::Distance,
+        HD: hannoy::Distance,
         R: rand::Rng + rand::SeedableRng,
     {
         // No work if distances are the same
@@ -1360,7 +1364,7 @@ fn clear_hannoy_store(
 
 fn arroy_build<R, D>(
     wtxn: &mut RwTxn<'_>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
     rng: &mut R,
     available_memory: Option<usize>,
     cancel: &MustStopProcessing,
@@ -1381,7 +1385,7 @@ where
 
 fn hannoy_build<R, D>(
     wtxn: &mut RwTxn<'_>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
     rng: &mut R,
     cancel: &MustStopProcessing,
     writer: &hannoy::Writer<D>,
@@ -1400,7 +1404,7 @@ where
 
 fn hannoy_rebuild_graph<R, D>(
     wtxn: &mut RwTxn<'_>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
     rng: &mut R,
     cancel: &MustStopProcessing,
     writer: &hannoy::Writer<D>,

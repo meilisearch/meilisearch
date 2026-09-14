@@ -1,10 +1,12 @@
 use std::any::TypeId;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
+use either::Either;
 use enum_iterator::Sequence as _;
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -15,11 +17,45 @@ pub trait Step: 'static + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
     fn current(&self) -> u32;
     fn total(&self) -> u32;
+    fn verbosity_mode(&self) -> ProgressVerbosityMode {
+        ProgressVerbosityMode::Info
+    }
 }
 
-#[derive(Clone, Default)]
-pub struct Progress {
+/// The mode of a step.
+/// The order is important, the higher the mode, the more verbose the step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, PartialOrd, Ord)]
+pub enum ProgressVerbosityMode {
+    Quiet = 0,
+    #[default]
+    Info = 1,
+    Trace = 2,
+}
+
+/// The mode of the timestamp computation.
+///
+/// `Precise` is the default mode and uses the std::time::Instant type.
+/// Based on the wall clock.
+///
+/// `Fast` is a faster mode that uses the fastant::Instant type.
+/// Based on TSC on Linux x86_64/x86 but fallback to the wall clock on other platforms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ProgressConcurrencyContext {
+    #[default]
+    Concurrent,
+    Sequencial,
+}
+
+#[derive(Clone)]
+pub struct ConcurrentProgress {
     steps: Arc<RwLock<InnerProgress>>,
+    verbosity_mode: ProgressVerbosityMode,
+}
+
+pub struct SequencialProgress {
+    // RefCell is used to avoid the need to lock the progress when updating it.
+    steps: RefCell<InnerProgress>,
+    verbosity_mode: ProgressVerbosityMode,
 }
 
 #[derive(Default)]
@@ -49,19 +85,9 @@ struct InnerProgress {
     durations: Vec<(String, Duration)>,
 }
 
-impl Progress {
-    /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
-    /// Return `Failed` if the RWLock failed to lock.
-    pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
-        let mut inner = match self.steps.write() {
-            Ok(inner) => inner,
-            Err(error) => {
-                tracing::error!("Failed to start progress step `{}`: {error}", sub_progress.name());
-                return UpdateStepStatus::NotUpdated;
-            }
-        };
-        let InnerProgress { steps, durations } = &mut *inner;
-
+impl InnerProgress {
+    fn update_progress<P: Step>(&mut self, sub_progress: P) -> UpdateStepStatus {
+        let Self { steps, durations } = self;
         let step_type = TypeId::of::<P>();
         if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
             if steps[idx].1.name() == sub_progress.name() {
@@ -80,19 +106,8 @@ impl Progress {
         UpdateStepStatus::Updated
     }
 
-    /// End a step that has been started without having to start a new step.
-    /// Update the progress and return `Updated` if the step was ended, `NotUpdated` if it was already ended.
-    /// Return `Failed` if the RWLock failed to lock.
-    fn end_progress_step<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
-        let mut inner = match self.steps.write() {
-            Ok(inner) => inner,
-            Err(error) => {
-                tracing::error!("Failed to end progress step `{}`: {error}", sub_progress.name());
-                return UpdateStepStatus::NotUpdated;
-            }
-        };
-
-        let InnerProgress { steps, durations } = &mut *inner;
+    fn end_progress_step<P: Step>(&mut self, sub_progress: P) -> UpdateStepStatus {
+        let Self { steps, durations } = self;
 
         let step_type = TypeId::of::<P>();
         match steps
@@ -109,30 +124,8 @@ impl Progress {
         }
     }
 
-    /// Update the progress and return a scoped progress step that will end the progress step when dropped.
-    pub fn update_progress_scoped<P: Step + Copy>(&self, step: P) -> ScopedProgressStep<'_, P> {
-        match self.update_progress(step) {
-            UpdateStepStatus::Updated => ScopedProgressStep { progress: self, step: Some(step) },
-            UpdateStepStatus::NotUpdated => {
-                tracing::warn!(
-                    "Step `{}` can't be scoped because it was already started",
-                    step.name()
-                );
-                ScopedProgressStep { progress: self, step: None }
-            }
-        }
-    }
-
-    // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
-    pub fn as_progress_view(&self) -> Option<ProgressView> {
-        let inner = match self.steps.read() {
-            Ok(inner) => inner,
-            Err(error) => {
-                tracing::error!("Failed to read progress: {error}");
-                return None;
-            }
-        };
-        let InnerProgress { steps, .. } = &*inner;
+    fn as_progress_view(&self) -> Option<ProgressView> {
+        let InnerProgress { steps, .. } = self;
 
         let mut percentage = 0.0;
         let mut prev_factors = 1.0;
@@ -152,15 +145,8 @@ impl Progress {
         Some(ProgressView { steps: step_view, percentage: percentage * 100.0 })
     }
 
-    pub fn accumulated_durations(&self) -> IndexMap<String, String> {
-        let inner = match self.steps.read() {
-            Ok(inner) => inner,
-            Err(error) => {
-                tracing::error!("Failed to read progress: {error}");
-                return IndexMap::new();
-            }
-        };
-        let InnerProgress { steps, durations, .. } = &*inner;
+    fn accumulated_durations(&self) -> IndexMap<String, String> {
+        let InnerProgress { steps, durations, .. } = self;
         let mut durations = durations.clone();
 
         let now = Instant::now();
@@ -176,12 +162,160 @@ impl Progress {
             .map(|(name, duration)| (name, format!("{duration:.2?}")))
             .collect()
     }
+}
+
+impl ConcurrentProgress {
+    pub fn new(verbosity_mode: ProgressVerbosityMode) -> Self {
+        Self { steps: Arc::new(RwLock::new(InnerProgress::default())), verbosity_mode }
+    }
+
+    /// Create a new progress with quiet verbosity mode.
+    /// This will not register any steps.
+    pub fn quiet() -> Self {
+        Self::new(ProgressVerbosityMode::Quiet)
+    }
+
+    /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
+    /// Return `Failed` if the RWLock failed to lock.
+    pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        // If the step is more verbose than the progress mode, we skip it.
+        if sub_progress.verbosity_mode() > self.verbosity_mode {
+            return UpdateStepStatus::Skipped;
+        }
+
+        let mut inner = match self.steps.write() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to start progress step `{}`: {error}", sub_progress.name());
+                return UpdateStepStatus::NotUpdated;
+            }
+        };
+
+        inner.update_progress(sub_progress)
+    }
+
+    /// End a step that has been started without having to start a new step.
+    /// Update the progress and return `Updated` if the step was ended, `NotUpdated` if it was already ended.
+    /// Return `Failed` if the RWLock failed to lock.
+    pub fn end_progress_step<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        let mut inner = match self.steps.write() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to end progress step `{}`: {error}", sub_progress.name());
+                return UpdateStepStatus::NotUpdated;
+            }
+        };
+
+        inner.end_progress_step(sub_progress)
+    }
+
+    pub fn as_progress_view(&self) -> Option<ProgressView> {
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return None;
+            }
+        };
+
+        inner.as_progress_view()
+    }
+
+    pub fn accumulated_durations(&self) -> IndexMap<String, String> {
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return IndexMap::new();
+            }
+        };
+
+        inner.accumulated_durations()
+    }
+
+    /// Update the progress and return a scoped progress step that will end the progress step when dropped.
+    pub fn update_progress_scoped<S: Step + Copy>(&self, step: S) -> ScopedProgressStep<'_, S> {
+        match self.update_progress(step) {
+            UpdateStepStatus::Updated => ScopedProgressStep::concurrent(self, Some(step)),
+            UpdateStepStatus::NotUpdated => {
+                tracing::warn!(
+                    "Step `{}` can't be scoped because it was already started",
+                    step.name()
+                );
+                ScopedProgressStep::concurrent(self, None)
+            }
+            UpdateStepStatus::Skipped => ScopedProgressStep::concurrent(self, None),
+        }
+    }
 
     // TODO: ideally we should expose the progress in a way that let arroy use it directly
     pub(crate) fn update_progress_from_arroy(&self, progress: arroy::WriterProgress) {
         self.update_progress(progress.main);
         if let Some(sub) = progress.sub {
             self.update_progress(sub);
+        }
+    }
+}
+
+impl SequencialProgress {
+    pub fn new(verbosity_mode: ProgressVerbosityMode) -> Self {
+        Self { steps: RefCell::new(InnerProgress::default()), verbosity_mode }
+    }
+
+    /// Create a new progress with quiet verbosity mode.
+    /// This will not register any steps.
+    pub fn quiet() -> Self {
+        Self::new(ProgressVerbosityMode::Quiet)
+    }
+
+    /// Recreate the progress with the same verbosity.
+    pub fn recreate(&self) -> Self {
+        Self::new(self.verbosity_mode)
+    }
+
+    /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
+    /// Return `Failed` if the RWLock failed to lock.
+    pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        // If the step is more verbose than the progress mode, we skip it.
+        if sub_progress.verbosity_mode() > self.verbosity_mode {
+            return UpdateStepStatus::Skipped;
+        }
+
+        self.steps.borrow_mut().update_progress(sub_progress)
+    }
+
+    /// End a step that has been started without having to start a new step.
+    /// Update the progress and return `Updated` if the step was ended, `NotUpdated` if it was already ended.
+    /// Return `Failed` if the RWLock failed to lock.
+    pub fn end_progress_step<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        // If the step is more verbose than the progress mode, we skip it.
+        if sub_progress.verbosity_mode() > self.verbosity_mode {
+            return UpdateStepStatus::Skipped;
+        }
+
+        self.steps.borrow_mut().end_progress_step(sub_progress)
+    }
+
+    pub fn as_progress_view(&self) -> Option<ProgressView> {
+        self.steps.borrow().as_progress_view()
+    }
+
+    pub fn accumulated_durations(&self) -> IndexMap<String, String> {
+        self.steps.borrow().accumulated_durations()
+    }
+
+    /// Update the progress and return a scoped progress step that will end the progress step when dropped.
+    pub fn update_progress_scoped<S: Step + Copy>(&self, step: S) -> ScopedProgressStep<'_, S> {
+        match self.update_progress(step) {
+            UpdateStepStatus::Updated => ScopedProgressStep::sequential(self, Some(step)),
+            UpdateStepStatus::NotUpdated => {
+                tracing::warn!(
+                    "Step `{}` can't be scoped because it was already started",
+                    step.name()
+                );
+                ScopedProgressStep::sequential(self, None)
+            }
+            UpdateStepStatus::Skipped => ScopedProgressStep::sequential(self, None),
         }
     }
 }
@@ -247,7 +381,7 @@ pub use enum_iterator as _private_enum_iterator;
 
 #[macro_export]
 macro_rules! make_enum_progress {
-    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+    ($visibility:vis enum $name:ident { $($variant:ident: $mode:ident,)+ }) => {
         #[repr(u8)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, $crate::progress::_private_enum_iterator::Sequence)]
         #[allow(clippy::enum_variant_names)]
@@ -256,6 +390,14 @@ macro_rules! make_enum_progress {
         }
 
         impl $crate::progress::Step for $name {
+            fn verbosity_mode(&self) -> $crate::progress::ProgressVerbosityMode {
+                match self {
+                    $(
+                        $name::$variant => $crate::progress::ProgressVerbosityMode::$mode,
+                    )+
+                }
+            }
+
             fn name(&self) -> std::borrow::Cow<'static, str> {
                 use $crate::progress::_private_convert_case::Casing;
 
@@ -276,6 +418,9 @@ macro_rules! make_enum_progress {
             }
         }
     };
+    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+        $crate::make_enum_progress!($visibility enum $name { $($variant: Info,)+ });
+    };
 }
 
 #[macro_export]
@@ -295,16 +440,6 @@ macro_rules! make_atomic_progress {
 make_atomic_progress!(Document alias AtomicDocumentStep => "document");
 make_atomic_progress!(Database alias AtomicDatabaseStep => "database");
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload");
-
-make_enum_progress! {
-    pub enum MergingWordCache {
-        WordDocids,
-        WordFieldIdDocids,
-        ExactWordDocids,
-        WordPositionDocids,
-        FieldIdWordCountDocids,
-    }
-}
 
 /// Real-time progress information for a batch or task that is currently
 /// being processed. Use this to display progress bars or status updates to
@@ -426,7 +561,7 @@ impl Step for arroy::SubStep {
 
 // Integration with steppe
 
-impl steppe::Progress for Progress {
+impl steppe::Progress for ConcurrentProgress {
     fn update(&self, sub_progress: impl steppe::Step) {
         self.update_progress(Compat(sub_progress));
     }
@@ -448,15 +583,29 @@ impl<T: steppe::Step> Step for Compat<T> {
     }
 }
 
-pub struct ScopedProgressStep<'a, P: Step + Copy> {
-    progress: &'a Progress,
-    step: Option<P>,
+pub struct ScopedProgressStep<'a, S: Step + Copy> {
+    progress: Either<&'a ConcurrentProgress, &'a SequencialProgress>,
+    step: Option<S>,
 }
 
-impl<'a, P: Step + Copy> Drop for ScopedProgressStep<'a, P> {
+impl<'a, S: Step + Copy> ScopedProgressStep<'a, S> {
+    fn sequential(progress: &'a SequencialProgress, step: Option<S>) -> Self {
+        Self { progress: Either::Right(progress), step }
+    }
+
+    fn concurrent(progress: &'a ConcurrentProgress, step: Option<S>) -> Self {
+        Self { progress: Either::Left(progress), step }
+    }
+}
+
+impl<'a, S: Step + Copy> Drop for ScopedProgressStep<'a, S> {
     fn drop(&mut self) {
         if let Some(step) = self.step {
-            if self.progress.end_progress_step(step) == UpdateStepStatus::NotUpdated {
+            let result = match self.progress {
+                Either::Left(progress) => progress.end_progress_step(step),
+                Either::Right(progress) => progress.end_progress_step(step),
+            };
+            if result == UpdateStepStatus::NotUpdated {
                 tracing::warn!("Step `{}` has already been ended", step.name());
             }
         }
@@ -469,4 +618,6 @@ pub enum UpdateStepStatus {
     Updated,
     /// The step did not change.
     NotUpdated,
+    /// The step as been skipped.
+    Skipped,
 }

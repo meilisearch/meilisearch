@@ -12,7 +12,7 @@ use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::handle_store_mdb_error;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::progress::Progress;
+use crate::progress::ConcurrentProgress;
 use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
@@ -136,7 +136,7 @@ impl ChannelCongestion {
 pub fn build_vectors(
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
     index_embeddings: Vec<IndexEmbeddingConfig>,
     vector_memory: Option<usize>,
     vector_stores: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,

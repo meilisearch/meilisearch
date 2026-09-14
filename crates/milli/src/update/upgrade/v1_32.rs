@@ -11,8 +11,8 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use super::{UpgradeIndex, UpgradeParams};
 use crate::heed_codec::StrBEU16Codec;
-use crate::progress::Progress;
-use crate::update::new::steps::SettingsIndexerStep;
+use crate::progress::ConcurrentProgress;
+use crate::steps::SettingsIndexerStep;
 use crate::vector::VectorStore;
 use crate::{
     make_enum_progress, Error, Index, InternalError, MustStopProcessing, PatternMatch, Result,
@@ -82,7 +82,7 @@ pub fn delete_old_fid_based_databases_from_fids(
     index: &Index,
     must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
-    progress: &Progress,
+    progress: &ConcurrentProgress,
 ) -> Result<()> {
     let bounds = compute_bounds(wtxn, index)?;
     let pool = ThreadPoolBuilder::new().num_threads(bounds.len().saturating_sub(1)).build()?;

@@ -7,7 +7,7 @@ use dump::IndexMetadata;
 use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{ConcurrentProgress, VariableNameStep};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self};
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
@@ -22,7 +22,7 @@ use crate::{Error, IndexScheduler, Result};
 impl IndexScheduler {
     pub(super) fn process_dump_creation(
         &self,
-        progress: Progress,
+        progress: ConcurrentProgress,
         mut task: Task,
     ) -> Result<Vec<Task>> {
         progress.update_progress(DumpCreationProgress::StartTheDumpCreation);

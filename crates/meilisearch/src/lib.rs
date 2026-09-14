@@ -44,7 +44,7 @@ use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
-use meilisearch_types::milli::progress::{EmbedderStats, Progress};
+use meilisearch_types::milli::progress::{ConcurrentProgress, EmbedderStats};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexerConfig, MissingDocumentPolicy,
@@ -573,7 +573,8 @@ fn import_dump(
     index_scheduler: &mut IndexScheduler,
     auth: &mut AuthController,
 ) -> Result<(), anyhow::Error> {
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = ConcurrentProgress::quiet();
     let reader = File::open(dump_path)?;
     let mut dump_reader = dump::DumpReader::open(reader)?;
 

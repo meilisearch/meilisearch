@@ -8,10 +8,10 @@ use roaring::RoaringBitmap;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::progress::{AtomicDocumentStep, Progress};
+use crate::progress::{AtomicDocumentStep, ConcurrentProgress};
+use crate::steps::IndexingStep;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
-use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::GrenadParameters;
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing, Result};
@@ -69,7 +69,7 @@ pub struct IndexingContext<
     pub doc_allocs: &'indexer ThreadLocal<FullySend<Cell<Bump>>>,
     pub fields_ids_map_store: &'indexer ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
     pub must_stop_processing: &'indexer MustStopProcessing,
-    pub progress: &'indexer Progress,
+    pub progress: &'indexer ConcurrentProgress,
     pub grenad_parameters: &'indexer GrenadParameters,
 }
 

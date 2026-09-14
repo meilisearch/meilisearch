@@ -17,15 +17,16 @@ use crate::documents::GeoSortParameter;
 use crate::dynamic_search_rules::{DsrFuel, DynamicSearchRules};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
-use crate::progress::Progress;
+use crate::progress::SequencialProgress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::{
     extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens, QueryGraph,
 };
+use crate::steps::RetrieveIndexDataStep;
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    FieldsIdsMap, Index, Position, Result, SearchContext, SearchStep, UserError,
+    FieldsIdsMap, Index, Position, Result, SearchContext, UserError,
 };
 
 // Building these factories is not free.
@@ -38,7 +39,6 @@ mod fst_utils;
 pub mod hybrid;
 pub mod new;
 pub mod similar;
-pub mod steps;
 
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {
@@ -154,7 +154,7 @@ pub struct Search<'a> {
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
-    progress: &'a Progress,
+    progress: &'a SequencialProgress,
     dynamic_search_rules: Option<(&'a DynamicSearchRules, DsrFuel)>,
     candidates: Option<&'a RoaringBitmap>,
 }
@@ -166,7 +166,7 @@ impl<'a> Search<'a> {
         fields_ids_map: &'a FieldsIdsMap,
         index_uid: &'a str,
         before_search: OffsetDateTime,
-        progress: &'a Progress,
+        progress: &'a SequencialProgress,
     ) -> Search<'a> {
         Search {
             query: None,
@@ -498,27 +498,28 @@ impl<'a> Search<'a> {
 
         let mut ignored = RoaringBitmap::new();
 
-        let query_graph_terms =
-            if let Some(query) = self.query.as_deref().filter(|q| !q.trim().is_empty()) {
-                let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
+        let query_graph_terms = if let Some(query) =
+            self.query.as_deref().filter(|q| !q.trim().is_empty())
+        {
+            let _step = self.progress.update_progress_scoped(RetrieveIndexDataStep::TokenizeQuery);
 
-                let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
-                    extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
+            let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
+                extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
 
-                used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+            used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
-                ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
-                ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
+            ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
+            ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
 
-                if query_terms.is_empty() {
-                    // Do a placeholder search instead
-                    None
-                } else {
-                    Some((graph, query_terms))
-                }
-            } else {
+            if query_terms.is_empty() {
+                // Do a placeholder search instead
                 None
-            };
+            } else {
+                Some((graph, query_terms))
+            }
+        } else {
+            None
+        };
 
         let pins = self
             .dynamic_search_rules
@@ -709,7 +710,7 @@ mod test {
     #[test]
     fn test_kanji_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::default();
+        let progress = ConcurrentProgress::quiet();
 
         let index = TempIndex::new();
 
@@ -734,7 +735,7 @@ mod test {
     #[test]
     fn test_hangul_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::default();
+        let progress = ConcurrentProgress::quiet();
 
         let index = TempIndex::new();
 

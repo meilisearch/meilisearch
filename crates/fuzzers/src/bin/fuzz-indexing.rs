@@ -11,7 +11,7 @@ use fuzzers::Operation;
 use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
-use milli::progress::Progress;
+use milli::progress::{ConcurrentProgress, SequencialProgress};
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy};
 use milli::vector::RuntimeEmbedders;
@@ -135,7 +135,7 @@ fn main() {
                                     None,
                                     &mut new_fields_ids_map,
                                     &MustStopProcessing::default(),
-                                    Progress::default(),
+                                    ConcurrentProgress::quiet(),
                                     None,
                                 )
                                 .unwrap();
@@ -151,14 +151,14 @@ fn main() {
                                 &document_changes,
                                 embedders,
                                 &MustStopProcessing::default(),
-                                &Progress::default(),
+                                &ConcurrentProgress::quiet(),
                                 &IpPolicy::deny_all_local_ips(),
                                 &Default::default(),
                             )
                             .unwrap();
 
                             // after executing a batch we check if the database is corrupted
-                            let progress = Progress::default();
+                            let progress = SequencialProgress::quiet();
                             let fields_ids_map = index.fields_ids_map(&wtxn).unwrap();
                             let res = index
                                 .search(

@@ -1,5 +1,5 @@
 use big_s::S;
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::Criterion::{Attribute, Exactness, Proximity, Typo, Words};
 use milli::{AscDesc, Error, Member, Search, TermsMatchingStrategy, UserError};
 
@@ -13,7 +13,7 @@ fn sort_ranking_rule_missing() {
     let rtxn = index.read_txn().unwrap();
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let progress = Progress::default();
+    let progress = ConcurrentProgress::quiet();
     let mut search = Search::new(
         &rtxn,
         &index,

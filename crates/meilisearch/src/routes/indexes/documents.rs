@@ -27,8 +27,9 @@ use meilisearch_types::milli::constants::{
 
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
+use meilisearch_types::milli::steps::PerformRetrievalStep;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{
@@ -277,6 +278,8 @@ pub async fn get_document(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = SequencialProgress::quiet();
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
@@ -336,13 +339,14 @@ pub async fn get_document(
             },
         };
 
-        let mut ret = retrieve_documents_federated(
+        let (mut ret, _progress) = retrieve_documents_federated(
             index_scheduler.clone(),
             query,
             // no preprocessing phase so no remote errors yet
             Default::default(),
             &network_partitioner,
             auth_filter,
+            progress,
         )
         .await?;
         ret.results.pop().ok_or_else(|| MeilisearchHttpError::DocumentNotFound(document_id))?
@@ -794,10 +798,16 @@ pub async fn documents_by_query_post(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     // TODO: https://linear.app/meilisearch/issue/ENGPROD-2703
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = SequencialProgress::quiet();
 
     let use_queue = index_scheduler.features().queue_documents_fetch();
-    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
+    let (permit, progress) = if use_queue {
+        let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
+        (Some(permit), progress)
+    } else {
+        (None, progress)
+    };
 
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
@@ -828,8 +838,7 @@ pub async fn documents_by_query_post(
 
     let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     let ret =
-        documents_by_query(index_scheduler, index_uid, body, is_proxy, &progress, auth_filter)
-            .await;
+        documents_by_query(index_scheduler, index_uid, body, is_proxy, progress, auth_filter).await;
     if let Some(permit) = permit {
         permit.drop().await;
     }
@@ -902,10 +911,16 @@ pub async fn get_documents(
     debug!(parameters = ?params, "Get documents GET");
 
     // TODO: https://linear.app/meilisearch/issue/ENGPROD-2703
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = SequencialProgress::quiet();
 
     let use_queue = index_scheduler.features().queue_documents_fetch();
-    let permit = if use_queue { Some(search_queue.try_get_search_permit().await?) } else { None };
+    let (permit, progress) = if use_queue {
+        let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
+        (Some(permit), progress)
+    } else {
+        (None, progress)
+    };
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort, use_network } =
         params.into_inner();
@@ -949,7 +964,7 @@ pub async fn get_documents(
 
     let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     let ret =
-        documents_by_query(index_scheduler, index_uid, query, false, &progress, auth_filter).await;
+        documents_by_query(index_scheduler, index_uid, query, false, progress, auth_filter).await;
 
     if let Some(permit) = permit {
         permit.drop().await;
@@ -963,7 +978,7 @@ async fn documents_by_query(
     index_uid: web::Path<String>,
     query: BrowseQuery,
     is_proxy: bool,
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: AuthFilter,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -972,7 +987,7 @@ async fn documents_by_query(
     let features = index_scheduler.features();
 
     let queries = vec![BrowseQueryWithIndex { index_uid, query, remote: None }];
-    let (_, mut queries, remote_errors) = preprocess_filters(
+    let (_, mut queries, remote_errors, progress) = preprocess_filters(
         index_scheduler.clone(),
         &network_partitioner,
         queries,
@@ -987,20 +1002,21 @@ async fn documents_by_query(
     // we only have one query, so we can pop it
     let mut query = queries.pop().unwrap();
 
-    let ret = if query.query.must_use_network(&network_partitioner, &features)? {
+    let (ret, _progress) = if query.query.must_use_network(&network_partitioner, &features)? {
         retrieve_documents_federated(
             index_scheduler,
             query,
             remote_errors,
             &network_partitioner,
             &auth_filter,
+            progress,
         )
         .await
     } else {
-        retrieve_documents_local(index_scheduler, query, is_proxy, auth_filter).await
-    };
+        retrieve_documents_local(index_scheduler, query, is_proxy, auth_filter, progress).await
+    }?;
 
-    Ok(HttpResponse::Ok().json(ret?))
+    Ok(HttpResponse::Ok().json(ret))
 }
 
 async fn retrieve_documents_federated(
@@ -1009,7 +1025,8 @@ async fn retrieve_documents_federated(
     mut remote_errors: RemoteErrors,
     network_partitioner: &NetworkPartitioner,
     auth_filter: &AuthFilter,
-) -> Result<DocumentsResult, ResponseError> {
+    progress: SequencialProgress,
+) -> Result<(DocumentsResult, SequencialProgress), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
@@ -1020,20 +1037,29 @@ async fn retrieve_documents_federated(
         );
 
     //remote
-    let remote_retrieve_documents =
-        RemoteRetrieveDocuments::start(network_partitioner, params, remote_queries).await?;
+    let (remote_retrieve_documents, progress) =
+        RemoteRetrieveDocuments::start(network_partitioner, params, remote_queries, progress)
+            .await?;
 
     // Perform local search
     let mut results = Vec::with_capacity(local_queries.len());
+    let mut progress = progress;
     for (query_id, query) in local_queries {
-        let result =
-            retrieve_documents_local(index_scheduler.clone(), query, true, auth_filter.clone())
-                .await?;
+        let (result, ret_progress) = retrieve_documents_local(
+            index_scheduler.clone(),
+            query,
+            true,
+            auth_filter.clone(),
+            progress,
+        )
+        .await?;
+        progress = ret_progress;
         results.push((query_id, result));
     }
 
     // wait
-    let (remote_results, errors) = remote_retrieve_documents.finish(&index_scheduler).await?;
+    let (remote_results, errors, progress) =
+        remote_retrieve_documents.finish(&index_scheduler, progress).await?;
     remote_errors.extend(errors);
     results.extend(remote_results);
 
@@ -1046,13 +1072,16 @@ async fn retrieve_documents_federated(
         .take(query.query.query.limit)
         .collect();
 
-    Ok(DocumentsResult {
-        results: merged_results?,
-        offset: query.query.query.offset,
-        limit: query.query.query.limit,
-        total,
-        remote_errors: Some(remote_errors).filter(|errors| !errors.is_empty()),
-    })
+    Ok((
+        DocumentsResult {
+            results: merged_results?,
+            offset: query.query.query.offset,
+            limit: query.query.query.limit,
+            total,
+            remote_errors: Some(remote_errors).filter(|errors| !errors.is_empty()),
+        },
+        progress,
+    ))
 }
 
 fn merge_documents_results(
@@ -1104,7 +1133,8 @@ async fn retrieve_documents_local(
     query: PreprocessedQuery<BrowseQueryWithIndex>,
     is_proxy: bool,
     auth_filter: AuthFilter,
-) -> Result<DocumentsResult, ResponseError> {
+    progress: SequencialProgress,
+) -> Result<(DocumentsResult, SequencialProgress), ResponseError> {
     let PreprocessedQuery {
         query:
             BrowseQueryWithIndex {
@@ -1126,6 +1156,7 @@ async fn retrieve_documents_local(
     } = query;
 
     tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+        let step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
         let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
         let ids = if let Some(ids) = ids {
             let mut parsed_ids = Vec::with_capacity(ids.len());
@@ -1171,13 +1202,17 @@ async fn retrieve_documents_local(
             is_proxy,
         )?;
 
-        Ok(DocumentsResult {
-            results: documents,
-            offset,
-            limit,
-            total: total as usize,
-            remote_errors: None,
-        })
+        drop(step);
+        Ok((
+            DocumentsResult {
+                results: documents,
+                offset,
+                limit,
+                total: total as usize,
+                remote_errors: None,
+            },
+            progress,
+        ))
     })
     .await
     .unwrap()

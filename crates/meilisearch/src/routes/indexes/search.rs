@@ -10,8 +10,8 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{self, TotalProcessingTimeStep};
+use meilisearch_types::milli;
+use meilisearch_types::milli::progress::{ProgressVerbosityMode, SequencialProgress};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -557,10 +557,8 @@ pub async fn search_with_url_query(
     if use_documents_retrieval {
         let request_uid = Uuid::now_v7();
         debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
-        let progress = Progress::default();
-        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-        let permit = search_queue.try_get_search_permit().await?;
-        progress.update_progress(TotalProcessingTimeStep::Search);
+        let progress = SequencialProgress::new(ProgressVerbosityMode::Info);
+        let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
         let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
         let query: SearchQuery = params.into_inner().try_into()?;
@@ -583,14 +581,17 @@ pub async fn search_with_url_query(
         };
 
         let search_result = document_retrieval
-            .execute(index_scheduler, &progress)
+            .execute(index_scheduler, progress)
             .await
             .map(|result| {
-                let DocumentSearchResult::Multi(mut search_results) = result else {
+                let DocumentSearchResult::Multi(mut search_results, mut progress_by_query) = result
+                else {
                     unreachable!()
                 };
 
-                search_results.pop().unwrap().result
+                let (_, progress) = progress_by_query.pop().unwrap();
+                let search_result = search_results.pop().unwrap();
+                (search_result.result, progress)
             })
             .map_err(|(mut err, _)| match err.error_code.as_str() {
                 "index_not_found" => {
@@ -603,14 +604,14 @@ pub async fn search_with_url_query(
 
         permit.drop().await;
 
-        if let Ok(search_result) = search_result.as_ref() {
+        if let Ok((search_result, _)) = search_result.as_ref() {
             aggregate.succeed(search_result);
         }
         analytics.publish(aggregate, &req);
 
-        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search get");
+        let (search_result, progress) = search_result?;
 
-        let search_result = search_result?;
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress, "Search get");
 
         Ok(HttpResponse::Ok().json(search_result))
     } else {
@@ -638,10 +639,8 @@ pub async fn legacy_search_with_url_query(
 ) -> Result<HttpResponse, ResponseError> {
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
-    let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
+    let progress = SequencialProgress::new(ProgressVerbosityMode::Info);
+    let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let mut query: SearchQuery = params.into_inner().try_into()?;
@@ -662,7 +661,7 @@ pub async fn legacy_search_with_url_query(
         index_uid,
         request_uid,
         include_metadata,
-        &progress,
+        progress,
         &auth_filter,
         &personalization_service,
         StatusCode::NOT_FOUND,
@@ -671,12 +670,12 @@ pub async fn legacy_search_with_url_query(
 
     permit.drop().await;
 
-    if let Ok(search_result) = search_result.as_ref() {
+    if let Ok((search_result, _)) = search_result.as_ref() {
         aggregate.succeed(search_result);
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let (search_result, progress) = search_result?;
 
     debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
 
@@ -690,11 +689,11 @@ pub(crate) async fn legacy_search(
     index_uid: IndexUid,
     request_uid: Uuid,
     include_metadata: bool,
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
     service: &PersonalizationService,
     index_not_found_http_code: StatusCode,
-) -> Result<SearchResult, ResponseError> {
+) -> Result<(SearchResult, SequencialProgress), ResponseError> {
     // Extract personalization and query string before moving query
     let personalize = query.personalize.take();
     // Save the query string for personalization if requested
@@ -708,7 +707,7 @@ pub(crate) async fn legacy_search(
         query.clone(),
         None,
     )];
-    let (hydration_cache, mut preprocessed_queries, remote_errors) = preprocess_filters(
+    let (hydration_cache, mut preprocessed_queries, remote_errors, progress) = preprocess_filters(
         index_scheduler.clone(),
         &network_partitioner,
         queries,
@@ -751,11 +750,11 @@ pub(crate) async fn legacy_search(
         .await
         .map_err(|(err, _)| err);
 
-        let (search_result, _deadline) = search_result?;
+        let (search_result, _deadline, progress) = search_result?;
         let search_result =
             search_result.into_search_result(q.unwrap_or_default(), index_uid.as_str());
 
-        Ok(search_result)
+        Ok((search_result, progress))
     } else {
         let index =
             index_scheduler.user_index(&index_uid, auth_filter).map_err(|err| match &err {
@@ -770,7 +769,6 @@ pub(crate) async fn legacy_search(
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
-        let progress_clone = progress.clone();
         let auth_filter_clone = auth_filter.clone();
         let show_performance_details = query.show_performance_details;
         let search_result = tokio::task::spawn_blocking(move || {
@@ -786,13 +784,14 @@ pub(crate) async fn legacy_search(
                 },
                 &index_scheduler,
                 &index,
-                &progress_clone,
+                &progress,
                 &auth_filter_clone,
             )
+            .map(|(search_result, deadline)| (search_result, deadline, progress))
         })
         .await;
 
-        let (mut search_result, deadline) = search_result??;
+        let (mut search_result, deadline, progress) = search_result??;
 
         // Apply personalization if requested
         // in the legacy search, personalization is applied after pinning hits,
@@ -804,7 +803,7 @@ pub(crate) async fn legacy_search(
                     &personalize,
                     personalize_query.as_deref(),
                     &deadline,
-                    progress,
+                    &progress,
                 )
                 .await?;
         }
@@ -814,7 +813,7 @@ pub(crate) async fn legacy_search(
             search_result.performance_details = Some(progress.accumulated_durations());
         }
 
-        Ok(search_result)
+        Ok((search_result, progress))
     }
 }
 
@@ -889,10 +888,8 @@ pub async fn search_with_post(
         let index_uid = IndexUid::try_from(index_uid.into_inner())?;
         let request_uid = Uuid::now_v7();
 
-        let progress = Progress::default();
-        progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-        let permit = search_queue.try_get_search_permit().await?;
-        progress.update_progress(TotalProcessingTimeStep::Search);
+        let progress = SequencialProgress::new(ProgressVerbosityMode::Info);
+        let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
 
         let query = params.into_inner();
         debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
@@ -915,14 +912,17 @@ pub async fn search_with_post(
         };
 
         let search_result = document_retrieval
-            .execute(index_scheduler, &progress)
+            .execute(index_scheduler, progress)
             .await
             .map(|result| {
-                let DocumentSearchResult::Multi(mut search_results) = result else {
+                let DocumentSearchResult::Multi(mut search_results, mut progress_by_query) = result
+                else {
                     unreachable!()
                 };
 
-                search_results.pop().unwrap().result
+                let (_, progress) = progress_by_query.pop().unwrap();
+                let search_result = search_results.pop().unwrap();
+                (search_result.result, progress)
             })
             .map_err(|(mut err, _)| match err.error_code.as_str() {
                 "index_not_found" => {
@@ -935,14 +935,14 @@ pub async fn search_with_post(
 
         permit.drop().await;
 
-        if let Ok(search_result) = search_result.as_ref() {
+        if let Ok((search_result, _)) = search_result.as_ref() {
             aggregate.succeed(search_result);
         }
         analytics.publish(aggregate, &req);
 
-        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress.accumulated_durations(), "Search post");
+        let (search_result, progress) = search_result?;
 
-        let search_result = search_result?;
+        debug!(request_uid = ?request_uid, returns = ?&search_result, progress = ?progress, "Search post");
 
         Ok(HttpResponse::Ok().json(search_result))
     } else {
@@ -971,10 +971,8 @@ pub async fn legacy_search_with_post(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let request_uid = Uuid::now_v7();
 
-    let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
-    let permit = search_queue.try_get_search_permit().await?;
-    progress.update_progress(TotalProcessingTimeStep::Search);
+    let progress = SequencialProgress::new(ProgressVerbosityMode::Info);
+    let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
 
     let mut query = params.into_inner();
     debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
@@ -995,7 +993,7 @@ pub async fn legacy_search_with_post(
         index_uid,
         request_uid,
         include_metadata,
-        &progress,
+        progress,
         &auth_filter,
         &personalization_service,
         StatusCode::NOT_FOUND,
@@ -1004,12 +1002,12 @@ pub async fn legacy_search_with_post(
 
     permit.drop().await;
 
-    if let Ok(search_result) = search_result.as_ref() {
+    if let Ok((search_result, _)) = search_result.as_ref() {
         aggregate.succeed(search_result);
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let (search_result, progress) = search_result?;
 
     debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
 

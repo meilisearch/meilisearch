@@ -8,8 +8,7 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::TotalProcessingTimeStep;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -206,7 +205,8 @@ async fn similar(
     index_uid: IndexUid,
     mut query: SimilarQuery,
 ) -> Result<SimilarResult, ResponseError> {
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = SequencialProgress::quiet();
 
     let (index_scheduler, auth_filter) = index_scheduler.into_inner();
     let search_rules = auth_filter.get_index_search_rules(&index_uid);
@@ -216,24 +216,15 @@ async fn similar(
         add_search_rules(&mut query.filter, search_rules);
     }
 
-    let progress_clone = progress.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let _step = progress_clone.update_progress_scoped(TotalProcessingTimeStep::Search);
-
-        perform_similar(
-            &index_scheduler,
-            index_uid,
-            query,
-            &progress_clone,
-            &auth_filter,
-            search_rules,
-        )
+    let (result, progress) = tokio::task::spawn_blocking(move || {
+        perform_similar(&index_scheduler, index_uid, query, &progress, &auth_filter, search_rules)
+            .map(|similar| (similar, progress))
     })
-    .await;
+    .await??;
 
     debug!(progress = ?progress.accumulated_durations(), "Similar");
 
-    result?
+    Ok(result)
 }
 
 #[derive(Debug, deserr::Deserr, IntoParams)]

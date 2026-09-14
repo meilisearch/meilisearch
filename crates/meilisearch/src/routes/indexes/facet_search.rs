@@ -11,7 +11,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::{
     serialize_index_filter_to_filter_string, FacetValueHit, IndexFilter, OrderBy,
 };
@@ -307,12 +307,13 @@ pub async fn search(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let progress = Progress::default();
+    // Progress is not used, we use the quiet progress to avoid logging any steps.
+    let progress = SequencialProgress::quiet();
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let before_search = time::OffsetDateTime::now_utc();
 
-    let permit = search_queue.try_get_search_permit().await?;
+    let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
 
     let mut query = params.into_inner();
     debug!(parameters = ?query, "Facet search");
@@ -329,13 +330,13 @@ pub async fn search(
     let network_partitioner = NetworkPartitioner::new(&index_scheduler);
 
     let queries = vec![(index_uid.clone(), query)];
-    let (_, mut queries, remote_errors) = preprocess_filters(
+    let (_, mut queries, remote_errors, progress) = preprocess_filters(
         index_scheduler.clone(),
         &network_partitioner,
         queries,
         features,
         false,
-        &progress,
+        progress,
         &auth_filter,
         Code::InvalidSearchFilter,
     )
@@ -360,17 +361,17 @@ pub async fn search(
     } else {
         search_local(index_scheduler.clone(), query, before_search, progress, auth_filter, features)
             .await
-            .map(|(results, _)| results)
+            .map(|(results, _, progress)| (results, progress))
     };
 
     permit.drop().await;
 
-    if let Ok(ref search_result) = search_result {
+    if let Ok((ref search_result, _)) = search_result {
         aggregate.succeed(search_result);
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let (search_result, _progress) = search_result?;
 
     debug!(returns = ?search_result, "Facet search");
     Ok(HttpResponse::Ok().json(search_result))
@@ -383,11 +384,11 @@ async fn search_federated(
     mut remote_errors: RemoteErrors,
     index_uid: IndexUid,
     before_search: time::OffsetDateTime,
-    progress: Progress,
+    progress: SequencialProgress,
     auth_filter: AuthFilter,
     features: RoFeatures,
     network_partitioner: &NetworkPartitioner,
-) -> Result<FacetSearchResult, ResponseError> {
+) -> Result<(FacetSearchResult, SequencialProgress), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
@@ -467,7 +468,7 @@ async fn search_federated(
     }
 
     let query = PreprocessedQuery { query: (index_uid, query), filter: original_filter };
-    let (mut local_results, order) = search_multi_local(
+    let (mut local_results, order, progress) = search_multi_local(
         local_queries,
         index_scheduler,
         query,
@@ -496,12 +497,15 @@ async fn search_federated(
         OrderBy::Count => count_merge(results),
     };
 
-    Ok(FacetSearchResult {
-        facet_hits,
-        facet_query,
-        processing_time_ms,
-        remote_errors: Some(remote_errors),
-    })
+    Ok((
+        FacetSearchResult {
+            facet_hits,
+            facet_query,
+            processing_time_ms,
+            remote_errors: Some(remote_errors),
+        },
+        progress,
+    ))
 }
 
 fn count_merge(mut results: Vec<FacetSearchResult>) -> Vec<FacetValueHit> {
@@ -535,10 +539,10 @@ async fn search_multi_local(
     index_scheduler: Data<IndexScheduler>,
     mut query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
     before_search: time::OffsetDateTime,
-    progress: Progress,
+    progress: SequencialProgress,
     auth_filter: AuthFilter,
     features: RoFeatures,
-) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
+) -> Result<(FacetSearchResult, OrderBy, SequencialProgress), ResponseError> {
     // we need to fuse the shard filters from the local queries into the query
     // inner array is OR, which is what we want
     let shard_filters =
@@ -553,18 +557,17 @@ async fn search_local(
     index_scheduler: Data<IndexScheduler>,
     query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
     before_search: time::OffsetDateTime,
-    progress: Progress,
+    progress: SequencialProgress,
     auth_filter: AuthFilter,
     features: RoFeatures,
-) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
+) -> Result<(FacetSearchResult, OrderBy, SequencialProgress), ResponseError> {
     let PreprocessedQuery { query: (index_uid, query), filter } = query;
     let facet_name = query.facet_name.clone();
     let facet_query = query.facet_query.clone();
     let locales = query.locales.clone().map(|l| l.into_iter().map(Into::into).collect());
     let search_query = SearchQuery::from(query);
 
-    let progress_clone = progress.clone();
-    let search_result = tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let index = index_scheduler.user_index(&index_uid, &auth_filter)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
@@ -583,7 +586,7 @@ async fn search_local(
             &search_kind,
             deadline,
             features,
-            &progress_clone,
+            &progress,
         )?;
 
         perform_facet_search(
@@ -596,9 +599,9 @@ async fn search_local(
             search_kind,
             locales,
         )
+        .map(|(fsr, ob)| (fsr, ob, progress))
     })
-    .await;
-    search_result?
+    .await?
 }
 
 impl From<FacetSearchQuery> for SearchQuery {

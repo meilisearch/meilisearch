@@ -3,7 +3,7 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
@@ -32,7 +32,7 @@ fn test_facet_distribution_with_no_facet_values() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::default(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -70,7 +70,7 @@ fn test_facet_distribution_with_no_facet_values() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            ConcurrentProgress::quiet(),
             None,
         )
         .unwrap();
@@ -86,7 +86,7 @@ fn test_facet_distribution_with_no_facet_values() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &ConcurrentProgress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),

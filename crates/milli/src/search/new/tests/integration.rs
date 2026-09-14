@@ -6,7 +6,7 @@ use heed::EnvOpenOptions;
 use http_client::policy::IpPolicy;
 use maplit::{btreemap, hashset};
 
-use crate::progress::Progress;
+use crate::progress::ConcurrentProgress;
 use crate::sharding::Shards;
 use crate::update::new::indexer;
 use crate::update::{IndexerConfig, MissingDocumentPolicy, Settings};
@@ -51,7 +51,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<S
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::default(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -87,7 +87,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<S
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::default(),
+            ConcurrentProgress::quiet(),
             None,
         )
         .unwrap();
@@ -107,7 +107,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<S
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::default(),
+        &ConcurrentProgress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),

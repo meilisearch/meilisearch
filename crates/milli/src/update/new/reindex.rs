@@ -2,10 +2,14 @@ use heed::RwTxn;
 
 use super::document::{Document, DocumentFromDb};
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
-use crate::progress::{self, AtomicSubStep, Progress};
+use crate::progress::{self, AtomicSubStep, ConcurrentProgress};
 use crate::{FieldDistribution, Index, Result};
 
-pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progress) -> Result<()> {
+pub fn field_distribution(
+    index: &Index,
+    wtxn: &mut RwTxn<'_>,
+    progress: &ConcurrentProgress,
+) -> Result<()> {
     let mut distribution = FieldDistribution::new();
 
     let document_count = index.number_of_documents(wtxn)?;

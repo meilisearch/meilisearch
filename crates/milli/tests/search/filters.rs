@@ -1,6 +1,6 @@
 use either::{Either, Left, Right};
 use filter_parser::{FilterCondition, IndexFilterCondition};
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::{Criterion, Filter, IndexFilter, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
 
@@ -51,7 +51,7 @@ macro_rules! test_filter {
             let filter_conditions =
                 Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
-            let progress = Progress::default();
+            let progress = Progress::quiet();
             let mut search = Search::new(
                 &rtxn,
                 &index,

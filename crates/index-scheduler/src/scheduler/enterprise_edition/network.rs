@@ -13,7 +13,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::{AnyIndex, UserIndex};
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::RwTxn;
-use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{ConcurrentProgress, EmbedderStats, VariableNameStep};
 use meilisearch_types::milli::sharding::enterprise_edition::Resharding;
 use meilisearch_types::milli::sharding::{DbShardDocids, ShardBalancingOutcome, Shards};
 use meilisearch_types::milli::update::new::indexer;
@@ -36,7 +36,7 @@ impl IndexScheduler {
         mut network_task: Task,
         inner_batch: Box<Batch>,
         current_batch: &mut ProcessingBatch,
-        progress: Progress,
+        progress: ConcurrentProgress,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         let KindWithContent::NetworkTopologyChange(network_topology_change) =
             &mut network_task.kind
@@ -82,7 +82,7 @@ impl IndexScheduler {
     pub(in crate::scheduler) fn process_network_ready(
         &self,
         mut task: Task,
-        progress: Progress,
+        progress: ConcurrentProgress,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         let KindWithContent::NetworkTopologyChange(network_topology_change) = &mut task.kind else {
             tracing::error!("network topology change task has the wrong kind with content");
@@ -179,7 +179,7 @@ impl IndexScheduler {
         new_shards: Shards,
         network_change_origin: &Origin,
         is_leader: bool,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         must_stop_processing: &MustStopProcessing,
     ) -> crate::Result<()> {
         // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
@@ -390,7 +390,7 @@ impl IndexScheduler {
     fn delete_removed_shards<'a>(
         &self,
         removed_shards: impl Iterator<Item = &'a str> + Clone,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         must_stop_processing: &MustStopProcessing,
     ) -> crate::Result<u64> {
         let mut deleted_documents = 0;
@@ -543,7 +543,7 @@ impl IndexScheduler {
         documents_to_delete: RoaringBitmap,
         embedders: RuntimeEmbedders,
         indexer_alloc: &Bump,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         must_stop_processing: &milli::MustStopProcessing,
     ) -> crate::Result<(), milli::Error> {
         let index_rtxn = index.read_txn()?;
