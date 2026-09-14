@@ -1167,12 +1167,7 @@ async fn remote_auto_sharding_dsrs() {
             "propagated-to-all-remotes",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":0}]}
             }),
         )
         .await;
@@ -1185,12 +1180,7 @@ async fn remote_auto_sharding_dsrs() {
             "deleted-after-sharding",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 2 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":1}]}
             }),
         )
         .await;
@@ -1261,17 +1251,14 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1290,17 +1277,14 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1319,17 +1303,14 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1343,12 +1324,7 @@ async fn remote_auto_sharding_dsrs() {
             "propagated-too",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":1}]}
             }),
         )
         .await;
@@ -1374,34 +1350,28 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "propagated-to-all-remotes",
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1420,34 +1390,28 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "propagated-to-all-remotes",
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1466,34 +1430,28 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "propagated-to-all-remotes",
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1562,12 +1520,7 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote-filtered" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-filtered", "position":0}]}
             }),
         )
         .await;
@@ -1674,12 +1627,7 @@ async fn remote_search_keeps_remote_pins() {
             "pin-remote",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":0}]}
             }),
         )
         .await;
@@ -1768,12 +1716,7 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
                     "words": "returns"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote-pinned" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-pinned","position":0}]}
             }),
         )
         .await;
@@ -1884,16 +1827,12 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
                     "words": "batman"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "late-pin-1" },
-                        "action": { "type": "pin", "position": 10 }
-                    },
-                    {
-                        "selector": { "id": "late-pin-2" },
-                        "action": { "type": "pin", "position": 20 }
-                    }
-                ]
+                "actions":{
+                  "pin": [
+                    {"id":"late-pin-1", "position":10},
+                    {"id":"late-pin-2","position":20}
+                  ]
+                }
             }),
         )
         .await;
@@ -2083,12 +2022,7 @@ async fn remote_search_distinct_deduplicates_pinned_documents() {
             "pin-remote-duplicate",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote-pinned" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-pinned","position":0}]}
             }),
         )
         .await;
@@ -2221,12 +2155,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
                     "words": "returns"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote-pinned" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-pinned","position":0}]}
             }),
         )
         .await;

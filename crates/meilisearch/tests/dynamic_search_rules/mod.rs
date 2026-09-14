@@ -34,12 +34,14 @@ async fn create_simple_dynamic_search_rule(server: &Server, uid: &str, active: b
             json!({
                 "description": uid,
                 "active": active,
-                "actions": [
+                "actions": {
+                  "pin": [
                     {
-                        "selector": { "id": doc_id },
-                        "action": { "type": "pin", "position": 0 }
+                      "id": doc_id,
+                      "position": 0
                     }
-                ]
+                  ]
+                }
             }),
         )
         .await;
@@ -88,17 +90,14 @@ async fn list_supports_pagination() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "1"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "1",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 1,
@@ -133,17 +132,14 @@ async fn list_filters_by_attribute_patterns() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "2"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "2",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "promo-active",
@@ -151,17 +147,14 @@ async fn list_filters_by_attribute_patterns() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "1"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "1",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -196,17 +189,14 @@ async fn list_filters_by_active_and_combines_filters() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "3"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "3",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "promo-active",
@@ -214,17 +204,14 @@ async fn list_filters_by_active_and_combines_filters() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "1"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "1",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -251,17 +238,14 @@ async fn list_filters_by_active_and_combines_filters() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "1"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "1",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -279,12 +263,14 @@ async fn create_and_get() {
         .create_dynamic_search_rule(
             "rule-1",
             json!({
-                "actions": [
+                "actions": {
+                  "pin": [
                     {
-                        "selector": { "id": "42" },
-                        "action": { "type": "pin", "position": 1 }
+                      "id": "42",
+                      "position": 1
                     }
-                ]
+                  ]
+                }
             }),
         )
         .await;
@@ -299,17 +285,14 @@ async fn create_and_get() {
       "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
-      "actions": [
-        {
-          "selector": {
-            "id": "42"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "42",
             "position": 1
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -333,24 +316,14 @@ async fn create_full_rule() {
             "start": "2025-11-28T00:00:00Z", "end": "2025-11-28T23:59:59Z"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "indexUid": "products", "id": "123" },
-                        "action": { "type": "pin", "position": 1 }
-                    },
-                    {
-                        "selector": { "indexUid": "products", "id": "456" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "789" },
-                        "action": { "type": "pin", "position": 3 }
-                    },
-                    {
-                        "selector": { "id": "999" },
-                        "action": { "type": "pin", "position": 8 }
-                    }
-                ]
+                "actions": {
+                  "pin": [
+                    { "indexUid": "products", "id": "123", "position": 1 },
+                    { "indexUid": "products", "id": "456", "position": 0 },
+                    { "id": "789", "position": 3 },
+                    { "id": "999", "position": 8 },
+                  ]
+                }
             }),
         )
         .await;
@@ -375,46 +348,28 @@ async fn create_full_rule() {
           "isEmpty": true
         }
       },
-      "actions": [
-        {
-          "selector": {
+      "actions": {
+        "pin": [
+          {
             "indexUid": "products",
-            "id": "123"
-          },
-          "action": {
-            "type": "pin",
+            "id": "123",
             "position": 1
-          }
-        },
-        {
-          "selector": {
+          },
+          {
             "indexUid": "products",
-            "id": "456"
-          },
-          "action": {
-            "type": "pin",
+            "id": "456",
             "position": 0
-          }
-        },
-        {
-          "selector": {
-            "id": "789"
           },
-          "action": {
-            "type": "pin",
+          {
+            "id": "789",
             "position": 3
-          }
-        },
-        {
-          "selector": {
-            "id": "999"
           },
-          "action": {
-            "type": "pin",
+          {
+            "id": "999",
             "position": 8
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -434,12 +389,14 @@ async fn create_rejects_query_condition_with_both_is_empty_and_contains() {
                     }
                 }
                 ,
-                "actions": [
+                "actions": {
+                  "pin": [
                     {
-                        "selector": { "id": "42" },
-                        "action": { "type": "pin", "position": 0 }
+                      "id": "42",
+                      "position": 0,
                     }
-                ]
+                  ]
+                }
             }),
         )
         .await;
@@ -460,17 +417,31 @@ async fn full_lifecycle() {
     let server = dynamic_search_rules_server().await;
 
     let (task, code) = server
-        .create_dynamic_search_rule("rule-a", json!({
-            "actions": [{ "selector": { "id": "0" }, "action": { "type": "pin", "position": 0 } }]
-        }))
+        .create_dynamic_search_rule(
+            "rule-a",
+            json!({
+                "actions": {
+                  "pin": [
+                    { "id": "0", "position": 0 }
+                  ]
+                }
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
 
     let (task, code) = server
-        .create_dynamic_search_rule("rule-b", json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
+        .create_dynamic_search_rule(
+            "rule-b",
+            json!({
+                "actions": {
+                  "pin": [
+                    { "id": "1", "position": 0 }
+                  ]
+                }
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
@@ -485,34 +456,28 @@ async fn full_lifecycle() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "1"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "1",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "rule-a",
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "0"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "0",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -535,17 +500,14 @@ async fn full_lifecycle() {
           "lastUpdatedAt": "[updated]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "1"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "1",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -581,9 +543,16 @@ async fn patch_rule() {
     let server = dynamic_search_rules_server().await;
 
     let (task, code) = server
-        .create_dynamic_search_rule("updatable", json!({
-            "actions": [{ "selector": { "id": "42" }, "action": { "type": "pin", "position": 1 } }]
-        }))
+        .create_dynamic_search_rule(
+            "updatable",
+            json!({
+                "actions": {
+                  "pin": [
+                    {"id":"42", "position":1}
+                  ]
+                }
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
@@ -609,17 +578,14 @@ async fn patch_rule() {
           "precedence": 10,
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "42"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "42",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -644,17 +610,14 @@ async fn patch_rule() {
           "precedence": 10,
           "active": false,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "42"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "42",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -692,17 +655,14 @@ async fn patch_rule() {
               "isEmpty": true
             }
           },
-          "actions": [
-            {
-              "selector": {
-                "id": "42"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "42",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -727,17 +687,14 @@ async fn patch_rule() {
               "isEmpty": true
             }
           },
-          "actions": [
-            {
-              "selector": {
-                "id": "42"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "42",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -748,7 +705,9 @@ async fn patch_rule() {
     let (task, code) = server
         .patch_dynamic_search_rule(
             "updatable",
-            json!({ "actions": [{ "selector": { "id": "99" }, "action": { "type": "pin", "position": 7 } }] }),
+            json!({ "actions": {"pin":[
+              {"id":"99","position":7}
+            ]}}),
         )
         .await;
     snapshot!(code, @"202 Accepted");
@@ -770,17 +729,14 @@ async fn patch_rule() {
               "isEmpty": true
             }
           },
-          "actions": [
-            {
-              "selector": {
-                "id": "99"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "99",
                 "position": 7
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -814,7 +770,7 @@ async fn patch_creates_rule_when_missing() {
         .patch_dynamic_search_rule(
             "foobar",
             json!({
-                "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
+                "actions": {"pin":[{"id":"1","position":0}]}
             }),
         )
         .await;
@@ -829,17 +785,14 @@ async fn patch_creates_rule_when_missing() {
       "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
-      "actions": [
-        {
-          "selector": {
-            "id": "1"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "1",
             "position": 0
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -858,10 +811,13 @@ async fn create_unknown_field() {
     let server = dynamic_search_rules_server().await;
 
     let (value, code) = server
-        .create_dynamic_search_rule("rule-x", json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }],
-            "unknownField": true
-        }))
+        .create_dynamic_search_rule(
+            "rule-x",
+            json!({
+                "actions": {"pin":[{"id":"1","position":0}]},
+                "unknownField": true
+            }),
+        )
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(value), @r###"
@@ -879,9 +835,12 @@ async fn patch_unknown_field() {
     let server = dynamic_search_rules_server().await;
 
     let (task, code) = server
-        .create_dynamic_search_rule("rule-y", json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
+        .create_dynamic_search_rule(
+            "rule-y",
+            json!({
+                "actions": {"pin":[{"id":"1","position":0}]}
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
@@ -915,7 +874,7 @@ async fn create_missing_actions() {
       "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
-      "actions": []
+      "actions": {}
     }
     "###);
 }
@@ -930,22 +889,63 @@ async fn create_empty_body() {
 }
 
 #[actix_web::test]
+async fn cannot_access_metadata() {
+    let server = dynamic_search_rules_server().await;
+
+    let (task, code) = server.create_dynamic_search_rule("empty", json!({})).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .get_dynamic_search_rule(meilisearch_types::milli::dynamic_search_rules::METADATA_UID)
+        .await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(value, @r###"
+    {
+      "message": "Dynamic search rule `__meilisearch_metadata` not found.",
+      "code": "dynamic_search_rule_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#dynamic_search_rule_not_found"
+    }
+    "###);
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            meilisearch_types::milli::dynamic_search_rules::METADATA_UID,
+            json!({}),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "`__meilisearch_metadata` is reserved and cannot be used as a rule uid. Use a different uid.",
+      "code": "invalid_dynamic_search_rule_uid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_uid"
+    }
+    "###);
+}
+
+#[actix_web::test]
 async fn patch_preserves_fields() {
     let server = dynamic_search_rules_server().await;
 
     let (task, code) = server
-        .create_dynamic_search_rule("preserve", json!({
-            "description": "original",
-            "precedence": 5,
-            "active": true,
-            "conditions":
-            {
-                "query": {
-                    "isEmpty": true
-                }
-            },
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
+        .create_dynamic_search_rule(
+            "preserve",
+            json!({
+                "description": "original",
+                "precedence": 5,
+                "active": true,
+                "conditions":
+                {
+                    "query": {
+                        "isEmpty": true
+                    }
+                },
+                "actions": {"pin":[{"id":"1","position":0}]}
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
@@ -964,17 +964,14 @@ async fn patch_preserves_fields() {
           "isEmpty": true
         }
       },
-      "actions": [
-        {
-          "selector": {
-            "id": "1"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "1",
             "position": 0
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 
@@ -997,17 +994,14 @@ async fn patch_preserves_fields() {
           "isEmpty": true
         }
       },
-      "actions": [
-        {
-          "selector": {
-            "id": "1"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "1",
             "position": 0
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -1021,10 +1015,18 @@ async fn patch_replaces_arrays() {
             "arrays",
             json!({
                 "conditions": {},
-                "actions": [
-                    { "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } },
-                    { "selector": { "id": "2" }, "action": { "type": "pin", "position": 2 } }
-                ]
+                "actions": {
+                  "pin": [
+                    {
+                      "id":"1",
+                      "position":0
+                    },
+                    {
+                      "id":"2",
+                      "position":2
+                    }
+                  ]
+                }
             }),
         )
         .await;
@@ -1034,7 +1036,8 @@ async fn patch_replaces_arrays() {
     let (task, code) = server
         .patch_dynamic_search_rule(
             "arrays",
-            json!({ "actions": [{ "selector": { "id": "3" }, "action": { "type": "pin", "position": 4 } }] }),
+            json!({ "actions": {"pin":[{"id":"3","position":4}]}
+            }),
         )
         .await;
     server.wait_task(task.uid()).await.succeeded();
@@ -1047,17 +1050,14 @@ async fn patch_replaces_arrays() {
       "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
-      "actions": [
-        {
-          "selector": {
-            "id": "3"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "3",
             "position": 4
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -1067,10 +1067,13 @@ async fn patch_empty_body() {
     let server = dynamic_search_rules_server().await;
 
     let (task, code) = server
-        .create_dynamic_search_rule("no-change", json!({
-            "active": true,
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
+        .create_dynamic_search_rule(
+            "no-change",
+            json!({
+                "active": true,
+                "actions": {"pin":[{"id":"1","position":0}]}
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
@@ -1087,17 +1090,14 @@ async fn patch_empty_body() {
       "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
-      "actions": [
-        {
-          "selector": {
-            "id": "1"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "1",
             "position": 0
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -1107,9 +1107,12 @@ async fn defaults_on_create() {
     let server = dynamic_search_rules_server().await;
 
     let (task, code) = server
-        .create_dynamic_search_rule("minimal", json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
+        .create_dynamic_search_rule(
+            "minimal",
+            json!({
+                "actions": {"pin":[{"id":"1","position":0}]}
+            }),
+        )
         .await;
     snapshot!(code, @"202 Accepted");
     server.wait_task(task.uid()).await.succeeded();
@@ -1121,17 +1124,14 @@ async fn defaults_on_create() {
       "lastUpdatedAt": "[updated]",
       "active": true,
       "conditions": {},
-      "actions": [
-        {
-          "selector": {
-            "id": "1"
-          },
-          "action": {
-            "type": "pin",
+      "actions": {
+        "pin": [
+          {
+            "id": "1",
             "position": 0
           }
-        }
-      ]
+        ]
+      }
     }
     "###);
 }
@@ -1158,12 +1158,7 @@ async fn disabling_the_feature_stops_applying_rules_to_search() {
             "pin-remote",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":0}]}
             }),
         )
         .await;
@@ -1232,12 +1227,7 @@ async fn search_applies_pins_when_query_contains_value() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":0}]}
             }),
         )
         .await;
@@ -1287,12 +1277,7 @@ async fn search_filters_out_pinned_documents_excluded_by_filters() {
             "pin-filtered",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"filtered-pin","position":0}]}
             }),
         )
         .await;
@@ -1348,16 +1333,12 @@ async fn search_keeps_pins_that_miss_query_but_not_filters() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-query-miss" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {
+                  "pin": [
+                    {"id":"pinned-query-miss", "position":0},
+                    {"id":"filter-pin", "position":1},
+                  ]
+                }
             }),
         )
         .await;
@@ -1440,16 +1421,12 @@ async fn search_keeps_hybrid_pins_that_miss_query_but_not_filters() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-query-miss" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {
+                  "pin": [
+                    {"id":"pinned-query-miss","position":0},
+                    {"id":"filtered-pin","position":1}
+                  ]
+                }
             }),
         )
         .await;
@@ -1528,16 +1505,12 @@ async fn search_counts_pins_that_miss_query() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-query-miss" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {
+                  "pin":[
+                    {"id":"pinned-query-miss", "position":0},
+                    {"id":"filtered-pin", "position":1}
+                  ]
+                }
             }),
         )
         .await;
@@ -1627,12 +1600,7 @@ async fn search_distinct_deduplicates_pinned_documents() {
             "pin-duplicate-series",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-duplicate" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin": [{"id":"pinned-duplicate","position":0}]}
             }),
         )
         .await;
@@ -1698,16 +1666,10 @@ async fn search_facet_distribution_counts_pins_that_miss_query() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-query-miss" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {"pin":[
+                  {"id":"pinned-query-miss","position":0},
+                  {"id":"filtered-pin","position":1}
+                ]}
             }),
         )
         .await;
@@ -1779,16 +1741,10 @@ async fn search_pumps_pins_when_organic_results_run_out() {
             "pump-pins",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "late-pin-1" },
-                        "action": { "type": "pin", "position": 10 }
-                    },
-                    {
-                        "selector": { "id": "late-pin-2" },
-                        "action": { "type": "pin", "position": 20 }
-                    }
-                ]
+                "actions": {"pin":[
+                  {"id":"late-pin-1", "position":10},
+                  {"id":"late-pin-2", "position":20}
+                ]}
             }),
         )
         .await;
@@ -1869,12 +1825,7 @@ async fn filter_conditions() {
                   }
                 },
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "pin-on-matrix" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"pin-on-matrix","position":0}]}
             }),
         )
         .await;
@@ -1953,7 +1904,8 @@ async fn filter_conditions() {
           "pin": {
             "order": 0,
             "position": 0,
-            "precedence": null
+            "precedence": null,
+            "ruleUid": "pin-on-matrix-action"
           }
         }
       },
@@ -2021,7 +1973,8 @@ async fn filter_conditions() {
           "pin": {
             "order": 0,
             "position": 0,
-            "precedence": null
+            "precedence": null,
+            "ruleUid": "pin-on-matrix-action"
           }
         }
       },
@@ -2089,7 +2042,8 @@ async fn filter_conditions() {
           "pin": {
             "order": 0,
             "position": 0,
-            "precedence": null
+            "precedence": null,
+            "ruleUid": "pin-on-matrix-action"
           }
         }
       },
@@ -2194,12 +2148,7 @@ async fn filter_conditions() {
                   }
                 },
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "pin-on-multi" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"pin-on-multi","position":1}]}
             }),
         )
         .await;
@@ -2227,7 +2176,8 @@ async fn filter_conditions() {
           "pin": {
             "order": 0,
             "position": 0,
-            "precedence": null
+            "precedence": null,
+            "ruleUid": "pin-on-matrix-action"
           }
         }
       },
@@ -2336,7 +2286,8 @@ async fn filter_conditions() {
           "pin": {
             "order": 0,
             "position": 1,
-            "precedence": null
+            "precedence": null,
+            "ruleUid": "pin-on-genres-series"
           }
         }
       }
@@ -2503,12 +2454,7 @@ async fn duplicated_word_constraints() {
                     "words": "Mario Luigi"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"pinned","position":1}]}
             }),
         )
         .await;
@@ -2606,7 +2552,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-9",
@@ -2614,7 +2560,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-8",
@@ -2622,7 +2568,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-7",
@@ -2630,7 +2576,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-6",
@@ -2638,7 +2584,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-5",
@@ -2646,7 +2592,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-4",
@@ -2654,7 +2600,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-3",
@@ -2662,7 +2608,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-2",
@@ -2670,7 +2616,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-1",
@@ -2678,7 +2624,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         },
         {
           "uid": "dsr-number-0",
@@ -2686,7 +2632,7 @@ async fn list_many_rules() {
           "lastUpdatedAt": "[updated]",
           "active": false,
           "conditions": {},
-          "actions": []
+          "actions": {}
         }
       ],
       "offset": 990,
@@ -2718,12 +2664,7 @@ async fn search_applies_precedenceless_rules() {
             "pin-with-precedence",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ],
+                "actions": {"pin":[{"id":"remote","position":0}]},
                 "precedence": 10
             }),
         )
@@ -2736,14 +2677,16 @@ async fn search_applies_precedenceless_rules() {
             "pin-without-precedence",
             json!({
                 "active": true,
-                "actions": [
+                "actions": {
+                  "pin": [
                     {
-                        "selector": { "id": "local" },
-                        // pick another position due to another bug causing
-                        // precedence to sometimes get ignored
-                        "action": { "type": "pin", "position": 1 }
+                      "id": "local",
+                      // pick another position due to another bug causing
+                      // precedence to sometimes get ignored
+                      "position": 1
                     }
-                ]
+                  ]
+                }
             }),
         )
         .await;
@@ -2762,7 +2705,8 @@ async fn search_applies_precedenceless_rules() {
           "pin": {
             "order": 0,
             "position": 0,
-            "precedence": 10
+            "precedence": 10,
+            "ruleUid": "pin-with-precedence"
           }
         }
       },
@@ -2773,7 +2717,8 @@ async fn search_applies_precedenceless_rules() {
           "pin": {
             "order": 0,
             "position": 1,
-            "precedence": null
+            "precedence": null,
+            "ruleUid": "pin-without-precedence"
           }
         }
       }
@@ -2809,16 +2754,12 @@ async fn multi_search_deduplicates_pins() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-query-miss" },
-                        "action": { "type": "pin", "position": 0 }
-                    },
-                    {
-                        "selector": { "id": "filtered-pin" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {
+                  "pin": [
+                    {"id":"pinned-query-miss","position":0},
+                    {"id":"filtered-pin","position":1}
+                  ]
+                }
             }),
         )
         .await;
@@ -2852,7 +2793,8 @@ async fn multi_search_deduplicates_pins() {
             "pin": {
               "order": 0,
               "position": 0,
-              "precedence": null
+              "precedence": null,
+              "ruleUid": "pin-invoked-twice-in-multi-search"
             }
           }
         },
@@ -2868,7 +2810,8 @@ async fn multi_search_deduplicates_pins() {
             "pin": {
               "order": 0,
               "position": 1,
-              "precedence": null
+              "precedence": null,
+              "ruleUid": "pin-invoked-twice-in-multi-search"
             }
           }
         },
@@ -2951,12 +2894,7 @@ async fn multi_search_lower_precedence_pin_wins() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-twice" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"pinned-twice","position":0}]}
             }),
         )
         .await;
@@ -2974,12 +2912,7 @@ async fn multi_search_lower_precedence_pin_wins() {
                         "words": "batman"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "pinned-twice" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"pinned-twice","position":1}]}
             }),
         )
         .await;
@@ -3053,7 +2986,8 @@ async fn multi_search_lower_precedence_pin_wins() {
             "pin": {
               "order": 0,
               "position": 1,
-              "precedence": 0
+              "precedence": 0,
+              "ruleUid": "pin-for-query-1"
             }
           }
         },
