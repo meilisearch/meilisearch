@@ -287,14 +287,29 @@ pub fn setup_meilisearch(
             Err(err) => bail!(err),
         };
 
+        let max_scale_actions = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_MAX_SCALE_ACTIONS")
+        {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 10,
+            Err(err) => bail!(err),
+        };
+
+        let scale_fuel = match std::env::var("MEILI_EXPERIMENTAL_DSR_FUEL_SCALE_FUEL") {
+            Ok(var) => var.parse()?,
+            Err(std::env::VarError::NotPresent) => 10,
+            Err(err) => bail!(err),
+        };
+
         let filter_constraint_fuel = FilterConstraintFuel::new(or_fuel, and_fuel, depth_fuel);
 
         DsrFuel::new(
             max_counted_words,
             max_active_rules,
             max_pin_actions,
+            max_scale_actions,
             word_fuel,
             filter_fuel,
+            scale_fuel,
             filter_constraint_fuel,
         )
     };
