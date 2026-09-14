@@ -49,11 +49,12 @@ pub struct SemanticSearch {
     quantized: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PinDoc {
     pub position: Position,
     pub precedence: Precedence,
     pub id: DocumentId,
+    pub rule_uid: String,
 }
 
 impl Pin for PinDoc {
