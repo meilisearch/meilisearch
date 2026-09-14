@@ -1,0 +1,30 @@
+use std::collections::BTreeMap;
+use std::io::Cursor;
+use std::sync::LazyLock;
+use std::{fmt, mem};
+
+use actix_web::web::{self, Data};
+use actix_web::{FromRequest, HttpRequest, HttpResponse};
+use anyhow::Context as _;
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
+use deserr::{Deserr, IntoValue, Value, ValuePointerRef};
+use either::Either;
+use index_scheduler::IndexScheduler;
+use meilisearch_types::batch_view::BatchView;
+use meilisearch_types::deserr::{DeserrError, DeserrJson, DeserrJsonError};
+use meilisearch_types::error::deserr_codes::BadRequest;
+use meilisearch_types::error::Code::BadParameter;
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli;
+use serde::Serialize;
+use serde_json::Number;
+use utoipa::openapi::path::Operation;
+use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref, Schema};
+use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
+use utoipa::{OpenApi as _, PartialSchema, ToSchema};
+
+use crate::analytics::Analytics;
+use crate::extractors::authentication::GuardedData;
+use crate::routes::MeilisearchApi;
+use crate::search_queue::SearchQueue;
