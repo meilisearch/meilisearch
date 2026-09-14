@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use meilisearch_types::heed::CompactionOption;
 use meilisearch_types::index_uid::AnyIndex;
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{ConcurrentProgress, VariableNameStep};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::{compression, VERSION_FILE_NAME};
 
@@ -80,7 +80,7 @@ unsafe fn remove_tasks(
 impl IndexScheduler {
     pub(super) fn process_snapshot(
         &self,
-        progress: Progress,
+        progress: ConcurrentProgress,
         tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
         progress.update_progress(SnapshotCreationProgress::StartTheSnapshotCreation);
@@ -104,7 +104,7 @@ impl IndexScheduler {
 
     fn process_snapshots_to_disk(
         &self,
-        progress: Progress,
+        progress: ConcurrentProgress,
         mut tasks: Vec<Task>,
     ) -> Result<Vec<Task>, Error> {
         fs::create_dir_all(&self.scheduler.snapshots_path)?;

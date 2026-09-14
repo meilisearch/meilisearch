@@ -13,7 +13,7 @@ use itertools::Itertools;
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::steps::{
     PerformRetrievalStep, QueryStep, RetrieveIndexDataStep, TotalProcessingTimeStep,
@@ -70,9 +70,9 @@ pub async fn perform_federated_search(
     include_metadata: bool,
     show_federation_info: ShowFederationInfo,
     personalization_service: &PersonalizationService,
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
-) -> Result<(FederatedSearchResult, Deadline), (ResponseError, Option<usize>)> {
+) -> Result<(FederatedSearchResult, Deadline, SequencialProgress), (ResponseError, Option<usize>)> {
     progress.update_progress(PerformRetrievalStep::Prepare);
     if is_proxy {
         features.check_network("Performing a remote federated search").without_index()?;
@@ -157,8 +157,7 @@ pub async fn perform_federated_search(
 
     let mut deadline = Deadline::never();
 
-    let (search_by_index, params, deadline) = tokio::task::spawn_blocking({
-        let progress = progress.clone();
+    let (search_by_index, params, deadline, mut progress) = tokio::task::spawn_blocking({
         move || -> Result<_, (ResponseError, Option<usize>)> {
             progress.update_progress(PerformRetrievalStep::ExecuteLocal);
             for (index_uid, queries) in partitioned_queries.local_queries_by_index {
@@ -178,7 +177,7 @@ pub async fn perform_federated_search(
                 .check_unused_facets(&params.index_scheduler, &params.auth_filter)
                 .without_index()?;
 
-            Ok((search_by_index, params, deadline))
+            Ok((search_by_index, params, deadline, progress))
         }
     })
     .await
@@ -341,7 +340,7 @@ pub async fn perform_federated_search(
                     personalize,
                     Some(&query),
                     &deadline,
-                    progress,
+                    &progress,
                 )
                 .await
                 .without_index()?;
@@ -363,17 +362,20 @@ pub async fn perform_federated_search(
             hydration_cache.register_foreign_docids(hit, *query_index);
         }
 
-        let (hydration_formatter, hydration_remote_errors) = FederatedHydrationFormatter::new(
-            hydration_cache,
-            &index_scheduler,
-            network_partitioner,
-            auth_filter,
-            progress,
-        )
-        .await
-        .without_index()?;
+        let (hydration_formatter, hydration_remote_errors, ret_progress) =
+            FederatedHydrationFormatter::new(
+                hydration_cache,
+                &index_scheduler,
+                network_partitioner,
+                auth_filter,
+                progress,
+            )
+            .await
+            .without_index()?;
+        progress = ret_progress;
         remote_errors.extend(hydration_remote_errors);
         hydration_formatter.hydrate_documents(&mut merged_hits).without_index()?;
+        progress.end_progress_step(TotalProcessingTimeStep::Hydrate);
     }
 
     let mut merged_hits = merged_hits
@@ -403,8 +405,13 @@ pub async fn perform_federated_search(
     };
 
     // 3.5. merge facets
-    let (facet_distribution, facet_stats, facets_by_index) =
-        facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits, progress);
+    let (facet_distribution, facet_stats, facets_by_index) = facet_order.merge(
+        federation.merge_facets,
+        remote_results,
+        facets,
+        rejected_hits,
+        &progress,
+    );
 
     let after_merge = time::OffsetDateTime::now_utc();
 
@@ -461,6 +468,7 @@ pub async fn perform_federated_search(
             performance_details,
         },
         deadline,
+        progress,
     ))
 }
 
@@ -1346,7 +1354,7 @@ impl SearchByIndex {
         before_search: time::OffsetDateTime,
         queries: Vec<QueryByIndex>,
         params: &SearchByIndexParams,
-        progress: &Progress,
+        progress: &SequencialProgress,
     ) -> Result<Deadline, (ResponseError, Option<usize>)> {
         let first_query_index = queries.first().map(|query| query.query_index);
         let index = match params.index_scheduler.user_index(&index_uid, &params.auth_filter) {
@@ -1932,7 +1940,7 @@ impl FacetOrder {
         remote_results: Vec<FederatedSearchResult>,
         mut facets: FederatedFacets,
         rejected_hits: BTreeMap<String, Vec<SearchHit>>,
-        progress: &Progress,
+        progress: &SequencialProgress,
     ) -> (Option<FacetDistributions>, Option<FacetStats>, FederatedFacets) {
         let _step = progress.update_progress_scoped(TotalProcessingTimeStep::MergeFacets);
         let (facet_distribution, facet_stats, facets_by_index) = match (self, merge_facets) {

@@ -4,7 +4,7 @@ use bumpalo::Bump;
 use heed::EnvOpenOptions;
 use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
@@ -25,7 +25,7 @@ fn test_typo_tolerance_one_typo() {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &txn,
             &index,
@@ -42,7 +42,7 @@ fn test_typo_tolerance_one_typo() {
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &txn,
             &index,
@@ -69,7 +69,7 @@ fn test_typo_tolerance_one_typo() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -77,7 +77,7 @@ fn test_typo_tolerance_one_typo() {
         .unwrap();
 
     // typo is now supported for 4 letters words
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let mut search = Search::new(
         &txn,
         &index,
@@ -105,7 +105,7 @@ fn test_typo_tolerance_two_typo() {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &txn,
             &index,
@@ -122,7 +122,7 @@ fn test_typo_tolerance_two_typo() {
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &txn,
             &index,
@@ -149,7 +149,7 @@ fn test_typo_tolerance_two_typo() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -157,7 +157,7 @@ fn test_typo_tolerance_two_typo() {
         .unwrap();
 
     // typo is now supported for 4 letters words
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let mut search = Search::new(
         &txn,
         &index,
@@ -207,7 +207,7 @@ fn test_typo_disabled_on_word() {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::quiet(),
+            ConcurrentProgress::quiet(),
             None,
         )
         .unwrap();
@@ -223,7 +223,7 @@ fn test_typo_disabled_on_word() {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::quiet(),
+        &ConcurrentProgress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
@@ -237,7 +237,7 @@ fn test_typo_disabled_on_word() {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &txn,
             &index,
@@ -267,14 +267,14 @@ fn test_typo_disabled_on_word() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
         )
         .unwrap();
 
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let mut search = Search::new(
         &txn,
         &index,
@@ -302,7 +302,7 @@ fn test_disable_typo_on_attribute() {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
         let mut search = Search::new(
             &txn,
             &index,
@@ -331,14 +331,14 @@ fn test_disable_typo_on_attribute() {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
         )
         .unwrap();
 
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let mut search = Search::new(
         &txn,
         &index,

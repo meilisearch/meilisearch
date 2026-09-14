@@ -9,7 +9,7 @@ use meilisearch_types::heed::RwTxn;
 use meilisearch_types::index_uid::DsrIndex;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::dynamic_search_rules::DynamicSearchRulesView;
-use meilisearch_types::milli::progress::{EmbedderStats, Progress};
+use meilisearch_types::milli::progress::{ConcurrentProgress, EmbedderStats};
 use meilisearch_types::milli::update::new::indexer::{
     self, IndexOperations, Payload, UpdateByFunction,
 };
@@ -47,7 +47,7 @@ impl IndexScheduler {
         index_wtxn: &mut RwTxn<'i>,
         index: &'i Index,
         operation: IndexOperation,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         embedder_stats: Arc<EmbedderStats>,
         network: &Network,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
@@ -584,7 +584,7 @@ impl IndexScheduler {
         &self,
         index_wtxn: &mut RwTxn<'i>,
         index: &'i Index,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
         must_stop_processing: &MustStopProcessing,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>> {
@@ -671,7 +671,7 @@ impl IndexScheduler {
         updates: &'i [DsrUpdate],
         embedder_stats: Arc<EmbedderStats>,
         mut tasks: Vec<Task>,
-        progress: &Progress,
+        progress: &ConcurrentProgress,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         use milli::dynamic_search_rules::fields as dsr_fields;
 

@@ -20,14 +20,14 @@ use v1_45::FixVectorStoreConfig;
 use v1_49::MigrateSynonymsToDedicatedDatabase;
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
-use crate::progress::{Progress, VariableNameStep};
+use crate::progress::{ConcurrentProgress, VariableNameStep};
 use crate::sharding::Shards;
 use crate::{Index, InternalError, MustStopProcessing, Result};
 
 #[derive(Clone, Copy)]
 pub struct UpgradeParams<'a> {
     pub must_stop_processing: &'a MustStopProcessing,
-    pub progress: &'a Progress,
+    pub progress: &'a ConcurrentProgress,
     pub shards: Option<&'a Shards>,
 }
 

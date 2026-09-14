@@ -32,7 +32,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::steps::TotalProcessingTimeStep;
 use meilisearch_types::milli::{
     all_obkv_to_json, obkv_to_json, FieldsIdsMap, OrderBy, PatternMatch,
@@ -359,8 +359,8 @@ async fn process_search_request(
     mut query: SearchInIndexParameters,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
     // Progress is not used, we use the quiet progress to avoid logging any steps.
-    let progress = Progress::quiet();
-    let permit = search_queue.try_get_search_permit(&progress).await?;
+    let progress = SequencialProgress::quiet();
+    let (permit, progress) = search_queue.try_get_search_permit(progress).await?;
 
     tracing::debug!("LLM query: {:?}", query);
 
@@ -376,13 +376,13 @@ async fn process_search_request(
     }
 
     let network_partitioner = NetworkPartitioner::new(index_scheduler);
-    let (_, mut preprocessed_queries, remote_errors) = preprocess_filters(
+    let (_, mut preprocessed_queries, remote_errors, progress) = preprocess_filters(
         (*index_scheduler).clone(),
         &network_partitioner,
         vec![query],
         features,
         false,
-        &progress,
+        progress,
         &auth_filter,
         Code::InvalidSearchFilter,
     )

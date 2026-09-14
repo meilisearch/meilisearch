@@ -8,7 +8,7 @@ use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceFieldName, SourceIndexUid};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use meilisearch_types::milli::{
     self, filtered_universe, Filter, IndexFilter, IndexFilterCondition, LightToken, Token,
@@ -48,14 +48,14 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
     queries: Vec<Q>,
     features: RoFeatures,
     is_proxy: bool,
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
     code: Code,
 ) -> Result<
-    (Option<HydrationContext>, Vec<PreprocessedQuery<Q>>, RemoteErrors),
+    (Option<HydrationContext>, Vec<PreprocessedQuery<Q>>, RemoteErrors, SequencialProgress),
     (ResponseError, Option<usize>),
 > {
-    let _step = progress.update_progress_scoped(TotalProcessingTimeStep::PreprocessFilters);
+    progress.update_progress(TotalProcessingTimeStep::PreprocessFilters);
     progress.update_progress(PerformRetrievalStep::Prepare);
 
     // Document join: list of indexes in the order of the queries
@@ -71,7 +71,7 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
         let source_index_uids =
             queries.iter().map(|q| SourceIndexUid(q.index_uid().clone())).collect::<Vec<_>>();
 
-        let (queries, remote_errors) = preprocess_filters_allowing_foreign_keys(
+        let (queries, remote_errors, progress) = preprocess_filters_allowing_foreign_keys(
             index_scheduler,
             network_partitioner,
             &foreign_keys_settings,
@@ -84,10 +84,10 @@ pub async fn preprocess_filters<Q: PreprocessableQuery>(
         .await?;
 
         let hydration_cache = HydrationContext::new(source_index_uids, foreign_keys_settings);
-        Ok((Some(hydration_cache), queries, remote_errors))
+        Ok((Some(hydration_cache), queries, remote_errors, progress))
     } else {
         preprocess_filters_forbidding_foreign_keys(queries, features, code)
-            .map(|queries| (None, queries, Default::default()))
+            .map(|queries| (None, queries, Default::default(), progress))
     }
 }
 
@@ -121,10 +121,13 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
     foreign_keys_settings: &ForeignKeysPerIndex,
     mut queries: Vec<Q>,
     features: RoFeatures,
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
     code: Code,
-) -> Result<(Vec<PreprocessedQuery<Q>>, RemoteErrors), (ResponseError, Option<usize>)> {
+) -> Result<
+    (Vec<PreprocessedQuery<Q>>, RemoteErrors, SequencialProgress),
+    (ResponseError, Option<usize>),
+> {
     // parse each query filter and bind them to their respective index
     let filters = queries
         .iter_mut()
@@ -141,7 +144,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
         .collect::<Result<_, (ResponseError, Option<usize>)>>()?;
 
     // convert the filters to index filters by evaluating the foreign filters
-    let (filters, remote_errors) = filters_into_index_filters(
+    let (filters, remote_errors, progress) = filters_into_index_filters(
         &index_scheduler,
         network_partitioner,
         filters,
@@ -159,6 +162,7 @@ async fn preprocess_filters_allowing_foreign_keys<Q: PreprocessableQuery>(
             .map(|(query, filter)| PreprocessedQuery { query, filter })
             .collect(),
         remote_errors,
+        progress,
     ))
 }
 
@@ -227,16 +231,15 @@ fn group_foreign_filters_by_foreign_index(
 async fn local_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
     foreign_filters: &[ForeignFilterWithContext],
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
-) -> Result<Vec<Vec<LightToken>>, ResponseError> {
-    let _step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
+) -> Result<(Vec<Vec<LightToken>>, SequencialProgress), ResponseError> {
     let index_scheduler = index_scheduler.clone();
     let foreign_filters = foreign_filters.to_vec();
-    let progress = progress.clone();
     let auth_filter = auth_filter.clone();
 
     tokio::task::spawn_blocking(move || {
+    let step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
     let filters_per_foreign_index = group_foreign_filters_by_foreign_index(&foreign_filters);
 
     let mut foreign_filters_external_docids = vec![vec![]; foreign_filters.len()];
@@ -291,16 +294,17 @@ async fn local_process_foreign_filters(
         }
     }
 
-    Ok(foreign_filters_external_docids) }).await.map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal)).flatten()
+    drop(step);
+    Ok((foreign_filters_external_docids, progress)) }).await.map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal)).flatten()
 }
 
 async fn federated_process_foreign_filters(
     index_scheduler: &Data<IndexScheduler>,
     partitioner: &NetworkPartitioner,
     foreign_filters: &[ForeignFilterWithContext],
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
-) -> Result<(Vec<Vec<LightToken>>, RemoteErrors), ResponseError> {
+) -> Result<(Vec<Vec<LightToken>>, RemoteErrors, SequencialProgress), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
@@ -335,16 +339,16 @@ async fn federated_process_foreign_filters(
     }
 
     //remote
-    let remote_retrieve_documents =
+    let (remote_retrieve_documents, progress) =
         RemoteRetrieveDocuments::start(partitioner, params, remote_queries, progress).await?;
 
     // Perform local search
-    let mut foreign_filters_external_docids =
+    let (mut foreign_filters_external_docids, progress) =
         local_process_foreign_filters(index_scheduler, foreign_filters, progress, auth_filter)
             .await?;
 
     // wait
-    let (remote_results, errors) =
+    let (remote_results, errors, progress) =
         remote_retrieve_documents.finish(index_scheduler, progress).await?;
 
     // Merge results
@@ -367,6 +371,7 @@ async fn federated_process_foreign_filters(
                 (index_uid, error)
             })
             .collect(),
+        progress,
     ))
 }
 
@@ -414,13 +419,15 @@ async fn filters_into_index_filters(
     network_partitioner: &NetworkPartitioner,
     filters: Vec<(SourceIndexUid, Option<Filter>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
-    progress: &Progress,
+    progress: SequencialProgress,
     auth_filter: &AuthFilter,
-) -> Result<(Vec<Option<IndexFilter>>, RemoteErrors), ResponseError> {
+) -> Result<(Vec<Option<IndexFilter>>, RemoteErrors, SequencialProgress), ResponseError> {
     let foreign_filters = extract_foreign_filters(&filters, foreign_keys_per_index)?;
 
     // retrieve the external docids executing each foreign filter
-    let (foreign_filters_external_docids, remote_errors) = if network_partitioner.sharding() {
+    let (foreign_filters_external_docids, remote_errors, progress) = if network_partitioner
+        .sharding()
+    {
         // network + local
         federated_process_foreign_filters(
             index_scheduler,
@@ -432,11 +439,10 @@ async fn filters_into_index_filters(
         .await?
     } else {
         // local
-        (
+        let (foreign_filters_external_docids, progress) =
             local_process_foreign_filters(index_scheduler, &foreign_filters, progress, auth_filter)
-                .await?,
-            Default::default(),
-        )
+                .await?;
+        (foreign_filters_external_docids, Default::default(), progress)
     };
 
     // build the index filters replacing the foreign filters with a IN filter containing the retrieved external docids
@@ -455,7 +461,7 @@ async fn filters_into_index_filters(
         })
         .collect::<milli::Result<_>>()
         .map_err(|e| e.into())
-        .map(|index_filters| (index_filters, remote_errors))
+        .map(|index_filters| (index_filters, remote_errors, progress))
 }
 
 /// Retrieve the foreign keys settings for a list of indexes

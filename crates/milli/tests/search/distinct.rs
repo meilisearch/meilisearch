@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use big_s::S;
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::update::Settings;
 use milli::{Criterion, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;

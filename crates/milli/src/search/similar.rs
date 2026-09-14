@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use roaring::RoaringBitmap;
 
-use crate::progress::Progress;
+use crate::progress::SequencialProgress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::IndexFilter;
 use crate::vector::{Embedder, VectorStore};
@@ -21,7 +21,7 @@ pub struct Similar<'a> {
     embedder: Arc<Embedder>,
     ranking_score_threshold: Option<f64>,
     quantized: bool,
-    progress: &'a Progress,
+    progress: &'a SequencialProgress,
 }
 
 impl<'a> Similar<'a> {
@@ -36,7 +36,7 @@ impl<'a> Similar<'a> {
         embedder_name: String,
         embedder: Arc<Embedder>,
         quantized: bool,
-        progress: &'a Progress,
+        progress: &'a SequencialProgress,
     ) -> Self {
         Self {
             id,

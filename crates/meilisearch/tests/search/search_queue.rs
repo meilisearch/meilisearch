@@ -5,11 +5,11 @@ use std::time::Duration;
 use actix_web::ResponseError;
 use meili_snap::snapshot;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::{ConcurrentProgress, Progress};
 
 #[actix_rt::test]
 async fn search_queue_register() {
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let queue = SearchQueue::new(4, NonZeroUsize::new(2).unwrap());
 
     // First, use all the cores
@@ -45,7 +45,7 @@ async fn search_queue_register() {
 
 #[actix_rt::test]
 async fn search_queue_register_with_explicit_drop() {
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let queue = SearchQueue::new(4, NonZeroUsize::new(2).unwrap());
 
     // First, use all the cores
@@ -65,7 +65,7 @@ async fn search_queue_register_with_explicit_drop() {
 
 #[actix_rt::test]
 async fn search_queue_register_with_time_to_abort() {
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let queue = Arc::new(
         SearchQueue::new(1, NonZeroUsize::new(1).unwrap())
             .with_time_to_abort(Duration::from_secs(1)),
@@ -84,7 +84,7 @@ async fn search_queue_register_with_time_to_abort() {
 
 #[actix_rt::test]
 async fn wait_till_cores_are_available() {
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let queue = Arc::new(SearchQueue::new(4, NonZeroUsize::new(1).unwrap()));
 
     // First, use all the cores
@@ -116,7 +116,7 @@ async fn refuse_search_requests_when_queue_is_full() {
     // First, use the whole capacity of the
     let _permit1 = tokio::time::timeout(
         Duration::from_secs(1),
-        queue.try_get_search_permit(&Progress::quiet()),
+        queue.try_get_search_permit(&ConcurrentProgress::quiet()),
     )
     .await
     .expect("I should get a permit straight away")
@@ -124,12 +124,16 @@ async fn refuse_search_requests_when_queue_is_full() {
 
     let q = queue.clone();
     let permit2 =
-        tokio::task::spawn(async move { q.try_get_search_permit(&Progress::quiet()).await });
+        tokio::task::spawn(
+            async move { q.try_get_search_permit(&ConcurrentProgress::quiet()).await },
+        );
 
     // Here the queue is full. By registering two new search requests the permit 2 and 3 should be thrown out
     let q = queue.clone();
     let _permit3 =
-        tokio::task::spawn(async move { q.try_get_search_permit(&Progress::quiet()).await });
+        tokio::task::spawn(
+            async move { q.try_get_search_permit(&ConcurrentProgress::quiet()).await },
+        );
 
     let permit2 = tokio::time::timeout(Duration::from_secs(1), permit2)
         .await
@@ -166,7 +170,7 @@ async fn search_request_crashes_while_holding_permits() {
     // This first request take a cpu
     let q = queue.clone();
     tokio::task::spawn(async move {
-        let _permit = q.try_get_search_permit(&Progress::quiet()).await.unwrap();
+        let _permit = q.try_get_search_permit(&ConcurrentProgress::quiet()).await.unwrap();
         recv.await.unwrap();
         panic!("oops an unexpected crash happened")
     });
@@ -174,7 +178,7 @@ async fn search_request_crashes_while_holding_permits() {
     // This second request waits in the queue till the first request finishes
     let q = queue.clone();
     let task = tokio::task::spawn(async move {
-        let _permit = q.try_get_search_permit(&Progress::quiet()).await.unwrap();
+        let _permit = q.try_get_search_permit(&ConcurrentProgress::quiet()).await.unwrap();
     });
 
     // By sending something in the channel the request holding a CPU will panic and should lose its permit
@@ -189,7 +193,7 @@ async fn search_request_crashes_while_holding_permits() {
     // I should even be able to take second permit here
     let _permit1 = tokio::time::timeout(
         Duration::from_secs(1),
-        queue.try_get_search_permit(&Progress::quiet()),
+        queue.try_get_search_permit(&ConcurrentProgress::quiet()),
     )
     .await
     .expect("I should get a permit straight away")
@@ -198,7 +202,7 @@ async fn search_request_crashes_while_holding_permits() {
 
 #[actix_rt::test]
 async fn works_with_capacity_of_zero() {
-    let progress = Progress::quiet();
+    let progress = ConcurrentProgress::quiet();
     let queue = Arc::new(SearchQueue::new(0, NonZeroUsize::new(1).unwrap()));
 
     // First, use the whole capacity of the

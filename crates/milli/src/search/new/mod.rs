@@ -56,7 +56,7 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::GeoSortParameter;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
-use crate::progress::Progress;
+use crate::progress::SequencialProgress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
@@ -307,7 +307,7 @@ fn resolve_universe(
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
     logger: &mut dyn SearchLogger<QueryGraph>,
-    progress: &Progress,
+    progress: &SequencialProgress,
 ) -> Result<RoaringBitmap> {
     let _step = progress.update_progress_scoped(RetrieveIndexDataStep::EvaluateQuery);
     resolve_maximally_reduced_query_graph(
@@ -722,7 +722,7 @@ pub fn filtered_universe(
     fields_ids_map: &FieldsIdsMap,
     filters: &Option<IndexFilter>,
     candidates: Option<&RoaringBitmap>,
-    progress: &Progress,
+    progress: &SequencialProgress,
 ) -> Result<RoaringBitmap> {
     Ok(match (filters, candidates) {
         (None, None) => index.documents_ids(txn)?,
@@ -758,7 +758,7 @@ pub fn execute_vector_search(
     quantized: bool,
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
-    progress: &Progress,
+    progress: &SequencialProgress,
     pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
@@ -826,7 +826,7 @@ pub fn execute_search(
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
-    progress: &Progress,
+    progress: &SequencialProgress,
     pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;

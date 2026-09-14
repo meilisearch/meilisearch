@@ -3,12 +3,12 @@ use matching_words::tests::temp_index_with_documents;
 
 use super::*;
 use crate::index::tests::TempIndex;
-use crate::progress::Progress;
+use crate::progress::ConcurrentProgress;
 use crate::{execute_search, filtered_universe, Deadline, SearchContext};
 
 impl<'a> MatcherBuilder<'a> {
     fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
 
         let fields_ids_map = index.fields_ids_map(rtxn).unwrap();
         let mut search = crate::Search::new(

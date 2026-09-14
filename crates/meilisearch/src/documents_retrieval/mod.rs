@@ -5,7 +5,7 @@ use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
 use indexmap::IndexMap;
 use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
-use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::progress::SequencialProgress;
 use meilisearch_types::milli::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use uuid::Uuid;
 
@@ -44,7 +44,7 @@ impl DocumentSearch {
     pub async fn execute<const P: u8>(
         mut self,
         guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
-        progress: Progress,
+        progress: SequencialProgress,
     ) -> Result<DocumentSearchResult, (ResponseError, Option<usize>)> {
         // regardless of federation, check authorization and apply search rules
         let auth_filter = guarded_index_scheduler.filters();
@@ -68,13 +68,13 @@ impl DocumentSearch {
         let features = index_scheduler.features();
 
         let network_partitioner = NetworkPartitioner::new(&index_scheduler);
-        let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
+        let (hydration_cache, preprocessed_queries, remote_errors, progress) = preprocess_filters(
             index_scheduler.clone(),
             &network_partitioner,
             self.queries,
             features,
             self.is_proxy,
-            &progress,
+            progress,
             auth_filter,
             Code::InvalidSearchFilter,
         )
@@ -84,7 +84,7 @@ impl DocumentSearch {
 
         if let Some(federation) = self.federation.take() {
             progress.update_progress(TotalProcessingTimeStep::Process);
-            let (search_result, _) = perform_federated_search(
+            let (search_result, _, progress) = perform_federated_search(
                 index_scheduler,
                 &network_partitioner,
                 preprocessed_queries,
@@ -97,7 +97,7 @@ impl DocumentSearch {
                 self.include_metadata,
                 ShowFederationInfo::Always,
                 &self.personalization_service,
-                &progress,
+                progress,
                 auth_filter,
             )
             .await?;
@@ -135,7 +135,7 @@ impl DocumentSearch {
                     (q, index_uid, PreprocessedQuery { query: fixed_query, filter }, federation)
                 };
 
-                let (search_result, _) = perform_federated_search(
+                let (search_result, _, progress) = perform_federated_search(
                     index_scheduler.clone(),
                     &network_partitioner,
                     vec![fixed_query],
@@ -148,7 +148,7 @@ impl DocumentSearch {
                     self.include_metadata,
                     ShowFederationInfo::OnNetworkOnly,
                     &self.personalization_service,
-                    &progress,
+                    progress,
                     auth_filter,
                 )
                 .await
@@ -307,9 +307,9 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
         network_partitioner: &NetworkPartitioner,
         params: ProxySearchParams,
         remote_queries: Vec<(T, PreprocessedQuery<BrowseQueryWithIndex>)>,
-        progress: &Progress,
-    ) -> Result<Self, ResponseError> {
-        let _step = progress.update_progress_scoped(PerformRetrievalStep::SendToRemote);
+        progress: SequencialProgress,
+    ) -> Result<(Self, SequencialProgress), ResponseError> {
+        progress.update_progress(PerformRetrievalStep::SendToRemote);
         let mut errors = BTreeMap::new();
         let mut results = Vec::with_capacity(remote_queries.len());
         let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
@@ -382,15 +382,16 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
             ));
         }
 
-        Ok(Self { errors, results, in_flight_requests })
+        progress.end_progress_step(PerformRetrievalStep::SendToRemote);
+        Ok((Self { errors, results, in_flight_requests }, progress))
     }
 
     pub async fn finish(
         self,
         index_scheduler: &IndexScheduler,
-        progress: &Progress,
-    ) -> Result<(Vec<(T, DocumentsResult)>, RemoteErrors), ResponseError> {
-        let _step = progress.update_progress_scoped(PerformRetrievalStep::WaitForRemote);
+        progress: SequencialProgress,
+    ) -> Result<(Vec<(T, DocumentsResult)>, RemoteErrors, SequencialProgress), ResponseError> {
+        progress.update_progress(PerformRetrievalStep::WaitForRemote);
         let Self { mut results, mut errors, in_flight_requests } = self;
         // Retrieve remote results
         for (task, remote_name, metadata) in in_flight_requests {
@@ -409,6 +410,7 @@ impl<T: Clone> RemoteRetrieveDocuments<T> {
             }
         }
 
-        Ok((results, errors))
+        progress.end_progress_step(PerformRetrievalStep::WaitForRemote);
+        Ok((results, errors, progress))
     }
 }

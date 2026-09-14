@@ -8,7 +8,7 @@ use either::{Either, Left, Right};
 use heed::EnvOpenOptions;
 use http_client::policy::IpPolicy;
 use maplit::{btreemap, hashset};
-use milli::progress::Progress;
+use milli::progress::ConcurrentProgress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
@@ -69,7 +69,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     builder
         .execute(
             &MustStopProcessing::default(),
-            &Progress::quiet(),
+            &ConcurrentProgress::quiet(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
             Default::default(),
@@ -105,7 +105,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             None,
             &mut new_fields_ids_map,
             &MustStopProcessing::default(),
-            Progress::quiet(),
+            ConcurrentProgress::quiet(),
             None,
         )
         .unwrap();
@@ -125,7 +125,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         &document_changes,
         embedders,
         &MustStopProcessing::default(),
-        &Progress::quiet(),
+        &ConcurrentProgress::quiet(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),

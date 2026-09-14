@@ -17,7 +17,7 @@ use crate::documents::GeoSortParameter;
 use crate::dynamic_search_rules::{DsrFuel, DynamicSearchRules};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
-use crate::progress::Progress;
+use crate::progress::SequencialProgress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::{
     extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens, QueryGraph,
@@ -154,7 +154,7 @@ pub struct Search<'a> {
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
-    progress: &'a Progress,
+    progress: &'a SequencialProgress,
     dynamic_search_rules: Option<(&'a DynamicSearchRules, DsrFuel)>,
     candidates: Option<&'a RoaringBitmap>,
 }
@@ -166,7 +166,7 @@ impl<'a> Search<'a> {
         fields_ids_map: &'a FieldsIdsMap,
         index_uid: &'a str,
         before_search: OffsetDateTime,
-        progress: &'a Progress,
+        progress: &'a SequencialProgress,
     ) -> Search<'a> {
         Search {
             query: None,
@@ -710,7 +710,7 @@ mod test {
     #[test]
     fn test_kanji_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
 
         let index = TempIndex::new();
 
@@ -735,7 +735,7 @@ mod test {
     #[test]
     fn test_hangul_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::quiet();
+        let progress = ConcurrentProgress::quiet();
 
         let index = TempIndex::new();
 

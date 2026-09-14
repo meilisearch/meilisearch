@@ -27,7 +27,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec, SynonymsKeyCodec};
 use crate::order_by_map::OrderByMap;
-use crate::progress::Progress;
+use crate::progress::SequencialProgress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::sharding::{DbShardDocids, Shards};
@@ -1507,7 +1507,7 @@ impl Index {
         index_uid: &'a str,
         fields_ids_map: &'a FieldsIdsMap,
         before_search: time::OffsetDateTime,
-        progress: &'a Progress,
+        progress: &'a SequencialProgress,
     ) -> Search<'a> {
         Search::new(rtxn, self, fields_ids_map, index_uid, before_search, progress)
     }

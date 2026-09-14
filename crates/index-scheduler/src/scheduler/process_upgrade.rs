@@ -1,6 +1,6 @@
 use meilisearch_types::index_uid::{DsrIndex, UserIndex};
 use meilisearch_types::milli;
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{ConcurrentProgress, VariableNameStep};
 use meilisearch_types::milli::update::upgrade::must_upgrade_dsr;
 
 use crate::index_mapper::IndexUid as _;
@@ -11,7 +11,7 @@ impl IndexScheduler {
     pub(super) fn process_upgrade(
         &self,
         db_version: (u32, u32, u32),
-        progress: Progress,
+        progress: ConcurrentProgress,
     ) -> Result<()> {
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessUpgrade)?;
@@ -115,7 +115,11 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub fn process_rollback(&self, db_version: (u32, u32, u32), progress: &Progress) -> Result<()> {
+    pub fn process_rollback(
+        &self,
+        db_version: (u32, u32, u32),
+        progress: &ConcurrentProgress,
+    ) -> Result<()> {
         let mut wtxn = self.env.write_txn()?;
         tracing::info!(?db_version, "roll back index scheduler version");
         self.version.set_version(&mut wtxn, db_version)?;
