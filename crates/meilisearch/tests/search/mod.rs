@@ -2467,3 +2467,97 @@ async fn test_skip_on_creation() {
     let (resp, code) = index.get_document(2, None).await;
     assert_eq!(code, 404, "{resp}");
 }
+
+#[actix_rt::test]
+async fn phrase_search_with_many_consecutive_stop_words_still_returns_documents() {
+    // Consecutive stop words can push a word pair beyond the maximum indexed
+    // proximity; such a pair cannot be constrained and must not empty the
+    // results (the words-level intersection still applies).
+    let documents = json!([
+        {"id": 1, "title": "soup as well as of the day"},
+        {"id": 2, "title": "unrelated document"}
+    ]);
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"stopWords": ["as", "well", "of", "the"]}),
+        &json!({"q": "\"soup as well as of the day\"", "attributesToRetrieve": ["id"]}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 1
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+}
+
+#[actix_rt::test]
+async fn phrase_search_with_stop_words_is_not_a_bare_word_intersection() {
+    let documents = json!([
+        {"id": 1, "title": "The soup of the day"},
+        {"id": 2, "title": "soup day"},
+        {"id": 3, "title": "the soup and later the day"},
+        {"id": 4, "title": "unrelated document"}
+    ]);
+
+    // A phrase containing stop words must still constrain the real words by
+    // their distance: "the soup of the day" may match words up to the removed
+    // stop words' span apart, but not words scattered further away (doc 3).
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"stopWords": ["of", "the"], "rankingRules": ["words", "typo", "proximity", "attribute", "sort", "exactness"]}),
+        &json!({"q": "\"the soup of the day\"", "attributesToRetrieve": ["id", "title"]}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 1,
+                "title": "The soup of the day"
+              },
+              {
+                "id": 2,
+                "title": "soup day"
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+}
+
+#[actix_rt::test]
+async fn exactness_ranking_resolves_stop_word_phrases() {
+    // The exactness ranking rule resolves phrases through the same
+    // compute_phrase_docids path; isolate it from the other rules so the
+    // ExactTerm::Phrase branch is covered explicitly.
+    let documents = json!([
+        {"id": 1, "title": "The soup of the day"},
+        {"id": 2, "title": "soup day"}
+    ]);
+
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({"stopWords": ["of", "the"], "rankingRules": ["exactness"]}),
+        &json!({"q": "\"the soup of the day\"", "attributesToRetrieve": ["id"]}),
+        |response, code| {
+            assert_eq!(code, 200, "{}", response);
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 1
+              },
+              {
+                "id": 2
+              }
+            ]
+            "###);
+        },
+    )
+    .await;
+}
