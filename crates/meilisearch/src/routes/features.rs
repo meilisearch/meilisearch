@@ -49,6 +49,7 @@ pub struct ExperimentalFeaturesApi;
             legacy_search: Some(false),
             render_route: Some(false),
             tasks_streaming_route: Some(false),
+            mcp_route: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -126,6 +127,9 @@ pub struct RuntimeTogglableFeatures {
     /// Enable the `POST /render-template` route
     #[request(default)]
     pub render_route: Option<bool>,
+    /// Enable the `POST /mcp` route
+    #[request(default)]
+    pub mcp_route: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -147,6 +151,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             legacy_search,
             render_route,
             tasks_streaming_route,
+            mcp_route,
         } = value;
 
         Self {
@@ -166,6 +171,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             legacy_search,
             render_route: Some(render_route),
             tasks_streaming_route: Some(tasks_streaming_route),
+            mcp_route: Some(mcp_route),
         }
     }
 }
@@ -188,6 +194,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     disable_documents_fetch_queue: bool,
     legacy_search: bool,
     render_route: bool,
+    mcp_route: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -213,6 +220,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             disable_documents_fetch_queue: new.disable_documents_fetch_queue,
             legacy_search: new.legacy_search,
             render_route: new.render_route,
+            mcp_route: new.mcp_route,
         })
     }
 
@@ -245,6 +253,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             disable_documents_fetch_queue: Some(false),
             legacy_search: Some(false),
             render_route: Some(false),
+            mcp_route: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -307,6 +316,7 @@ async fn patch_features(
             .0
             .tasks_streaming_route
             .unwrap_or(old_features.tasks_streaming_route),
+        mcp_route: new_features.0.mcp_route.unwrap_or(old_features.mcp_route),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -329,6 +339,7 @@ async fn patch_features(
         legacy_search,
         render_route,
         tasks_streaming_route,
+        mcp_route,
     } = new_features;
 
     analytics.publish(
@@ -349,6 +360,7 @@ async fn patch_features(
             legacy_search: legacy_search.unwrap_or(false),
             render_route,
             tasks_streaming_route,
+            mcp_route,
         },
         &req,
     );

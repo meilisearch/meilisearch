@@ -2252,7 +2252,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
       "legacySearch": null,
-      "renderRoute": false
+      "renderRoute": false,
+      "mcpRoute": false
     }
     "###);
 
@@ -2386,7 +2387,8 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
       "legacySearch": null,
-      "renderRoute": false
+      "renderRoute": false,
+      "mcpRoute": false
     }
     "###);
 
@@ -2500,7 +2502,8 @@ async fn generate_and_import_dump_containing_vectors() {
       "foreignKeys": false,
       "disableDocumentsFetchQueue": false,
       "legacySearch": false,
-      "renderRoute": false
+      "renderRoute": false,
+      "mcpRoute": false
     }
     "###);
 
