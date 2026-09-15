@@ -1,5 +1,3 @@
-use std::ops::Not as _;
-
 use roaring::RoaringBitmap;
 
 use crate::dynamic_search_rules::{fields, DsrFuel, DynamicSearchRulesView, RuleId};
@@ -228,6 +226,8 @@ impl ScaleAction {
         }
 
         Ok(match (&self.ids, &self.filter) {
+            // note: this case is not supposed to happen, because a rule without ids OR filter is rejected by the route.
+            // however, should it still happen due to a bug, the behavior here (no document) is a reasonable fallback.
             (None, None) => None,
             (None, Some(filter)) => {
                 let Ok(filter) = Filter::from_json(filter) else {
@@ -258,7 +258,11 @@ impl ScaleAction {
             }
             (Some(ids), None) => {
                 let candidates = candidates_from_ids(search_context, ids)?;
-                candidates.is_empty().not().then_some(candidates)
+                if candidates.is_empty() {
+                    None
+                } else {
+                    Some(candidates)
+                }
             }
             (Some(ids), Some(filter)) => {
                 let mut candidates = candidates_from_ids(search_context, ids)?;

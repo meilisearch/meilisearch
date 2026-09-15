@@ -220,6 +220,11 @@ impl ScoreDetails {
         std::iter::from_fn(move || {
             details
                 .by_ref()
+                // any scale detail modifies the weight starting from this action,
+                // meaning that a hypothetical score details iterator with some relevancy rules before the scale
+                // detail would have the base weight and not the weight modified by the scale.
+                // In practice, the search implementation guarantees that scale is the first score detail, and as a result
+                // the weight is applied to all relevancy rules.
                 .inspect(|detail| {
                     if let ScoreDetails::Scale { actions } = detail {
                         for action in actions {
@@ -251,6 +256,9 @@ impl ScoreDetails {
         // define a cell that will keep the current weight, and capture it in a from_fn closure to keep the state
         // throughout the entire iteration
         let weight = std::cell::Cell::new(weight);
+        // record whether there has been at least one relevancy rule.
+        // this allows weight to be effective even if there is no relevancy rule: one final score is then inserted taking into account
+        // the current weight.
         let used_weight = std::cell::Cell::new(false);
 
         std::iter::from_fn(move || {

@@ -12,7 +12,7 @@ pub trait DocumentUpdater {
     fn update<'doc, T, D>(
         &self,
         context: &'doc DocumentContext<T>,
-        docid: u32,
+        docid: DocumentId,
         current: D,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
@@ -41,7 +41,7 @@ where
     fn update<'doc, T, D>(
         &self,
         context: &'doc DocumentContext<T>,
-        docid: u32,
+        docid: DocumentId,
         current: D,
     ) -> Result<Option<DocumentChange<'doc>>>
     where
@@ -57,7 +57,7 @@ where
 }
 
 pub struct DocumentUpdateChanges<U: DocumentUpdater> {
-    documents: Vec<u32>,
+    documents: Vec<DocumentId>,
     updater: U,
 }
 

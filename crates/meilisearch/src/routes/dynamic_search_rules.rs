@@ -382,8 +382,8 @@ fn check_rule(rule: &DynamicSearchRuleUpdateRequest) -> Result<(), ResponseError
 
                 let _ = IndexFilter::from_filter_without_foreign(filter).map_err(|(fid, _)| {
                     let err = fid.to_external_error(
-                    "filter condition `_foreign` is not supported in dynamic search rule actions.",
-                );
+                        "filter condition `_foreign` is not supported in dynamic search rule actions.",
+                    );
                     ResponseError::from_msg(
                         format!("invalid `.actions.scale[{action_index}].filter`: {err}"),
                         Code::InvalidDynamicSearchRuleActions,

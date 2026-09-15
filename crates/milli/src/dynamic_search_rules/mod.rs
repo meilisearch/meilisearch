@@ -133,6 +133,9 @@ impl<'a> DynamicSearchRulesView<'a> {
         let active_rules =
             self.active_rules_for_query(query_terms, filter, search_context, fuel)?;
 
+        // this used to be a flattened iterator of pin iterators.
+        // however we can no longer flatten because we have an iterator of `(pin_iterator, scale_iterator)`
+        // so we are using an explicit loop
         let mut pins = Vec::new();
         let mut scales = Vec::new();
 
@@ -151,6 +154,11 @@ impl<'a> DynamicSearchRulesView<'a> {
                     break;
                 }
                 let pin = pin?;
+                // this removal serves 2 simultaneous purposes:
+                // 1. make sure that the pinned document cannot appear in the organic results
+                // 2. make sure that the pinned document is initially part of the candidates post-filter: this is a security property
+                // of pinning that you cannot use pinning to pin documents that are not part of the current filter. This is to prevent,
+                // for example, unexpected interactions with tenant tokens.
                 if universe.remove(pin.id) {
                     pins.push(pin);
                 }
