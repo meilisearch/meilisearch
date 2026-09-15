@@ -397,7 +397,7 @@ impl BatchKind {
             // we can autobatch different kind of document operations and mix replacements with updates
             (
                 BatchKind::DocumentOperation { allow_index_creation, primary_key: _, mut operation_ids },
-                K::DocumentImport { primary_key: _, .. },
+                K::DocumentImport { .. },
             ) => {
                 operation_ids.push(id);
                 Continue(BatchKind::DocumentOperation {

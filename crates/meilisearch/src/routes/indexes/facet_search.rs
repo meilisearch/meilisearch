@@ -5,6 +5,7 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools as _;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::error::{deserr_codes::*, Code};
@@ -318,7 +319,8 @@ pub async fn search(
 
     // Tenant token search_rules.
     // NOTE: must be applied **BEFORE** proxying the query so that the tenant token sent to the original machine is taken into account
-    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
+    if let Some(search_rules) = auth_filter.get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
 
@@ -334,6 +336,7 @@ pub async fn search(
         features,
         false,
         &progress,
+        &auth_filter,
         Code::InvalidSearchFilter,
     )
     .await
@@ -349,12 +352,13 @@ pub async fn search(
             index_uid,
             before_search,
             progress,
+            auth_filter,
             features,
             &network_partitioner,
         )
         .await
     } else {
-        search_local(index_scheduler.clone(), query, before_search, progress, features)
+        search_local(index_scheduler.clone(), query, before_search, progress, auth_filter, features)
             .await
             .map(|(results, _)| results)
     };
@@ -380,6 +384,7 @@ async fn search_federated(
     index_uid: IndexUid,
     before_search: time::OffsetDateTime,
     progress: Progress,
+    auth_filter: AuthFilter,
     features: RoFeatures,
     network_partitioner: &NetworkPartitioner,
 ) -> Result<FacetSearchResult, ResponseError> {
@@ -468,6 +473,7 @@ async fn search_federated(
         query,
         before_search,
         progress,
+        auth_filter,
         features,
     )
     .await?;
@@ -530,6 +536,7 @@ async fn search_multi_local(
     mut query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
     before_search: time::OffsetDateTime,
     progress: Progress,
+    auth_filter: AuthFilter,
     features: RoFeatures,
 ) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
     // we need to fuse the shard filters from the local queries into the query
@@ -539,7 +546,7 @@ async fn search_multi_local(
 
     query.filter = intersect_index_filters(query.filter.take(), shard_filters);
 
-    search_local(index_scheduler, query, before_search, progress, features).await
+    search_local(index_scheduler, query, before_search, progress, auth_filter, features).await
 }
 
 async fn search_local(
@@ -547,6 +554,7 @@ async fn search_local(
     query: PreprocessedQuery<(IndexUid, FacetSearchQuery)>,
     before_search: time::OffsetDateTime,
     progress: Progress,
+    auth_filter: AuthFilter,
     features: RoFeatures,
 ) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
     let PreprocessedQuery { query: (index_uid, query), filter } = query;
@@ -557,7 +565,7 @@ async fn search_local(
 
     let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
-        let index = index_scheduler.user_index(&index_uid)?;
+        let index = index_scheduler.user_index(&index_uid, &auth_filter)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
         let fields_ids_map = index.fields_ids_map(&rtxn)?;

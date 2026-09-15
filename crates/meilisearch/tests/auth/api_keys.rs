@@ -415,7 +415,7 @@ async fn error_add_api_key_invalid_parameters_actions() {
         "expiresAt": "2050-11-13T00:00:00Z"
     });
     let (response, code) = server.add_api_key(content).await;
-    assert_eq!(400, code, "{:?}", &response);
+    assert_eq!(400, code, "{:?}", response);
 
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response, { ".createdAt" => "[ignored]", ".updatedAt" => "[ignored]" }), @r###"

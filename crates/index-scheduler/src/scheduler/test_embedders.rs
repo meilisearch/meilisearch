@@ -80,7 +80,7 @@ fn import_vectors() {
     }
 
     let (fakerest_name, simple_hf_name, beagle_embed, lab_embed, patou_embed) = {
-        let index = index_scheduler.user_index("doggos").unwrap();
+        let index = index_scheduler.user_index_unsecured("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
 
         let embedders = index.embedding_configs();
@@ -180,7 +180,7 @@ fn import_vectors() {
 
     // check embeddings
     {
-        let index = index_scheduler.user_index("doggos").unwrap();
+        let index = index_scheduler.user_index_unsecured("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
 
         // Ensure the document have been inserted into the relevant bitamp
@@ -267,7 +267,7 @@ fn import_vectors() {
     {
         // check embeddings
         {
-            let index = index_scheduler.user_index("doggos").unwrap();
+            let index = index_scheduler.user_index_unsecured("doggos").unwrap();
             let rtxn = index.read_txn().unwrap();
 
             let embedders = index.embedding_configs();
@@ -393,7 +393,7 @@ fn import_vectors_first_and_embedder_later() {
         .unwrap();
     handle.advance_one_successful_batch();
 
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -428,7 +428,7 @@ fn import_vectors_first_and_embedder_later() {
     handle.advance_one_successful_batch();
     index_scheduler.assert_internally_consistent();
 
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -628,7 +628,7 @@ fn delete_document_containing_vector() {
         .unwrap();
     handle.advance_one_successful_batch();
 
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -672,7 +672,7 @@ fn delete_document_containing_vector() {
     index_scheduler.register(KindWithContent::DocumentClear { index_uid: S("doggos") }).unwrap();
     handle.advance_one_successful_batch();
 
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -786,7 +786,7 @@ fn delete_embedder_with_user_provided_vectors() {
     handle.advance_one_successful_batch();
 
     {
-        let index = index_scheduler.user_index("doggos").unwrap();
+        let index = index_scheduler.user_index_unsecured("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -817,7 +817,7 @@ fn delete_embedder_with_user_provided_vectors() {
     }
 
     {
-        let index = index_scheduler.user_index("doggos").unwrap();
+        let index = index_scheduler.user_index_unsecured("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -846,7 +846,7 @@ fn delete_embedder_with_user_provided_vectors() {
     }
 
     {
-        let index = index_scheduler.user_index("doggos").unwrap();
+        let index = index_scheduler.user_index_unsecured("doggos").unwrap();
         let rtxn = index.read_txn().unwrap();
         let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
         let field_ids = field_ids_map.ids().collect::<Vec<_>>();

@@ -1,14 +1,16 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
-use once_cell::sync::Lazy;
+use meili_snap::{json_string, snapshot};
 use time::{Duration, OffsetDateTime};
 
 use super::authorization::{ALL_ACTIONS, AUTHORIZATIONS};
 use crate::auth::authorization::ALL_INDEX_SCOPED_ACTIONS;
 use crate::common::{Server, Value, DOCUMENTS};
 use crate::json;
+use crate::search::document_join::setup_indexes_with_foreign_key_and_filterable_profile;
 
 fn generate_tenant_token(
     parent_uid: impl AsRef<str>,
@@ -23,7 +25,7 @@ fn generate_tenant_token(
         .unwrap()
 }
 
-static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
+static INVALID_RESPONSE: LazyLock<Value> = LazyLock::new(|| {
     json!({
         "message": null,
         "code": "invalid_api_key",
@@ -32,7 +34,7 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     })
 });
 
-static ACCEPTED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
+static ACCEPTED_KEYS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         json!({
             "indexes": ["*"],
@@ -62,7 +64,7 @@ static ACCEPTED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
     ]
 });
 
-static REFUSED_KEYS: Lazy<Vec<Value>> = Lazy::new(|| {
+static REFUSED_KEYS: LazyLock<Vec<Value>> = LazyLock::new(|| {
     vec![
         // no search action
         json!({
@@ -468,7 +470,7 @@ async fn error_access_forbidden_routes() {
     server.use_api_key(&web_token);
 
     for ((method, route, _), actions) in AUTHORIZATIONS.iter() {
-        let actions = actions.iter().flat_map(|(s, _)| s.iter()).copied().collect::<HashSet<_>>();
+        let actions = actions.keys().flat_map(|s| s.iter()).copied().collect::<HashSet<_>>();
         if !actions.contains("search") {
             let (mut response, code) = server.dummy_request(method, route).await;
             response["message"] = serde_json::json!(null);
@@ -567,4 +569,100 @@ async fn error_access_modified_token() {
     response["message"] = serde_json::json!(null);
     assert_eq!(response, INVALID_RESPONSE.clone());
     assert_eq!(code, 403);
+}
+
+#[actix_rt::test]
+async fn error_foreign_filter_tenant_token() {
+    let mut server = Server::new_auth().await;
+    server.use_api_key("MASTER_KEY");
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let books_index = {
+        let (_authors_index, books_index) =
+            setup_indexes_with_foreign_key_and_filterable_profile(&server).await;
+        books_index.uid
+    };
+
+    // create a key that allows access to the books index only
+    let content = json!({
+        "indexes": [books_index],
+        "actions": ["*"],
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
+    });
+
+    let (response, code) = server.add_api_key(content).await;
+    assert_eq!(code, 201);
+    let books_key = response["key"].as_str().unwrap();
+    server.use_api_key(books_key);
+
+    let search_params = json!({
+        "queries": [{
+            "indexUid": books_index,
+        "q": "",
+        "filter": "genres = action AND _foreign(author, birthday STARTS WITH \"1958-\" AND popularity >= 3.5)",
+        "attributesToRetrieve": ["title", "author", "related_authors", "genres"]
+    }]});
+
+    let (response, code) = server.multi_search(search_params.clone()).await;
+    snapshot!(code, @"403 Forbidden");
+    snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    // create a tenant token that allows access to the books index only
+    server.use_api_key("MASTER_KEY");
+    let content = json!({
+        "indexes": ["*"],
+        "actions": ["*"],
+        "expiresAt": (OffsetDateTime::now_utc() + Duration::hours(1)).format(&Rfc3339).unwrap(),
+    });
+
+    let (response, code) = server.add_api_key(content).await;
+    assert_eq!(code, 201);
+    let key = response["key"].as_str().unwrap();
+    let uid = response["uid"].as_str().unwrap();
+    server.use_api_key(key);
+
+    let tenant_token = hashmap! {
+        "searchRules" => json!([books_index]),
+        "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
+    };
+    let web_token = generate_tenant_token(uid, key, tenant_token);
+    server.use_api_key(&web_token);
+
+    let (response, code) = server.multi_search(search_params.clone()).await;
+    snapshot!(code, @"403 Forbidden");
+    snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+    {
+      "message": "The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
+
+    // No foreign filter but hydration
+    let search_params = json!({
+        "queries": [{
+            "indexUid": books_index,
+        "q": "",
+        "filter": "genres = action",
+        "attributesToRetrieve": ["title", "author", "related_authors", "genres"]
+    }]});
+
+    let (response, code) = server.multi_search(search_params.clone()).await;
+    snapshot!(code, @"403 Forbidden");
+    snapshot!(json_string!(response, { ".**._rankingScore" => "[score]" }), @r###"
+    {
+      "message": "Inside `.queries[0]`: When trying to open an hydration index: The provided API key is invalid.",
+      "code": "invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
+    }
+    "###);
 }

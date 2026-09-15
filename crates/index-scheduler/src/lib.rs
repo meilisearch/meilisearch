@@ -35,6 +35,7 @@ mod queue;
 mod scheduler;
 #[cfg(test)]
 mod test_utils;
+pub mod timeouts;
 pub mod upgrade;
 mod utils;
 pub mod uuid_codec;
@@ -58,7 +59,9 @@ pub use error::Error;
 pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::error::AuthenticationError;
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -364,6 +367,9 @@ impl IndexScheduler {
         let scheduler = Scheduler::new(&options, auth_env);
 
         let web_client = http_client::reqwest::ClientBuilder::new()
+            .prepare(|build| {
+                build.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
+            })
             .build_with_policies(scheduler.ip_policy.clone(), Default::default())
             .unwrap();
 
@@ -581,7 +587,18 @@ impl IndexScheduler {
     /// Some configurations also can't reasonably open multiple indexes at once.
     /// If you need to fetch information from or perform an action on all indexes,
     /// see the `try_for_each_index` function.
-    pub fn user_index(&self, name: &str) -> Result<Index> {
+    pub fn user_index(&self, name: &str, auth_filter: &AuthFilter) -> Result<Index> {
+        if !auth_filter.is_index_authorized(name) {
+            return Err(Error::AuthenticationError(AuthenticationError::InvalidToken));
+        }
+
+        self.user_index_unsecured(name)
+    }
+
+    /// Same as `user_index` but without checking authorization.
+    ///
+    /// This function is not meant to be used outside of the index scheduler.
+    pub(crate) fn user_index_unsecured(&self, name: &str) -> Result<Index> {
         let name = UserIndex::try_from_uid(name)?;
         let rtxn = self.env.read_txn()?;
         self.index_mapper.index(&rtxn, name)
@@ -999,7 +1016,11 @@ impl IndexScheduler {
             &mut network_task.kind
         else {
             tracing::error!("unexpected network kind for network task while registering task");
-            return Err(Error::CorruptedTaskQueue);
+            return Err(Error::CorruptedTaskQueue {
+                file: file!(),
+                message: "Unexpected network kind for network task while registering task"
+                    .to_string(),
+            });
         };
 
         let o = update_fn(network_topology_change)?;
@@ -1062,7 +1083,15 @@ impl IndexScheduler {
                                 .tasks
                                 .get_task(self.rtxn, task_id)
                                 .map_err(io::Error::other)?
-                                .ok_or_else(|| io::Error::other(Error::CorruptedTaskQueue))?;
+                                .ok_or_else(|| {
+                                    io::Error::other(Error::CorruptedTaskQueue {
+                                        file: file!(),
+                                        message: format!(
+                                            "Task content not found for uid `{}` when notifying webhooks",
+                                            task_id
+                                        ),
+                                    })
+                                })?;
 
                             serde_json::to_writer(&mut self.buffer, &TaskView::from_task(&task))?;
                             self.buffer.push(b'\n');

@@ -208,7 +208,8 @@ async fn similar(
 ) -> Result<SimilarResult, ResponseError> {
     let progress = Progress::default();
 
-    let search_rules = index_scheduler.filters().get_index_search_rules(&index_uid);
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
+    let search_rules = auth_filter.get_index_search_rules(&index_uid);
 
     // Tenant token search_rules.
     if let Some(search_rules) = search_rules.clone() {
@@ -219,7 +220,14 @@ async fn similar(
     let result = tokio::task::spawn_blocking(move || {
         let _step = progress_clone.update_progress_scoped(TotalProcessingTimeStep::Search);
 
-        perform_similar(&index_scheduler, index_uid, query, &progress_clone, search_rules)
+        perform_similar(
+            &index_scheduler,
+            index_uid,
+            query,
+            &progress_clone,
+            &auth_filter,
+            search_rules,
+        )
     })
     .await;
 

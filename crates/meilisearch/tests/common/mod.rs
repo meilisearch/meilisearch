@@ -10,10 +10,10 @@ use actix_http::StatusCode;
 #[allow(unused)]
 pub use index::GetAllDocumentsOptions;
 use meili_snap::json_string;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 #[allow(unused)]
 pub use server::{default_settings, Server};
+use std::sync::LazyLock;
 use tokio::sync::OnceCell;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -199,7 +199,7 @@ macro_rules! test_post_get_search {
 }
 
 pub async fn shared_does_not_exists_index() -> &'static Index<'static, Shared> {
-    static INDEX: Lazy<Index<'static, Shared>> = Lazy::new(|| {
+    static INDEX: LazyLock<Index<'static, Shared>> = LazyLock::new(|| {
         let server = Server::new_shared();
         server._index("DOES_NOT_EXISTS").to_shared()
     });
@@ -220,7 +220,7 @@ pub async fn shared_empty_index() -> &'static Index<'static, Shared> {
         .await
 }
 
-pub static DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "title": "Shazam!",
@@ -273,7 +273,7 @@ pub async fn shared_index_with_documents() -> &'static Index<'static, Shared> {
     }).await
 }
 
-pub static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static SCORE_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "title": "Batman the dark knight returns: Part 1",
@@ -299,7 +299,7 @@ pub static SCORE_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
 });
 
 #[cfg(feature = "enterprise")] // only used in sharding tests for now
-pub static C_EST_FRANÇAIS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static C_EST_FRANÇAIS_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "id": "A",
@@ -350,7 +350,7 @@ pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shar
     }).await
 }
 
-pub static NESTED_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static NESTED_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "id": 852,
@@ -427,7 +427,7 @@ pub async fn shared_index_with_nested_documents() -> &'static Index<'static, Sha
     }).await
 }
 
-pub static FRUITS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static FRUITS_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "name": "Exclusive sale: green apple",
@@ -455,7 +455,7 @@ pub static FRUITS_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     ])
 });
 
-pub static VECTOR_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static VECTOR_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
       {
         "id": "A",
@@ -522,7 +522,7 @@ pub async fn shared_index_with_test_set() -> &'static Index<'static, Shared> {
         .await
 }
 
-pub static GEO_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+pub static GEO_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
         {
             "id": 1,

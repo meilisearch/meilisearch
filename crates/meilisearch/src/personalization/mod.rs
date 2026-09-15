@@ -4,7 +4,6 @@ use http_client::reqwest::Client;
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{Deadline, SearchStep};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -165,8 +164,8 @@ impl CohereService {
             };
 
             // randomly up to double the retry duration
-            let retry_duration = retry_duration
-                + rand::thread_rng().gen_range(std::time::Duration::ZERO..retry_duration);
+            let retry_duration =
+                retry_duration + rand::random_range(std::time::Duration::ZERO..retry_duration);
 
             warn!("Retrying after {}ms", retry_duration.as_millis());
             tokio::time::sleep(retry_duration).await;

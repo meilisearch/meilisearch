@@ -1,10 +1,10 @@
 use meili_snap::{json_string, snapshot};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use crate::common::Server;
 use crate::json;
 
-static DOCUMENTS: Lazy<crate::common::Value> = Lazy::new(|| {
+static DOCUMENTS: LazyLock<crate::common::Value> = LazyLock::new(|| {
     json!([
         {
             "id": 1,

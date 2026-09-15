@@ -70,6 +70,7 @@ use std::{io, iter, mem};
 
 use bumpalo::Bump;
 use bumparaw_collections::bbbul::{BitPacker, BitPacker4x};
+use bumparaw_collections::frozen::Freezable;
 use bumparaw_collections::map::FrozenMap;
 use bumparaw_collections::{Bbbul, FrozenBbbul};
 use grenad::ReaderCursor;
@@ -183,24 +184,6 @@ impl<'extractor> BalancedCaches<'extractor> {
                 .iter_mut()
                 .enumerate()
                 .map(|(bucket_id, map)| {
-                    // safety: we are transmuting the Bbbul into a FrozenBbbul
-                    //         that are the same size.
-                    let map = unsafe {
-                        std::mem::transmute::<
-                            &mut HashMap<
-                                &[u8],
-                                DelAddBbbul<BitPacker4x>, // from this
-                                FxBuildHasher,
-                                &Bump,
-                            >,
-                            &mut HashMap<
-                                &[u8],
-                                FrozenDelAddBbbul<BitPacker4x>, // to that
-                                FxBuildHasher,
-                                &Bump,
-                            >,
-                        >(map)
-                    };
                     Ok(FrozenCache {
                         source_id,
                         bucket_id,
@@ -221,24 +204,6 @@ impl<'extractor> BalancedCaches<'extractor> {
                         .map(BufReader::new)
                         .map(|bufreader| grenad::Reader::new(bufreader).map_err(Into::into))
                         .collect::<Result<_>>()?;
-                    // safety: we are transmuting the Bbbul into a FrozenBbbul
-                    //         that are the same size.
-                    let map = unsafe {
-                        std::mem::transmute::<
-                            &mut HashMap<
-                                &[u8],
-                                DelAddBbbul<BitPacker4x>, // from this
-                                FxBuildHasher,
-                                &Bump,
-                            >,
-                            &mut HashMap<
-                                &[u8],
-                                FrozenDelAddBbbul<BitPacker4x>, // to that
-                                FxBuildHasher,
-                                &Bump,
-                            >,
-                        >(map)
-                    };
                     Ok(FrozenCache { source_id, bucket_id, cache: FrozenMap::new(map), spilled })
                 })
                 .collect(),
@@ -451,7 +416,7 @@ pub struct FrozenCache<'a, 'extractor> {
         'a,
         'extractor,
         &'extractor [u8],
-        FrozenDelAddBbbul<'extractor, BitPacker4x>,
+        DelAddBbbul<'extractor, BitPacker4x>,
         FxBuildHasher,
     >,
     spilled: Vec<grenad::Reader<BufReader<File>>>,
@@ -528,7 +493,7 @@ where
         // fetch the entries from the non-spilled entries (the HashMaps).
         for (source_id, map) in maps.iter_mut() {
             debug_assert!(
-                !(map.get(first_key).is_some() && first_entry.source_id == *source_id),
+                !(map.get_mut(first_key).is_some() && first_entry.source_id == *source_id),
                 "A thread should not have spiled a key that has been inserted in the cache"
             );
             if first_entry.source_id != *source_id {
@@ -618,14 +583,26 @@ impl<'bump, B: BitPacker> DelAddBbbul<'bump, B> {
     }
 }
 
-pub struct FrozenDelAddBbbul<'bump, B> {
-    pub del: Option<FrozenBbbul<'bump, B>>,
-    pub add: Option<FrozenBbbul<'bump, B>>,
+unsafe impl<'a, 'bump: 'a, B: 'static> Freezable<'a> for DelAddBbbul<'bump, B> {
+    type Frozen = FrozenDelAddBbbul<'a, 'bump, B>;
+
+    fn freeze(&'a mut self) -> FrozenDelAddBbbul<'a, 'bump, B> {
+        let DelAddBbbul { del, add } = self;
+        let del = del.as_mut().map(|del| del.freeze());
+        let add = add.as_mut().map(|add| add.freeze());
+        Self::Frozen { del, add }
+    }
 }
 
-impl<B> FrozenDelAddBbbul<'_, B> {
+pub struct FrozenDelAddBbbul<'a, 'bump, B> {
+    pub del: Option<FrozenBbbul<'a, 'bump, B>>,
+    pub add: Option<FrozenBbbul<'a, 'bump, B>>,
+}
+
+impl<'a, B> FrozenDelAddBbbul<'a, '_, B> {
     fn is_empty(&self) -> bool {
-        self.del.is_none() && self.add.is_none()
+        self.del.as_ref().is_none_or(|del| del.is_empty())
+            && self.add.as_ref().is_none_or(|add| add.is_empty())
     }
 }
 
@@ -672,10 +649,10 @@ impl DelAddRoaringBitmap {
         DelAddRoaringBitmap { del: None, add: Some(RoaringBitmap::from([n])) }
     }
 
-    pub fn union_and_clear_bbbul<B: BitPacker>(&mut self, bbbul: &mut FrozenDelAddBbbul<'_, B>) {
-        let FrozenDelAddBbbul { del, add } = bbbul;
+    pub fn union_and_clear_bbbul<B: BitPacker>(&mut self, bbbul: FrozenDelAddBbbul<'_, '_, B>) {
+        let FrozenDelAddBbbul { mut del, mut add } = bbbul;
 
-        if let Some(ref mut bbbul) = del.take() {
+        if let Some(ref mut bbbul) = del.take().filter(|del| !del.is_empty()) {
             let del = self.del.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {
@@ -683,7 +660,7 @@ impl DelAddRoaringBitmap {
             }
         }
 
-        if let Some(ref mut bbbul) = add.take() {
+        if let Some(ref mut bbbul) = add.take().filter(|add| !add.is_empty()) {
             let add = self.add.get_or_insert_with(RoaringBitmap::new);
             let mut iter = bbbul.iter_and_clear();
             while let Some(block) = iter.next_block() {

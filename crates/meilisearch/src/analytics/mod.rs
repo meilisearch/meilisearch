@@ -10,8 +10,8 @@ use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::InstanceUid;
 use mopa::mopafy;
-use once_cell::sync::Lazy;
 use platform_dirs::AppDirs;
+use std::sync::LazyLock;
 
 // if the feature analytics is enabled we use the real analytics
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
@@ -45,8 +45,8 @@ macro_rules! empty_analytics {
 /// `~/.config/Meilisearch` on *NIX or *BSD.
 /// `~/Library/ApplicationSupport` on macOS.
 /// `%APPDATA` (= `C:\Users%USERNAME%\AppData\Roaming`) on windows.
-static MEILISEARCH_CONFIG_PATH: Lazy<Option<PathBuf>> =
-    Lazy::new(|| AppDirs::new(Some("Meilisearch"), false).map(|appdir| appdir.config_dir));
+static MEILISEARCH_CONFIG_PATH: LazyLock<Option<PathBuf>> =
+    LazyLock::new(|| AppDirs::new(Some("Meilisearch"), false).map(|appdir| appdir.config_dir));
 
 fn config_user_id_path(db_path: &Path) -> Option<PathBuf> {
     db_path

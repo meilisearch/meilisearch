@@ -42,7 +42,11 @@ impl IndexScheduler {
             &mut network_task.kind
         else {
             tracing::error!("unexpected network kind for network task while processing batch");
-            return Err(Error::CorruptedTaskQueue);
+            return Err(Error::CorruptedTaskQueue {
+                file: file!(),
+                message: "Unexpected network kind for network task while processing batch"
+                    .to_string(),
+            });
         };
 
         progress.update_progress(processing::network::NetworkTopologyState::from(
@@ -82,12 +86,18 @@ impl IndexScheduler {
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         let KindWithContent::NetworkTopologyChange(network_topology_change) = &mut task.kind else {
             tracing::error!("network topology change task has the wrong kind with content");
-            return Err(Error::CorruptedTaskQueue);
+            return Err(Error::CorruptedTaskQueue {
+                file: file!(),
+                message: "Network topology change task has the wrong kind with content".to_string(),
+            });
         };
 
         let Some(task_network) = &task.network else {
             tracing::error!("network topology change task has no network");
-            return Err(Error::CorruptedTaskQueue);
+            return Err(Error::CorruptedTaskQueue {
+                file: file!(),
+                message: "Network topology change task has no network".to_string(),
+            });
         };
 
         let origin;
@@ -488,9 +498,7 @@ impl IndexScheduler {
         in_name: String,
         origin: &Origin,
     ) -> crate::Result<()> {
-        let client = http_client::reqwest::ClientBuilder::new()
-            .build_with_policies(self.ip_policy().clone(), Default::default())
-            .unwrap();
+        let client = self.web_client();
 
         let body = route::NetworkChange {
             origin: origin.clone(),

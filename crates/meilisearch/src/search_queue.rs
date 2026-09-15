@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::RngExt as _;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::error::MeilisearchHttpError;
@@ -119,7 +119,7 @@ impl SearchQueue {
         metric_searches_waiting: Arc<AtomicUsize>,
     ) {
         let mut queue: Vec<oneshot::Sender<Permit>> = Default::default();
-        let mut rng: StdRng = StdRng::from_entropy();
+        let mut rng: StdRng = rand::make_rng();
         let mut searches_running: usize = 0;
         // By having a capacity of parallelism we ensure that every time a search finish it can release its RAM asap
         let (sender, mut search_finished) = mpsc::channel(parallelism.into());
@@ -132,7 +132,7 @@ impl SearchQueue {
                     searches_running = searches_running.saturating_sub(1);
                     if !queue.is_empty() {
                         // Can't panic: the queue wasn't empty thus the range isn't empty.
-                        let remove = rng.gen_range(0..queue.len());
+                        let remove = rng.random_range(0..queue.len());
                         let channel = queue.swap_remove(remove);
                         let _ = channel.send(Permit { sender: sender.clone() });
                     }
@@ -159,7 +159,7 @@ impl SearchQueue {
                         continue;
 
                     } else if queue.len() >= capacity {
-                        let remove = rng.gen_range(0..queue.len());
+                        let remove = rng.random_range(0..queue.len());
                         let thing = queue.swap_remove(remove); // this will drop the channel and notify the search that it won't be processed
                         drop(thing);
                     }

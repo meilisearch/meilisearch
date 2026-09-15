@@ -85,7 +85,7 @@ impl IndexScheduler {
 
             let ExportIndexSettings { filter, override_settings } = export_settings;
 
-            let index = self.user_index(uid)?;
+            let index = self.user_index_unsecured(uid)?;
             let index_rtxn = index.read_txn()?;
             let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
             let filter = filter

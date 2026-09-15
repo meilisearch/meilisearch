@@ -526,7 +526,7 @@ fn batch_skip_creation_with_deletion() {
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-    let index = index_scheduler.user_index("docs").unwrap();
+    let index = index_scheduler.user_index_unsecured("docs").unwrap();
     let rtxn = index.read_txn().unwrap();
     snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }
@@ -618,7 +618,7 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-    let index = index_scheduler.user_index("docs").unwrap();
+    let index = index_scheduler.user_index_unsecured("docs").unwrap();
     let rtxn = index.read_txn().unwrap();
     snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }
@@ -679,7 +679,7 @@ fn batch_deletion_by_filter_and_addition() {
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
-    let index = index_scheduler.user_index("docs").unwrap();
+    let index = index_scheduler.user_index_unsecured("docs").unwrap();
     let rtxn = index.read_txn().unwrap();
     snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }

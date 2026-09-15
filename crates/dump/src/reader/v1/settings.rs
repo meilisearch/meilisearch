@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::sync::LazyLock;
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -56,7 +56,8 @@ pub enum RankingRule {
     Desc(String),
 }
 
-static ASC_DESC_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(asc|desc)\(([\w_-]+)\)").unwrap());
+static ASC_DESC_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(asc|desc)\(([\w_-]+)\)").unwrap());
 
 impl FromStr for RankingRule {
     type Err = ();

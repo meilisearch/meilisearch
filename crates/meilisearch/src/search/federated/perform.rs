@@ -10,6 +10,7 @@ use actix_web::web::Data;
 use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
@@ -68,6 +69,7 @@ pub async fn perform_federated_search(
     show_federation_info: ShowFederationInfo,
     personalization_service: &PersonalizationService,
     progress: &Progress,
+    auth_filter: &AuthFilter,
 ) -> Result<(FederatedSearchResult, Deadline), (ResponseError, Option<usize>)> {
     if is_proxy {
         features.check_network("Performing a remote federated search").without_index()?;
@@ -137,6 +139,7 @@ pub async fn perform_federated_search(
     progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
     let params = SearchByIndexParams {
         index_scheduler,
+        auth_filter: auth_filter.clone(),
         local_name: network_partitioner.local().map(|local| local.to_string()),
         features,
         is_proxy,
@@ -169,7 +172,9 @@ pub async fn perform_federated_search(
             }
 
             // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
-            search_by_index.check_unused_facets(&params.index_scheduler).without_index()?;
+            search_by_index
+                .check_unused_facets(&params.index_scheduler, &params.auth_filter)
+                .without_index()?;
 
             Ok((search_by_index, params, deadline))
         }
@@ -291,7 +296,7 @@ pub async fn perform_federated_search(
                     return None;
                 }
 
-                distinct_values.extend(facet_values.into_iter());
+                distinct_values.extend(facet_values);
             }
             Some(hit)
         })
@@ -361,6 +366,7 @@ pub async fn perform_federated_search(
             hydration_cache,
             &index_scheduler,
             network_partitioner,
+            auth_filter,
         )
         .await
         .without_index()?;
@@ -1288,6 +1294,7 @@ impl RemoteSearch {
 
 struct SearchByIndexParams {
     index_scheduler: Data<IndexScheduler>,
+    auth_filter: AuthFilter,
     local_name: Option<String>,
     required_hit_count: usize,
     is_exhaustive: bool,
@@ -1341,7 +1348,7 @@ impl SearchByIndex {
         progress: &Progress,
     ) -> Result<Deadline, (ResponseError, Option<usize>)> {
         let first_query_index = queries.first().map(|query| query.query_index);
-        let index = match params.index_scheduler.user_index(&index_uid) {
+        let index = match params.index_scheduler.user_index(&index_uid, &params.auth_filter) {
             Ok(index) => index,
             Err(err) => {
                 let mut err = ResponseError::from(err);
@@ -1360,6 +1367,7 @@ impl SearchByIndex {
         let separators = index.allowed_separators(&rtxn).without_index()?;
         let separators: Option<Vec<_>> =
             separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+        let stop_words = index.stop_words(&rtxn).without_index()?;
 
         let max_total_hits = index
             .pagination_max_total_hits(&rtxn)
@@ -1583,7 +1591,11 @@ impl SearchByIndex {
                 degraded |= query_degraded;
                 used_negative_operator |= query_used_negative_operator;
 
-                let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
+                let tokenizer = HitMaker::tokenizer(
+                    dictionary.as_deref(),
+                    separators.as_deref(),
+                    stop_words.as_ref(),
+                );
 
                 let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
@@ -1612,7 +1624,7 @@ impl SearchByIndex {
             let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
             let prev_scores = std::mem::take(&mut result_by_query.document_scores);
 
-            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
+            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores) {
                 if let Some(ScoreDetails::Pin { position, precedence }) = score.first() {
                     let mut hit = result_by_query
                         .hit_maker
@@ -1753,9 +1765,10 @@ impl SearchByIndex {
     fn check_unused_facets(
         &mut self,
         index_scheduler: &IndexScheduler,
+        auth_filter: &AuthFilter,
     ) -> Result<(), ResponseError> {
         for (index_uid, facets) in std::mem::take(&mut self.federation.facets_by_index) {
-            let index = match index_scheduler.user_index(&index_uid) {
+            let index = match index_scheduler.user_index(&index_uid, auth_filter) {
                 Ok(index) => index,
                 Err(err) => {
                     let mut err = ResponseError::from(err);

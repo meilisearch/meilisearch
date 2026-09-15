@@ -27,7 +27,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.53.1"
+version = "1.53.2"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",
@@ -39,7 +39,7 @@ edition = "2021"
 license = "MIT"
 
 [workspace.dependencies]
-mimalloc = { version = "0.1.48", default-features = false, features = ["v3", "override"] }
+mimalloc = { version = "0.1.52", default-features = false, features = ["override"] }
 
 [profile.release]
 codegen-units = 1

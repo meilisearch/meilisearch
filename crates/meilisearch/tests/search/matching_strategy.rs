@@ -1,5 +1,5 @@
 use meili_snap::snapshot;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use crate::common::index::Index;
 use crate::common::{Server, Shared, Value};
@@ -13,7 +13,7 @@ async fn index_with_documents<'a>(server: &'a Server<Shared>, documents: &Value)
     index
 }
 
-static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
+static SIMPLE_SEARCH_DOCUMENTS: LazyLock<Value> = LazyLock::new(|| {
     json!([
     {
         "title": "Shazam!",

@@ -693,7 +693,7 @@ fn test_settings_update() {
     }
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
 
     let embedders = index.embedding_configs();
@@ -927,7 +927,7 @@ fn create_and_list_index() {
     handle.advance_till([Start, BatchCreated, InsideProcessBatch]);
     // The index creation has not been started, the index should not exists
 
-    let err = index_scheduler.user_index("kefir").map(|_| ()).unwrap_err();
+    let err = index_scheduler.user_index_unsecured("kefir").map(|_| ()).unwrap_err();
     snapshot!(err, @"Index `kefir` not found.");
     let empty =
         index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
@@ -937,7 +937,7 @@ fn create_and_list_index() {
     // but the indexUpdate task has not been processed yet
     handle.advance_till([InsideProcessBatch]);
 
-    index_scheduler.user_index("kefir").unwrap();
+    index_scheduler.user_index_unsecured("kefir").unwrap();
     let list = index_scheduler.paginated_user_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
     snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]", "[1][0][1].internal_database_sizes" => "[bytes]" }), @r###"
     [

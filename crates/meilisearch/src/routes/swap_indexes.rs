@@ -4,7 +4,7 @@ use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{InvalidSwapIndexes, InvalidSwapRename};
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{AuthenticationError, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
@@ -13,7 +13,7 @@ use super::SummarizedTaskView;
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 
 #[routes::routes(

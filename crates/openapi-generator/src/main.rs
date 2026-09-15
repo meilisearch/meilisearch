@@ -1,5 +1,5 @@
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -10,17 +10,19 @@ use utoipa::OpenApi;
 
 /// HTTP methods supported in OpenAPI specifications.
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
+const OPENAPI_FILENAME: &str = "meilisearch-openapi.json";
+const ERROR_FILENAME: &str = "meilisearch-error-codes.json";
 
 /// Alias for OpenAPI path item or operation object (map of string keys to JSON values).
 type JsonObject = Map<String, Value>;
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
-#[command(about = "Generate OpenAPI specification for Meilisearch")]
+#[command(about = "Generate OpenAPI specification and other metadata about Meilisearch")]
 struct Cli {
-    /// Output file path (default: meilisearch-openapi.json)
-    #[arg(short, long, value_name = "FILE")]
-    output: Option<PathBuf>,
+    /// Output directory for file generation (default: ./)
+    #[arg(short, long, value_name = "DIR")]
+    output_dir: Option<PathBuf>,
 
     /// Pretty print the JSON output
     #[arg(short, long)]
@@ -54,26 +56,26 @@ fn main() -> Result<()> {
     let openapi = MeilisearchApi::openapi();
 
     // Convert to serde_json::Value for modification
-    let openapi_value: Value = serde_json::to_value(&openapi)?;
+    let openapi: Value = serde_json::to_value(&openapi)?;
 
     // Check that all routes have summaries if requested
     if cli.check_summaries {
-        check_all_routes_have_summaries(&openapi_value)?;
+        check_all_routes_have_summaries(&openapi)?;
     }
 
     // Check that all routes have descriptions if requested
     if cli.check_descriptions {
-        check_all_routes_have_descriptions(&openapi_value)?;
+        check_all_routes_have_descriptions(&openapi)?;
     }
 
     // Check for path issues (duplicates, malformed paths) if requested
     if cli.check_paths {
-        check_path_issues(&openapi_value)?;
+        check_path_issues(&openapi)?;
     }
 
     // Check documentation (param descriptions, response examples, schema properties) if requested
     if cli.check_docs {
-        check_docs(&openapi_value)?;
+        check_docs(&openapi)?;
     }
 
     // Check that query and body parameters have explicit required = true/false in code
@@ -82,19 +84,43 @@ fn main() -> Result<()> {
     }
 
     // Determine output path
-    let output_path = cli.output.unwrap_or_else(|| PathBuf::from("meilisearch-openapi.json"));
+    let output_path = cli.output_dir.unwrap_or_else(|| PathBuf::from("./"));
+
+    // OpenAPI
+    let openapi_path = output_path.join(OPENAPI_FILENAME);
 
     // Serialize to JSON
-    let json = if cli.pretty {
-        serde_json::to_string_pretty(&openapi_value)?
+    let openapi = if cli.pretty {
+        serde_json::to_string_pretty(&openapi)
     } else {
-        serde_json::to_string(&openapi_value)?
-    };
+        serde_json::to_string(&openapi)
+    }
+    .context("serializing OpenAPI specification")?;
 
-    std::fs::write(&output_path, &json)
-        .with_context(|| format!("write OpenAPI spec to {}", output_path.display()))?;
+    std::fs::write(&openapi_path, &openapi)
+        .with_context(|| format!("while writing OpenAPI spec to {}", openapi_path.display()))?;
 
-    println!("OpenAPI specification written to: {}", output_path.display());
+    println!("OpenAPI specification written to: {}", openapi_path.display());
+
+    // Error codes
+    let error_path = output_path.join(ERROR_FILENAME);
+
+    let error_codes: BTreeMap<String, &'static str> =
+        enum_iterator::all::<meilisearch_types::error::Code>()
+            .map(|code| (code.name(), code.description()))
+            .collect();
+
+    let error_codes = if cli.pretty {
+        serde_json::to_string_pretty(&error_codes)
+    } else {
+        serde_json::to_string(&error_codes)
+    }
+    .context("serializing error codes")?;
+
+    std::fs::write(&error_path, &error_codes)
+        .with_context(|| format!("writing error codes to {}", error_path.display()))?;
+
+    println!("Error code specification written to: {}", error_path.display());
 
     Ok(())
 }

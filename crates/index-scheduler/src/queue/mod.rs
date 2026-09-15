@@ -190,10 +190,12 @@ impl Queue {
         tasks
             .into_iter()
             .map(|task_id| {
-                let mut task = self
-                    .tasks
-                    .get_task(rtxn, task_id)
-                    .and_then(|task| task.ok_or(Error::CorruptedTaskQueue));
+                let mut task = self.tasks.get_task(rtxn, task_id).and_then(|task| {
+                    task.ok_or_else(|| Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message: format!("Task content not found for uid `{}` when getting existing tasks for processing batch", task_id),
+                    })
+                });
                 processing_batch.processing(&mut task);
                 task
             })
@@ -315,8 +317,15 @@ impl Queue {
 
         // it's safe to unwrap here because we checked the len above
         let newest_task_id = to_delete.iter().next_back().unwrap();
-        let last_task_to_delete =
-            self.tasks.get_task(wtxn, newest_task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+        let last_task_to_delete = self.tasks.get_task(wtxn, newest_task_id)?.ok_or_else(|| {
+            Error::CorruptedTaskQueue {
+                file: file!(),
+                message: format!(
+                    "Task content not found for uid `{}` when getting the last task to delete",
+                    newest_task_id
+                ),
+            }
+        })?;
 
         // increase time by one nanosecond so that the enqueuedAt of the last task to delete is also lower than that date.
         let delete_before = last_task_to_delete.enqueued_at + Duration::from_nanos(1);
@@ -326,7 +335,12 @@ impl Queue {
             &KindWithContent::TaskDeletion {
                 query: format!(
                     "?beforeEnqueuedAt={}&statuses=succeeded,failed,canceled",
-                    delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue)?,
+                    delete_before.format(&Rfc3339).map_err(|_| Error::CorruptedTaskQueue {
+                        file: file!(),
+                        message:
+                            "Failed to format beforeEnqueuedAt when registering a task deletion"
+                                .to_string(),
+                    })?,
                 ),
                 tasks: to_delete,
             },

@@ -5,12 +5,12 @@ use std::sync::Mutex;
 
 pub use insta;
 use insta::internals::{Content, ContentPath};
-use once_cell::sync::Lazy;
 use regex_lite::Regex;
+use std::sync::LazyLock;
 
-static SNAPSHOT_NAMES: Lazy<Mutex<HashMap<PathBuf, usize>>> = Lazy::new(Mutex::default);
+static SNAPSHOT_NAMES: LazyLock<Mutex<HashMap<PathBuf, usize>>> = LazyLock::new(Mutex::default);
 /// A regex to match UUIDs in messages, specifically looking for the UUID v4 format
-static UUID_IN_MESSAGE_RE: Lazy<Regex> = Lazy::new(|| {
+static UUID_IN_MESSAGE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
         .unwrap()
 });

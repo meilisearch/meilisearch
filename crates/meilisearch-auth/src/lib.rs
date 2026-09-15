@@ -392,13 +392,13 @@ const MASTER_KEY_GEN_SIZE: usize = 32;
 
 pub fn generate_master_key() -> String {
     use base64::Engine;
-    use rand::rngs::OsRng;
-    use rand::RngCore;
+    use rand::rngs::SysRng;
+    use rand::TryRng as _;
 
-    // We need to use a cryptographically-secure source of randomness. That's why we're using the OsRng; https://crates.io/crates/getrandom
-    let mut csprng = OsRng;
+    // We need to use a cryptographically-secure source of randomness.
+    // That's why we're using the SysRng; https://docs.rs/rand/latest/rand/rngs/struct.SysRng.html
     let mut buf = vec![0; MASTER_KEY_GEN_SIZE];
-    csprng.fill_bytes(&mut buf);
+    SysRng.try_fill_bytes(&mut buf).unwrap();
 
     // let's encode the random bytes to base64 to make them human-readable and not too long.
     // We're using the URL_SAFE alphabet that will produce keys without =, / or other unusual characters.

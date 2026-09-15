@@ -3,6 +3,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::ResponseError;
@@ -646,7 +647,8 @@ pub async fn legacy_search_with_url_query(
     let mut query: SearchQuery = params.into_inner().try_into()?;
 
     // Tenant token search_rules.
-    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
+    if let Some(search_rules) = auth_filter.get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
 
@@ -661,6 +663,7 @@ pub async fn legacy_search_with_url_query(
         request_uid,
         include_metadata,
         &progress,
+        &auth_filter,
         &personalization_service,
         StatusCode::NOT_FOUND,
     )
@@ -688,6 +691,7 @@ pub(crate) async fn legacy_search(
     request_uid: Uuid,
     include_metadata: bool,
     progress: &Progress,
+    auth_filter: &AuthFilter,
     service: &PersonalizationService,
     index_not_found_http_code: StatusCode,
 ) -> Result<SearchResult, ResponseError> {
@@ -711,6 +715,7 @@ pub(crate) async fn legacy_search(
         features,
         false,
         progress,
+        auth_filter,
         Code::InvalidSearchFilter,
     )
     .await
@@ -741,6 +746,7 @@ pub(crate) async fn legacy_search(
             ShowFederationInfo::OnNetworkOnly,
             service,
             progress,
+            auth_filter,
         )
         .await
         .map_err(|(err, _)| err);
@@ -751,19 +757,21 @@ pub(crate) async fn legacy_search(
 
         Ok(search_result)
     } else {
-        let index = index_scheduler.user_index(&index_uid).map_err(|err| match &err {
-            index_scheduler::Error::IndexNotFound(_) => {
-                let mut err = ResponseError::from(err);
-                err.code = index_not_found_http_code;
-                err
-            }
-            _ => ResponseError::from(err),
-        })?;
+        let index =
+            index_scheduler.user_index(&index_uid, auth_filter).map_err(|err| match &err {
+                index_scheduler::Error::IndexNotFound(_) => {
+                    let mut err = ResponseError::from(err);
+                    err.code = index_not_found_http_code;
+                    err
+                }
+                _ => ResponseError::from(err),
+            })?;
         let (index_uid, query, _) = query.into_inner_preprocessed().into_index_query_federation();
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
+        let auth_filter_clone = auth_filter.clone();
         let show_performance_details = query.show_performance_details;
         let search_result = tokio::task::spawn_blocking(move || {
             perform_search(
@@ -779,6 +787,7 @@ pub(crate) async fn legacy_search(
                 &index_scheduler,
                 &index,
                 &progress_clone,
+                &auth_filter_clone,
             )
         })
         .await;
@@ -971,7 +980,8 @@ pub async fn legacy_search_with_post(
     debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
 
     // Tenant token search_rules.
-    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+    let (index_scheduler, auth_filter) = index_scheduler.into_inner();
+    if let Some(search_rules) = auth_filter.get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
 
@@ -986,6 +996,7 @@ pub async fn legacy_search_with_post(
         request_uid,
         include_metadata,
         &progress,
+        &auth_filter,
         &personalization_service,
         StatusCode::NOT_FOUND,
     )

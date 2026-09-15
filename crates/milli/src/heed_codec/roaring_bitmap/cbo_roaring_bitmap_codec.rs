@@ -219,6 +219,17 @@ mod tests {
     }
 
     #[test]
+    fn verify_cbo_encoding_validity() {
+        let mut input = RoaringBitmap::new();
+        for x in 0..250_000 {
+            input.try_push(x).unwrap();
+            let bytes = CboRoaringBitmapCodec::bytes_encode(&input).unwrap();
+            let output = CboRoaringBitmapCodec::bytes_decode(&bytes).unwrap();
+            assert_eq!(input, output);
+        }
+    }
+
+    #[test]
     fn merge_cbo_roaring_bitmaps() {
         let mut buffer = Vec::new();
 

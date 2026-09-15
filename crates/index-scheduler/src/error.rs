@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use http_client::reqwest::StatusCode;
 use meilisearch_types::batches::BatchId;
-use meilisearch_types::error::{Code, ErrorCode};
+use meilisearch_types::error::{AuthenticationError, Code, ErrorCode};
 use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::milli::DocumentId;
 use meilisearch_types::tasks::network::{ReceiveImportFinishedError, ReceiveTaskError};
@@ -52,6 +52,8 @@ impl From<DateField> for Code {
 #[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("{0}")]
+    AuthenticationError(AuthenticationError),
     #[error("{1}")]
     WithCustomErrorCode(Code, Box<Self>),
     #[error("Index `{0}` not found.")]
@@ -168,8 +170,8 @@ pub enum Error {
     // Irrecoverable errors:
     #[error(transparent)]
     CreateBatch(Box<Self>),
-    #[error("Corrupted task queue.")]
-    CorruptedTaskQueue,
+    #[error("Corrupted task queue in {file}: {message}.")]
+    CorruptedTaskQueue { file: &'static str, message: String },
     #[error(transparent)]
     DatabaseUpgrade(Box<Self>),
     #[error(transparent)]
@@ -276,7 +278,7 @@ impl Error {
             | Error::RequiresEnterpriseEdition { .. }
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
-            | Error::CorruptedTaskQueue
+            | Error::CorruptedTaskQueue { .. }
             | Error::DatabaseUpgrade(_)
             | Error::UnrecoverableError(_)
             | Error::IndexSchedulerVersionMismatch { .. }
@@ -287,6 +289,7 @@ impl Error {
             | Error::HeedTransaction(_) => false,
             #[cfg(test)]
             Error::PlannedFailure => false,
+            Error::AuthenticationError(_) => false,
         }
     }
 
@@ -363,7 +366,7 @@ impl ErrorCode for Error {
 
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,
-            Error::CorruptedTaskQueue => Code::Internal,
+            Error::CorruptedTaskQueue { .. } => Code::Internal,
             Error::CorruptedDump => Code::Internal,
             Error::DatabaseUpgrade(_) => Code::Internal,
             Error::Export(_) => Code::Internal,
@@ -372,6 +375,7 @@ impl ErrorCode for Error {
             Error::IndexSchedulerVersionMismatch { .. } => Code::Internal,
             Error::IndexVersionMismatch { .. } => Code::Internal,
             Error::CreateBatch(_) => Code::Internal,
+            Error::AuthenticationError(e) => e.error_code(),
 
             // This one should never be seen by the end user
             Error::AbortedTask => Code::Internal,

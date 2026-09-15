@@ -14,13 +14,13 @@ use crate::snapshot_tests::display_bitmap;
 #[test]
 fn random_looking_index_snap() {
     let index = get_random_looking_index();
-    milli_snap!(format!("{index}"), @"3256c76a7c1b768a013e78d5fa6e9ff9");
+    milli_snap!(format!("{index}"), @"23ef1deffb2581fe71c4a5e3a2f996ef");
 }
 
 #[test]
 fn random_looking_index_with_multiple_field_ids_snap() {
     let index = get_random_looking_index_with_multiple_field_ids();
-    milli_snap!(format!("{index}"), @"c3e5fe06a8f1c404ed4935b32c90a89b");
+    milli_snap!(format!("{index}"), @"444905fcfa86cd3f05eb21363afcdbb1");
 }
 
 #[test]

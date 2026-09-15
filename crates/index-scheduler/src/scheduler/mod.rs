@@ -389,7 +389,12 @@ impl IndexScheduler {
                         .tasks
                         .get_task(&wtxn, id)
                         .map_err(|e| Error::UnrecoverableError(Box::new(e)))?
-                        .ok_or(Error::CorruptedTaskQueue)?;
+                        .ok_or_else(|| Error::CorruptedTaskQueue {
+                            file: file!(),
+                            message: format!(
+                                "Task content not found for uid `{id}` when updating the tasks for process batch failure"
+                            ),
+                        })?;
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
                     task.details = task.details.map(|d| d.to_failed());
@@ -466,7 +471,12 @@ impl IndexScheduler {
                         .tasks
                         .get_task(&rtxn, id)
                         .map_err(|e| Error::UnrecoverableError(Box::new(e)))?
-                        .ok_or(Error::CorruptedTaskQueue)?;
+                        .ok_or_else(|| Error::CorruptedTaskQueue {
+                            file: file!(),
+                            message: format!(
+                                "Task content not found for uid `{id}` when deleting the persisted task data"
+                            ),
+                        })?;
                     if let Err(e) = self.queue.delete_persisted_task_data(&task) {
                         tracing::error!(
                         "Failure to delete the content files associated with task {}. Error: {e}",

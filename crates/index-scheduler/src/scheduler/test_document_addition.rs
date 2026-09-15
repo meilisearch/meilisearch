@@ -80,7 +80,7 @@ fn document_addition_and_document_deletion() {
     handle.advance_one_successful_batch(); // The addition AND deletion should've been batched together
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_batch");
 
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -133,7 +133,7 @@ fn document_deletion_and_document_addition() {
     handle.advance_one_successful_batch();
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_last_successful_addition");
 
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -181,7 +181,7 @@ fn test_document_replace() {
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -229,7 +229,7 @@ fn test_document_update() {
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -279,7 +279,7 @@ fn test_mixed_document_addition() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -331,7 +331,7 @@ fn test_document_replace_without_autobatching() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -383,7 +383,7 @@ fn test_document_update_without_autobatching() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -539,7 +539,7 @@ fn test_document_addition_cant_create_index_with_index() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "after_processing_the_10_tasks");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -603,7 +603,7 @@ fn test_document_addition_cant_create_index_with_index_without_autobatching() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -664,7 +664,7 @@ fn test_document_addition_mixed_rights_with_index() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -722,7 +722,7 @@ fn test_document_addition_mixed_right_without_index_starts_with_cant_create() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_tasks_processed");
 
     // Has everything being pushed successfully in milli?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let field_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let field_ids = field_ids_map.ids().collect::<Vec<_>>();
@@ -778,7 +778,7 @@ fn test_document_addition_with_multiple_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_fails");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -835,7 +835,7 @@ fn test_document_addition_with_multiple_primary_key_batch_wrong_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_and_third_tasks_fails");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -891,7 +891,7 @@ fn test_document_addition_with_bad_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_and_second_task_fails");
 
     // The primary key should be set to none since we failed the batch.
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"true");
@@ -901,7 +901,7 @@ fn test_document_addition_with_bad_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "third_task_succeeds");
 
     // The primary key should be set to `id` since this batch succeeded.
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -916,7 +916,7 @@ fn test_document_addition_with_bad_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "fifth_task_succeeds");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"id");
@@ -978,7 +978,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "second_task_fails");
 
     // No primary key should be set at this point.
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"true");
@@ -988,7 +988,7 @@ fn test_document_addition_with_set_and_null_primary_key() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
     // The primary key should be set to `paw` since this batch succeeded.
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"paw");
@@ -1044,7 +1044,7 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "first_task_succeed");
 
     // Checking the primary key.
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap();
     snapshot!(primary_key.is_none(), @"false");
@@ -1058,7 +1058,7 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "all_other_tasks_succeeds");
 
     // Is the primary key still what we expect?
-    let index = index_scheduler.user_index("doggos").unwrap();
+    let index = index_scheduler.user_index_unsecured("doggos").unwrap();
     let rtxn = index.read_txn().unwrap();
     let primary_key = index.primary_key(&rtxn).unwrap().unwrap();
     snapshot!(primary_key, @"doggoid");

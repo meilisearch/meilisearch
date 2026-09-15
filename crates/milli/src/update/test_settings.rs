@@ -1,5 +1,6 @@
 use big_s::S;
 use heed::types::Bytes;
+use heed::RoTxn;
 use maplit::{btreemap, btreeset};
 use meili_snap::snapshot;
 
@@ -529,6 +530,93 @@ fn set_and_reset_stop_words() {
     assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
     let result = index.search(&rtxn, &fields_ids_map).query("benoît").execute().unwrap();
     assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
+}
+
+#[test]
+fn stop_words_change_updates_word_count_of_every_document() {
+    // Related to https://github.com/meilisearch/meilisearch/issues/6600
+    let index = TempIndex::new();
+
+    let mut wtxn = index.write_txn().unwrap();
+    index
+        .add_documents_using_wtxn(
+            &mut wtxn,
+            documents!([
+                { "id": 0, "name": "kevin", "age": 23, "maxim": "I love dogs" },
+                { "id": 1, "name": "kevina", "age": 21, "maxim": "Doggos are the best" },
+                { "id": 2, "name": "benoit", "age": 34, "maxim": "The crepes are really good" },
+            ]),
+        )
+        .unwrap();
+
+    wtxn.commit().unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
+    let set = btreeset! { "the".to_string(), "are".to_string() };
+    index
+        .update_settings_using_wtxn(&mut wtxn, |settings| {
+            settings.set_stop_words(set.clone());
+        })
+        .unwrap();
+
+    wtxn.commit().unwrap();
+
+    // Ensure stop_words are effectively stored
+    let rtxn = index.read_txn().unwrap();
+    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+    let stop_words = index.stop_words(&rtxn).unwrap();
+    assert!(stop_words.is_some()); // at this point the index should return something
+
+    let stop_words = stop_words.unwrap();
+    let expected = fst::Set::from_iter(&set).unwrap();
+    assert_eq!(stop_words.as_fst().as_bytes(), expected.as_fst().as_bytes());
+
+    let fid_word_count = index.field_id_word_count_docids;
+    let maxim_fid = fields_ids_map.id("maxim").unwrap();
+
+    let maxim_counts = |rtxn: &RoTxn| {
+        let mut counts: BTreeMap<u32, Vec<u8>> = BTreeMap::new();
+        for result in fid_word_count.iter(rtxn).unwrap() {
+            let ((fid, count), bitmap) = result.unwrap();
+            if fid == maxim_fid {
+                for docid in &bitmap {
+                    counts.entry(docid).or_default().push(count);
+                }
+            }
+        }
+        counts
+    };
+
+    let counts = maxim_counts(&rtxn);
+
+    // Each document is recorded exactly once and that, the last document gets a count too
+    assert_eq!(counts[&0], vec![3]); // I love dogs
+    assert_eq!(counts[&1], vec![2]); // Doggos best
+    assert_eq!(counts[&2], vec![4]); // The crepes really good - last document per thread
+
+    let mut wtxn = index.write_txn().unwrap();
+    let set = btreeset! { "I".to_string(), "are".to_string() };
+    // Second change stop words, reindexing updates `field_id_word_count_docids`
+    index
+        .update_settings_using_wtxn(&mut wtxn, |settings| {
+            settings.set_stop_words(set.clone());
+        })
+        .unwrap();
+    wtxn.commit().unwrap();
+
+    let rtxn = index.read_txn().unwrap();
+    let stop_words = index.stop_words(&rtxn).unwrap();
+    assert!(stop_words.is_some());
+
+    let stop_words = stop_words.unwrap();
+    let expected = fst::Set::from_iter(&set).unwrap();
+    assert_eq!(stop_words.as_fst().as_bytes(), expected.as_fst().as_bytes());
+
+    let counts = maxim_counts(&rtxn);
+
+    assert_eq!(counts[&0], vec![2]); // love dogs
+    assert_eq!(counts[&1], vec![3]); // Doggos the best
+    assert_eq!(counts[&2], vec![4]); // The crepes really good - last document per thread
 }
 
 #[test]

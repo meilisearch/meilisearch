@@ -358,9 +358,6 @@ async fn process_search_request(
     mut query: SearchInIndexParameters,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
     let progress = Progress::default();
-    let index = index_scheduler.user_index(query.index_uid.as_str())?;
-    let rtxn = index.static_read_txn()?;
-    let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
     tracing::debug!("LLM query: {:?}", query);
 
@@ -383,6 +380,7 @@ async fn process_search_request(
         features,
         false,
         &progress,
+        &auth_filter,
         Code::InvalidSearchFilter,
     )
     .await
@@ -394,8 +392,9 @@ async fn process_search_request(
     let PreprocessedQuery { query: SearchInIndexParameters { index_uid, q, filter: _ }, filter } =
         preprocessed_queries.pop().unwrap();
 
-    let index = index_scheduler.user_index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid, &auth_filter)?;
     let rtxn = index.static_read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
     let query = SearchQuery { q, filter: None, ..SearchQuery::from(search_parameters) };
 

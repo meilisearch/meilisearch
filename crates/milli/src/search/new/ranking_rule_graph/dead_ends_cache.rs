@@ -57,10 +57,9 @@ impl<T> DeadEndsCache<T> {
     ) -> Option<SmallBitmap<T>> {
         let mut cursor = self;
         for c in prefix {
-            if let Some(next) = cursor.advance(c) {
+            {
+                let next = cursor.advance(c)?;
                 cursor = next;
-            } else {
-                return None;
             }
         }
         Some(cursor.forbidden.clone())

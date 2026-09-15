@@ -11,7 +11,7 @@ pub use federated::ProxyQuery;
 use index_scheduler::filter::parse_local_index_filter;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
-use meilisearch_auth::IndexSearchRules;
+use meilisearch_auth::{AuthFilter, IndexSearchRules};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
@@ -1794,6 +1794,7 @@ pub fn perform_search(
     index_scheduler: &IndexScheduler,
     index: &Index,
     progress: &Progress,
+    auth_filter: &AuthFilter,
 ) -> Result<(SearchResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
@@ -1937,7 +1938,7 @@ pub fn perform_search(
     // Document join: hydrate documents based on the foreign keys
     if features.runtime_features().foreign_keys {
         let foreign_keys = index.foreign_keys(&rtxn)?;
-        hydrate_documents(&mut documents, &foreign_keys, index_scheduler)?;
+        hydrate_documents(&mut documents, &foreign_keys, index_scheduler, auth_filter)?;
     }
 
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
@@ -2242,8 +2243,9 @@ impl<'a> HitMaker<'a> {
     pub fn tokenizer<'b>(
         dictionary: Option<&'b [&'b str]>,
         separators: Option<&'b [&'b str]>,
+        stop_words: Option<&'b fst::Set<&'b [u8]>>,
     ) -> milli::tokenizer::Tokenizer<'b> {
-        let mut tokenizer_builder = TokenizerBuilder::default();
+        let mut tokenizer_builder = TokenizerBuilder::<&[u8]>::new();
         tokenizer_builder.create_char_map(true);
 
         if let Some(separators) = separators {
@@ -2252,6 +2254,10 @@ impl<'a> HitMaker<'a> {
 
         if let Some(dictionary) = dictionary {
             tokenizer_builder.words_dict(dictionary);
+        }
+
+        if let Some(stop_words) = stop_words {
+            tokenizer_builder.stop_words(stop_words);
         }
 
         tokenizer_builder.into_tokenizer()
@@ -2505,8 +2511,10 @@ fn make_hits<'a>(
     let separators = index.allowed_separators(rtxn)?;
     let separators: Option<Vec<_>> =
         separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    let stop_words = index.stop_words(rtxn)?;
 
-    let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
+    let tokenizer =
+        HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref(), stop_words.as_ref());
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
@@ -2587,11 +2595,12 @@ pub fn perform_similar(
     index_uid: IndexUid,
     query: SimilarQuery,
     progress: &Progress,
+    auth_filter: &AuthFilter,
     search_rules: Option<IndexSearchRules>,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let features = index_scheduler.features();
-    let index = index_scheduler.user_index(&index_uid)?;
+    let index = index_scheduler.user_index(&index_uid, auth_filter)?;
     let rtxn = index.read_txn()?;
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
 

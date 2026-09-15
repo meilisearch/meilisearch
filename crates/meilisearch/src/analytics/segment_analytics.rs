@@ -13,11 +13,11 @@ use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::InstanceUid;
-use once_cell::sync::Lazy;
 use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::sync::LazyLock;
 use sysinfo::{Disks, System};
 use time::OffsetDateTime;
 use tokio::select;
@@ -406,8 +406,8 @@ pub struct Segment {
 
 impl Segment {
     fn compute_traits(opt: &Opt, stats: Stats, features: RuntimeTogglableFeatures) -> Value {
-        static FIRST_START_TIMESTAMP: Lazy<Instant> = Lazy::new(Instant::now);
-        static SYSTEM: Lazy<Value> = Lazy::new(|| {
+        static FIRST_START_TIMESTAMP: LazyLock<Instant> = LazyLock::new(Instant::now);
+        static SYSTEM: LazyLock<Value> = LazyLock::new(|| {
             let disks = Disks::new_with_refreshed_list();
             let mut sys = System::new_all();
             sys.refresh_all();

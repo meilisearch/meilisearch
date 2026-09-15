@@ -3,7 +3,7 @@ use actix_web::HttpResponse;
 use index_scheduler::{IndexScheduler, Query};
 use meilisearch_auth::AuthController;
 use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{AuthenticationError, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::progress::ProgressStepView;
 use meilisearch_types::task_view::DetailsView;
@@ -12,7 +12,7 @@ use prometheus::{Encoder, TextEncoder};
 use time::{Duration, OffsetDateTime};
 
 use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::GuardedData;
 use crate::routes::create_all_stats;
 use crate::routes::indexes::{GetIndexStatsParams, SizeFormat};
 use crate::search_queue::SearchQueue;
@@ -160,8 +160,8 @@ pub async fn get_metrics(
         crate::routes::indexes::Size::Human(_) => 0,
     };
 
-    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(database_size as i64);
-    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(used_database_size as i64);
+    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(database_size);
+    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(used_database_size);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
     crate::metrics::MEILISEARCH_SEARCH_QUEUE_SIZE.set(search_queue.capacity() as i64);

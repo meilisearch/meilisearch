@@ -3,14 +3,14 @@ mod errors;
 use insta::internals::{Content, ContentPath};
 use meili_snap::insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 use crate::common::Server;
 use crate::json;
 
-static TASK_WITH_ID_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"task with id (\d+) of type").unwrap());
+static TASK_WITH_ID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"task with id (\d+) of type").unwrap());
 
 fn task_with_id_redaction(value: Content, _path: ContentPath) -> Content {
     match value {
