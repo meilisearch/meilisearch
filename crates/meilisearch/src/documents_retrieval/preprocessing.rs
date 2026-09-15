@@ -191,7 +191,7 @@ fn extract_foreign_filters(
             // convert inner foreign filter into an index filter, throw an error if there is a nested foreign filter
             let index_filter =
                 IndexFilter::from_filter_without_foreign(Filter { condition: op.clone() })
-                    .map_err(|(fid, _)| {
+                    .map_err(|(_, _)| {
                         let error =
                             fid.to_external_error("Nested foreign filters are not supported");
                         milli::Error::from(error)
