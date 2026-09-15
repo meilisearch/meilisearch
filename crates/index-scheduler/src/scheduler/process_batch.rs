@@ -561,6 +561,7 @@ impl IndexScheduler {
             Batch::DsrUpdate { rules, tasks, must_create_index } => {
                 let index_uid = DsrIndex;
                 let index;
+                let must_stop_processing = self.scheduler.must_stop_processing.clone();
 
                 let settings_congestion = if must_create_index {
                     // create the index if it doesn't already exist
@@ -568,8 +569,6 @@ impl IndexScheduler {
 
                     index = self.index_mapper.create_index(wtxn, index_uid, None, None)?;
                     let mut index_wtxn = index.write_txn()?;
-
-                    let must_stop_processing = self.scheduler.must_stop_processing.clone();
 
                     let settings_congestion = self.apply_dsr_settings(
                         &mut index_wtxn,
@@ -590,6 +589,27 @@ impl IndexScheduler {
                     index = self.index_mapper.index(&rtxn, index_uid)?;
                     None
                 };
+
+                // write DSR metadata
+                if must_create_index {
+                    let mut index_wtxn = index.write_txn()?;
+
+                    let db_fields_ids_map = index.fields_ids_map(&index_wtxn)?;
+
+                    milli::dynamic_search_rules::create_metadata(
+                        (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH),
+                        &index,
+                        &mut index_wtxn,
+                        &db_fields_ids_map,
+                        &progress,
+                        self.indexer_config(),
+                        &must_stop_processing,
+                        self.ip_policy(),
+                    )
+                    .map_err(|err| Error::from_milli(err, Some(DsrIndex::dsr_uid().to_string())))?;
+
+                    index_wtxn.commit()?;
+                }
 
                 let mut index_wtxn = index.write_txn()?;
 

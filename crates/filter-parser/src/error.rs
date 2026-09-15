@@ -126,7 +126,7 @@ impl Error {
         nom::Err::Failure(Self::new_from_kind(context, kind))
     }
 
-    pub fn new_from_external(context: OwnedSpan, error: impl std::error::Error) -> Self {
+    pub fn new_from_external(context: OwnedSpan, error: impl std::string::ToString) -> Self {
         Self::new_from_kind(context, ErrorKind::External(error.to_string()))
     }
 

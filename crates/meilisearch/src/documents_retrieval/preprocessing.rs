@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use actix_web::web::Data;
-use index_scheduler::filter::{
-    condition_to_index_condition, parse_filter, parse_local_index_filter,
-};
+use index_scheduler::filter::{parse_filter, parse_local_index_filter};
 use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
@@ -192,12 +190,12 @@ fn extract_foreign_filters(
 
             // convert inner foreign filter into an index filter, throw an error if there is a nested foreign filter
             let index_filter =
-                IndexFilter::from(condition_to_index_condition(op.clone(), &mut |_| {
-                    let error = milli::Error::UserError(milli::UserError::InvalidFilter(
-                        "Nested foreign filters are not supported".to_string(),
-                    ));
-                    Err(fid.to_external_error(error).into())
-                })?);
+                IndexFilter::from_filter_without_foreign(Filter { condition: op.clone() })
+                    .map_err(|(_, _)| {
+                        let error =
+                            fid.to_external_error("Nested foreign filters are not supported");
+                        milli::Error::from(error)
+                    })?;
 
             foreign_filters.push(ForeignFilterWithContext {
                 foreign_index_uid: foreign_index_uid.clone(),
@@ -441,13 +439,14 @@ async fn filters_into_index_filters(
         .into_iter()
         .map(|(_index_uid, filter)| {
             let Some(filter) = filter else { return Ok(None) };
-            condition_to_index_condition(filter.condition, &mut |_| {
+
+            Some(IndexFilter::from_filter(filter, &mut |_, _| {
                 let Some((ForeignFilterWithContext { fid, .. }, els)) = in_iter.next() else {
                     unreachable!()
                 };
                 Ok(IndexFilterCondition::In { fid, els })
-            })
-            .map(|condition| Some(IndexFilter { condition }))
+            }))
+            .transpose()
         })
         .collect::<milli::Result<_>>()
         .map_err(|e| e.into())
