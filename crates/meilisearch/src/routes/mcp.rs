@@ -93,6 +93,7 @@ async fn mcp(
     index_scheduler.features().check_mcp_route("calling the /mcp route")?;
 
     let body = body.into_inner();
+    tracing::debug!("MCP JSON-RPC body received: {:?}", body);
     let McpQuery { jsonrpc, id, method, params } = body;
 
     let response = match method.as_str() {
