@@ -791,7 +791,9 @@ impl McpResult {
                     version: format!("{major}.{minor}.{patch}"),
                 },
             }),
-            capabilities: Some(McpCapabilities { tools: Some(BTreeMap::new()), resources: None }),
+            // Note that we MUST declare the tools as the server supports tool calling.
+            // <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities>
+            capabilities: Some(McpCapabilities { tools: Some(BTreeMap::new()) }),
             content: None,
             structured_content: None,
             instructions: Some(
@@ -1023,8 +1025,6 @@ pub struct McpServerMeta {
 pub struct McpCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<BTreeMap<(), ()>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    resources: Option<BTreeMap<(), ()>>,
 }
 
 #[derive(Debug, Serialize)]
