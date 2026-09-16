@@ -3,13 +3,13 @@ use std::path::Path;
 use anyhow::{bail, Context};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{
-    Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified, WithoutTls,
+    Database, Env, EnvOpenOptions, RwTxn, UniqueRoTxn, UniqueRwTxn, Unspecified, WithoutTls,
 };
 use meilisearch_types::milli::index::{db_name, main_key};
 
 use super::v1_9;
 use crate::uuid_codec::UuidCodec;
-use crate::{try_opening_database, try_opening_poly_database};
+use crate::{try_opening_database_w, try_opening_poly_database, try_opening_poly_database_w};
 
 pub type FieldDistribution = std::collections::BTreeMap<String, u64>;
 
@@ -95,9 +95,9 @@ fn update_index_stats(
 fn update_date_format(
     index_uid: &str,
     index_env: &Env<WithoutTls>,
-    index_wtxn: &mut RwTxn,
+    index_wtxn: &mut UniqueRwTxn,
 ) -> anyhow::Result<()> {
-    let main = try_opening_poly_database(index_env, index_wtxn, db_name::MAIN)
+    let main = try_opening_poly_database_w(index_env, index_wtxn, db_name::MAIN)
         .with_context(|| format!("while updating date format for index `{index_uid}`"))?;
 
     date_round_trip(index_wtxn, index_uid, main, main_key::CREATED_AT_KEY)?;
@@ -109,7 +109,7 @@ fn update_date_format(
 fn find_rest_embedders(
     index_uid: &str,
     index_env: &Env<WithoutTls>,
-    index_txn: &RoTxn,
+    index_txn: &UniqueRoTxn<'_, WithoutTls>,
 ) -> anyhow::Result<Vec<String>> {
     let main = try_opening_poly_database(index_env, index_txn, db_name::MAIN)
         .with_context(|| format!("while checking REST embedders for index `{index_uid}`"))?;
@@ -171,13 +171,13 @@ pub fn v1_9_to_v1_10(
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let mut sched_wtxn = env.write_txn()?;
+    let mut sched_wtxn = env.unique_write_txn()?;
 
     let index_mapping: Database<Str, UuidCodec> =
-        try_opening_database(&env, &sched_wtxn, "index-mapping")?;
+        try_opening_database_w(&env, &sched_wtxn, "index-mapping")?;
 
     let index_stats: Database<UuidCodec, Unspecified> =
-        try_opening_database(&env, &sched_wtxn, "index-stats").with_context(|| {
+        try_opening_database_w(&env, &sched_wtxn, "index-stats").with_context(|| {
             format!("While trying to open {:?}", index_scheduler_path.display())
         })?;
 
@@ -218,7 +218,7 @@ pub fn v1_9_to_v1_10(
                 })?
         };
 
-        let index_txn = index_env.read_txn().with_context(|| {
+        let index_txn = index_env.unique_read_txn().with_context(|| {
             format!(
                 "while obtaining a write transaction for index {uid} at {}",
                 index_path.display()
@@ -269,7 +269,7 @@ pub fn v1_9_to_v1_10(
                 })?
         };
 
-        let mut index_wtxn = index_env.write_txn().with_context(|| {
+        let mut index_wtxn = index_env.unique_write_txn().with_context(|| {
             format!(
                 "while obtaining a write transaction for index `{uid}` at `{}`",
                 index_path.display()
