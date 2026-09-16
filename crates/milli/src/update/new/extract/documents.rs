@@ -92,6 +92,21 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                 }
                 DocumentChange::Update(update) => {
                     let docid = update.docid();
+
+                    // If applying this update leaves the stored document strictly
+                    // identical to its current version, skip the work entirely:
+                    // the field distribution deltas would cancel out and the
+                    // merged obkv would be byte-identical to the stored one.
+                    if update.is_document_unchanged(
+                        &context.rtxn,
+                        context.index,
+                        &context.db_fields_ids_map,
+                        &context.doc_alloc,
+                        self.embedders,
+                    )? {
+                        continue;
+                    }
+
                     let content =
                         update.current(&context.rtxn, context.index, &context.db_fields_ids_map)?;
                     let geo_iter = content
