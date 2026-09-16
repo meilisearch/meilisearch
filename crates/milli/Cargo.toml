@@ -19,7 +19,7 @@ bstr = "1.13.1"
 bytemuck = { version = "1.25.2", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.10.0", default-features = false }
-cellulite = "0.3.2"
+cellulite = { version = "0.3.2", git = "https://github.com/meilisearch/cellulite", branch = "mutexify-open-dbi"}
 concat-arrays = "0.1.2"
 convert_case = "0.9.0"
 crossbeam-channel = "0.5.16"
@@ -123,13 +123,15 @@ geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meili
 zerometry = "0.3.0"
 
 [dev-dependencies]
-mimalloc = { workspace = true }
 # fixed version due to format breakages in v1.40
 insta = "=1.39.0"
 maplit = "1.0.2"
 md5 = "0.8.1"
 meili-snap = { path = "../meili-snap" }
 rand = "0.10.2"
+
+[target.'cfg(not(windows))'.dev-dependencies]
+tikv-jemallocator = { workspace = true }
 
 [features]
 all-tokenizations = ["charabia/default"]
