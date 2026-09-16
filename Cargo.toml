@@ -43,6 +43,7 @@ mimalloc = { git = "https://github.com/dureuill/tmp_mimalloc_rust", version = "0
 
 [profile.release]
 codegen-units = 1
+debug = true
 
 [profile.release-with-debug]
 inherits = "release"
