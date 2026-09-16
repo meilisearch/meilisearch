@@ -12,7 +12,7 @@ use meilisearch_types::heed::{Database, EnvOpenOptions};
 use meilisearch_types::milli::index::db_name;
 
 use crate::uuid_codec::UuidCodec;
-use crate::{try_opening_database, try_opening_poly_database};
+use crate::{try_opening_database, try_opening_poly_database_w};
 
 pub fn v1_10_to_v1_11(
     db_path: &Path,
@@ -28,7 +28,7 @@ pub fn v1_10_to_v1_11(
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let sched_rtxn = env.read_txn()?;
+    let sched_rtxn = env.unique_read_txn()?;
 
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &sched_rtxn, "index-mapping")?;
@@ -67,26 +67,22 @@ pub fn v1_10_to_v1_11(
                 index_path.display()
             )
         })?;
-        let index_read_database =
-            try_opening_poly_database(&index_env, &index_rtxn, db_name::VECTOR_STORE)
-                .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
-        let mut index_wtxn = index_env.write_txn().with_context(|| {
+        let mut index_wtxn = index_env.unique_write_txn().with_context(|| {
             format!(
                 "while obtaining a write transaction for index {uid} at {}",
                 index_path.display()
             )
         })?;
 
-        let index_write_database =
-            try_opening_poly_database(&index_env, &index_wtxn, db_name::VECTOR_STORE)
-                .with_context(|| format!("while updating date format for index `{uid}`"))?;
+        let database = try_opening_poly_database_w(&index_env, &index_wtxn, db_name::VECTOR_STORE)
+            .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
         meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(
             &index_rtxn,
-            index_read_database.remap_types(),
+            database.remap_types(),
             &mut index_wtxn,
-            index_write_database.remap_types(),
+            database.remap_types(),
         )?;
 
         index_wtxn.commit()?;
