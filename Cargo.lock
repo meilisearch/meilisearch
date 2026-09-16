@@ -1074,8 +1074,7 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9375c46e50ef66180ba3f15f82149505d8a66058cf62cbf32827d0013a5b6824"
+source = "git+https://github.com/meilisearch/cellulite?branch=mutexify-open-dbi#f68e7ebedcccca725bb4d9b535d805c22ffa9cbd"
 dependencies = [
  "crossbeam",
  "geo",
@@ -3085,8 +3084,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "heed"
 version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad82d6598ccf1dac15c8b758a1bd282b755b6776be600429176757190a1b0202"
+source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
 dependencies = [
  "bitflags 2.12.1",
  "byteorder",
@@ -3103,14 +3101,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
+source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c255bdf46e07fb840d120a36dcc81f385140d7191c76a7391672675c01a55d"
+source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
 dependencies = [
  "bincode 1.3.3",
  "byteorder",
@@ -3928,16 +3924,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "libmimalloc-sys"
-version = "0.1.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "667f4fec20f29dfc6bc7357c582d91796c169ad7e2fce709468aefeb2c099870"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
 name = "libproc"
 version = "0.14.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4167,8 +4153,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aaeb9bd22e73bd1babffff614994b341e9b2008de7bb73bf1f7e9154f1978f8b"
+source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
 dependencies = [
  "cc",
  "doxygen-rs",
@@ -4369,7 +4354,6 @@ dependencies = [
  "meilisearch-auth",
  "meilisearch-types",
  "memmap2",
- "mimalloc",
  "mime",
  "mopa-maintained",
  "num_cpus",
@@ -4398,6 +4382,7 @@ dependencies = [
  "tempfile",
  "termcolor",
  "thiserror 2.0.18",
+ "tikv-jemallocator",
  "time",
  "tokio",
  "toml 1.1.2+spec-1.1.0",
@@ -4558,7 +4543,6 @@ dependencies = [
  "meili-snap",
  "memchr",
  "memmap2",
- "mimalloc",
  "obkv",
  "once_cell",
  "ordered-float 5.3.0",
@@ -4582,6 +4566,7 @@ dependencies = [
  "thiserror 2.0.18",
  "thread_local",
  "tiktoken-rs",
+ "tikv-jemallocator",
  "time",
  "tokenizers",
  "tracing",
@@ -4591,15 +4576,6 @@ dependencies = [
  "utoipa",
  "uuid",
  "zerometry",
-]
-
-[[package]]
-name = "mimalloc"
-version = "0.1.48"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1ee66a4b64c74f4ef288bcbb9192ad9c3feaad75193129ac8509af543894fd8"
-dependencies = [
- "libmimalloc-sys",
 ]
 
 [[package]]
@@ -7088,6 +7064,26 @@ dependencies = [
  "lazy_static",
  "regex",
  "rustc-hash",
+]
+
+[[package]]
+name = "tikv-jemalloc-sys"
+version = "0.7.1+5.3.1-0-g81034ce1f1373e37dc865038e1bc8eeecf559ce8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a2825c78386b4ae0314074867860ba9577875de945f05992c38815cbec327f0"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "tikv-jemallocator"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "249f09e49ab1609436f34c776e84231bead18d6a955f119f939bdc1d847561bd"
+dependencies = [
+ "libc",
+ "tikv-jemalloc-sys",
 ]
 
 [[package]]

@@ -26,7 +26,7 @@ unsafe fn remove_tasks(
     let env_options = EnvOpenOptions::new();
     let mut env_options = env_options.read_txn_without_tls();
     let env = env_options.max_dbs(TaskQueue::nb_db()).map_size(index_base_map_size).open(dst)?;
-    let mut wtxn = env.write_txn()?;
+    let mut wtxn = env.unique_write_txn()?;
     let task_queue = TaskQueue::new(&env, &mut wtxn)?;
 
     // Destructuring to ensure the code below gets updated if a database gets added in the future.

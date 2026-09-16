@@ -85,7 +85,6 @@ fn filter_range_increasing() {
             results.push_str(&format!("0 < . < {i} : {}\n", display_bitmap(&docids)));
         }
         milli_snap!(results, format!("excluded_{i}"));
-        txn.commit().unwrap();
     }
 }
 #[test]
@@ -142,8 +141,6 @@ fn filter_range_decreasing() {
         }
 
         milli_snap!(results, format!("excluded_{i}"));
-
-        txn.commit().unwrap();
     }
 }
 #[test]
@@ -208,8 +205,6 @@ fn filter_range_pinch() {
         }
 
         milli_snap!(results, format!("excluded_{i}"));
-
-        txn.commit().unwrap();
     }
 }
 
