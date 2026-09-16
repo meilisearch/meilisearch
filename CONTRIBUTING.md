@@ -15,7 +15,7 @@ If Meilisearch does not offer optimized support for your language, please consid
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
 - [Git Guidelines](#git-guidelines)
-- [Release Process (for internal team only)](#release-process-for-internal-team-only)
+- [Release Process (for internal team only)](#publish-process-for-internal-team-only)
 
 ## Use of generative AI tools
 
@@ -238,7 +238,7 @@ This project uses GitHub Merge Queues that helps us manage pull requests merging
 Before merging a PR, the maintainer should ensure the following requirements are met
 - Automated tests have been added.
 - If some tests cannot be automated, manual rigorous tests should be applied.
-- ⚠️ If there is an change in the DB: it's mandatory to manually test the `--upgrade-db` on a DB of the previous Meilisearch minor version (e.g. v1.13 for the v1.14 release).
+- ⚠️ If there is a change in the DB: it's mandatory to manually test the `--upgrade-db` on a DB of the previous Meilisearch minor version (e.g. v1.13 for the v1.14 release).
 - If necessary, the feature have been tested in the Cloud production environment (with [prototypes](./documentation/prototypes.md)) and the Cloud UI is ready.
 - If necessary, the [documentation](https://github.com/meilisearch/documentation) related to the implemented feature in the PR is ready.
 - If necessary, the [integrations](https://github.com/meilisearch/integration-guides) related to the implemented feature in the PR are ready.

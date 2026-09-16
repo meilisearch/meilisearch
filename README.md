@@ -116,7 +116,7 @@ Meilisearch is available in two editions:
 - Not allowed in production without a commercial agreement with Meilisearch.
   - You may use, modify, and distribute the Licensed Work for non-production purposes only, such as testing, development, or evaluation.
 
-Want access to Enterprise features? → Contact us at [sales@meilisearch.com](maito:sales@meilisearch.com).
+Want access to Enterprise features? → Contact us at [sales@meilisearch.com](mailto:sales@meilisearch.com).
 
 ### 📦 External crates
 
