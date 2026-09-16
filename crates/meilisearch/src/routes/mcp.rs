@@ -30,25 +30,6 @@ use crate::search_queue::SearchQueue;
 
 static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::openapi);
 
-macro_rules! r#try_or_internal_error {
-    ($jsonrpc:ident, $id:ident, $expr:expr $(,)?) => {
-        try_or_internal_error!($jsonrpc, $id, $expr, internal_error)
-    };
-    ($jsonrpc:ident, $id:ident, $expr:expr, $error_type:ident $(,)?) => {
-        match $expr {
-            ::std::result::Result::Ok(val) => val,
-            ::std::result::Result::Err(err) => {
-                return Ok(::actix_web::HttpResponse::Ok().json(McpResponse {
-                    $jsonrpc,
-                    $id,
-                    result: None,
-                    error: Some(McpError::$error_type(err)),
-                }));
-            }
-        }
-    };
-}
-
 #[routes::routes(
     tag = "MCP connection",
     routes(
@@ -112,21 +93,23 @@ async fn mcp(
     index_scheduler.features().check_mcp_route("calling the /mcp route")?;
 
     let body = body.into_inner();
-    let McpQuery { jsonrpc, id, method, mut params } = body;
+    let McpQuery { jsonrpc, id, method, params } = body;
 
     let response = match method.as_str() {
         method::SERVER_DISCOVERY => {
             McpResponse { jsonrpc, id, result: Some(McpResult::discover()), error: None }
         }
-        method::TOOLS_LIST => {
-            let list_tools = try_or_internal_error!(
-                jsonrpc,
-                id,
-                McpResult::list_tools(),
-                internal_error_from_anyhow,
-            );
-            McpResponse { jsonrpc, id, result: Some(list_tools), error: None }
-        }
+        method::TOOLS_LIST => match McpResult::list_tools() {
+            Ok(list_tools) => McpResponse { jsonrpc, id, result: Some(list_tools), error: None },
+            Err(err) => {
+                return Ok(HttpResponse::Ok().json(McpResponse {
+                    jsonrpc,
+                    id,
+                    result: None,
+                    error: Some(McpError::internal_error_from_anyhow(err)),
+                }))
+            }
+        },
         method::RESOURCES_LIST => {
             McpResponse { jsonrpc, id, result: Some(McpResult::empty_resources()), error: None }
         }
@@ -134,358 +117,60 @@ async fn mcp(
             McpResponse { jsonrpc, id, result: Some(McpResult::empty_prompts()), error: None }
         }
         method::TOOLS_CALL => match params.name.as_deref() {
-            Some(tool_name::SEARCH_IN_INDEXES) => {
-                let query = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    serde_json::to_vec(&params.arguments.unwrap_or_default())
-                );
-
-                let mut payload = actix_web::dev::Payload::from(query);
-                let guarded_index_scheduler = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    GuardedData::from_request(&request, &mut payload).await
-                );
-
-                let params = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    AwebJson::from_request(&request, &mut payload).await
-                );
-
-                let result = super::multi_search::multi_search_with_post(
-                    guarded_index_scheduler,
+            Some(SearchInIndexes::NAME) => {
+                match SearchInIndexes::call(
+                    request,
                     search_queue,
+                    analytics,
                     personalization_service,
-                    params,
-                    request,
-                    analytics,
+                    params.arguments,
                 )
-                .await;
-
-                match result {
-                    Ok(response) => {
-                        let body = response.into_body();
-                        let bytes = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            actix_web::body::to_bytes(body).await,
-                            internal_error_from_box_dyn
-                        );
-                        let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // Note: This blocks and would have been better to have a serde_json
-                        //       RawValue to avoid allocating too much and simply pass through
-                        let content = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            serde_json::from_reader(Cursor::new(bytes))
-                        );
-
-                        McpResponse {
-                            jsonrpc,
-                            id,
-                            result: Some(McpResult::from_content_text_and_ttl(
-                                content,
-                                text,
-                                ttl_ms::IMMEDIATELY_STALE,
-                            )),
-                            error: None,
-                        }
-                    }
-                    Err(response) => {
-                        tracing::error!("{response:?}");
-                        let result = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            McpResult::from_response_error(response)
-                        );
-                        McpResponse { jsonrpc, id, result: Some(result), error: None }
-                    }
+                .await
+                {
+                    Ok(result) => McpResponse { jsonrpc, id, result: Some(result), error: None },
+                    Err(error) => McpResponse { jsonrpc, id, result: None, error: Some(error) },
                 }
             }
-            Some(tool_name::FACET_SEARCH) => {
-                let index_uid = match params.arguments.as_mut() {
-                    Some(serde_json::Value::Object(object)) => {
-                        // We remove the extra indexUid parameter to make sure the route accepts the payload
-                        let index_uid = match object.remove("indexUid") {
-                            Some(uid) => uid,
-                            None => {
-                                return Ok(HttpResponse::Ok().json(McpResponse {
-                                    jsonrpc,
-                                    id,
-                                    result: None,
-                                    error: Some(McpError::invalid_params("missing indexUid")),
-                                }))
-                            }
-                        };
-                        match index_uid.as_str() {
-                            Some(s) => s.to_owned(),
-                            None => {
-                                return Ok(HttpResponse::Ok().json(McpResponse {
-                                    jsonrpc,
-                                    id,
-                                    result: None,
-                                    error: Some(McpError::invalid_params(
-                                        "expected the indexUid to be a string",
-                                    )),
-                                }))
-                            }
-                        }
-                    }
-                    _ => {
-                        return Ok(HttpResponse::Ok().json(McpResponse {
-                            jsonrpc,
-                            id,
-                            result: None,
-                            error: Some(McpError::invalid_params("expected JSON Object")),
-                        }))
-                    }
-                };
-
-                let query = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    serde_json::to_vec(&params.arguments.unwrap_or_default())
-                );
-                let mut payload = actix_web::dev::Payload::from(query);
-                let guarded_index_scheduler = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    GuardedData::from_request(&request, &mut payload).await
-                );
-                let params = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    AwebJson::from_request(&request, &mut payload).await
-                );
-
-                let result = super::indexes::facet_search::search(
-                    guarded_index_scheduler,
+            Some(FacetSearch::NAME) => {
+                match FacetSearch::call(
+                    request,
                     search_queue,
-                    index_uid.into(),
-                    params,
-                    request,
                     analytics,
+                    personalization_service,
+                    params.arguments,
                 )
-                .await;
-
-                match result {
-                    Ok(response) => {
-                        let body = response.into_body();
-                        let bytes = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            actix_web::body::to_bytes(body).await,
-                            internal_error_from_box_dyn,
-                        );
-                        let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // Note: This blocks and would have been better to have a serde_json
-                        //       RawValue to avoid allocating too much and simply pass through
-                        let content = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            serde_json::from_reader(Cursor::new(bytes))
-                        );
-                        McpResponse {
-                            jsonrpc,
-                            id,
-                            result: Some(McpResult::from_content_text_and_ttl(
-                                content,
-                                text,
-                                ttl_ms::IMMEDIATELY_STALE,
-                            )),
-                            error: None,
-                        }
-                    }
-                    Err(response) => {
-                        tracing::error!("{response:?}");
-                        let result = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            McpResult::from_response_error(response),
-                        );
-                        McpResponse { jsonrpc, id, result: Some(result), error: None }
-                    }
+                .await
+                {
+                    Ok(result) => McpResponse { jsonrpc, id, result: Some(result), error: None },
+                    Err(error) => McpResponse { jsonrpc, id, result: None, error: Some(error) },
                 }
             }
-            Some(tool_name::LIST_INDEXES) => {
-                #[derive(Serialize)]
-                #[serde(rename_all = "camelCase")]
-                struct Pagination {
-                    #[serde(skip_serializing_if = "Option::is_none")]
-                    offset: Option<u64>,
-                    #[serde(skip_serializing_if = "Option::is_none")]
-                    limit: Option<u64>,
-                }
-
-                let pagination = match params.arguments.as_mut() {
-                    Some(serde_json::Value::Object(object)) => {
-                        // We remove the extra indexUid parameter to make sure the route accepts the payload
-                        let offset = object.remove("offset").and_then(|off| off.as_u64());
-                        let limit = object.remove("limit").and_then(|limit| limit.as_u64());
-                        Pagination { offset, limit }
-                    }
-                    _ => {
-                        return Ok(HttpResponse::Ok().json(McpResponse {
-                            jsonrpc,
-                            id,
-                            result: None,
-                            error: Some(McpError::invalid_params("expected JSON Object")),
-                        }))
-                    }
-                };
-
-                let mut payload = actix_web::dev::Payload::None;
-                let guarded_index_scheduler = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    GuardedData::from_request(&request, &mut payload).await
-                );
-                let query =
-                    try_or_internal_error!(jsonrpc, id, serde_urlencoded::to_string(&pagination));
-                let paginate =
-                    try_or_internal_error!(jsonrpc, id, AwebQueryParameter::from_query(&query));
-
-                let result = super::indexes::list_indexes(guarded_index_scheduler, paginate).await;
-
-                match result {
-                    Ok(response) => {
-                        let body = response.into_body();
-                        let bytes = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            actix_web::body::to_bytes(body).await,
-                            internal_error_from_box_dyn,
-                        );
-                        let text = String::from_utf8_lossy(&bytes).into_owned();
-                        // Note: this blocks and would have been better to have a serde_json
-                        //       RawValue to avoid allocating too much and simply pass through
-                        let content = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            serde_json::from_reader(Cursor::new(bytes))
-                        );
-                        McpResponse {
-                            jsonrpc,
-                            id,
-                            result: Some(McpResult::from_content_text_and_ttl(
-                                content,
-                                text,
-                                ttl_ms::QUICKLY_STALE,
-                            )),
-                            error: None,
-                        }
-                    }
-                    Err(response) => {
-                        tracing::error!("{response:?}");
-                        let result = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            McpResult::from_response_error(response),
-                        );
-                        McpResponse { jsonrpc, id, result: Some(result), error: None }
-                    }
-                }
-            }
-            Some(tool_name::DESCRIBE_INDEX) => {
-                let DescribeIndex { index_uid } = match params.arguments.take() {
-                    Some(value) => try_or_internal_error!(
-                        jsonrpc,
-                        id,
-                        serde_json::from_value(value).map_err(|err| err.to_string()),
-                        invalid_params,
-                    ),
-                    _ => {
-                        return Ok(HttpResponse::Ok().json(McpResponse {
-                            jsonrpc,
-                            id,
-                            result: None,
-                            error: Some(McpError::invalid_params("expected arguments found none")),
-                        }))
-                    }
-                };
-
-                let query = serde_json::to_vec(&serde_json::json!({ "limit": 5 }))
-                    .expect("The json macro to correctly serialize");
-                let mut payload = actix_web::dev::Payload::from(query);
-
-                let guarded_index_scheduler = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    GuardedData::from_request(&request, &mut payload).await
-                );
-                let params = try_or_internal_error!(
-                    jsonrpc,
-                    id,
-                    AwebJson::from_request(&request, &mut payload).await
-                );
-
-                let result = super::indexes::documents::documents_by_query_post(
-                    guarded_index_scheduler,
-                    index_uid.into_inner().into(),
-                    params,
+            Some(ListIndexes::NAME) => {
+                match ListIndexes::call(
+                    request,
                     search_queue,
-                    request,
                     analytics,
+                    personalization_service,
+                    params.arguments,
                 )
-                .await;
-
-                let sample_hits = match result {
-                    Ok(response) => {
-                        let body = response.into_body();
-                        let bytes = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            actix_web::body::to_bytes(body).await,
-                            internal_error_from_box_dyn,
-                        );
-                        // Note: This blocks and would have been better to have a serde_json
-                        //       RawValue to avoid allocating too much and simply pass through
-                        let mut content: serde_json::Map<String, serde_json::Value> = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            serde_json::from_reader(Cursor::new(bytes))
-                        );
-                        content.remove("results")
-                    }
-                    Err(response) => {
-                        tracing::error!("{response:?}");
-                        let result = try_or_internal_error!(
-                            jsonrpc,
-                            id,
-                            McpResult::from_response_error(response)
-                        );
-                        return Ok(HttpResponse::Ok().json(McpResponse {
-                            jsonrpc,
-                            id,
-                            result: Some(result),
-                            error: None,
-                        }));
-                    }
-                };
-
-                #[derive(Debug, Clone, Serialize)]
-                #[serde(rename_all = "camelCase")]
-                struct IndexDescription {
-                    #[serde(skip_serializing_if = "Option::is_none")]
-                    sample_hits: Option<serde_json::Value>,
+                .await
+                {
+                    Ok(result) => McpResponse { jsonrpc, id, result: Some(result), error: None },
+                    Err(error) => McpResponse { jsonrpc, id, result: None, error: Some(error) },
                 }
-
-                let description = IndexDescription { sample_hits };
-                let content =
-                    try_or_internal_error!(jsonrpc, id, serde_json::to_value(&description));
-                let text = try_or_internal_error!(jsonrpc, id, serde_json::to_string(&content));
-
-                McpResponse {
-                    jsonrpc,
-                    id,
-                    result: Some(McpResult::from_content_text_and_ttl(
-                        content,
-                        text,
-                        ttl_ms::QUICKLY_STALE,
-                    )),
-                    error: None,
+            }
+            Some(DescribeIndex::NAME) => {
+                match DescribeIndex::call(
+                    request,
+                    search_queue,
+                    analytics,
+                    personalization_service,
+                    params.arguments,
+                )
+                .await
+                {
+                    Ok(result) => McpResponse { jsonrpc, id, result: Some(result), error: None },
+                    Err(error) => McpResponse { jsonrpc, id, result: None, error: Some(error) },
                 }
             }
             Some(unknown_tool_name) => McpResponse {
@@ -512,19 +197,400 @@ async fn mcp(
     Ok(HttpResponse::Ok().json(response))
 }
 
+trait McpTool {
+    /// The name of the tool, i.e., listIndexes, describeIndex.
+    const NAME: &'static str;
+
+    fn definition() -> anyhow::Result<McpToolDefinition>;
+
+    async fn call(
+        request: HttpRequest,
+        search_queue: web::Data<SearchQueue>,
+        analytics: web::Data<Analytics>,
+        personalization_service: web::Data<crate::personalization::PersonalizationService>,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<McpResult, McpError>;
+}
+
+enum ListIndexes {}
+
+impl McpTool for ListIndexes {
+    const NAME: &'static str = "listIndexes";
+
+    fn definition() -> anyhow::Result<McpToolDefinition> {
+        // list indexes
+        let route = "/indexes";
+        let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).context("retrieving paths")?;
+        let components = MEILISEARCH_OPEN_API
+            .components
+            .as_ref()
+            .context("retrieving the Meilisearch components")?;
+        let operation = paths.get.as_ref().context("retrieving the GET data")?;
+
+        // We retrieve the offset and limit from the query parameters
+        let mut properties = ObjectBuilder::new();
+        for parameter in operation.parameters.as_ref().context("retrieving the parameters")? {
+            let ref_or_schema = parameter.schema.as_ref().context("retrieving the schema")?.clone();
+            let mut schema = clean_refs_from_schema(components, ref_or_schema)
+                .context("cleaning the refs from the schema")?;
+            if let Schema::Object(object) = &mut schema {
+                object.description = parameter.description.clone();
+            }
+            properties = properties.property(&parameter.name, schema);
+        }
+
+        let schema = Schema::from(properties);
+
+        Ok(McpToolDefinition {
+            name: Self::NAME.to_string(),
+            title: operation.summary.clone().context("Extracting the summary from the schema")?,
+            description: operation
+                .description
+                .clone()
+                .context("Extracting the description from the schema")?,
+            input_schema: schema,
+        })
+    }
+
+    async fn call(
+        request: HttpRequest,
+        _search_queue: web::Data<SearchQueue>,
+        _analytics: web::Data<Analytics>,
+        _personalization_service: web::Data<crate::personalization::PersonalizationService>,
+        mut arguments: Option<serde_json::Value>,
+    ) -> Result<McpResult, McpError> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Pagination {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            offset: Option<u64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            limit: Option<u64>,
+        }
+
+        let pagination = match arguments.as_mut() {
+            Some(serde_json::Value::Object(object)) => {
+                // We remove the extra indexUid parameter to make sure the route accepts the payload
+                let offset = object.remove("offset").and_then(|off| off.as_u64());
+                let limit = object.remove("limit").and_then(|limit| limit.as_u64());
+                Pagination { offset, limit }
+            }
+            _ => {
+                return Err(McpError::invalid_params("expected JSON Object"));
+            }
+        };
+
+        let mut payload = actix_web::dev::Payload::None;
+        let guarded_index_scheduler = GuardedData::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+        let query = serde_urlencoded::to_string(&pagination).map_err(McpError::internal_error)?;
+        let paginate = AwebQueryParameter::from_query(&query).map_err(McpError::internal_error)?;
+
+        let result = super::indexes::list_indexes(guarded_index_scheduler, paginate).await;
+
+        match result {
+            Ok(response) => {
+                let body = response.into_body();
+                let bytes = actix_web::body::to_bytes(body)
+                    .await
+                    .map_err(McpError::internal_error_from_box_dyn)?;
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                // Note: this blocks and would have been better to have a serde_json
+                //       RawValue to avoid allocating too much and simply pass through
+                let content = serde_json::from_reader(Cursor::new(bytes))
+                    .map_err(McpError::internal_error)?;
+                Ok(McpResult::from_content_text_and_ttl(content, text, ttl_ms::QUICKLY_STALE))
+            }
+            Err(response) => {
+                tracing::error!("{response:?}");
+                McpResult::from_response_error(response).map_err(McpError::internal_error)
+            }
+        }
+    }
+}
+
+enum DescribeIndex {}
+
+impl McpTool for DescribeIndex {
+    const NAME: &'static str = "describeIndex";
+
+    fn definition() -> anyhow::Result<McpToolDefinition> {
+        let components = MEILISEARCH_OPEN_API
+            .components
+            .as_ref()
+            .context("retrieving the Meilisearch components")?;
+        let ref_or_schema = <DescribeIndexParams as PartialSchema>::schema();
+
+        let schema = clean_refs_from_schema(components, ref_or_schema)
+            .context("cleaning the refs from the schema")?;
+
+        Ok(McpToolDefinition {
+            name: Self::NAME.to_string(),
+            title: "Describe an index".to_string(),
+            description:
+                "Describes an index to understand what's stored inside and what's its purpose."
+                    .to_string(),
+            input_schema: schema,
+        })
+    }
+
+    async fn call(
+        request: HttpRequest,
+        search_queue: web::Data<SearchQueue>,
+        analytics: web::Data<Analytics>,
+        _personalization_service: web::Data<crate::personalization::PersonalizationService>,
+        mut arguments: Option<serde_json::Value>,
+    ) -> Result<McpResult, McpError> {
+        let DescribeIndexParams { index_uid } = match arguments.take() {
+            Some(value) => serde_json::from_value(value)
+                .map_err(|err| McpError::invalid_params(err.to_string()))?,
+            _ => return Err(McpError::invalid_params("expected arguments found none")),
+        };
+
+        let query = serde_json::to_vec(&serde_json::json!({ "limit": 5 }))
+            .expect("The json macro to correctly serialize");
+        let mut payload = actix_web::dev::Payload::from(query);
+
+        let guarded_index_scheduler = GuardedData::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+        let params = AwebJson::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+
+        let result = super::indexes::documents::documents_by_query_post(
+            guarded_index_scheduler,
+            index_uid.into_inner().into(),
+            params,
+            search_queue,
+            request,
+            analytics,
+        )
+        .await;
+
+        let sample_hits = match result {
+            Ok(response) => {
+                let body = response.into_body();
+                let bytes = actix_web::body::to_bytes(body)
+                    .await
+                    .map_err(McpError::internal_error_from_box_dyn)?;
+                // Note: This blocks and would have been better to have a serde_json
+                //       RawValue to avoid allocating too much and simply pass through
+                let mut content: serde_json::Map<String, serde_json::Value> =
+                    serde_json::from_reader(Cursor::new(bytes))
+                        .map_err(McpError::internal_error)?;
+                content.remove("results")
+            }
+            Err(response) => {
+                tracing::error!("{response:?}");
+                return McpResult::from_response_error(response).map_err(McpError::internal_error);
+            }
+        };
+
+        #[derive(Debug, Clone, Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct IndexDescription {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            sample_hits: Option<serde_json::Value>,
+        }
+
+        let description = IndexDescription { sample_hits };
+        let content = serde_json::to_value(&description).map_err(McpError::internal_error)?;
+        let text = serde_json::to_string(&content).map_err(McpError::internal_error)?;
+
+        Ok(McpResult::from_content_text_and_ttl(content, text, ttl_ms::QUICKLY_STALE))
+    }
+}
+
+enum FacetSearch {}
+
+impl McpTool for FacetSearch {
+    const NAME: &'static str = "facetSearch";
+
+    fn definition() -> anyhow::Result<McpToolDefinition> {
+        let (mut schema, components, operation) =
+            retrieve_schema("/indexes/{index_uid}/facet-search")
+                .context("while extracting the /indexes/{index_uid}/facet-search OpenAPI schema")?;
+
+        // We modify the schema's properties a bit to expose
+        // the original-in-the-path index uid.
+        let params = operation.parameters.as_ref().context("extracting operation parameters")?;
+        if let Some(param) = params.iter().find(|param| param.name == "index_uid") {
+            if let Schema::Object(object) = &mut schema {
+                let field_name = "indexUid";
+                let ref_or_schema =
+                    param.schema.clone().context("extracting the indexUid schema")?;
+                let mut schema = clean_refs_from_schema(components, ref_or_schema)
+                    .context("cleaning refs from schema")?;
+                if let Schema::Object(object) = &mut schema {
+                    object.description = param.description.clone();
+                }
+                // Insert this new mandatory field at the beginning
+                object.properties.insert_before(0, field_name.to_string(), RefOr::T(schema));
+                object.required.push(field_name.to_string());
+            }
+        }
+
+        Ok(McpToolDefinition {
+            name: Self::NAME.to_string(),
+            title: operation.summary.clone().context("Extracting the summary from the schema")?,
+            description: operation
+                .description
+                .clone()
+                .context("Extracting the description from the schema")?,
+            input_schema: schema,
+        })
+    }
+
+    async fn call(
+        request: HttpRequest,
+        search_queue: web::Data<SearchQueue>,
+        analytics: web::Data<Analytics>,
+        _personalization_service: web::Data<crate::personalization::PersonalizationService>,
+        mut arguments: Option<serde_json::Value>,
+    ) -> Result<McpResult, McpError> {
+        let index_uid = match arguments.as_mut() {
+            Some(serde_json::Value::Object(object)) => {
+                // We remove the extra indexUid parameter to make sure the route accepts the payload
+                let index_uid = match object.remove("indexUid") {
+                    Some(uid) => uid,
+                    None => return Err(McpError::invalid_params("missing indexUid")),
+                };
+                match index_uid.as_str() {
+                    Some(s) => s.to_owned(),
+                    None => {
+                        return Err(McpError::invalid_params(
+                            "expected the indexUid to be a string",
+                        ))
+                    }
+                }
+            }
+            _ => return Err(McpError::invalid_params("expected JSON Object")),
+        };
+
+        let query =
+            serde_json::to_vec(&arguments.unwrap_or_default()).map_err(McpError::internal_error)?;
+        let mut payload = actix_web::dev::Payload::from(query);
+        let guarded_index_scheduler = GuardedData::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+        let params = AwebJson::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+
+        let result = super::indexes::facet_search::search(
+            guarded_index_scheduler,
+            search_queue,
+            index_uid.into(),
+            params,
+            request,
+            analytics,
+        )
+        .await;
+
+        match result {
+            Ok(response) => {
+                let body = response.into_body();
+                let bytes = actix_web::body::to_bytes(body)
+                    .await
+                    .map_err(McpError::internal_error_from_box_dyn)?;
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                // Note: This blocks and would have been better to have a serde_json
+                //       RawValue to avoid allocating too much and simply pass through
+                let content = serde_json::from_reader(Cursor::new(bytes))
+                    .map_err(McpError::internal_error)?;
+                Ok(McpResult::from_content_text_and_ttl(content, text, ttl_ms::IMMEDIATELY_STALE))
+            }
+            Err(response) => {
+                tracing::error!("{response:?}");
+                McpResult::from_response_error(response).map_err(McpError::internal_error)
+            }
+        }
+    }
+}
+
+enum SearchInIndexes {}
+
+impl McpTool for SearchInIndexes {
+    const NAME: &'static str = "searchInIndexes";
+
+    fn definition() -> anyhow::Result<McpToolDefinition> {
+        let (schema, _, operation) = retrieve_schema("/multi-search")
+            .context("while extracting the /multi-search OpenAPI schema")?;
+
+        Ok(McpToolDefinition {
+            name: Self::NAME.to_string(),
+            title: operation
+                .summary
+                .clone()
+                .context("reading the summary of the /multi-search route")?,
+            description: operation
+                .description
+                .clone()
+                .context("reading the description of the /multi-search route")?,
+            // TODO maybe add more information about how to do filtering and such?
+            //      It is probably better to explain it in the OpenAPI description or examples maybe?
+            input_schema: schema,
+        })
+    }
+
+    async fn call(
+        request: HttpRequest,
+        search_queue: web::Data<SearchQueue>,
+        analytics: web::Data<Analytics>,
+        personalization_service: web::Data<crate::personalization::PersonalizationService>,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<McpResult, McpError> {
+        let query =
+            serde_json::to_vec(&arguments.unwrap_or_default()).map_err(McpError::internal_error)?;
+
+        let mut payload = actix_web::dev::Payload::from(query);
+        let guarded_index_scheduler = GuardedData::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+
+        let params = AwebJson::from_request(&request, &mut payload)
+            .await
+            .map_err(McpError::internal_error)?;
+
+        let result = super::multi_search::multi_search_with_post(
+            guarded_index_scheduler,
+            search_queue,
+            personalization_service,
+            params,
+            request,
+            analytics,
+        )
+        .await;
+
+        match result {
+            Ok(response) => {
+                let body = response.into_body();
+                let bytes = actix_web::body::to_bytes(body)
+                    .await
+                    .map_err(McpError::internal_error_from_box_dyn)?;
+                let text = String::from_utf8_lossy(&bytes).into_owned();
+                // Note: This blocks and would have been better to have a serde_json
+                //       RawValue to avoid allocating too much and simply pass through
+                let content = serde_json::from_reader(Cursor::new(bytes))
+                    .map_err(McpError::internal_error)?;
+                Ok(McpResult::from_content_text_and_ttl(content, text, ttl_ms::IMMEDIATELY_STALE))
+            }
+            Err(response) => {
+                tracing::error!("{response:?}");
+                McpResult::from_response_error(response).map_err(McpError::internal_error)
+            }
+        }
+    }
+}
+
 pub mod method {
     pub const SERVER_DISCOVERY: &str = "server/discover";
     pub const TOOLS_CALL: &str = "tools/call";
     pub const TOOLS_LIST: &str = "tools/list";
     pub const RESOURCES_LIST: &str = "resources/list";
     pub const PROMPTS_LIST: &str = "prompts/list";
-}
-
-pub mod tool_name {
-    pub const LIST_INDEXES: &str = "listIndexes";
-    pub const DESCRIBE_INDEX: &str = "describeIndex";
-    pub const SEARCH_IN_INDEXES: &str = "searchInIndexes";
-    pub const FACET_SEARCH: &str = "facetSearch";
 }
 
 pub mod cache_scope {
@@ -540,7 +606,7 @@ pub mod ttl_ms {
 #[routes::request(db)]
 #[derive(Debug, Clone)]
 /// Describes an index
-pub struct DescribeIndex {
+pub struct DescribeIndexParams {
     #[request(required)]
     index_uid: IndexUid,
 }
@@ -844,153 +910,11 @@ impl McpResult {
     }
 
     fn list_tools() -> anyhow::Result<McpResult> {
-        fn retrieve_schema(
-            route: &str,
-        ) -> anyhow::Result<(Schema, &'static Components, &'static Operation)> {
-            let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).context("retrieving paths")?;
-            let components = MEILISEARCH_OPEN_API
-                .components
-                .as_ref()
-                .context("retrieving the Meilisearch components")?;
-            let operation = paths.post.as_ref().context("retrieving the POST data")?;
-            let request_body =
-                operation.request_body.as_ref().context("retrieving the request body")?;
-            let content = request_body
-                .content
-                .get("application/json")
-                .context("retrieving the body content")?;
-            let ref_or_schema = content.schema.clone().context("retrieving the schema")?;
-            clean_refs_from_schema(components, ref_or_schema)
-                .context("cleaning the refs from the schema")
-                .map(|schema| (schema, components, operation))
-        }
-
         let tools = vec![
-            {
-                // search in indexes
-                let (schema, _, operation) = retrieve_schema("/multi-search")
-                    .context("while extracting the /multi-search OpenAPI schema")?;
-
-                McpToolDefinition {
-                    name: tool_name::SEARCH_IN_INDEXES.to_string(),
-                    title: operation
-                        .summary
-                        .clone()
-                        .context("reading the summary of the /multi-search route")?,
-                    description: operation
-                        .description
-                        .clone()
-                        .context("reading the description of the /multi-search route")?,
-                    // TODO maybe add more information about how to do filtering and such?
-                    //      It is probably better to explain it in the OpenAPI description or examples maybe?
-                    input_schema: schema,
-                }
-            },
-            {
-                // facet search
-                let (mut schema, components, operation) = retrieve_schema(
-                    "/indexes/{index_uid}/facet-search",
-                )
-                .context("while extracting the /indexes/{index_uid}/facet-search OpenAPI schema")?;
-
-                // We modify the schema's properties a bit to expose
-                // the original-in-the-path index uid.
-                let params =
-                    operation.parameters.as_ref().context("extracting operation parameters")?;
-                if let Some(param) = params.iter().find(|param| param.name == "index_uid") {
-                    if let Schema::Object(object) = &mut schema {
-                        let field_name = "indexUid";
-                        let ref_or_schema =
-                            param.schema.clone().context("extracting the indexUid schema")?;
-                        let mut schema = clean_refs_from_schema(components, ref_or_schema)
-                            .context("cleaning refs from schema")?;
-                        if let Schema::Object(object) = &mut schema {
-                            object.description = param.description.clone();
-                        }
-                        // Insert this new mandatory field at the beginning
-                        object.properties.insert_before(
-                            0,
-                            field_name.to_string(),
-                            RefOr::T(schema),
-                        );
-                        object.required.push(field_name.to_string());
-                    }
-                }
-
-                McpToolDefinition {
-                    name: tool_name::FACET_SEARCH.to_string(),
-                    title: operation
-                        .summary
-                        .clone()
-                        .context("Extracting the summary from the schema")?,
-                    description: operation
-                        .description
-                        .clone()
-                        .context("Extracting the description from the schema")?,
-                    input_schema: schema,
-                }
-            },
-            {
-                // list indexes
-                let route = "/indexes";
-                let paths =
-                    MEILISEARCH_OPEN_API.paths.paths.get(route).context("retrieving paths")?;
-                let components = MEILISEARCH_OPEN_API
-                    .components
-                    .as_ref()
-                    .context("retrieving the Meilisearch components")?;
-                let operation = paths.get.as_ref().context("retrieving the GET data")?;
-
-                // We retrieve the offset and limit from the query parameters
-                let mut properties = ObjectBuilder::new();
-                for parameter in
-                    operation.parameters.as_ref().context("retrieving the parameters")?
-                {
-                    let ref_or_schema =
-                        parameter.schema.as_ref().context("retrieving the schema")?.clone();
-                    let mut schema = clean_refs_from_schema(components, ref_or_schema)
-                        .context("cleaning the refs from the schema")?;
-                    if let Schema::Object(object) = &mut schema {
-                        object.description = parameter.description.clone();
-                    }
-                    properties = properties.property(&parameter.name, schema);
-                }
-
-                let schema = Schema::from(properties);
-
-                McpToolDefinition {
-                    name: tool_name::LIST_INDEXES.to_string(),
-                    title: operation
-                        .summary
-                        .clone()
-                        .context("Extracting the summary from the schema")?,
-                    description: operation
-                        .description
-                        .clone()
-                        .context("Extracting the description from the schema")?,
-                    input_schema: schema,
-                }
-            },
-            {
-                // describe index
-                let components = MEILISEARCH_OPEN_API
-                    .components
-                    .as_ref()
-                    .context("retrieving the Meilisearch components")?;
-                let ref_or_schema = <DescribeIndex as PartialSchema>::schema();
-
-                let schema = clean_refs_from_schema(components, ref_or_schema)
-                    .context("cleaning the refs from the schema")?;
-
-                McpToolDefinition {
-                    name: tool_name::DESCRIBE_INDEX.to_string(),
-                    title: "Describe an index".to_string(),
-                    description:
-                        "Describes an index to understand what's stored inside and what's its purpose."
-                            .to_string(),
-                    input_schema: schema,
-                }
-            },
+            SearchInIndexes::definition()?,
+            FacetSearch::definition()?,
+            ListIndexes::definition()?,
+            DescribeIndex::definition()?,
         ];
 
         Ok(McpResult {
@@ -1130,6 +1054,24 @@ impl From<&ResponseError> for McpErrorData {
             error_link: response_error.error_link().to_string(),
         }
     }
+}
+
+fn retrieve_schema(
+    route: &str,
+) -> anyhow::Result<(Schema, &'static Components, &'static Operation)> {
+    let paths = MEILISEARCH_OPEN_API.paths.paths.get(route).context("retrieving paths")?;
+    let components = MEILISEARCH_OPEN_API
+        .components
+        .as_ref()
+        .context("retrieving the Meilisearch components")?;
+    let operation = paths.post.as_ref().context("retrieving the POST data")?;
+    let request_body = operation.request_body.as_ref().context("retrieving the request body")?;
+    let content =
+        request_body.content.get("application/json").context("retrieving the body content")?;
+    let ref_or_schema = content.schema.clone().context("retrieving the schema")?;
+    clean_refs_from_schema(components, ref_or_schema)
+        .context("cleaning the refs from the schema")
+        .map(|schema| (schema, components, operation))
 }
 
 fn ref_to_schema<'a>(components: &'a Components, r#ref: &Ref) -> Option<&'a Schema> {
