@@ -74,7 +74,7 @@ Why? GitHub Merge Queue does not work with branch patterns yet, so we have to ad
 
 ⚠️ If you encounter any merge conflicts, please do NOT fix the git conflicts directly on the `release-vX.Y.Z` branch. It would bring the changes present in `main` into `release-vX.Y.Z`, which would break a potential future patched release.
 
-![GitHub interface showing merge conflicts](../assets/merge-conflicts.png)
+
 
 Instead:
 - Create a new branch originating `release-vX.Y.Z+1`, like `tmp-release-vX.Y.Z+1`
