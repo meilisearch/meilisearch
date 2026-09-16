@@ -10,7 +10,6 @@ use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{Deserr, IntoValue, Value, ValuePointerRef};
 use either::Either;
 use index_scheduler::IndexScheduler;
-use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::deserr::{DeserrError, DeserrJson, DeserrJsonError};
 use meilisearch_types::error::deserr_codes::BadRequest;
 use meilisearch_types::error::Code::BadParameter;
@@ -62,39 +61,34 @@ macro_rules! r#try_or_internal_error {
 )]
 pub struct McpApi;
 
-/// Stream batches changes
+/// Model context protocol (MCP)
 ///
-/// The `/batches/stream` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
-///
-/// Batches are sent throught an SSE stream any time their progress or status changes, i.e., enqueued, processing, succeeded, failed.
+/// The `/mcp` route exposes [the MCP open protocol](https://modelcontextprotocol.io) that enables seamless integration between LLM
+/// applications and external data sources and tools.
 #[routes::path(
     security(),
     request_body = McpQuery,
     responses(
-        (status = 200, description = "Stream of batches changes.", body = BatchView, content_type = "application/x-ndjson", example = json!(
+        (status = 200, description = "Stream of batches changes.", body = McpResponse, content_type = "application/json", example = json!(
             {
-                "uid": 0,
-                "details": {
-                    "receivedDocuments": 1,
-                    "indexedDocuments": 1
-                },
-                "progress": null,
-                "stats": {
-                    "totalNbTasks": 1,
-                    "status": {
-                        "succeeded": 1
+                "jsonrpc": "2.0",
+                "id": 42,
+                "result": {
+                    "resultType": "complete",
+                    "supportedVersions": ["2026-07-28"],
+                    "capabilities": {
+                        "tools": {}
                     },
-                    "types": {
-                        "documentAdditionOrUpdate": 1
+                    "_meta": {
+                        "io.modelcontextprotocol/serverInfo": {
+                        "name": "Meilisearch",
+                        "version": "1.52.0"
+                        }
                     },
-                    "indexUids": {
-                        "INDEX_NAME": 1
-                    }
-                },
-                "duration": "PT0.364788S",
-                "startedAt": "2024-12-10T15:48:49.672141Z",
-                "finishedAt": "2024-12-10T15:48:50.036929Z",
-                "batchStrategy": "batched all enqueued tasks"
+                    "instructions": "This is a Meilisearch instance that is capable of returning documents based on a search query.",
+                    "ttlMs": 3_600_000,
+                    "cacheScope": "public"
+                }
             }
         )),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -680,13 +674,18 @@ impl utoipa::PartialSchema for RequestId {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct McpResponse {
+    /// The JSON-RPC version.
     jsonrpc: String,
+    /// The JSON-RPC request ID.
     id: RequestId,
+    /// The JSON-RPC result.
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<McpResult>,
+    /// The JSON-RPC error.
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<McpError>,
 }
@@ -698,8 +697,9 @@ impl routes::RequestBody for RequestId {}
 const RESULT_TYPE_COMPLETE: &str = "complete";
 const SUPPORTED_VERSIONS: &[&str] = &["2026-07-28"];
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct McpResult {
     result_type: &'static str, // "complete", "input_required"
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -711,10 +711,10 @@ pub struct McpResult {
     tools: Option<Vec<McpToolDefinition>>,
     // Note that for now we will simply return an empty list of resources
     #[serde(skip_serializing_if = "Option::is_none")]
-    resources: Option<Vec<()>>,
-    // Note that for now we will simply return an empty list of prompt
+    resources: Option<Vec<serde_json::Value>>,
+    // Note that for now we will simply return an empty list of prompts
     #[serde(skip_serializing_if = "Option::is_none")]
-    prompts: Option<Vec<()>>,
+    prompts: Option<Vec<serde_json::Value>>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     meta: Option<McpServerMeta>,
     /// Capabilities the server supports (tools, resources, prompts, etc.).
@@ -1011,8 +1011,9 @@ impl McpResult {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct McpServerMeta {
     #[serde(rename = "io.modelcontextprotocol/serverInfo")]
     server_info: ClientServerInfo,
@@ -1020,15 +1021,17 @@ pub struct McpServerMeta {
 
 // Note that those fields are just a way to display the
 // capabilities and must always stay empty or not shown at all.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct McpCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<BTreeMap<(), ()>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct McpTextContentOutput {
     r#type: &'static str, // text
     text: String,
@@ -1041,8 +1044,9 @@ impl From<String> for McpTextContentOutput {
 }
 
 /// <https://modelcontextprotocol.io/specification/2026-07-28/server/tools#data-types>
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct McpToolDefinition {
     /// Unique identifier for the tool.
     name: String,
@@ -1050,11 +1054,9 @@ pub struct McpToolDefinition {
     title: String,
     /// Human-readable description of functionality.
     description: String,
-    // icons (optional)
     /// JSON Schema defining expected parameters.
+    #[schema(value_type = serde_json::Value)]
     input_schema: Schema,
-    // outputSchema (optional)
-    // annotations (optional)
 }
 
 impl fmt::Debug for McpToolDefinition {
