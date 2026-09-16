@@ -152,8 +152,6 @@ mod tests {
                 results.push('\n');
             }
             milli_snap!(results, i);
-
-            txn.commit().unwrap();
         }
     }
 
@@ -185,8 +183,6 @@ mod tests {
                 results.push('\n');
             }
             milli_snap!(results, format!("{i}-1"));
-
-            txn.commit().unwrap();
         }
     }
     #[test]
@@ -215,8 +211,6 @@ mod tests {
                 results.push('\n');
             }
             assert!(results.is_empty());
-
-            txn.commit().unwrap();
         }
     }
 
@@ -237,8 +231,6 @@ mod tests {
                 results.push('\n');
             }
             assert!(results.is_empty());
-
-            txn.commit().unwrap();
         }
     }
 }

@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
@@ -156,10 +156,20 @@ impl Queue {
         tasks::TaskQueue::nb_db() + batches::BatchQueue::nb_db() + NUMBER_OF_DATABASES
     }
 
+    pub fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Self { tasks, batches, batch_to_tasks_mapping, file_store: _, max_number_of_tasks: _ } =
+            self;
+        let total_size = batch_to_tasks_mapping.stat(rtxn)?.non_free_page_size() as u64
+            + tasks.used_size(rtxn)?
+            + batches.used_size(rtxn)?;
+
+        Ok(total_size)
+    }
+
     /// Create an index scheduler and start its run loop.
     pub(crate) fn new(
         env: &Env<WithoutTls>,
-        wtxn: &mut RwTxn,
+        wtxn: &mut UniqueRwTxn,
         options: &IndexSchedulerOptions,
     ) -> Result<Self> {
         // allow unreachable_code to get rids of the warning in the case of a test build.
