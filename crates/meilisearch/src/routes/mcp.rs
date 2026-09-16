@@ -665,7 +665,7 @@ pub struct McpClientMeta {
     #[request(required, rename = "io.modelcontextprotocol/protocolVersion")]
     _protocol_version: String, // "2026-07-28"
     #[request(required, rename = "io.modelcontextprotocol/clientInfo")]
-    _client_info: ClientServerInfo,
+    _client_info: serde_json::Value, // { "name": "ExampleClient", "version": "1.0.0" }
     #[request(default, rename = "io.modelcontextprotocol/clientCapabilities")]
     _client_capabilities: serde_json::Value,
 }
