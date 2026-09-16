@@ -13,7 +13,8 @@ use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
 use meilisearch_types::heed::{
-    CompactionOption, Database, Env, EnvOpenOptions, RoTxn, RwTxn, Unspecified, WithoutTls,
+    CompactionOption, Database, Env, EnvOpenOptions, RwTxn, UniqueRoTxn, UniqueRwTxn, Unspecified,
+    WithoutTls,
 };
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -184,16 +185,16 @@ fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
 
     eprintln!("Deleting tasks from the database...");
 
-    let mut wtxn = env.write_txn()?;
-    let all_tasks = try_opening_poly_database(&env, &wtxn, "all-tasks")?;
+    let mut wtxn = env.unique_write_txn()?;
+    let all_tasks = try_opening_poly_database_w(&env, &wtxn, "all-tasks")?;
     let total = all_tasks.len(&wtxn)?;
-    let status = try_opening_poly_database(&env, &wtxn, "status")?;
-    let kind = try_opening_poly_database(&env, &wtxn, "kind")?;
-    let index_tasks = try_opening_poly_database(&env, &wtxn, "index-tasks")?;
-    let canceled_by = try_opening_poly_database(&env, &wtxn, "canceled_by")?;
-    let enqueued_at = try_opening_poly_database(&env, &wtxn, "enqueued-at")?;
-    let started_at = try_opening_poly_database(&env, &wtxn, "started-at")?;
-    let finished_at = try_opening_poly_database(&env, &wtxn, "finished-at")?;
+    let status = try_opening_poly_database_w(&env, &wtxn, "status")?;
+    let kind = try_opening_poly_database_w(&env, &wtxn, "kind")?;
+    let index_tasks = try_opening_poly_database_w(&env, &wtxn, "index-tasks")?;
+    let canceled_by = try_opening_poly_database_w(&env, &wtxn, "canceled_by")?;
+    let enqueued_at = try_opening_poly_database_w(&env, &wtxn, "enqueued-at")?;
+    let started_at = try_opening_poly_database_w(&env, &wtxn, "started-at")?;
+    let finished_at = try_opening_poly_database_w(&env, &wtxn, "finished-at")?;
 
     try_clearing_poly_database(&mut wtxn, all_tasks, "all-tasks")?;
     try_clearing_poly_database(&mut wtxn, status, "status")?;
@@ -233,7 +234,17 @@ fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
 
 fn try_opening_database<KC: 'static, DC: 'static>(
     env: &Env<WithoutTls>,
-    rtxn: &RoTxn,
+    rtxn: &UniqueRoTxn<'_, WithoutTls>,
+    db_name: &str,
+) -> anyhow::Result<Database<KC, DC>> {
+    env.open_database(rtxn, Some(db_name))
+        .with_context(|| format!("While opening the {db_name:?} database"))?
+        .with_context(|| format!("Missing the {db_name:?} database"))
+}
+
+fn try_opening_database_w<KC: 'static, DC: 'static>(
+    env: &Env<WithoutTls>,
+    rtxn: &UniqueRwTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<KC, DC>> {
     env.open_database(rtxn, Some(db_name))
@@ -243,7 +254,19 @@ fn try_opening_database<KC: 'static, DC: 'static>(
 
 fn try_opening_poly_database(
     env: &Env<WithoutTls>,
-    rtxn: &RoTxn,
+    rtxn: &UniqueRoTxn<WithoutTls>,
+    db_name: &str,
+) -> anyhow::Result<Database<Unspecified, Unspecified>> {
+    env.database_options()
+        .name(db_name)
+        .open(rtxn)
+        .with_context(|| format!("While opening the {db_name:?} poly database"))?
+        .with_context(|| format!("Missing the {db_name:?} poly database"))
+}
+
+fn try_opening_poly_database_w(
+    env: &Env<WithoutTls>,
+    rtxn: &UniqueRwTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<Unspecified, Unspecified>> {
     env.database_options()
@@ -315,7 +338,7 @@ fn export_a_dump(
     eprintln!("Successfully dumped {count} keys!");
 
     eprintln!("Dumping the queue");
-    let rtxn = env.read_txn()?;
+    let rtxn = env.unique_read_txn()?;
     let all_tasks: Database<BEU32, SerdeJson<Task>> =
         try_opening_database(&env, &rtxn, "all-tasks")?;
     let all_batches: Database<BEU32, SerdeJson<Batch>> =
@@ -460,7 +483,7 @@ fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let rtxn = env.read_txn()?;
+    let rtxn = env.unique_read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 
@@ -543,7 +566,7 @@ fn export_documents(
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let rtxn = env.read_txn()?;
+    let rtxn = env.unique_read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 
@@ -654,7 +677,7 @@ fn export_word_fst(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let rtxn = env.read_txn()?;
+    let rtxn = env.unique_read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 
@@ -696,7 +719,7 @@ fn hair_dryer(
 
     eprintln!("Trying to get a read transaction on the index scheduler...");
 
-    let rtxn = env.read_txn()?;
+    let rtxn = env.unique_read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 

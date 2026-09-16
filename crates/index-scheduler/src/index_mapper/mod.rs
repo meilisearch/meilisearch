@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
 use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex, RESERVED_UID_PREFIX};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
@@ -170,7 +170,7 @@ impl IndexStats {
             number_of_documents: None,
             internal_database_sizes,
             database_size: index.on_disk_size()?,
-            used_database_size: index.used_size()?,
+            used_database_size: index.used_size(rtxn)?,
             primary_key: index.primary_key(rtxn)?.map(|s| s.to_string()),
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
@@ -184,9 +184,30 @@ impl IndexMapper {
         NUMBER_OF_DATABASES
     }
 
+    pub fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Self {
+            index_map: _,
+            index_mapping,
+            index_stats,
+            base_path: _,
+            index_base_map_size: _,
+            index_growth_amount: _,
+            enable_mdb_writemap: _,
+            indexer_config: _,
+            currently_updating_index: _,
+        } = self;
+
+        let total_size: usize = [index_mapping.stat(rtxn)?, index_stats.stat(rtxn)?]
+            .iter()
+            .map(milli::heed::DatabaseStat::non_free_page_size)
+            .sum();
+
+        Ok(total_size as u64)
+    }
+
     pub fn new(
         env: &Env<WithoutTls>,
-        wtxn: &mut RwTxn,
+        wtxn: &mut UniqueRwTxn,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,
     ) -> Result<Self> {

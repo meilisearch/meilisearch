@@ -310,7 +310,7 @@ impl IndexScheduler {
 
                 index_wtxn.commit()?;
                 // drop rtxn before starting a new wtxn on the same db
-                rtxn.commit()?;
+                drop(rtxn);
 
                 task.status = Status::Succeeded;
                 task.details = Some(Details::IndexInfo {
