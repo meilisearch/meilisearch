@@ -4,7 +4,7 @@
 #[cfg(not(windows))]
 #[cfg(test)]
 #[global_allocator]
-pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[macro_use]
 pub mod documents;

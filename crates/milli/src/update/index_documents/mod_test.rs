@@ -2836,8 +2836,6 @@ fn stats_should_not_return_deleted_documents() {
     assert_eq!(Some(&18), results.get("label"));
     assert_eq!(Some(&1), results.get("title"));
     assert_eq!(Some(&2), results.get("number"));
-
-    rtxn.commit().unwrap();
 }
 
 #[test]

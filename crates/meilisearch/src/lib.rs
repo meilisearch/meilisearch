@@ -538,7 +538,7 @@ pub fn update_version_file_for_dumpless_upgrade(
                 .map_size(index_scheduler_opt.task_db_size)
                 .open(&index_scheduler_opt.tasks_path)
         }?;
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
         let versioning = Versioning::raw_new(&env, &mut wtxn)?;
         versioning.set_version(&mut wtxn, (from_major, from_minor, from_patch))?;
         wtxn.commit()?;

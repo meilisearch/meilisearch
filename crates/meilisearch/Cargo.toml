@@ -51,7 +51,6 @@ liquid = "0.26.11"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.9"
-mimalloc = { workspace = true }
 mime = "0.3.17"
 num_cpus = "1.17.0"
 obkv = "0.3.0"
@@ -112,6 +111,9 @@ cidr = { version = "0.3.2", features = ["serde"] }
 routes = { path = "../routes" }
 bumparaw-collections = "0.1.7"
 fst = "0.4.7"
+
+[target.'cfg(not(windows))'.dependencies]
+tikv-jemallocator = { workspace = true }
 
 [dev-dependencies]
 actix-rt = "2.11.0"

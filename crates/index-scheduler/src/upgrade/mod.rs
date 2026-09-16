@@ -1,5 +1,5 @@
 use anyhow::bail;
-use meilisearch_types::heed::{Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Env, UniqueRwTxn, WithoutTls};
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::versioning;
 use time::OffsetDateTime;
@@ -16,7 +16,7 @@ mod v1_49;
 mod v1_50;
 
 trait UpgradeIndexScheduler {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()>;
+    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> anyhow::Result<()>;
     /// Whether the migration should be applied, depending on the initial version of the index scheduler before
     /// any migration was applied
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool;
@@ -70,7 +70,7 @@ pub fn upgrade_index_scheduler(
     }
 
     info!("Upgrading the task queue");
-    let mut wtxn = env.write_txn()?;
+    let mut wtxn = env.unique_write_txn()?;
     let migration_count = upgrade_functions.len();
     for (migration_index, upgrade) in upgrade_functions.iter().enumerate() {
         if upgrade.must_upgrade(initial_version) {
