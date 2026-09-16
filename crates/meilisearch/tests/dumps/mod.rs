@@ -7,9 +7,7 @@ use self::data::GetDump;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use crate::json;
 
-// all the following test are ignored on windows. See #2364
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v1_movie_raw() {
     let temp = tempfile::tempdir().unwrap();
     let path = GetDump::MoviesRawV1.path();
@@ -172,7 +170,6 @@ async fn import_dump_v1_movie_raw() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v1_movie_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -350,7 +347,6 @@ async fn import_dump_v1_movie_with_settings() {
 }
 
 #[actix_rt::test]
-#[cfg_attr(target_os = "windows", ignore)]
 async fn import_dump_v1_rubygems_with_settings() {
     let temp = tempfile::tempdir().unwrap();
 
@@ -2413,6 +2409,16 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
 
 // In this test we must generate the dump ourselves to ensure the
 // `user provided` vectors are well set
+//
+// Still ignored on windows: the scheduler background thread spawned by
+// `IndexScheduler::run` (crates/index-scheduler/src/lib.rs) holds its own
+// clone of the `waker` broadcast sender, so the channel it listens on
+// (`wake_up`) never closes and the thread keeps running, with its LMDB envs
+// memory-mapped, for the life of the process. Dropping the `Server` in this
+// test only drops one of several references, so the immediate
+// `remove_dir_all` below hits `ERROR_SHARING_VIOLATION` (os error 32) and,
+// unlike a transient lock, it does not clear even after tens of seconds of
+// retrying. See #2364 and the same failure mode reported live in #5283.
 #[actix_rt::test]
 #[cfg_attr(target_os = "windows", ignore)]
 async fn generate_and_import_dump_containing_vectors() {
