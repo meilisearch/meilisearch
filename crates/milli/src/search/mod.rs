@@ -39,6 +39,7 @@ mod fst_utils;
 pub mod hybrid;
 pub mod new;
 pub mod similar;
+pub mod steps;
 
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {

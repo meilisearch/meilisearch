@@ -31,7 +31,6 @@ pub mod proximity;
 pub mod score_details;
 mod search;
 pub mod sharding;
-pub mod steps;
 mod thread_pool_no_abort;
 pub mod update;
 pub mod vector;
