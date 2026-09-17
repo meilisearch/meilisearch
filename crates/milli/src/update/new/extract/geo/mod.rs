@@ -10,7 +10,6 @@ use serde_json::value::RawValue;
 use serde_json::Value;
 
 use crate::error::GeoError;
-use crate::update::new::steps::IndexingStep;
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
 use crate::update::new::indexer::settings_change_extract;
@@ -18,6 +17,7 @@ use crate::update::new::indexer::settings_changes::{
     DocumentsIndentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::GrenadParameters;

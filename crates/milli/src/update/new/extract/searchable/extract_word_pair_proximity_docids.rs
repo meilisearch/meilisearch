@@ -9,7 +9,6 @@ use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::fields_ids_map::metadata::Metadata;
 use crate::proximity::ProximityPrecision::*;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
-use crate::update::new::steps::IndexingStep;
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::searchable::OneOrTwoTokenizers;
@@ -21,6 +20,7 @@ use crate::update::new::indexer::settings_changes::{
     DocumentsIndentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
