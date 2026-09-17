@@ -74,7 +74,7 @@ impl Progress {
         Self::new(ProgressVerbosityMode::Quiet)
     }
 
-    /// Recreate the progress with the same verbosity and timestamp mode.
+    /// Recreate the progress with the same verbosity mode.
     pub fn recreate(&self) -> Self {
         Self::new(self.verbosity_mode)
     }
