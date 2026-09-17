@@ -1433,7 +1433,7 @@ impl SearchByIndex {
 
         let queries_len = queries.len();
         for QueryByIndex { query, weight, query_index } in queries {
-            let _step = progress.update_progress_scoped(QueryStep(query_index, queries_len));
+            let _step = progress.update_progress_scoped(QueryStep::new(query_index, queries_len));
             // use an immediately invoked lambda to capture the result without returning from the function
             let res: Result<(), ResponseError> = (|| {
                 let search_kind =

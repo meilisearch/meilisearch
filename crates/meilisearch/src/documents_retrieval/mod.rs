@@ -110,13 +110,13 @@ impl DocumentSearch {
 
         // Multi-search
         let search_results: Result<_, (ResponseError, _)> = async {
-            let mut multi_search_progress = Some(progress);
+            let mut multi_search_progress = progress;
             let mut search_results = Vec::with_capacity(preprocessed_queries.len());
             let mut progress_by_query = IndexMap::with_capacity(preprocessed_queries.len());
             for (query_index, query) in preprocessed_queries.into_iter().enumerate() {
                 // recreate the progress for each query to reset the time tracking
-                let progress = multi_search_progress.take().unwrap();
-                multi_search_progress = Some(progress.recreate());
+                let progress = multi_search_progress;
+                multi_search_progress = progress.recreate();
 
                 progress.update_progress(TotalProcessingTimeStep::Process);
                 if query.query.federation_options.is_some() {
@@ -155,6 +155,7 @@ impl DocumentSearch {
                 // Fixup the query index for the error
                 .map_err(|(err, _)| (err, Some(query_index)))?;
 
+                // Because progress by query is an IndexMap<String, _> we need to format the query index as a string
                 progress_by_query
                     .insert(format!("query[{}]", query_index), progress.accumulated_durations());
                 search_results.push(SearchResultWithIndex {
