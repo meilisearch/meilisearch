@@ -3,7 +3,7 @@ use std::time::Duration;
 use http_client::reqwest::Client;
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::steps::RetrieveIndexDataStep;
+use meilisearch_types::milli::search::steps::RetrieveIndexDataStep;
 use meilisearch_types::milli::Deadline;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};

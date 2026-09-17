@@ -26,7 +26,7 @@ use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
 use crate::sharding::{Shard, Shards};
-use crate::steps::IndexingStep;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::extract::DelAddRoaringBitmap;
 use crate::update::new::thread_local::MostlySend;

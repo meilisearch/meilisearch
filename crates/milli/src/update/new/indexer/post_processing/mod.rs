@@ -15,7 +15,7 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::progress::Progress;
-use crate::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
+use crate::update::new::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};

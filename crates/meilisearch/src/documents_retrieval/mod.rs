@@ -6,7 +6,7 @@ use index_scheduler::IndexScheduler;
 use indexmap::IndexMap;
 use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
+use meilisearch_types::milli::search::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;

@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::SemanticSearch;
-use crate::steps::RetrieveIndexDataStep;
+use crate::search::steps::RetrieveIndexDataStep;
 use crate::vector::{Embedding, SearchQuery};
 use crate::{
     merge_positioned_hits_into_page, FieldsIdsMap, Index, MatchingWords, PinDoc, Precedence,

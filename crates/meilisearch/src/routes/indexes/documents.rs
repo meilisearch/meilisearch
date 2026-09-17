@@ -29,7 +29,7 @@ use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{GeoSort, WeightedScoreValue};
-use meilisearch_types::milli::steps::PerformRetrievalStep;
+use meilisearch_types::milli::search::steps::PerformRetrievalStep;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{

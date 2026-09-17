@@ -29,7 +29,7 @@ pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
 pub mod score_details;
-mod search;
+pub mod search;
 pub mod sharding;
 mod thread_pool_no_abort;
 pub mod update;

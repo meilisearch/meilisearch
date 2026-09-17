@@ -10,7 +10,7 @@ use permissive_json_pointer::contained_in;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use super::{match_searchable_field, OneOrTwoTokenizers};
 use crate::fields_ids_map::metadata::Metadata;
-use crate::steps::IndexingStep;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::indexer::document_changes::{

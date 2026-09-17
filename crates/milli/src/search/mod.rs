@@ -22,7 +22,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::{
     extract_tokens, resolve_negative_phrases, resolve_negative_words, ExtractedTokens, QueryGraph,
 };
-use crate::steps::RetrieveIndexDataStep;
+use crate::search::steps::RetrieveIndexDataStep;
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,

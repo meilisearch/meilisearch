@@ -9,7 +9,7 @@ use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceFieldName, SourceIndexUid};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
+use meilisearch_types::milli::search::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use meilisearch_types::milli::{
     self, filtered_universe, Filter, IndexFilter, IndexFilterCondition, LightToken, Token,
     TokenLike,

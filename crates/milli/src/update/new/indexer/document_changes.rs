@@ -9,7 +9,7 @@ use roaring::RoaringBitmap;
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::progress::{AtomicDocumentStep, Progress};
-use crate::steps::IndexingStep;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};

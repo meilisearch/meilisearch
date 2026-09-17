@@ -15,7 +15,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
-use meilisearch_types::milli::steps::{
+use meilisearch_types::milli::search::steps::{
     PerformRetrievalStep, QueryStep, RetrieveIndexDataStep, TotalProcessingTimeStep,
 };
 use meilisearch_types::milli::vector::Embedding;

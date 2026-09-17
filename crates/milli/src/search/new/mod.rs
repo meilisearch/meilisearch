@@ -60,7 +60,7 @@ use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
-use crate::steps::RetrieveIndexDataStep;
+use crate::search::steps::RetrieveIndexDataStep;
 use crate::vector::Embedder;
 use crate::{
     AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, PinDoc, Result,

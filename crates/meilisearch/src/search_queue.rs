@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::steps::TotalProcessingTimeStep;
+use meilisearch_types::milli::search::steps::TotalProcessingTimeStep;
 use rand::rngs::StdRng;
 use rand::RngExt as _;
 use tokio::sync::{mpsc, oneshot};

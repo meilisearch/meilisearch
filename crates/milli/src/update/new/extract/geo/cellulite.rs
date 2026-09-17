@@ -7,7 +7,7 @@ use geojson::GeoJson;
 use heed::{BytesEncode, RoTxn};
 use zerometry::Zerometry;
 
-use crate::steps::IndexingStep;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::channel::GeoJsonSender;
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};

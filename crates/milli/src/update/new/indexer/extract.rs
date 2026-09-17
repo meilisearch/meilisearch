@@ -16,7 +16,7 @@ use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{FieldIdMapper, PrimaryKey};
 use crate::progress::EmbedderStats;
 use crate::proximity::ProximityPrecision;
-use crate::steps::{IndexingStep, MergingWordCache};
+use crate::update::new::steps::{IndexingStep, MergingWordCache};
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;

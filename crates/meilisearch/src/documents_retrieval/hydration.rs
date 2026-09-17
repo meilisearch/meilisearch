@@ -6,7 +6,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceIndexUid};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::steps::PerformRetrievalStep;
+use meilisearch_types::milli::search::steps::PerformRetrievalStep;
 use meilisearch_types::milli::{
     self, make_document, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey,
 };

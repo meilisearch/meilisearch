@@ -33,7 +33,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::steps::TotalProcessingTimeStep;
+use meilisearch_types::milli::search::steps::TotalProcessingTimeStep;
 use meilisearch_types::milli::{
     all_obkv_to_json, obkv_to_json, FieldsIdsMap, OrderBy, PatternMatch,
 };
