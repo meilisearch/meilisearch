@@ -1,64 +1,9 @@
 use either::Either;
 use meilisearch_types::error::Code;
-use meilisearch_types::milli::{self, Filter, FilterCondition, IndexFilter, IndexFilterCondition};
+use meilisearch_types::milli::{self, Filter, IndexFilter};
 use serde_json::Value;
 
 use crate::{Error, Result, RoFeatures};
-
-/// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
-///
-/// This function will not open any foreign index but will panic if a foreign filter is encountered.
-pub fn filters_into_index_filters_unchecked(
-    filters: Vec<Option<Filter>>,
-) -> milli::Result<Vec<Option<IndexFilter>>> {
-    filters
-        .into_iter()
-        .map(|filter| {
-            let Some(filter) = filter else { return Ok(None) };
-            condition_to_index_condition(filter.condition, &mut |_| unreachable!())
-                .map(|condition| Some(IndexFilter { condition }))
-        })
-        .collect::<milli::Result<_>>()
-}
-
-pub fn condition_to_index_condition<F>(
-    filter: FilterCondition,
-    foreign_filter: &mut F,
-) -> milli::Result<IndexFilterCondition>
-where
-    F: FnMut(FilterCondition) -> milli::Result<IndexFilterCondition>,
-{
-    match filter {
-        FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
-            .map(Box::new)
-            .map(IndexFilterCondition::Not),
-        FilterCondition::Condition { fid, op } => Ok(IndexFilterCondition::Condition { fid, op }),
-        FilterCondition::In { fid, els } => Ok(IndexFilterCondition::In { fid, els }),
-        FilterCondition::Or(filters) => filters
-            .into_iter()
-            .map(|filter| condition_to_index_condition(filter, foreign_filter))
-            .collect::<milli::Result<_>>()
-            .map(IndexFilterCondition::Or),
-
-        FilterCondition::And(filters) => filters
-            .into_iter()
-            .map(|filter| condition_to_index_condition(filter, foreign_filter))
-            .collect::<milli::Result<_>>()
-            .map(IndexFilterCondition::And),
-
-        FilterCondition::VectorExists { fid, embedder, filter } => {
-            Ok(IndexFilterCondition::VectorExists { fid, embedder, filter })
-        }
-        FilterCondition::GeoLowerThan { point, radius, resolution } => {
-            Ok(IndexFilterCondition::GeoLowerThan { point, radius, resolution })
-        }
-        FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
-            Ok(IndexFilterCondition::GeoBoundingBox { top_right_point, bottom_left_point })
-        }
-        FilterCondition::GeoPolygon { points } => Ok(IndexFilterCondition::GeoPolygon { points }),
-        FilterCondition::Foreign { .. } => foreign_filter(filter),
-    }
-}
 
 pub fn parse_filter(
     facets: &Value,
@@ -180,20 +125,14 @@ pub fn parse_local_index_filter(
     features: RoFeatures,
     code: Code,
 ) -> Result<Option<IndexFilter>> {
-    let Some(Filter { condition }) = parse_filter(filter, code, features)? else {
+    let Some(filter) = parse_filter(filter, code, features)? else {
         return Ok(None);
     };
-    let condition = condition_to_index_condition(condition, &mut |filter| {
-        let FilterCondition::Foreign { fid, op: _ } = filter else { unreachable!() };
-        let error = milli::Error::UserError(milli::UserError::InvalidFilter(
-            "Filter condition `_foreign` is not supported for this endpoint.".to_string(),
-        ));
-        Err(fid.to_external_error(error).into())
-    })
-    .map_err(|e| {
-        Error::Milli { error: e, index_uid: index_uid.map(String::from) }
-            .with_custom_error_code(code)
-    })?;
 
-    Ok(Some(IndexFilter { condition }))
+    Ok(Some(IndexFilter::from_filter_without_foreign(filter).map_err(|(fid, _)| {
+        let error = fid
+            .to_external_error("Filter condition `_foreign` is not supported for this endpoint.")
+            .into();
+        Error::Milli { error, index_uid: index_uid.map(String::from) }.with_custom_error_code(code)
+    })?))
 }

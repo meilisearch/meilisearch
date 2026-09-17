@@ -479,6 +479,35 @@ impl<'doc> Versions<'doc> {
         Self { data: version }
     }
 
+    pub fn empty(doc_alloc: &'doc Bump) -> Self {
+        Self { data: bumparaw_collections::RawMap::with_hasher_in(FxBuildHasher, doc_alloc) }
+    }
+
+    /// Inserts a new (field, T). This serializes T in JSON inside of a buffer newly allocated in the arena.
+    ///
+    /// Errors if there is an error while serializing `value` to JSON, or deserializing the serialized `value` to a `RawValue`.
+    pub fn insert_top_level_field_value<T: serde::Serialize>(
+        &mut self,
+        field: &'doc str,
+        value: &T,
+    ) -> Result<Option<&'doc RawValue>, serde_json::Error> {
+        let bump = self.data.bump();
+        let mut vec = bumpalo::collections::Vec::new_in(bump);
+        serde_json::to_writer(&mut vec, value)?;
+        let buf = vec.into_bump_slice();
+        let value = serde_json::from_slice(buf)?;
+        Ok(self.insert_top_level_field_raw(field, value))
+    }
+
+    /// Inserts a new (field, value). This does not allocate.
+    pub fn insert_top_level_field_raw(
+        &mut self,
+        field: &'doc str,
+        value: &'doc RawValue,
+    ) -> Option<&'doc RawValue> {
+        self.data.insert(field, value)
+    }
+
     pub fn iter_top_level_fields(&self) -> impl Iterator<Item = (&'doc str, &'doc RawValue)> + '_ {
         self.data.iter().filter(|(k, _)| {
             *k != RESERVED_VECTORS_FIELD_NAME

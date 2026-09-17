@@ -118,7 +118,16 @@ impl IndexScheduler {
             embedding_cache_cap: 10,
             // NO DANGER: test code
             ip_policy: IpPolicy::danger_always_allow(),
-            dsr_fuel: DsrFuel::new(3, 10, 3, 128, 128, FilterConstraintFuel::new(100, 100, 25)),
+            dsr_fuel: DsrFuel::new(
+                3,
+                10,
+                3,
+                10,
+                128,
+                128,
+                10,
+                FilterConstraintFuel::new(100, 100, 25),
+            ),
         };
         let version = configuration(&mut options).unwrap_or({
             (versioning::VERSION_MAJOR, versioning::VERSION_MINOR, versioning::VERSION_PATCH)

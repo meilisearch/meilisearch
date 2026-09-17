@@ -527,279 +527,6 @@
     },
     {
       "binary": {
-        "source": "release",
-        "edition": "community",
-        "version": "1.53.2",
-        "extraCliArgs": [
-          "--upgrade-db",
-          "--experimental-max-number-of-batched-tasks=0"
-        ]
-      }
-    },
-    {
-      "route": "dynamic-search-rules",
-      "method": "POST",
-      "body": {
-        "inline": {}
-      },
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "limit": 20,
-        "offset": 0,
-        "results": [],
-        "total": 0
-      },
-      "synchronous": "WaitForResponse"
-    },
-    {
-      "route": "tasks?types=dsrUpdate",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "from": 3,
-        "limit": 20,
-        "next": null,
-        "results": [
-          {
-            "batchUid": null,
-            "canceledBy": null,
-            "details": {
-              "rule": {
-                "actions": [],
-                "active": true,
-                "conditions": {
-                  "time": {
-                    "start": "2023-01-01T09:50:12Z",
-                    "end": "2032-12-31T09:50:12Z"
-                  }
-                }
-              },
-              "updatedRules": 1
-            },
-            "duration": "[duration]",
-            "enqueuedAt": "[timestamp]",
-            "error": null,
-            "finishedAt": "[timestamp]",
-            "indexUid": ".meili_dsr",
-            "startedAt": "[timestamp]",
-            "status": "enqueued",
-            "type": "dsrUpdate",
-            "uid": 3
-          },
-          {
-            "batchUid": null,
-            "canceledBy": null,
-            "details": {
-              "rule": {
-                "actions": [
-                  {
-                    "action": {
-                      "position": 0,
-                      "type": "pin"
-                    },
-                    "selector": {
-                      "id": "15242",
-                      "indexUid": "movies"
-                    }
-                  }
-                ],
-                "active": true,
-                "conditions": {
-                  "query": {
-                    "words": "super hero"
-                  }
-                }
-              },
-              "updatedRules": 1
-            },
-            "duration": "[duration]",
-            "enqueuedAt": "[timestamp]",
-            "error": null,
-            "finishedAt": "[timestamp]",
-            "indexUid": ".meili_dsr",
-            "startedAt": "[timestamp]",
-            "status": "enqueued",
-            "type": "dsrUpdate",
-            "uid": 2
-          }
-        ],
-        "total": 2
-      },
-      "synchronous": "WaitForResponse"
-    },
-    {
-      "binary": {
-        "source": "release",
-        "version": "1.53.2",
-        "edition": "community",
-        "extraCliArgs": [
-          "--upgrade-db"
-        ]
-      }
-    },
-    {
-      "route": "health",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "status": "available"
-      },
-      "synchronous": "WaitForTask"
-    },
-    {
-      "route": "dynamic-search-rules",
-      "method": "POST",
-      "body": {
-        "inline": {}
-      },
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "limit": 20,
-        "offset": 0,
-        "total": 2,
-        "results": [
-          {
-            "actions": [],
-            "active": true,
-            "conditions": {
-              "time": {
-                "start": "2023-01-01T09:50:12Z",
-                "end": "2032-12-31T09:50:12Z"
-              }
-            },
-            "uid": "skips-action-without-selector-id",
-            "lastUpdatedAt": "[updated]"
-          },
-          {
-            "actions": [
-              {
-                "action": {
-                  "type": "pin",
-                  "position": 0
-                },
-                "selector": {
-                  "id": "15242",
-                  "indexUid": "movies"
-                }
-              }
-            ],
-            "active": true,
-            "conditions": {
-              "query": {
-                "words": "super hero"
-              }
-            },
-            "uid": "existing-rule-to-migrate",
-            "lastUpdatedAt": "[updated]"
-          }
-        ]
-      },
-      "synchronous": "WaitForResponse"
-    },
-    {
-      "route": "indexes/movies/search?q=super hero&limit=3",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "estimatedTotalHits": 373,
-        "hits": [
-          {
-            "genres": [
-              "Family",
-              "Animation"
-            ],
-            "id": 15242,
-            "overview": "When Snoopy receives a letter from his original owner Lila, he goes to visit her in the hospital while Charlie Brown and the gang are on the lookout for him. Suddenly, Snoopy feels that he must go live with Lila, but must say goodbye to all his friends. In his adventure to the hospital, he encounters numerous \"No Dogs Allowed\" signs, an annoying little girl who desires to keep him, and more!",
-            "poster": "https://image.tmdb.org/t/p/w500/vGYhYtoXkpjXTZ7KLQMJehwfLG0.jpg",
-            "release_date": 84758400,
-            "title": "Snoopy, Come Home"
-          },
-          {
-            "genres": [
-              "Animation",
-              "Family"
-            ],
-            "id": 452931,
-            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
-            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
-            "release_date": 1494288000,
-            "title": "DC Super Hero Girls: Intergalactic Games"
-          },
-          {
-            "genres": [
-              "Animation",
-              "Fantasy"
-            ],
-            "id": 372631,
-            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
-            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
-            "release_date": 1450137600,
-            "title": "Marvel Super Hero Adventures: Frost Fight!"
-          }
-        ],
-        "limit": 3,
-        "offset": 0,
-        "processingTimeMs": "[duration]",
-        "query": "super hero",
-        "requestUid": "[uuid]"
-      },
-      "synchronous": "DontWait"
-    },
-    {
-      "route": "indexes/movies/search?q=hero super&limit=3",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": {
-        "estimatedTotalHits": 341,
-        "hits": [
-          {
-            "genres": [
-              "Family",
-              "Animation"
-            ],
-            "id": 15242,
-            "overview": "When Snoopy receives a letter from his original owner Lila, he goes to visit her in the hospital while Charlie Brown and the gang are on the lookout for him. Suddenly, Snoopy feels that he must go live with Lila, but must say goodbye to all his friends. In his adventure to the hospital, he encounters numerous \"No Dogs Allowed\" signs, an annoying little girl who desires to keep him, and more!",
-            "poster": "https://image.tmdb.org/t/p/w500/vGYhYtoXkpjXTZ7KLQMJehwfLG0.jpg",
-            "release_date": 84758400,
-            "title": "Snoopy, Come Home"
-          },
-          {
-            "genres": [
-              "Animation",
-              "Family"
-            ],
-            "id": 452931,
-            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
-            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
-            "release_date": 1494288000,
-            "title": "DC Super Hero Girls: Intergalactic Games"
-          },
-          {
-            "genres": [
-              "Animation",
-              "Fantasy"
-            ],
-            "id": 372631,
-            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
-            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
-            "release_date": 1450137600,
-            "title": "Marvel Super Hero Adventures: Frost Fight!"
-          }
-        ],
-        "limit": 3,
-        "offset": 0,
-        "processingTimeMs": "[duration]",
-        "query": "hero super",
-        "requestUid": "[uuid]"
-      },
-      "synchronous": "DontWait"
-    },
-    {
-      "binary": {
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
@@ -818,32 +545,8 @@
       "expectedResponse": {
         "limit": 20,
         "offset": 0,
-        "results": [
-          {
-            "actions": {},
-            "active": true,
-            "conditions": {
-              "time": {
-                "end": "2032-12-31T09:50:12Z",
-                "start": "2023-01-01T09:50:12Z"
-              }
-            },
-            "lastUpdatedAt": "[lastUpdatedAt]",
-            "uid": "skips-action-without-selector-id"
-          },
-          {
-            "actions": {},
-            "active": true,
-            "conditions": {
-              "query": {
-                "words": "super hero"
-              }
-            },
-            "lastUpdatedAt": "[lastUpdatedAt]",
-            "uid": "existing-rule-to-migrate"
-          }
-        ],
-        "total": 2
+        "results": [],
+        "total": 0
       },
       "synchronous": "WaitForResponse"
     },
@@ -1020,33 +723,16 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "from": 5,
+        "from": 4,
         "limit": 20,
         "next": null,
         "results": [
-          {
-            "batchUid": 4,
-            "canceledBy": null,
-            "details": {
-              "upgradeFrom": "v1.53.2",
-              "upgradeTo": "[latest]"
-            },
-            "duration": "[duration]",
-            "enqueuedAt": "[timestamp]",
-            "error": null,
-            "finishedAt": "[timestamp]",
-            "indexUid": null,
-            "startedAt": "[timestamp]",
-            "status": "succeeded",
-            "type": "upgradeDatabase",
-            "uid": 5
-          },
           {
             "batchUid": 2,
             "canceledBy": null,
             "details": {
               "upgradeFrom": "v1.48.3",
-              "upgradeTo": "v1.53.2"
+              "upgradeTo": "[latest]"
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -1059,7 +745,7 @@
             "uid": 4
           }
         ],
-        "total": 2
+        "total": 1
       },
       "synchronous": "WaitForResponse"
     }

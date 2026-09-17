@@ -1167,12 +1167,7 @@ async fn remote_auto_sharding_dsrs() {
             "propagated-to-all-remotes",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":0}]}
             }),
         )
         .await;
@@ -1185,12 +1180,7 @@ async fn remote_auto_sharding_dsrs() {
             "deleted-after-sharding",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 2 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":1}]}
             }),
         )
         .await;
@@ -1261,17 +1251,14 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1290,17 +1277,14 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1319,17 +1303,14 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1343,12 +1324,7 @@ async fn remote_auto_sharding_dsrs() {
             "propagated-too",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 1 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":1}]}
             }),
         )
         .await;
@@ -1374,34 +1350,28 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "propagated-to-all-remotes",
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1420,34 +1390,28 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "propagated-to-all-remotes",
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
@@ -1466,39 +1430,805 @@ async fn remote_auto_sharding_dsrs() {
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 1
               }
-            }
-          ]
+            ]
+          }
         },
         {
           "uid": "propagated-to-all-remotes",
           "lastUpdatedAt": "[updatedAt]",
           "active": true,
           "conditions": {},
-          "actions": [
-            {
-              "selector": {
-                "id": "remote"
-              },
-              "action": {
-                "type": "pin",
+          "actions": {
+            "pin": [
+              {
+                "id": "remote",
                 "position": 0
               }
-            }
-          ]
+            ]
+          }
         }
       ],
       "offset": 0,
       "limit": 20,
       "total": 2
+    }
+    "###);
+}
+
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_auto_sharding_auto_search_dsr() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) =
+        ms0.set_features(json!({"network": true, "dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) =
+        ms1.set_features(json!({"network": true, "dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) =
+        ms2.set_features(json!({"network": true, "dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          }
+        },
+        "shards": {
+            "ms0": {
+              "remotes": ["ms0"]
+            },
+            "ms1": {
+              "remotes": ["ms1"]
+            },
+            "ms2": {
+              "remotes": ["ms2"]
+            }
+        }
+      }
+    );
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let wait_for_task = async |t0: u64| {
+        let (t, _) = ms0.get_task(t0).await;
+
+        let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+        let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+        ms0.wait_task(t0).await.succeeded();
+        ms1.wait_task(t1).await.succeeded();
+        ms2.wait_task(t2).await.succeeded();
+    };
+
+    wait_for_task(task.uid()).await;
+
+    // add documents
+    let documents = json!([
+        {
+            "title": "The Badman Returns",
+            "id": "287947",
+            "color": ["green", "blue"],
+            "genres": ["Comedy", "Family"],
+            "_vectors": { "manual": [1, 2, 3]},
+        },
+        {
+            "title": "Batman Returns",
+            "id": "299537",
+            "color": ["yellow", "blue"],
+            "genres": ["superhero", "Adventure"],
+            "_vectors": { "manual": [1, 2, 54] },
+        },
+        {
+            "title": "The Dark Knight Returns Part 1",
+            "id": "522681",
+            "color": ["yellow", "red"],
+            "genres": ["superhero", "Adventure"],
+            "_vectors": { "manual": [10, -23, 32] },
+        },
+        {
+            "title": "The Dark Knight Returns Part 2",
+            "id": "166428",
+            "color": ["green", "red"],
+            "genres": ["superhero", "Adventure"],
+            "_vectors": { "manual": [-100, 231, 32] },
+        },
+        {
+            "title": "Superman Returns",
+            "id": "450465",
+            "color": ["blue", "red"],
+            "genres": ["superhero", "Adventure"],
+            "_vectors": { "manual": [-100, 340, 90] },
+        }
+    ]);
+    let documents = documents.as_array().unwrap();
+    let index0 = ms0.index("test");
+    let _index1 = ms1.index("test");
+    let _index2 = ms2.index("test");
+
+    let (task, _status_code) = index0.add_documents(json!(documents), None).await;
+
+    wait_for_task(task.uid()).await;
+
+    // set settings
+    let (task, status_code) =
+        index0.update_settings(json!({"filterableAttributes":["color","genres"]})).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    wait_for_task(task.uid()).await;
+
+    // perform search with network
+    let query = "returns batman";
+    let request = json!(
+    {
+        "q": query,
+        "useNetwork": true,
+        "showRankingScoreDetails": true,
+    });
+
+    let (response, code) = index0.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.953042328042328,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 0,
+              "maxTypoCount": 2,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 2,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Badman Returns",
+          "id": "287947",
+          "color": [
+            "green",
+            "blue"
+          ],
+          "genres": [
+            "Comedy",
+            "Family"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.7861552028218695,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 1,
+              "maxTypoCount": 2,
+              "score": 0.6666666666666666
+            },
+            "proximity": {
+              "order": 2,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.2222222222222222
+            }
+          }
+        },
+        {
+          "title": "Superman Returns",
+          "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4621212121212121,
+            "remote": "ms1"
+          },
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 2,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.9090909090909092
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Dark Knight Returns Part 1",
+          "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394,
+            "remote": "ms1"
+          },
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 2,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Dark Knight Returns Part 2",
+          "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "words": {
+              "order": 0,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 1,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 2,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 3,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 4,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 5,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        }
+      ],
+      "query": "returns batman",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+
+    // send DSR
+    let (task, status_code) = ms0
+        .create_dynamic_search_rule(
+            "scale",
+            json!({
+              "conditions": {
+                "query": {
+                  "words": "batman"
+                }
+              },
+              "actions": {
+                "pin": [
+                  {
+                    "id": "450465", // Superman returns
+                    "position": 1
+                  }
+                ],
+                "scale": [
+                  {
+                    "filter": "color = red",
+                    "weight": 1.5
+                  },
+                  {
+                    "filter": "color IN [blue, green]",
+                    "weight": 0.8
+                  },
+                  {
+                    "filter": "genres = Adventure",
+                    "weight": 1.2
+                  },
+                  {
+                    "filter": "genres = Family",
+                    "weight": 0.7
+                  }
+                ]
+              }
+            }),
+        )
+        .await;
+    snapshot!(status_code, @"202 Accepted");
+
+    wait_for_task(task.uid()).await;
+
+    // perform search with network after DSR setup
+    let query = "returns batman";
+    let request = json!(
+    {
+        "q": query,
+        "useNetwork": true,
+        "showRankingScoreDetails": true,
+    });
+
+    let (response, code) = index0.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.953042328042328,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "scale",
+                  "weight": 0.8
+                },
+                {
+                  "ruleUid": "scale",
+                  "weight": 1.2
+                }
+              ],
+              "totalWeight": 0.96
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 2,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "Superman Returns",
+          "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          },
+          "_rankingScoreDetails": {
+            "pin": {
+              "order": 0,
+              "position": 1,
+              "precedence": null,
+              "ruleUid": "scale"
+            }
+          }
+        },
+        {
+          "title": "The Dark Knight Returns Part 1",
+          "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394,
+            "remote": "ms1"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "scale",
+                  "weight": 1.5
+                },
+                {
+                  "ruleUid": "scale",
+                  "weight": 1.2
+                }
+              ],
+              "totalWeight": 1.7999999999999998
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Dark Knight Returns Part 2",
+          "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "scale",
+                  "weight": 1.5
+                },
+                {
+                  "ruleUid": "scale",
+                  "weight": 0.8
+                },
+                {
+                  "ruleUid": "scale",
+                  "weight": 1.2
+                }
+              ],
+              "totalWeight": 1.4400000000000002
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Badman Returns",
+          "id": "287947",
+          "color": [
+            "green",
+            "blue"
+          ],
+          "genres": [
+            "Comedy",
+            "Family"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.7861552028218695,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "scale",
+                  "weight": 0.8
+                },
+                {
+                  "ruleUid": "scale",
+                  "weight": 0.7
+                }
+              ],
+              "totalWeight": 0.5599999999999999
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 1,
+              "maxTypoCount": 2,
+              "score": 0.6666666666666666
+            },
+            "proximity": {
+              "order": 3,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.2222222222222222
+            }
+          }
+        }
+      ],
+      "query": "returns batman",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
     }
     "###);
 }
@@ -1562,12 +2292,7 @@ async fn remote_search_filters_out_pinned_documents_excluded_by_filters() {
                         "words": "returns"
                     }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote-filtered" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-filtered", "position":0}]}
             }),
         )
         .await;
@@ -1674,12 +2399,7 @@ async fn remote_search_keeps_remote_pins() {
             "pin-remote",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote","position":0}]}
             }),
         )
         .await;
@@ -1768,12 +2488,7 @@ async fn remote_search_pagination_counts_pins_that_miss_query() {
                     "words": "returns"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote-pinned" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-pinned","position":0}]}
             }),
         )
         .await;
@@ -1884,16 +2599,12 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
                     "words": "batman"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "late-pin-1" },
-                        "action": { "type": "pin", "position": 10 }
-                    },
-                    {
-                        "selector": { "id": "late-pin-2" },
-                        "action": { "type": "pin", "position": 20 }
-                    }
-                ]
+                "actions":{
+                  "pin": [
+                    {"id":"late-pin-1", "position":10},
+                    {"id":"late-pin-2","position":20}
+                  ]
+                }
             }),
         )
         .await;
@@ -2083,12 +2794,7 @@ async fn remote_search_distinct_deduplicates_pinned_documents() {
             "pin-remote-duplicate",
             json!({
                 "active": true,
-                "actions": [
-                    {
-                        "selector": { "id": "remote-pinned" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-pinned","position":0}]}
             }),
         )
         .await;
@@ -2221,12 +2927,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
                     "words": "returns"
                   }
                 },
-                "actions": [
-                    {
-                        "selector": { "id": "remote-pinned" },
-                        "action": { "type": "pin", "position": 0 }
-                    }
-                ]
+                "actions": {"pin":[{"id":"remote-pinned","position":0}]}
             }),
         )
         .await;
