@@ -25,7 +25,6 @@ use write::{build_vectors, write_to_db};
 pub use write::{update_index, ChannelCongestion};
 
 use super::channel::*;
-use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::disabled_typos_terms::DisabledTyposTerms;
@@ -35,6 +34,7 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::index::PrefixSearch;
 use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
+use crate::update::new::steps::IndexingStep;
 use crate::update::new::steps::{PostProcessingWords, SettingsIndexerStep};
 use crate::update::settings::SettingsDelta;
 use crate::update::{GrenadParameters, WordsPrefixesFst};

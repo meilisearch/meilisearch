@@ -29,7 +29,7 @@ pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
 pub mod score_details;
-mod search;
+pub mod search;
 pub mod sharding;
 mod thread_pool_no_abort;
 pub mod update;
@@ -95,7 +95,6 @@ pub use self::index::{CreateOrOpen, Index};
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues, SHARD_FIELD};
 pub use self::search::similar::Similar;
-pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{
     merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, FacetDistribution,
     Filter, FormatOptions, IndexFilter, MatchBounds, MatcherBuilder, MatchingWords, OrderBy, Pin,

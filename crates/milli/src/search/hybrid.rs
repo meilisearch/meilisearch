@@ -6,7 +6,7 @@ use roaring::RoaringBitmap;
 
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
-use crate::search::steps::SearchStep;
+use crate::search::steps::RetrieveIndexDataStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
 use crate::{
@@ -326,7 +326,7 @@ impl Search<'_> {
             Some(vector_query) => vector_query,
             None => {
                 // attempt to embed the vector
-                self.progress.update_progress(SearchStep::EmbedQuery);
+                self.progress.update_progress(RetrieveIndexDataStep::EmbedQuery);
                 let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
                 let _entered = span.enter();
 

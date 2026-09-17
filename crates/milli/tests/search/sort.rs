@@ -13,7 +13,7 @@ fn sort_ranking_rule_missing() {
     let rtxn = index.read_txn().unwrap();
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-    let progress = Progress::default();
+    let progress = Progress::quiet();
     let mut search = Search::new(
         &rtxn,
         &index,

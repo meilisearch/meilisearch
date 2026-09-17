@@ -3,7 +3,8 @@ use std::time::Duration;
 use http_client::reqwest::Client;
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{Deadline, SearchStep};
+use meilisearch_types::milli::search::steps::RetrieveIndexDataStep;
+use meilisearch_types::milli::Deadline;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -353,7 +354,7 @@ impl PersonalizationService {
     ) -> Result<Vec<H>, ResponseError> {
         match self {
             Self::Cohere(cohere_service) => {
-                let _step = progress.update_progress_scoped(SearchStep::Personalization);
+                let _step = progress.update_progress_scoped(RetrieveIndexDataStep::Personalization);
                 cohere_service.rerank_search_results(hits, personalize, query, deadline).await
             }
             Self::Disabled => Err(PersonalizationError::FeatureNotEnabled(

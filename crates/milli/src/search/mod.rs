@@ -26,10 +26,11 @@ use crate::search::new::{
     distinct_fid, distinct_single_docid, extract_tokens, resolve_negative_phrases,
     resolve_negative_words, ExtractedTokens, QueryGraph,
 };
+use crate::search::steps::RetrieveIndexDataStep;
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    FieldsIdsMap, Index, Position, Result, SearchContext, SearchStep, UserError,
+    FieldsIdsMap, Index, Position, Result, SearchContext, UserError,
 };
 
 // Building these factories is not free.
@@ -593,27 +594,28 @@ impl<'a> Search<'a> {
 
         let mut ignored = RoaringBitmap::new();
 
-        let query_graph_terms =
-            if let Some(query) = self.query.as_deref().filter(|q| !q.trim().is_empty()) {
-                let _step = self.progress.update_progress_scoped(SearchStep::TokenizeQuery);
+        let query_graph_terms = if let Some(query) =
+            self.query.as_deref().filter(|q| !q.trim().is_empty())
+        {
+            let _step = self.progress.update_progress_scoped(RetrieveIndexDataStep::TokenizeQuery);
 
-                let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
-                    extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
+            let ExtractedTokens { query_terms, graph, negative_words, negative_phrases } =
+                extract_tokens(ctx, query, Some(self.words_limit), self.locales.as_ref())?;
 
-                used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
+            used_negative_operator = !negative_words.is_empty() || !negative_phrases.is_empty();
 
-                ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
-                ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
+            ignored |= resolve_negative_words(ctx, Some(&*universe), &negative_words)?;
+            ignored |= resolve_negative_phrases(ctx, &negative_phrases)?;
 
-                if query_terms.is_empty() {
-                    // Do a placeholder search instead
-                    None
-                } else {
-                    Some((graph, query_terms))
-                }
-            } else {
+            if query_terms.is_empty() {
+                // Do a placeholder search instead
                 None
-            };
+            } else {
+                Some((graph, query_terms))
+            }
+        } else {
+            None
+        };
 
         let (pins, scales) = self
             .dynamic_search_rules
@@ -924,7 +926,7 @@ mod test {
     #[test]
     fn test_kanji_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::default();
+        let progress = Progress::quiet();
 
         let index = TempIndex::new();
 
@@ -949,7 +951,7 @@ mod test {
     #[test]
     fn test_hangul_language_detection() {
         use crate::index::tests::TempIndex;
-        let progress = Progress::default();
+        let progress = Progress::quiet();
 
         let index = TempIndex::new();
 

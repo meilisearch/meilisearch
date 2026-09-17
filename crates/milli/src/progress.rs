@@ -15,11 +15,25 @@ pub trait Step: 'static + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
     fn current(&self) -> u32;
     fn total(&self) -> u32;
+    fn verbosity_mode(&self) -> ProgressVerbosityMode {
+        ProgressVerbosityMode::Info
+    }
 }
 
-#[derive(Clone, Default)]
+/// The mode of a step.
+/// The order is important, the higher the mode, the more verbose the step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, PartialOrd, Ord)]
+pub enum ProgressVerbosityMode {
+    Quiet = 0,
+    #[default]
+    Info = 1,
+    Trace = 2,
+}
+
+#[derive(Clone)]
 pub struct Progress {
     steps: Arc<RwLock<InnerProgress>>,
+    verbosity_mode: ProgressVerbosityMode,
 }
 
 #[derive(Default)]
@@ -50,9 +64,29 @@ struct InnerProgress {
 }
 
 impl Progress {
+    pub fn new(verbosity_mode: ProgressVerbosityMode) -> Self {
+        Self { steps: Arc::new(RwLock::new(InnerProgress::default())), verbosity_mode }
+    }
+
+    /// Create a new progress with quiet verbosity mode.
+    /// This will not register any steps.
+    pub fn quiet() -> Self {
+        Self::new(ProgressVerbosityMode::Quiet)
+    }
+
+    /// Recreate the progress with the same verbosity mode.
+    pub fn recreate(&self) -> Self {
+        Self::new(self.verbosity_mode)
+    }
+
     /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
     /// Return `Failed` if the RWLock failed to lock.
     pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        // If the step is more verbose than the progress mode, we skip it.
+        if sub_progress.verbosity_mode() > self.verbosity_mode {
+            return UpdateStepStatus::Skipped;
+        }
+
         let mut inner = match self.steps.write() {
             Ok(inner) => inner,
             Err(error) => {
@@ -120,6 +154,7 @@ impl Progress {
                 );
                 ScopedProgressStep { progress: self, step: None }
             }
+            UpdateStepStatus::Skipped => ScopedProgressStep { progress: self, step: None },
         }
     }
 
@@ -247,7 +282,7 @@ pub use enum_iterator as _private_enum_iterator;
 
 #[macro_export]
 macro_rules! make_enum_progress {
-    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+    ($visibility:vis enum $name:ident { $($variant:ident: $mode:ident,)+ }) => {
         #[repr(u8)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, $crate::progress::_private_enum_iterator::Sequence)]
         #[allow(clippy::enum_variant_names)]
@@ -256,6 +291,14 @@ macro_rules! make_enum_progress {
         }
 
         impl $crate::progress::Step for $name {
+            fn verbosity_mode(&self) -> $crate::progress::ProgressVerbosityMode {
+                match self {
+                    $(
+                        $name::$variant => $crate::progress::ProgressVerbosityMode::$mode,
+                    )+
+                }
+            }
+
             fn name(&self) -> std::borrow::Cow<'static, str> {
                 use $crate::progress::_private_convert_case::Casing;
 
@@ -276,6 +319,9 @@ macro_rules! make_enum_progress {
             }
         }
     };
+    ($visibility:vis enum $name:ident { $($variant:ident,)+ }) => {
+        $crate::make_enum_progress!($visibility enum $name { $($variant: Info,)+ });
+    };
 }
 
 #[macro_export]
@@ -295,16 +341,6 @@ macro_rules! make_atomic_progress {
 make_atomic_progress!(Document alias AtomicDocumentStep => "document");
 make_atomic_progress!(Database alias AtomicDatabaseStep => "database");
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload");
-
-make_enum_progress! {
-    pub enum MergingWordCache {
-        WordDocids,
-        WordFieldIdDocids,
-        ExactWordDocids,
-        WordPositionDocids,
-        FieldIdWordCountDocids,
-    }
-}
 
 /// Real-time progress information for a batch or task that is currently
 /// being processed. Use this to display progress bars or status updates to
@@ -469,4 +505,6 @@ pub enum UpdateStepStatus {
     Updated,
     /// The step did not change.
     NotUpdated,
+    /// The step as been skipped.
+    Skipped,
 }

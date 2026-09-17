@@ -61,3 +61,13 @@ make_enum_progress! {
         WordPrefixPositionDocids,
     }
 }
+
+make_enum_progress! {
+    pub enum MergingWordCache {
+        WordDocids,
+        WordFieldIdDocids,
+        ExactWordDocids,
+        WordPositionDocids,
+        FieldIdWordCountDocids,
+    }
+}

@@ -7,6 +7,7 @@ use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
+use crate::progress::Progress;
 use crate::search::facet::ascending_facet_sort;
 use crate::search::new::LocatedQueryTerm;
 use crate::search::{Pin, ScaleDocs};
@@ -244,7 +245,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         limit: usize,
         offset: usize,
     ) -> Result<SearchResult> {
-        let progress = Default::default();
+        let progress = Progress::quiet();
         let mut search = self.index.search(
             self.rtxn,
             "",
