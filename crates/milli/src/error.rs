@@ -133,7 +133,7 @@ pub enum UserError {
     CelluliteError(#[from] cellulite::Error),
     #[error("Malformed geojson: {0}")]
     MalformedGeojson(serde_json::Error),
-    #[error("A document cannot contain more than 65,535 fields.")]
+    #[error("The index has reached its maximum number of unique fields across all documents. A single index cannot have more than 65,535 unique fields.")]
     AttributeLimitReached,
     #[error(transparent)]
     CriterionError(#[from] CriterionError),
