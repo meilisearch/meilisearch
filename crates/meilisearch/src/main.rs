@@ -104,6 +104,57 @@ async fn try_main(runtime: tokio::runtime::Handle) -> anyhow::Result<()> {
 
     let log_handle = setup(&opt)?;
 
+    let is_outputting = std::sync::Mutex::new(());
+
+    tracing::info!("registering mimalloc callbacks");
+    mimalloc::MiMalloc::register_output(move |msg| loop {
+        match is_outputting.lock() {
+            Ok(_lock) => {
+                let bt = std::backtrace::Backtrace::force_capture();
+                match msg.to_str() {
+                    Ok(msg) => tracing::info!("=== BEGIN MIMALLOC MESSAGE === \n\n {msg}\n\n {bt} === END MIMALLOC MESSAGE ==="),
+                    Err(_) => tracing::info!("mimalloc non-utf8 message: {:?} {bt}", msg.to_bytes()),
+                }
+                return;
+            }
+            Err(_) => is_outputting.clear_poison(),
+        }
+    });
+
+    let is_erroring = std::sync::Mutex::new(());
+
+    mimalloc::MiMalloc::register_error(move |error_code| loop {
+        match is_erroring.lock() {
+            Ok(_lock) => {
+                let bt = std::backtrace::Backtrace::force_capture();
+
+                match error_code {
+                    mimalloc::ErrorCode::DoubleFree => {
+                        tracing::error!("mimalloc error (double-free) \n === BEGIN BACKTRACE === \n\n {bt} \n\n === END BACKTRACE ===")
+                    }
+                    mimalloc::ErrorCode::CorruptedFreeListOrMetadata => {
+                        tracing::error!("mimalloc error (corruption) \n === BEGIN BACKTRACE === \n\n {bt} \n\n === END BACKTRACE ===")
+                    }
+                    mimalloc::ErrorCode::OutOfMemory => {
+                        tracing::error!("mimalloc error (out-of-memory) \n === BEGIN BACKTRACE === \n\n {bt} \n\n === END BACKTRACE ===")
+                    }
+                    mimalloc::ErrorCode::TooLargeRequest => {
+                        tracing::error!("mimalloc error (too large request) \n === BEGIN BACKTRACE === \n\n {bt} \n\n === END BACKTRACE ===")
+                    }
+                    mimalloc::ErrorCode::InvalidPointer => {
+                        tracing::error!("mimalloc error (invalid pointer) \n === BEGIN BACKTRACE === \n\n {bt} \n\n === END BACKTRACE ===")
+                    }
+                    mimalloc::ErrorCode::UnexpectedErrorCode(code) => {
+                        tracing::error!("mimalloc error: unexpected error code `{code}` \n === BEGIN BACKTRACE === \n\n {bt} \n\n === END BACKTRACE ===")
+                    }
+                }
+
+                return;
+            }
+            Err(_) => is_erroring.clear_poison(),
+        }
+    });
+
     match (opt.env.as_ref(), &opt.master_key) {
         ("production", Some(master_key)) if master_key.len() < MASTER_KEY_MIN_SIZE => {
             anyhow::bail!(
@@ -135,6 +186,8 @@ async fn try_main(runtime: tokio::runtime::Handle) -> anyhow::Result<()> {
 
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.unwrap();
+        mimalloc::MiMalloc::reset_output();
+        mimalloc::MiMalloc::reset_error();
         std::process::exit(130);
     });
 

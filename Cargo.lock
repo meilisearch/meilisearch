@@ -1575,6 +1575,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cty"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
+
+[[package]]
 name = "cudarc"
 version = "0.17.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3929,9 +3935,10 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libmimalloc-sys"
 version = "0.1.49"
-source = "git+https://github.com/dureuill/tmp_mimalloc_rust#c03a764c5e30fde399fe305cb317bd0c5df1c74c"
+source = "git+https://github.com/dureuill/tmp_mimalloc_rust?branch=extended-register-functions#85c8ff4b8528a6aafc92063b59715cd1c5ab031c"
 dependencies = [
  "cc",
+ "cty",
 ]
 
 [[package]]
@@ -4593,7 +4600,7 @@ dependencies = [
 [[package]]
 name = "mimalloc"
 version = "0.1.52"
-source = "git+https://github.com/dureuill/tmp_mimalloc_rust#c03a764c5e30fde399fe305cb317bd0c5df1c74c"
+source = "git+https://github.com/dureuill/tmp_mimalloc_rust?branch=extended-register-functions#85c8ff4b8528a6aafc92063b59715cd1c5ab031c"
 dependencies = [
  "libmimalloc-sys",
 ]
