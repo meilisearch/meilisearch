@@ -136,6 +136,15 @@ impl<T> Setting<T> {
         *self = new;
         true
     }
+
+    pub fn difference(&mut self, other: &Self)
+    where
+        T: PartialEq,
+    {
+        if self == other {
+            *self = Setting::NotSet
+        }
+    }
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
