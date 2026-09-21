@@ -259,16 +259,16 @@ fn stream_tarball_into_pipe(
     tarball.append_dir(update_files_dir, src_update_files_dir)?;
 
     for task_id in enqueued {
-        let task = index_scheduler
-            .queue
-            .tasks
-            .get_task(&rtxn, task_id)?
-            .ok_or_else(|| Error::CorruptedTaskQueue {
-                file: file!(),
-                message: format!(
-                    "Task content not found for uid `{task_id}` when streaming the update files for snapshot creation"
-                ),
-            })?;
+        let task = index_scheduler.queue.tasks.get_task(&rtxn, task_id)?;
+
+        let task = match task {
+            Some(task) => task,
+            None => {
+                tracing::error!("Corrupted task queue: the task {task_id} doesn't exists");
+                continue;
+            }
+        };
+
         if let Some(content_uuid) = task.content_uuid() {
             use std::fs::File;
 
