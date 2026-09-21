@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{remove_file, File};
 use std::io::{ErrorKind, Seek, SeekFrom};
+use std::ops::Not as _;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
@@ -1051,6 +1052,31 @@ impl IndexScheduler {
             AtomicBatchStep::new(affected_batches_bitmap.len() as u32);
         progress.update_progress(task_progress);
 
+        // Consistency check: iterate over all the tasks and try to find
+        // them in db if missing or corrupted register them in two lists.
+        let mut missing_tasks = RoaringBitmap::new();
+        let mut corrupted_tasks = RoaringBitmap::new();
+        for task_id in self.queue.tasks.all_task_ids(&rtxn)? {
+            match self.queue.tasks.get_task(&rtxn, task_id) {
+                Ok(Some(_)) => (),
+                Ok(None) => {
+                    missing_tasks.insert(task_id);
+                }
+                Err(e) => {
+                    tracing::error!("Corrupted task {task_id}: {e}");
+                    corrupted_tasks.insert(task_id);
+                }
+            }
+        }
+
+        // if any corrupted or missing add all affected statuses to the list.
+        if missing_tasks.is_empty().not() || corrupted_tasks.is_empty().not() {
+            tracing::error!(
+                "Found {missing_tasks:?} missing tasks and {corrupted_tasks:?} corrupted tasks"
+            );
+            affected_statuses.extend(enum_iterator::all::<Status>());
+        }
+
         for range in consecutive_ranges(&affected_batches_bitmap) {
             for batch in self.queue.batch_to_tasks_mapping.range(&rtxn, &range)? {
                 let (batch_id, mut tasks) = batch?;
@@ -1104,6 +1130,10 @@ impl IndexScheduler {
                 atomic_progress.fetch_add(1, Ordering::Relaxed);
             }
         }
+
+        // Add the corrupted and missing tasks to the list of tasks to delete.
+        to_delete_tasks |= missing_tasks;
+        to_delete_tasks |= corrupted_tasks;
 
         // Drop the read transaction before starting the write transaction
         // to avoid reading stale task data.
