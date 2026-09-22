@@ -331,7 +331,7 @@ impl IndexScheduler {
         // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;

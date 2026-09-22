@@ -1,4 +1,4 @@
-use meilisearch_types::heed::{Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Env, UniqueRwTxn, WithoutTls};
 use meilisearch_types::tasks::{KindWithContent, Status, Task};
 use time::OffsetDateTime;
 
@@ -10,7 +10,7 @@ use crate::Result;
 pub struct MigrateDynamicSearchRules;
 
 impl UpgradeIndexScheduler for MigrateDynamicSearchRules {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
+    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> anyhow::Result<()> {
         let queue = TaskQueue::new(env, wtxn)?;
 
         let store = LegacyDynamicSearchRulesStore::new(env, wtxn)?;

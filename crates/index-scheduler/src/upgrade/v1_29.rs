@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{Env, UniqueRwTxn, WithoutTls};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
@@ -36,12 +36,12 @@ pub struct Remote {
     pub write_api_key: Option<String>,
 }
 
-pub fn get_network(env: &Env<WithoutTls>, rtxn: &RoTxn) -> Result<Option<Network>> {
-    let Some(network_db) =
-        env.open_database::<Str, SerdeJson<Network>>(rtxn, Some(db_name::EXPERIMENTAL_FEATURES))?
+pub fn get_network(env: &Env<WithoutTls>, wtxn: &UniqueRwTxn) -> Result<Option<Network>> {
+    let Some(network_db) = env
+        .open_database::<Str, SerdeJson<Network>, _>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?
     else {
         return Ok(None);
     };
 
-    Ok(network_db.get(rtxn, db_keys::NETWORK)?)
+    Ok(network_db.get(wtxn, db_keys::NETWORK)?)
 }

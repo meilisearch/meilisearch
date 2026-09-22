@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
 use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex, RESERVED_UID_PREFIX};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
@@ -186,7 +186,7 @@ impl IndexMapper {
 
     pub fn new(
         env: &Env<WithoutTls>,
-        wtxn: &mut RwTxn,
+        wtxn: &mut UniqueRwTxn,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,
     ) -> Result<Self> {

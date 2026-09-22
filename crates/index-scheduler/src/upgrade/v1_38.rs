@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, UniqueRwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status};
 use roaring::RoaringBitmap;
@@ -13,7 +13,7 @@ use crate::queue::{BatchQueue, TaskQueue};
 pub struct RemoveOrphanBatches;
 
 impl UpgradeIndexScheduler for RemoveOrphanBatches {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
+    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> anyhow::Result<()> {
         let batch_queue = BatchQueue::new(env, wtxn)?;
         let all_batch_ids = batch_queue.all_batch_ids(wtxn)?;
 
@@ -65,7 +65,7 @@ impl UpgradeIndexScheduler for RemoveOrphanBatches {
 pub struct FixupIndexTasks;
 
 impl super::UpgradeIndexScheduler for FixupIndexTasks {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
+    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> anyhow::Result<()> {
         let queue = TaskQueue::new(env, wtxn)?;
         let mut tasks_per_index: BTreeMap<String, RoaringBitmap> = BTreeMap::new();
         let mut tasks_per_status: BTreeMap<Status, RoaringBitmap> = BTreeMap::new();

@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RwTxn, UniqueRwTxn, WithoutTls};
 use meilisearch_types::network::route::Status;
 use meilisearch_types::network::{Network, RemoteAvailability};
 
@@ -246,7 +246,7 @@ impl FeatureData {
 
     pub fn new(
         env: &Env<WithoutTls>,
-        wtxn: &mut RwTxn,
+        wtxn: &mut UniqueRwTxn,
         instance_features: InstanceTogglableFeatures,
     ) -> Result<Self> {
         let runtime_features_db =

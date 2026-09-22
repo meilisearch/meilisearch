@@ -263,8 +263,6 @@ mod tests {
             )
             .unwrap();
             milli_snap!(results, i);
-
-            txn.commit().unwrap();
         }
     }
 
@@ -294,8 +292,6 @@ mod tests {
             )
             .unwrap();
             milli_snap!(results, i);
-
-            txn.commit().unwrap();
         }
     }
 }

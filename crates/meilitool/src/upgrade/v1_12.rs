@@ -20,7 +20,7 @@ use tempfile::NamedTempFile;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::try_opening_database;
+use crate::try_opening_database_w;
 use crate::uuid_codec::UuidCodec;
 
 pub fn v1_11_to_v1_12(
@@ -120,12 +120,12 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let mut sched_wtxn = env.write_txn()?;
+    let mut sched_wtxn = env.unique_write_txn()?;
 
     let index_mapping: Database<Str, UuidCodec> =
-        try_opening_database(&env, &sched_wtxn, "index-mapping")?;
+        try_opening_database_w(&env, &sched_wtxn, "index-mapping")?;
     let stats_db: Database<UuidCodec, SerdeJson<IndexStats>> =
-        try_opening_database(&env, &sched_wtxn, "index-stats").with_context(|| {
+        try_opening_database_w(&env, &sched_wtxn, "index-stats").with_context(|| {
             format!("While trying to open {:?}", index_scheduler_path.display())
         })?;
 

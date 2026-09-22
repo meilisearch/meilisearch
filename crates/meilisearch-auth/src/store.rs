@@ -43,7 +43,7 @@ pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
 
 impl HeedAuthStore {
     pub fn new(env: Env<WithoutTls>) -> Result<Self> {
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
         let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;

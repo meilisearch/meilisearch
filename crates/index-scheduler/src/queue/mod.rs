@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
@@ -159,7 +159,7 @@ impl Queue {
     /// Create an index scheduler and start its run loop.
     pub(crate) fn new(
         env: &Env<WithoutTls>,
-        wtxn: &mut RwTxn,
+        wtxn: &mut UniqueRwTxn,
         options: &IndexSchedulerOptions,
     ) -> Result<Self> {
         // allow unreachable_code to get rids of the warning in the case of a test build.

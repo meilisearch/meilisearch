@@ -19,7 +19,6 @@ fn append() {
     }
     let txn = index.env.read_txn().unwrap();
     index.verify_structure_validity(&txn, 0);
-    txn.commit().unwrap();
     milli_snap!(format!("{index}"));
 }
 #[test]
@@ -50,7 +49,6 @@ fn many_field_ids_append() {
     index.verify_structure_validity(&txn, 0);
     index.verify_structure_validity(&txn, 1);
     index.verify_structure_validity(&txn, 2);
-    txn.commit().unwrap();
     milli_snap!(format!("{index}"));
 }
 #[test]
@@ -81,7 +79,6 @@ fn many_field_ids_prepend() {
     index.verify_structure_validity(&txn, 0);
     index.verify_structure_validity(&txn, 1);
     index.verify_structure_validity(&txn, 2);
-    txn.commit().unwrap();
     milli_snap!(format!("{index}"));
 }
 

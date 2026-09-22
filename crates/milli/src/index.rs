@@ -226,7 +226,7 @@ impl Index {
         options.max_dbs(NUMBER_OF_DBS);
 
         let env = unsafe { options.open(path) }?;
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
         let main = env.database_options().name(MAIN).create(&mut wtxn)?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
         let external_documents_ids =
@@ -351,7 +351,7 @@ impl Index {
 
         // optimistically check if the index is already at the requested version.
         let env = unsafe { options.open(path.as_ref()) }?;
-        let rtxn = env.read_txn()?;
+        let rtxn = env.unique_read_txn()?;
         let Some(main) = env.database_options().name(db_name::MAIN).open(&rtxn)? else {
             return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
@@ -371,7 +371,7 @@ impl Index {
         // really need to rollback then...
         unsafe { options.flags(heed::EnvFlags::PREV_SNAPSHOT) };
         let env = unsafe { options.open(path) }?;
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
         let Some(main) = env.database_options().name(db_name::MAIN).open(&wtxn)? else {
             return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,

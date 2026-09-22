@@ -19,7 +19,7 @@ bstr = "1.12.1"
 bytemuck = { version = "1.24.0", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.9", default-features = false }
-cellulite = "0.3.2"
+cellulite = { version = "0.3.2", git = "https://github.com/meilisearch/cellulite", branch = "mutexify-open-dbi"}
 concat-arrays = "0.1.2"
 convert_case = "0.9.0"
 crossbeam-channel = "0.5.15"
