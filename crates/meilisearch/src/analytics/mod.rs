@@ -1,9 +1,10 @@
 pub mod segment_analytics;
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use actix_web::HttpRequest;
 use index_scheduler::IndexScheduler;
@@ -11,7 +12,6 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::InstanceUid;
 use mopa::mopafy;
 use platform_dirs::AppDirs;
-use std::sync::LazyLock;
 
 // if the feature analytics is enabled we use the real analytics
 pub type SegmentAnalytics = segment_analytics::SegmentAnalytics;
@@ -155,6 +155,14 @@ impl Analytics {
     pub fn publish<T: Aggregate>(&self, event: T, request: &HttpRequest) {
         if let Some(ref segment) = self.segment {
             let _ = segment.sender.try_send(segment_analytics::Message::new(event, request));
+        }
+    }
+
+    pub fn publish_with_user_agents<T: Aggregate>(&self, event: T, user_agents: HashSet<String>) {
+        if let Some(ref segment) = self.segment {
+            let _ = segment
+                .sender
+                .try_send(segment_analytics::Message::with_user_agents(event, user_agents));
         }
     }
 }

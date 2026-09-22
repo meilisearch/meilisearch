@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
 use actix_web::http::header::USER_AGENT;
@@ -17,7 +17,6 @@ use segment::message::{Identify, Track, User};
 use segment::{AutoBatcher, Batcher, HttpClient};
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::sync::LazyLock;
 use sysinfo::{Disks, System};
 use time::OffsetDateTime;
 use tokio::select;
@@ -96,12 +95,16 @@ fn downcast_aggregate<ConcreteType: Aggregate>(
 
 impl Message {
     pub fn new<T: Aggregate>(event: T, request: &HttpRequest) -> Self {
+        Self::with_user_agents(event, extract_user_agents(request))
+    }
+
+    pub fn with_user_agents<T: Aggregate>(event: T, user_agents: HashSet<String>) -> Self {
         Self {
             type_id: TypeId::of::<T>(),
             event: Event {
                 original: Box::new(event),
                 timestamp: OffsetDateTime::now_utc(),
-                user_agents: extract_user_agents(request),
+                user_agents,
                 total: 1,
             },
             aggregator_function: downcast_aggregate::<T>,

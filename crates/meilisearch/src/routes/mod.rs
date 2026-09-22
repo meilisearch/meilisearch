@@ -71,6 +71,7 @@ pub mod features;
 pub mod indexes;
 mod logs;
 mod mcp;
+mod mcp_analytics;
 mod metrics;
 mod multi_search;
 mod multi_search_analytics;

@@ -23,9 +23,12 @@ use utoipa::openapi::schema::{AdditionalProperties, ArrayItems, Components, Ref,
 use utoipa::openapi::{ObjectBuilder, OpenApi, RefOr};
 use utoipa::{OpenApi as _, PartialSchema, ToSchema};
 
+use crate::analytics::segment_analytics::extract_user_agents;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
+use crate::routes::mcp_analytics::McpAggregator;
 use crate::routes::MeilisearchApi;
+use crate::search::elapsed;
 use crate::search_queue::SearchQueue;
 
 static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::openapi);
@@ -91,10 +94,21 @@ async fn mcp(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_mcp_route("calling the /mcp route")?;
+    let start_time = time::OffsetDateTime::now_utc();
 
     let body = body.into_inner();
     tracing::debug!("MCP JSON-RPC body received: {:?}", body);
     let McpQuery { jsonrpc, id, method, params } = body;
+
+    // Create analytics aggregator
+    let user_agents = extract_user_agents(&request);
+    let mut aggregate = match params
+        .meta
+        .and_then(|m| m.client_info.get("name").and_then(|s| s.as_str().map(ToOwned::to_owned)))
+    {
+        Some(client) => McpAggregator::from_client(client),
+        None => McpAggregator::without_client(),
+    };
 
     let response = match method.as_str() {
         method::SERVER_DISCOVERY => {
@@ -122,7 +136,7 @@ async fn mcp(
                 match SearchInIndexes::call(
                     request,
                     search_queue,
-                    analytics,
+                    analytics.clone(),
                     personalization_service,
                     params.arguments,
                 )
@@ -136,7 +150,7 @@ async fn mcp(
                 match FacetSearch::call(
                     request,
                     search_queue,
-                    analytics,
+                    analytics.clone(),
                     personalization_service,
                     params.arguments,
                 )
@@ -150,7 +164,7 @@ async fn mcp(
                 match ListIndexes::call(
                     request,
                     search_queue,
-                    analytics,
+                    analytics.clone(),
                     personalization_service,
                     params.arguments,
                 )
@@ -164,7 +178,7 @@ async fn mcp(
                 match DescribeIndex::call(
                     request,
                     search_queue,
-                    analytics,
+                    analytics.clone(),
                     personalization_service,
                     params.arguments,
                 )
@@ -194,6 +208,10 @@ async fn mcp(
             error: Some(McpError::unknow_method(unknow_method_name)),
         },
     };
+
+    // Record success in analytics after the stream is set up
+    aggregate.succeed(elapsed(start_time));
+    analytics.publish_with_user_agents(aggregate, user_agents);
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -647,7 +665,7 @@ pub struct ParamsWithMeta {
     ///
     /// You can find more information about this field on [the MCP specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#_meta).
     #[request(default, rename = "_meta")]
-    _meta: Option<McpClientMeta>,
+    meta: Option<McpClientMeta>,
     /// The tool name to call used by the MCP protocol.
     ///
     /// You can find more information about this field on [the MCP specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-names).
@@ -666,7 +684,7 @@ pub struct McpClientMeta {
     #[request(required, rename = "io.modelcontextprotocol/protocolVersion")]
     _protocol_version: String, // "2026-07-28"
     #[request(required, rename = "io.modelcontextprotocol/clientInfo")]
-    _client_info: serde_json::Value, // { "name": "ExampleClient", "version": "1.0.0" }
+    client_info: serde_json::Value, // { "name": "ExampleClient", "version": "1.0.0" }
     #[request(default, rename = "io.modelcontextprotocol/clientCapabilities")]
     _client_capabilities: serde_json::Value,
 }
