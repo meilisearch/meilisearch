@@ -32,8 +32,8 @@ use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::{
-    DocumentId, FieldId, FieldIdMapMissingEntry, FilterableAttributesRule, GlobalFieldsIdsMap,
-    InternalError, PatternMatch, Result, UserError, MAX_FACET_VALUE_LENGTH,
+    DocumentId, Error, FieldId, FieldIdMapMissingEntry, FilterableAttributesRule,
+    GlobalFieldsIdsMap, InternalError, PatternMatch, Result, UserError, MAX_FACET_VALUE_LENGTH,
 };
 
 pub struct FacetedExtractorData<'a, 'b> {
@@ -169,7 +169,8 @@ impl FacetedDocidsExtractor {
                         inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
                         &mut del,
-                    )?;
+                    )
+                    .or_else(ignore_geo_errors)?;
                 }
             }
             DocumentChange::Update(inner) => {
@@ -238,7 +239,8 @@ impl FacetedDocidsExtractor {
                         inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
                         &mut facet_fn!(del),
-                    )?;
+                    )
+                    .or_else(ignore_geo_errors)?;
                     extract_geo_document(
                         inner.merged(rtxn, index, context.db_fields_ids_map)?,
                         inner.external_document_id(),
@@ -726,5 +728,12 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
             )?;
         }
         Ok(())
+    }
+}
+
+fn ignore_geo_errors(err: Error) -> Result<()> {
+    match err {
+        Error::UserError(UserError::InvalidGeoField(_)) => Ok(()),
+        err => Err(err),
     }
 }
