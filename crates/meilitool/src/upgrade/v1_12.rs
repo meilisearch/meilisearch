@@ -293,7 +293,7 @@ impl IndexStats {
         Ok(IndexStats {
             number_of_documents: index.number_of_documents(rtxn)?,
             database_size: index.on_disk_size()?,
-            used_database_size: index.used_size()?,
+            used_database_size: index.used_size(rtxn)?,
             field_distribution: index.field_distribution(rtxn)?,
             created_at: index.created_at(rtxn)?,
             updated_at: index.updated_at(rtxn)?,

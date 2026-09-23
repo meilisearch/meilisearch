@@ -26,6 +26,10 @@ impl Versioning {
         NUMBER_OF_DATABASES
     }
 
+    pub fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        Ok(self.version.stat(rtxn)?.non_free_page_size() as u64)
+    }
+
     pub fn get_version(&self, rtxn: &RoTxn) -> Result<Option<(u32, u32, u32)>, heed::Error> {
         self.version.get(rtxn, entry_name::MAIN)
     }

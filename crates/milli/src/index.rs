@@ -449,8 +449,74 @@ impl Index {
     }
 
     /// Returns the size used by the index without the cached pages.
-    pub fn used_size(&self) -> Result<u64> {
-        Ok(self.env.non_free_pages_size()?)
+    pub fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Index {
+            env: _,
+            main,
+            external_documents_ids,
+            word_docids,
+            exact_word_docids,
+            synonyms,
+            word_prefix_docids,
+            exact_word_prefix_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+            field_id_word_count_docids,
+            word_prefix_position_docids,
+            word_prefix_fid_docids,
+            facet_id_exists_docids,
+            facet_id_is_null_docids,
+            facet_id_is_empty_docids,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            facet_id_normalized_string_strings,
+            facet_id_string_fst,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
+            embedder_category_id,
+            vector_store,
+            shard_docids,
+            cellulite,
+            documents,
+        } = self;
+
+        let total_size: usize = [
+            main.stat(rtxn)?,
+            external_documents_ids.stat(rtxn)?,
+            word_docids.stat(rtxn)?,
+            exact_word_docids.stat(rtxn)?,
+            synonyms.stat(rtxn)?,
+            word_prefix_docids.stat(rtxn)?,
+            exact_word_prefix_docids.stat(rtxn)?,
+            word_pair_proximity_docids.stat(rtxn)?,
+            word_position_docids.stat(rtxn)?,
+            word_fid_docids.stat(rtxn)?,
+            field_id_word_count_docids.stat(rtxn)?,
+            word_prefix_position_docids.stat(rtxn)?,
+            word_prefix_fid_docids.stat(rtxn)?,
+            facet_id_exists_docids.stat(rtxn)?,
+            facet_id_is_null_docids.stat(rtxn)?,
+            facet_id_is_empty_docids.stat(rtxn)?,
+            facet_id_f64_docids.stat(rtxn)?,
+            facet_id_string_docids.stat(rtxn)?,
+            facet_id_normalized_string_strings.stat(rtxn)?,
+            facet_id_string_fst.stat(rtxn)?,
+            field_id_docid_facet_f64s.stat(rtxn)?,
+            field_id_docid_facet_strings.stat(rtxn)?,
+            embedder_category_id.stat(rtxn)?,
+            vector_store.stat(rtxn)?,
+            shard_docids.stat(rtxn)?,
+            cellulite.item_db_stats(rtxn)?,
+            cellulite.cell_db_stats(rtxn)?,
+            cellulite.update_db_stats(rtxn)?,
+            cellulite.metadata_db_stats(rtxn)?,
+            documents.stat(rtxn)?,
+        ]
+        .iter()
+        .map(DatabaseStat::non_free_page_size)
+        .sum();
+        Ok(total_size as u64)
     }
 
     /// Returns the real size used by the index.

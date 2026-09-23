@@ -156,6 +156,16 @@ impl Queue {
         tasks::TaskQueue::nb_db() + batches::BatchQueue::nb_db() + NUMBER_OF_DATABASES
     }
 
+    pub fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Self { tasks, batches, batch_to_tasks_mapping, file_store: _, max_number_of_tasks: _ } =
+            self;
+        let total_size = batch_to_tasks_mapping.stat(rtxn)?.non_free_page_size() as u64
+            + tasks.used_size(rtxn)?
+            + batches.used_size(rtxn)?;
+
+        Ok(total_size)
+    }
+
     /// Create an index scheduler and start its run loop.
     pub(crate) fn new(
         env: &Env<WithoutTls>,

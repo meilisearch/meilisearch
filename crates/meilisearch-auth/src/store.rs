@@ -65,7 +65,13 @@ impl HeedAuthStore {
 
     /// Return the number of bytes actually used in the database
     pub fn used_size(&self) -> Result<u64> {
-        Ok(self.env.non_free_pages_size()?)
+        let rtxn = self.env.read_txn()?;
+        let Self { env, keys, action_keyid_index_expiration } = self;
+        let total_size = env.stat().non_free_page_size()
+            + keys.stat(&rtxn)?.non_free_page_size()
+            + action_keyid_index_expiration.stat(&rtxn)?.non_free_page_size();
+
+        Ok(total_size as u64)
     }
 
     pub fn is_empty(&self) -> Result<bool> {

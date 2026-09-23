@@ -66,6 +66,25 @@ impl BatchQueue {
         NUMBER_OF_DATABASES
     }
 
+    pub(crate) fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Self { all_batches, status, kind, index_tasks, enqueued_at, started_at, finished_at } =
+            self;
+        let total_size: usize = [
+            all_batches.stat(rtxn)?,
+            status.stat(rtxn)?,
+            kind.stat(rtxn)?,
+            index_tasks.stat(rtxn)?,
+            enqueued_at.stat(rtxn)?,
+            started_at.stat(rtxn)?,
+            finished_at.stat(rtxn)?,
+        ]
+        .iter()
+        .map(meilisearch_types::heed::DatabaseStat::non_free_page_size)
+        .sum();
+
+        Ok(total_size as u64)
+    }
+
     pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> Result<Self> {
         Ok(Self {
             all_batches: env.create_database(wtxn, Some(db_name::ALL_BATCHES))?,

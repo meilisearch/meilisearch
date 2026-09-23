@@ -244,6 +244,10 @@ impl FeatureData {
         NUMBER_OF_DATABASES
     }
 
+    pub(crate) fn used_size(&self, rtxn: &meilisearch_types::heed::RoTxn) -> Result<u64> {
+        Ok(self.persisted.stat(rtxn)?.non_free_page_size() as u64)
+    }
+
     pub fn new(
         env: &Env<WithoutTls>,
         wtxn: &mut UniqueRwTxn,

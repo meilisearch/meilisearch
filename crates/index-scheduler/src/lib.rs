@@ -62,7 +62,7 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, Unspecified, WithoutTls};
 use meilisearch_types::index_uid::UserIndex;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::sharding::Shards;
@@ -105,6 +105,7 @@ const TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT: u64 = 40;
 mod db_name {
     pub const CHAT_SETTINGS: &str = "chat-settings";
     pub const PERSISTED: &str = "persisted";
+    pub const DYNAMIC_SEARCH_RULES: &str = "dynamic-search-rules";
 }
 
 mod db_keys {
@@ -196,6 +197,9 @@ pub struct IndexScheduler {
     /// A database to store single-keyed data that is persisted across restarts.
     persisted: Database<Str, Str>,
 
+    /// A legacy database that used to store dynamic search rules before they became a dedicated index
+    legacy_dsr: Database<Unspecified, Unspecified>,
+
     /// Webhook, loaded and stored in the `persisted` database
     webhooks: Arc<Webhooks>,
 
@@ -247,6 +251,8 @@ impl IndexScheduler {
 
             index_mapper: self.index_mapper.clone(),
             persisted: self.persisted,
+            legacy_dsr: self.legacy_dsr,
+
             export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
             webhooks: self.webhooks.clone(),
@@ -273,6 +279,54 @@ impl IndexScheduler {
             + 1 // chat-prompts
             + 1 // persisted
             + 1 // legacy dynamic search rules
+    }
+
+    /// Return the used database size (i.e.: The size **without** the free pages)
+    pub fn used_size(&self) -> Result<u64> {
+        let rtxn = self.read_txn()?;
+        self.used_size_with_txn(&rtxn)
+    }
+
+    /// Return the used database size (i.e.: The size **without** the free pages)
+    fn used_size_with_txn(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Self {
+            env,
+            processing_tasks: _,
+            version,
+            queue,
+            index_mapper,
+            features,
+            chat_settings,
+            scheduler: _,
+            persisted,
+            legacy_dsr,
+            webhooks: _,
+            embedders: _,
+            export_default_payload_size_bytes: _,
+            runtime: _,
+            web_client: _,
+            dsr_fuel: _,
+
+            #[cfg(test)]
+                test_breakpoint_sdr: _,
+            #[cfg(test)]
+                planned_failures: _,
+            #[cfg(test)]
+                run_loop_iteration: _,
+        } = self;
+
+        let total_size = env.stat().non_free_page_size()
+            + chat_settings.stat(rtxn)?.non_free_page_size()
+            + persisted.stat(rtxn)?.non_free_page_size()
+            + legacy_dsr.stat(rtxn)?.non_free_page_size();
+
+        let total_size = total_size as u64
+            + version.used_size(rtxn)?
+            + queue.used_size(rtxn)?
+            + features.used_size(rtxn)?
+            + index_mapper.used_size(rtxn)?;
+
+        Ok(total_size)
     }
 
     /// Create an index scheduler and start its run loop.
@@ -339,6 +393,7 @@ impl IndexScheduler {
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
 
         let persisted = env.create_database(&mut wtxn, Some(db_name::PERSISTED))?;
+        let legacy_dsr = env.create_database(&mut wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
         let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
         let mut webhooks = webhooks_db.get(&wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
         webhooks
@@ -360,6 +415,7 @@ impl IndexScheduler {
             index_mapper,
             env,
             persisted,
+            legacy_dsr,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
             export_default_payload_size_bytes: options.export_default_payload_size_bytes,
@@ -535,11 +591,6 @@ impl IndexScheduler {
     /// Return the real database size (i.e.: The size **with** the free pages)
     pub fn size(&self) -> Result<u64> {
         Ok(self.env.real_disk_size()?)
-    }
-
-    /// Return the used database size (i.e.: The size **without** the free pages)
-    pub fn used_size(&self) -> Result<u64> {
-        Ok(self.env.non_free_pages_size()?)
     }
 
     /// Return the maximum possible database size
@@ -811,15 +862,15 @@ impl IndexScheduler {
         task_network: Option<TaskNetwork>,
         new_network: Option<Network>,
     ) -> Result<Task> {
+        let mut wtxn = self.env.write_txn()?;
+
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
-            && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64
+            && (self.used_size_with_txn(&wtxn)? * 100) / self.env.info().map_size as u64
                 > TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT
         {
             return Err(Error::NoSpaceLeftInTaskQueue);
         }
-
-        let mut wtxn = self.env.write_txn()?;
 
         if let Some(TaskNetwork::Import { import_from, network_change, metadata }) = &task_network {
             self.update_network_task(&mut wtxn, network_change, |network_topology_change| {

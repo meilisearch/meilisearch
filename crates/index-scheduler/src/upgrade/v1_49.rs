@@ -8,9 +8,7 @@ use meilisearch_types::heed::{Database, Env, UniqueRwTxn, WithoutTls};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-mod db_name {
-    pub const DYNAMIC_SEARCH_RULES: &str = "dynamic-search-rules";
-}
+use crate::db_name;
 
 #[derive(Clone)]
 pub(crate) struct LegacyDynamicSearchRulesStore {
