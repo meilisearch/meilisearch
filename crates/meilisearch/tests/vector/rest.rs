@@ -386,16 +386,22 @@ async fn create_mock_with_revocable_key() -> (&'static MockServer, Value, Value,
     const UNREVOCABLE_API_KEY: &str = "my-super-api-key";
     const UNREVOCABLE_API_KEY_BEARER: &str = "Bearer my-super-api-key";
 
-    let text_to_embedding: BTreeMap<_, _> =
-        vec![("kefir", [0.0, 0.0, 0.0]), ("intel", [1.0, 1.0, 1.0]), ("test", [0.5, 0.5, 0.5])]
-            .into_iter()
-            .collect();
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+        ("test", [0.5, 0.5, 0.5]),
+        ("toto kefir", [0.0, 0.5, 0.0]),
+        ("toto intel", [1.0, 0.5, 1.0]),
+        ("toto test", [0.5, 1.0, 0.5]),
+    ]
+    .into_iter()
+    .collect();
 
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |req: &Request| {
-            match req.headers.get("Authorization") {
-                Some(api_key) if api_key == UNREVOCABLE_API_KEY_BEARER => {}
+            let text_to_embedding = match req.headers.get("Authorization") {
+                Some(api_key) if api_key == UNREVOCABLE_API_KEY_BEARER => &text_to_embedding,
                 Some(api_key)
                     if api_key != REVOCABLE_API_KEY_BEARER
                         || revoked_for_handler.load(Ordering::SeqCst) =>
@@ -404,12 +410,12 @@ async fn create_mock_with_revocable_key() -> (&'static MockServer, Value, Value,
                         "error": format!("invalid api key: {}", api_key.to_str().unwrap())
                     }));
                 }
-                Some(_) => {}
+                Some(_) => &text_to_embedding,
                 None => {
                     return ResponseTemplate::new(401)
                         .set_body_json(json!({"error": "missing Authorization header"}));
                 }
-            }
+            };
 
             let text: String = match req.body_json() {
                 Ok(text) => text,
@@ -446,7 +452,7 @@ async fn create_mock_with_revocable_key() -> (&'static MockServer, Value, Value,
         "response": {
           "data": "{{embedding}}"
         },
-        "documentTemplate": "{{doc.name}}",
+        "documentTemplate": "toto {{doc.name}}",
     });
 
     (mock_server, embedder_settings, unrevocable_embedder_settings, revoked)
@@ -2386,7 +2392,7 @@ async fn revoked_api_key() {
           "rest": {
             "source": "rest",
             "apiKey": "myXXXX...",
-            "documentTemplate": "{{doc.name}}",
+            "documentTemplate": "toto {{doc.name}}",
             "url": "[url]",
             "request": "{{text}}",
             "response": {
@@ -2423,6 +2429,52 @@ async fn revoked_api_key() {
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    }
+    "###);
+
+    // should return the new embedding
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "intel",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  0.5,
+                  1.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
     }
     "###);
 }
