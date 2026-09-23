@@ -21,7 +21,7 @@ use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::GrenadParameters;
-use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result};
+use crate::{lat_lng_to_xyz, DocumentId, Error, GeoPoint, Index, InternalError, Result, UserError};
 
 pub mod cellulite;
 
@@ -231,7 +231,9 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                     let current = deletion.current(rtxn, index, db_fields_ids_map)?;
                     let current_geo = current
                         .geo_field()?
-                        .map(|geo| extract_geo_coordinates(external_id, geo))
+                        .map(|geo| {
+                            extract_geo_coordinates(external_id, geo).or_else(ignore_geo_errors)
+                        })
                         .transpose()?;
 
                     if let Some(lat_lng) = current_geo.flatten() {
@@ -249,7 +251,9 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
 
                     let current_geo = current
                         .geo_field()?
-                        .map(|geo| extract_geo_coordinates(external_id, geo))
+                        .map(|geo| {
+                            extract_geo_coordinates(external_id, geo).or_else(ignore_geo_errors)
+                        })
                         .transpose()?;
 
                     let updated_geo = update
@@ -304,10 +308,17 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
     }
 }
 
+fn ignore_geo_errors(err: Error) -> Result<Option<[f64; 2]>> {
+    match err {
+        Error::UserError(UserError::InvalidGeoField(_)) => Ok(None),
+        err => Err(err),
+    }
+}
+
 /// Extracts and validates the latitude and latitude from a document geo field.
 ///
 /// It can be of the form `{ "lat": 0.0, "lng": "1.0" }`.
-pub fn extract_geo_coordinates(
+pub(crate) fn extract_geo_coordinates(
     external_id: &str,
     raw_value: &RawValue,
 ) -> Result<Option<[f64; 2]>> {

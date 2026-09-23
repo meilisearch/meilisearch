@@ -79,7 +79,7 @@ pub fn extract_document_facets<'doc>(
     Ok(())
 }
 
-pub fn extract_geo_document<'doc>(
+pub(crate) fn extract_geo_document<'doc>(
     document: impl Document<'doc>,
     external_document_id: &str,
     field_id_map: &mut GlobalFieldsIdsMap,
