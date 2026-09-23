@@ -536,8 +536,8 @@ where
         let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
             continue;
         };
-        let arroy = VectorStore::new(backend, index.vector_store, infos.embedder_id, was_quantized);
-        let Some(dimensions) = arroy.dimensions(wtxn)? else {
+        let store = VectorStore::new(backend, index.vector_store, infos.embedder_id, was_quantized);
+        let Some(dimensions) = store.dimensions(wtxn)? else {
             continue;
         };
         for fragment_id in fragment_ids {
@@ -545,17 +545,17 @@ where
 
             if infos.embedding_status.user_provided_docids().is_empty() {
                 // no user provided: clear store
-                arroy.clear_store(wtxn, *fragment_id, dimensions)?;
+                store.clear_store(wtxn, *fragment_id, dimensions)?;
                 continue;
             }
 
             // some user provided, remove only the ids that are not user provided
-            let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
+            let to_delete = store.items_in_store(wtxn, *fragment_id, |items| {
                 items - infos.embedding_status.user_provided_docids()
             })?;
 
             for to_delete in to_delete {
-                arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
+                store.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
             }
         }
     }
