@@ -39,7 +39,7 @@ edition = "2021"
 license = "MIT"
 
 [workspace.dependencies]
-mimalloc = { git = "https://github.com/dureuill/tmp_mimalloc_rust", branch = "extended-register-functions", version = "0.1.52", default-features = false, features = ["override", "debug", "secure", "extended"] }
+mimalloc = { git = "https://github.com/dureuill/tmp_mimalloc_rust", branch = "extended-register-functions", version = "0.1.52", default-features = false, features = ["v2", "override", "debug", "extended"] }
 
 [profile.release]
 codegen-units = 1

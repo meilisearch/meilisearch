@@ -3931,7 +3931,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libmimalloc-sys"
 version = "0.1.49"
-source = "git+https://github.com/dureuill/tmp_mimalloc_rust?branch=extended-register-functions#85c8ff4b8528a6aafc92063b59715cd1c5ab031c"
+source = "git+https://github.com/dureuill/tmp_mimalloc_rust?branch=extended-register-functions#01119a33a364a7fd3721a14b60601ff8b4153782"
 dependencies = [
  "cc",
  "cty",
@@ -4595,7 +4595,7 @@ dependencies = [
 [[package]]
 name = "mimalloc"
 version = "0.1.52"
-source = "git+https://github.com/dureuill/tmp_mimalloc_rust?branch=extended-register-functions#85c8ff4b8528a6aafc92063b59715cd1c5ab031c"
+source = "git+https://github.com/dureuill/tmp_mimalloc_rust?branch=extended-register-functions#01119a33a364a7fd3721a14b60601ff8b4153782"
 dependencies = [
  "libmimalloc-sys",
 ]
