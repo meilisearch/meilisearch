@@ -4,6 +4,7 @@
 #[macro_use]
 pub mod error;
 pub mod analytics;
+pub mod blocking;
 #[macro_use]
 pub mod extractors;
 pub mod documents_retrieval;

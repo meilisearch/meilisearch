@@ -60,7 +60,7 @@ pub async fn create_dump(
         instance_uid: analytics.instance_uid().cloned(),
     };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        crate::blocking::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!(returns = ?task, "Create dump");
     Ok(HttpResponse::Accepted().json(task))

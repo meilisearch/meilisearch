@@ -407,7 +407,7 @@ async fn process_search_request(
     progress.update_progress(TotalProcessingTimeStep::Process);
     let index_cloned = index.clone();
 
-    let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+    let output = crate::blocking::spawn_blocking(move || -> Result<_, ResponseError> {
         let deadline = index_cloned
             .search_deadline(&rtxn)
             .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;

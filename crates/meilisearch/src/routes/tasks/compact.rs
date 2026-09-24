@@ -90,7 +90,7 @@ pub async fn compact_task_queue(
     index_scheduler.features().check_task_queue_compaction_route()?;
 
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    tokio::task::spawn_blocking(move || -> index_scheduler::Result<()> {
+    crate::blocking::spawn_blocking(move || -> index_scheduler::Result<()> {
         // we keep an open write transaction to prevent tasks insertion in the queue. We keep
         // the transaction until the server get restarted.
         let wtxn = index_scheduler

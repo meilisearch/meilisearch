@@ -253,7 +253,7 @@ pub async fn create_index(
             primary_key: primary_key.clone(),
         };
         let scheduler = index_scheduler.clone();
-        let mut task = tokio::task::spawn_blocking(move || {
+        let mut task = crate::blocking::spawn_blocking(move || {
             scheduler.register_with_custom_metadata(task, None, task_network)
         })
         .await??;
@@ -444,7 +444,7 @@ pub async fn update_index(
     };
 
     let scheduler = index_scheduler.clone();
-    let mut task = tokio::task::spawn_blocking(move || {
+    let mut task = crate::blocking::spawn_blocking(move || {
         scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
@@ -514,7 +514,7 @@ pub async fn delete_index(
     let task = KindWithContent::IndexDeletion { index_uid: index_uid.clone().into_inner() };
     let scheduler = index_scheduler.clone();
 
-    let mut task = tokio::task::spawn_blocking(move || {
+    let mut task = crate::blocking::spawn_blocking(move || {
         scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
