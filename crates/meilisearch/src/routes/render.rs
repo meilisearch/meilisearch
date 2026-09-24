@@ -115,7 +115,7 @@ pub async fn render_post(
     let RenderQuery { template, input } = query;
 
     let result: Result<(RenderingTemplate, Option<Value>), Error> =
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             let template_index_uid = template.index_uid.as_deref();
             let input_index_uid = input.as_ref().and_then(|input| input.index_uid.as_deref());
 
