@@ -51,7 +51,7 @@ liquid = "0.26.11"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.9"
-mimalloc = { workspace = true }
+tikv-jemallocator = { workspace = true }
 mime = "0.3.17"
 num_cpus = "1.17.0"
 obkv = "0.3.0"
