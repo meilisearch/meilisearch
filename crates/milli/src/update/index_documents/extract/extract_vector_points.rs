@@ -319,16 +319,16 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                         }
                     }
 
-                    ReindexAction::RegeneratePrompts => {
-                        let Some(old_runtime) = old_configs.get(name) else {
-                            tracing::error!(embedder = name, "Old embedder config not found");
-                            continue;
-                        };
-
-                        ExtractionAction::SettingsRegeneratePrompts {
+                    ReindexAction::RegeneratePrompts => match old_configs.get(name) {
+                        Some(old_runtime) => ExtractionAction::SettingsRegeneratePrompts {
                             old_runtime: old_runtime.clone(),
+                        },
+                        None => {
+                            tracing::error!(embedder = name, "Old embedder config not found");
+                            // if we may need to reindex, but we don't have the old config, we need to reindex everything
+                            ExtractionAction::SettingsFullReindex
                         }
-                    }
+                    },
                 };
 
                 extractors.push(EmbedderVectorExtractor {

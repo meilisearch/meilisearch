@@ -1469,7 +1469,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
         let old_inner_settings =
-            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+            InnerIndexSettings::from_index_inner(self.index, self.wtxn, ip_policy, None, true)?;
 
         // never trigger re-indexing
         self.update_displayed()?;
@@ -1561,7 +1561,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
         let old_inner_settings =
-            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
+            InnerIndexSettings::from_index_inner(self.index, self.wtxn, ip_policy, None, true)?;
 
         // Update index settings
         let embedding_config_updates = self.update_embedding_configs()?;
@@ -2013,6 +2013,19 @@ impl InnerIndexSettings {
         ip_policy: &http_client::policy::IpPolicy,
         runtime_embedders: Option<RuntimeEmbedders>,
     ) -> Result<Self> {
+        Self::from_index_inner(index, rtxn, ip_policy, runtime_embedders, false)
+    }
+
+    /// Allow to ignore embedder errors when building the runtime embedders.
+    /// This is used when we are loading the embedders from the old settings,
+    /// avoiding to fail the indexing because of settings that would have been replaced or removed.
+    fn from_index_inner(
+        index: &Index,
+        rtxn: &heed::RoTxn<'_>,
+        ip_policy: &http_client::policy::IpPolicy,
+        runtime_embedders: Option<RuntimeEmbedders>,
+        ignore_embedder_errors: bool,
+    ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
         let stop_words = stop_words.map(|sw| sw.map_data(Vec::from).unwrap());
         let allowed_separators = index.allowed_separators(rtxn)?;
@@ -2022,7 +2035,11 @@ impl InnerIndexSettings {
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let runtime_embedders = match runtime_embedders {
             Some(embedding_configs) => embedding_configs,
-            None => embedders(index.embedding_configs().embedding_configs(rtxn)?, ip_policy)?,
+            None => embedders(
+                index.embedding_configs().embedding_configs(rtxn)?,
+                ip_policy,
+                ignore_embedder_errors,
+            )?,
         };
         let embedder_category_id = index
             .embedding_configs()
@@ -2118,6 +2135,7 @@ impl InnerIndexSettings {
 fn embedders(
     embedding_configs: Vec<IndexEmbeddingConfig>,
     ip_policy: &http_client::policy::IpPolicy,
+    ignore_build_errors: bool,
 ) -> Result<RuntimeEmbedders> {
     let res: Result<_> = embedding_configs
         .into_iter()
@@ -2159,6 +2177,7 @@ fn embedders(
                 ))
             },
         )
+        .filter(|r| if ignore_build_errors { r.is_ok() } else { true })
         .collect();
     res.map(RuntimeEmbedders::new)
 }

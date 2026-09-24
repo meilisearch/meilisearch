@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use http_client::policy::IpPolicy;
@@ -345,7 +346,7 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (&'static MockServe
     Mock::given(method("POST"))
         .and(path("/"))
         .respond_with(move |_req: &Request| {
-            let count = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let count = count.fetch_add(1, Ordering::SeqCst);
 
             if count >= 5 {
                 let _ = sender.try_send(());
@@ -371,6 +372,90 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (&'static MockServe
     });
 
     (mock_server, embedder_settings)
+}
+
+/// Mock REST embedder that accepts `Authorization: Bearer my-api-key` until `revoked` is set.
+async fn create_mock_with_revocable_key() -> (&'static MockServer, Value, Value, Arc<AtomicBool>) {
+    let mock_server = Box::leak(Box::new(MockServer::start().await));
+    let revoked = Arc::new(AtomicBool::new(false));
+    let revoked_for_handler = revoked.clone();
+
+    const REVOCABLE_API_KEY: &str = "my-api-key";
+    const REVOCABLE_API_KEY_BEARER: &str = "Bearer my-api-key";
+
+    const UNREVOCABLE_API_KEY: &str = "my-super-api-key";
+    const UNREVOCABLE_API_KEY_BEARER: &str = "Bearer my-super-api-key";
+
+    let text_to_embedding: BTreeMap<_, _> = vec![
+        ("kefir", [0.0, 0.0, 0.0]),
+        ("intel", [1.0, 1.0, 1.0]),
+        ("test", [0.5, 0.5, 0.5]),
+        ("toto kefir", [0.0, 0.5, 0.0]),
+        ("toto intel", [1.0, 0.5, 1.0]),
+        ("toto test", [0.5, 1.0, 0.5]),
+    ]
+    .into_iter()
+    .collect();
+
+    Mock::given(method("POST"))
+        .and(path("/"))
+        .respond_with(move |req: &Request| {
+            let text_to_embedding = match req.headers.get("Authorization") {
+                Some(api_key) if api_key == UNREVOCABLE_API_KEY_BEARER => &text_to_embedding,
+                Some(api_key)
+                    if api_key != REVOCABLE_API_KEY_BEARER
+                        || revoked_for_handler.load(Ordering::SeqCst) =>
+                {
+                    return ResponseTemplate::new(401).set_body_json(json!({
+                        "error": format!("invalid api key: {}", api_key.to_str().unwrap())
+                    }));
+                }
+                Some(_) => &text_to_embedding,
+                None => {
+                    return ResponseTemplate::new(401)
+                        .set_body_json(json!({"error": "missing Authorization header"}));
+                }
+            };
+
+            let text: String = match req.body_json() {
+                Ok(text) => text,
+                Err(error) => {
+                    return ResponseTemplate::new(400).set_body_json(json!({
+                      "error": format!("Invalid request: {error}")
+                    }));
+                }
+            };
+
+            ResponseTemplate::new(200).set_body_json(
+                json!({ "data": text_to_embedding.get(text.as_str()).unwrap_or(&[99., 99., 99.]) }),
+            )
+        })
+        .mount(mock_server)
+        .await;
+
+    let embedder_settings = json!({
+        "source": "rest",
+        "url": mock_server.uri(),
+        "apiKey": REVOCABLE_API_KEY,
+        "request": "{{text}}",
+        "response": {
+          "data": "{{embedding}}"
+        },
+        "documentTemplate": "{{doc.name}}",
+    });
+
+    let unrevocable_embedder_settings = json!({
+        "source": "rest",
+        "url": mock_server.uri(),
+        "apiKey": UNREVOCABLE_API_KEY,
+        "request": "{{text}}",
+        "response": {
+          "data": "{{embedding}}"
+        },
+        "documentTemplate": "toto {{doc.name}}",
+    });
+
+    (mock_server, embedder_settings, unrevocable_embedder_settings, revoked)
 }
 
 pub async fn post<T: IntoUrl>(
@@ -2231,4 +2316,165 @@ async fn last_error_stats() {
       "batchStrategy": "batched all enqueued tasks"
     }
     "#);
+}
+
+#[actix_rt::test]
+async fn revoked_api_key() {
+    let (_mock, setting, unrevocable_settings, revoked) = create_mock_with_revocable_key().await;
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    let (value, code) = index.add_documents(json!([{"id": 0, "name": "kefir"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    revoked.store(true, Ordering::SeqCst);
+
+    let (value, code) = index.add_documents(json!([{"id": 1, "name": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Index `doggo`: While embedding documents for embedder `rest`: user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"invalid api key: Bearer my-api-key\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration",
+        "code": "vector_embedding_error",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#vector_embedding_error"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "rest": unrevocable_settings,
+        }
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "apiKey": "myXXXX...",
+            "documentTemplate": "toto {{doc.name}}",
+            "url": "[url]",
+            "request": "{{text}}",
+            "response": {
+              "data": "{{embedding}}"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (value, code) = index.add_documents(json!([{"id": 1, "name": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    // should return the new embedding
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "kefir",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "intel",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  0.5,
+                  1.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
 }
