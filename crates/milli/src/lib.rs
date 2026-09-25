@@ -55,7 +55,6 @@ pub use filter_parser::{
     Token, TokenLike,
 };
 use fxhash::{FxHasher32, FxHasher64};
-pub use grenad::CompressionType;
 pub use must_stop_processing::MustStopProcessing;
 use permissive_json_pointer::contained_in;
 pub use search::new::{
