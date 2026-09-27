@@ -47,13 +47,16 @@ pub struct SearchQueue {
 #[derive(Debug)]
 pub struct Permit {
     sender: mpsc::Sender<()>,
+    released: bool,
 }
 
 impl Permit {
-    /// Drop the permit giving back on permit to the search queue.
-    pub async fn drop(self) {
+    /// Drop the permit giving back one permit to the search queue.
+    pub async fn drop(mut self) {
         // if the channel is closed then the whole instance is down
         let _ = self.sender.send(()).await;
+        // Mark it only after sending so cancellation still releases through Drop.
+        self.released = true;
     }
 }
 
@@ -62,6 +65,9 @@ impl Drop for Permit {
     /// - We forgot to call the explicit one somewhere => this should be fixed on our side asap
     /// - The future is cancelled while running and the permit dropped with it
     fn drop(&mut self) {
+        if self.released {
+            return;
+        }
         let sender = self.sender.clone();
         // if the channel is closed then the whole instance is down
         std::mem::drop(tokio::spawn(async move { sender.send(()).await }));
@@ -136,7 +142,7 @@ impl SearchQueue {
                         // Can't panic: the queue wasn't empty thus the range isn't empty.
                         let remove = rng.random_range(0..queue.len());
                         let channel = queue.swap_remove(remove);
-                        let _ = channel.send(Permit { sender: sender.clone() });
+                        let _ = channel.send(Permit { sender: sender.clone(), released: false });
                     }
                 },
 
@@ -151,7 +157,7 @@ impl SearchQueue {
                     if searches_running < usize::from(parallelism) && queue.is_empty() {
                         searches_running += 1;
                         // if the search requests die, it's not a hard error on our side
-                        let _ = search_request.send(Permit { sender: sender.clone() });
+                        let _ = search_request.send(Permit { sender: sender.clone(), released: false });
                         continue;
                     } else if capacity == 0 {
                         // in the very specific case where we have a capacity of zero,
@@ -208,5 +214,53 @@ impl SearchQueue {
         } else {
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::{poll_fn, Future};
+    use std::task::Poll;
+
+    use super::*;
+
+    async fn expect_one_release(mut receiver: mpsc::Receiver<()>) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            assert_eq!(receiver.recv().await, Some(()));
+            assert_eq!(receiver.recv().await, None, "a permit must release exactly once");
+        })
+        .await
+        .expect("permit release should complete");
+    }
+
+    #[tokio::test]
+    async fn explicit_drop_releases_once() {
+        let (sender, receiver) = mpsc::channel(1);
+        Permit { sender, released: false }.drop().await;
+        expect_one_release(receiver).await;
+    }
+
+    #[tokio::test]
+    async fn implicit_drop_releases_once() {
+        let (sender, receiver) = mpsc::channel(1);
+        drop(Permit { sender, released: false });
+        expect_one_release(receiver).await;
+    }
+
+    #[tokio::test]
+    async fn cancelled_explicit_drop_still_releases_once() {
+        let (sender, mut receiver) = mpsc::channel(1);
+        // Fill the channel so explicit release has to suspend.
+        sender.send(()).await.unwrap();
+        let mut release = Box::pin(Permit { sender, released: false }.drop());
+        poll_fn(|cx| {
+            assert!(release.as_mut().poll(cx).is_pending());
+            Poll::Ready(())
+        })
+        .await;
+        drop(release);
+        // Drain the filler; the cancelled permit must still send its own release.
+        assert_eq!(receiver.recv().await, Some(()));
+        expect_one_release(receiver).await;
     }
 }
