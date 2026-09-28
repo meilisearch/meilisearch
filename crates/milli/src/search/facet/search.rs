@@ -127,7 +127,7 @@ impl<'a> SearchForFacetValues<'a> {
         let rtxn = self.rtxn;
         let mut results = match order {
             OrderBy::Lexicographic => ValuesCollection::by_lexicographic(self.max_values),
-            OrderBy::Count => ValuesCollection::by_count(self.max_values),
+            OrderBy::Count | OrderBy::CountSampled => ValuesCollection::by_count(self.max_values),
         };
         match self.query.as_ref() {
             Some(query) => {
