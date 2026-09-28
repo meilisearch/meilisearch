@@ -8,9 +8,9 @@ use filter_parser::{ConstraintCondition, ConstraintConditionKind, FilterConstrai
 use time::OffsetDateTime;
 
 use crate::{
-    dynamic_search_rules::{DynamicSearchRulesView, RuleActions, RuleId},
+    dynamic_search_rules::{RuleActions, RuleId},
     search::facet::value_bounds::{to_str_bounds, ValueBounds},
-    PatternMatch, Precedence, Result,
+    Precedence, Result,
 };
 
 /// Preview of a DSR.
@@ -33,8 +33,8 @@ pub struct RulePreview {
     pub actions: RuleActions,
 }
 
-pub(super) struct RulePreviewWithId {
-    pub preview: RulePreview,
+pub(super) struct RulePreviewWithId<'a> {
+    pub preview: &'a RulePreview,
     pub preview_id: RuleId,
 }
 
@@ -47,12 +47,11 @@ impl RulePreview {
         query_terms: &[&str],
         filter_constraints: &FilterConstraints,
         target_time: OffsetDateTime,
-        dsrs: &DynamicSearchRulesView<'_>,
     ) -> Result<ConditionOutcomes> {
         let satisfies_active_condition = self.active;
         let satisfies_time_condition = self.apply_time_conditions(target_time);
         let (satisfies_query_empty_condition, satisfies_query_words_condition) =
-            self.apply_query_conditions(query_terms, dsrs)?;
+            self.apply_query_conditions(query_terms)?;
         let satisfies_filter_condition = self.apply_filter_conditions(filter_constraints);
 
         Ok(ConditionOutcomes {
@@ -86,7 +85,6 @@ impl RulePreview {
     fn apply_query_conditions(
         &self,
         query_terms: &[&str],
-        dsrs: &DynamicSearchRulesView<'_>,
     ) -> Result<(QueryEmptyConditionOutcome, QueryWordsConditionOutcome)> {
         let Some(query) = &self.conditions.query else {
             return Ok((
@@ -108,31 +106,10 @@ impl RulePreview {
 
         if let Some(words) = query.words.as_deref() {
             words_condition = QueryWordsConditionOutcome::Satisfied;
-            let index = dsrs.index;
-            let rtxn = dsrs.rtxn;
 
-            let localized_attributes_rules =
-                index.localized_attributes_rules(rtxn)?.unwrap_or_default();
-            let locales = localized_attributes_rules
-                .iter()
-                .find(|rule| rule.match_str("words") == PatternMatch::Match)
-                .map(|rule| rule.locales());
-
-            // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
-            let stop_words = index.stop_words(&rtxn)?;
-            let allowed_separators = index.allowed_separators(&rtxn)?;
-            let allowed_separators: Option<Vec<_>> =
-                allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
-            let dictionary = index.dictionary(&rtxn)?;
-            let dictionary: Option<Vec<_>> =
-                dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
-            let mut builder = crate::update::new::tokenizer_builder(
-                stop_words.as_ref(),
-                allowed_separators.as_deref(),
-                dictionary.as_deref(),
-            );
+            let mut builder = crate::update::new::tokenizer_builder(None, None, None);
             let tokenizer = builder.build();
-            for token in tokenizer.tokenize_with_allow_list(words, locales) {
+            for token in tokenizer.tokenize_with_allow_list(words, None) {
                 if !matches!(token.kind(), TokenKind::Word) {
                     continue;
                 }
@@ -252,22 +229,32 @@ fn find_field_values(
 }
 
 /// Outcome of applying conditions to a query.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct ConditionOutcomes {
     /// Whether the rule was active
     pub satisfies_active_condition: bool,
     /// Whether the current time falls in the range of time specified by the condition
+    #[serde(skip_serializing_if = "TimeConditionOutcome::no_constraint")]
     pub satisfies_time_condition: TimeConditionOutcome,
     /// Whether the query emptiness condition aligns with the actual query
+    #[serde(skip_serializing_if = "QueryEmptyConditionOutcome::no_constraint")]
     pub satisfies_query_empty_condition: QueryEmptyConditionOutcome,
     /// Whether the query words meet the condition
+    #[serde(skip_serializing_if = "QueryWordsConditionOutcome::no_constraint")]
     pub satisfies_query_words_condition: QueryWordsConditionOutcome,
     /// Whether the filter meets the condition
+    #[serde(skip_serializing_if = "FilterConditionOutcome::no_constraint")]
     pub satisfies_filter_condition: FilterConditionOutcome,
 }
 
 /// Outcome of the time condition
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub enum TimeConditionOutcome {
     /// Current time falls in range
     Satisfied,
@@ -287,10 +274,19 @@ impl TimeConditionOutcome {
             TimeConditionOutcome::TooEarly | TimeConditionOutcome::TooLate => false,
         }
     }
+
+    /// `true` if there is no such condition
+    pub fn no_constraint(&self) -> bool {
+        matches!(self, Self::NoConstraint)
+    }
 }
 
 /// Outcome of the query empty condition
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema,
+)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub enum QueryEmptyConditionOutcome {
     /// Query emptiness agrees with the condition
     Satisfied,
@@ -314,10 +310,17 @@ impl QueryEmptyConditionOutcome {
             }
         }
     }
+
+    /// `true` if there is no such condition
+    pub fn no_constraint(&self) -> bool {
+        matches!(self, Self::NoConstraint)
+    }
 }
 
 /// Outcome of the query words condition
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub enum QueryWordsConditionOutcome {
     /// The query contains all the words of the condition
     Satisfied,
@@ -340,10 +343,17 @@ impl QueryWordsConditionOutcome {
             QueryWordsConditionOutcome::MissingWord { word: _ } => false,
         }
     }
+
+    /// `true` if there is no such condition
+    pub fn no_constraint(&self) -> bool {
+        matches!(self, Self::NoConstraint)
+    }
 }
 
 /// Outcome of the filter condition
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub enum FilterConditionOutcome {
     /// The filter satifies all constraints in the condition
     Satisfied,
@@ -380,6 +390,11 @@ impl FilterConditionOutcome {
             }
         }
     }
+
+    /// `true` if there is no such condition
+    pub fn no_constraint(&self) -> bool {
+        matches!(self, Self::NoConstraint)
+    }
 }
 
 impl ConditionOutcomes {
@@ -407,16 +422,24 @@ pub struct PreviewConditions {
 }
 
 #[derive(Clone, Copy)]
+/// Duplicate implementation of the equivalent meilisearch-types struct due to deserr shenanigans
 pub struct TimeCondition {
+    /// Beginning of the range
     pub start: Option<OffsetDateTime>,
+    /// End of the range
     pub end: Option<OffsetDateTime>,
 }
 
+/// Duplicate implementation of the equivalent meilisearch-types struct due to deserr shenanigans
 pub struct QueryCondition {
+    /// Whether the query should be empty
     pub is_empty: Option<bool>,
+    /// Words that the query must contain
     pub words: Option<String>,
 }
+/// Duplicate implementation of the equivalent meilisearch-types struct due to deserr shenanigans
 pub struct FilterCondition {
+    /// Constrained values
     pub values: BTreeMap<String, serde_json::Value>,
 }
 
@@ -437,7 +460,7 @@ fn resolve_constraints(
                             )
                         }
                         (either::Either::Right(number), Some(number_range)) => {
-                            number_range.contains(&number)
+                            number_range.contains(number)
                         }
                         _ => false,
                     },

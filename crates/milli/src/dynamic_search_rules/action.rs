@@ -8,12 +8,12 @@ use crate::update::new::document::DocumentFromDb;
 use crate::{DocumentId, Filter, IndexFilter, PinDoc, Result, SearchContext};
 
 impl<'a> DynamicSearchRulesView<'a> {
-    fn find_pin_actions(
+    fn find_pin_actions<'b>(
         precedence: Precedence,
         actions: Vec<PinAction>,
-        search_context: &'a SearchContext,
+        search_context: &'b SearchContext,
         rule_uid: String,
-    ) -> impl Iterator<Item = Result<PinDoc>> + 'a {
+    ) -> impl Iterator<Item = Result<PinDoc>> + 'b {
         actions.into_iter().filter_map(move |action| {
             let doc_id = action.active_document(search_context).transpose()?;
 
@@ -31,11 +31,11 @@ impl<'a> DynamicSearchRulesView<'a> {
         })
     }
 
-    fn find_scale_actions(
+    fn find_scale_actions<'b>(
         actions: Vec<ScaleAction>,
-        search_context: &'a SearchContext,
+        search_context: &'b SearchContext,
         rule_uid: String,
-    ) -> impl Iterator<Item = Result<ScaleDocs>> + 'a {
+    ) -> impl Iterator<Item = Result<ScaleDocs>> + 'b {
         actions.into_iter().filter_map(move |action| {
             let docs = action.active_documents(search_context).transpose()?;
 
@@ -48,18 +48,21 @@ impl<'a> DynamicSearchRulesView<'a> {
         })
     }
 
-    pub(super) fn find_actions(
-        self,
-        sorted_active_rules: impl IntoIterator<Item = Result<RuleId>> + 'a,
-        search_context: &'a SearchContext,
+    pub(super) fn find_actions<'b>(
+        this: Option<Self>,
+        sorted_active_rules: impl IntoIterator<Item = Result<RuleId>> + 'b,
+        search_context: &'b SearchContext,
         fuel: DsrFuel,
-        mut active_preview: Option<&'a RulePreviewWithId>,
+        mut active_preview: Option<&'b RulePreviewWithId>,
     ) -> impl Iterator<
         Item = Result<(
-            impl Iterator<Item = Result<PinDoc>> + 'a,
-            impl Iterator<Item = Result<ScaleDocs>> + 'a,
+            impl Iterator<Item = Result<PinDoc>> + 'b,
+            impl Iterator<Item = Result<ScaleDocs>> + 'b,
         )>,
-    > + 'a {
+    > + 'b
+    where
+        'a: 'b,
+    {
         sorted_active_rules
             .into_iter()
             .take(fuel.max_active_rules())
@@ -74,8 +77,10 @@ impl<'a> DynamicSearchRulesView<'a> {
                         preview.preview.actions.clone(),
                         preview.preview.uid.clone(),
                     ))
+                } else if let Some(this) = this {
+                    this.find_actions_from_db(rule_id)?
                 } else {
-                    self.find_actions_from_db(rule_id)?
+                    None
                 };
 
                 let Some((precedence, actions, rule_uid)) = res else { return Ok(None) };

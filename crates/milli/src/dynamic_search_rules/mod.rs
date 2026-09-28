@@ -32,8 +32,10 @@ pub mod fields;
 pub use action::{PinAction, RuleActions, ScaleAction};
 pub use fuel::DsrFuel;
 pub use preview::{
-    ConditionOutcomes, FilterConditionOutcome, PreviewConditions, QueryEmptyConditionOutcome,
-    QueryWordsConditionOutcome, RulePreview, TimeConditionOutcome,
+    ConditionOutcomes, FilterCondition as PreviewFilterCondition, FilterConditionOutcome,
+    PreviewConditions, QueryCondition as PreviewQueryCondition, QueryEmptyConditionOutcome,
+    QueryWordsConditionOutcome, RulePreview, TimeCondition as PreviewTimeCondition,
+    TimeConditionOutcome,
 };
 pub use upgrade::{create_metadata, upgrade_dsrs, METADATA_UID};
 
@@ -134,31 +136,38 @@ impl<'a> DynamicSearchRulesView<'a> {
 
     /// Resolve the applicable actions for the given query.
     pub fn resolve_actions(
-        &self,
+        this: Option<Self>,
         query_terms: &[LocatedQueryTerm],
         filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
-        preview: Option<RulePreview>,
+        preview: Option<&RulePreview>,
     ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>, Option<ConditionOutcomes>)> {
         let preview = preview
             .map(|preview| {
-                let preview_id = self.get_id(&preview.uid).transpose().unwrap_or_else(|| {
-                    let mut available_ids = RoaringBitmap::full();
-                    available_ids -= self.index.documents_ids(self.rtxn)?;
+                let preview_id = if let Some(this) = this {
+                    this.get_id(&preview.uid).transpose().unwrap_or_else(|| {
+                        let mut available_ids = RoaringBitmap::full();
+                        available_ids -= this.index.documents_ids(this.rtxn)?;
 
-                    Ok(available_ids.min().unwrap_wip())
-                })?;
+                        Ok(available_ids.min().unwrap_wip())
+                    })?
+                } else {
+                    0
+                };
                 Ok::<_, crate::Error>(preview::RulePreviewWithId { preview_id, preview })
             })
             .transpose()?;
 
         let (query_terms, filter_constraints) =
-            self.prepare_query(query_terms, filter, search_context, fuel)?;
+            Self::prepare_query(query_terms, filter, search_context, fuel)?;
 
-        let active_rules =
-            self.active_rules_for_query(&query_terms, &filter_constraints, search_context, fuel)?;
+        let active_rules = if let Some(this) = this {
+            this.active_rules_for_query(&query_terms, &filter_constraints, search_context, fuel)?
+        } else {
+            Default::default()
+        };
 
         let preview_outcome = preview
             .map(|preview| {
@@ -166,7 +175,6 @@ impl<'a> DynamicSearchRulesView<'a> {
                     &query_terms,
                     &filter_constraints,
                     search_context.before_search,
-                    self,
                 )?;
                 Ok::<_, crate::Error>((preview, outcome))
             })
@@ -182,8 +190,9 @@ impl<'a> DynamicSearchRulesView<'a> {
         let mut pins = Vec::new();
         let mut scales = Vec::new();
 
-        for res in self.find_actions(
-            self.rule_ids_sorted_by_precedence(active_rules, active_preview)?,
+        for res in Self::find_actions(
+            this,
+            Self::rule_ids_sorted_by_precedence(this, active_rules, active_preview)?,
             search_context,
             fuel,
             active_preview,
@@ -318,6 +327,18 @@ impl<'a> DynamicSearchRulesView<'a> {
     }
 
     fn rule_ids_sorted_by_precedence(
+        this: Option<Self>,
+        active_rules: RoaringBitmap,
+        active_preview: Option<&RulePreviewWithId>,
+    ) -> Result<impl Iterator<Item = Result<RuleId>> + 'a> {
+        Ok(if let Some(this) = this {
+            either::Left(this.rule_ids_sorted_by_precedence_db(active_rules, active_preview)?)
+        } else {
+            either::Right(active_preview.map(|preview| Ok(preview.preview_id)).into_iter())
+        })
+    }
+
+    fn rule_ids_sorted_by_precedence_db(
         self,
         mut active_rules: RoaringBitmap,
         active_preview: Option<&RulePreviewWithId>,
@@ -440,15 +461,23 @@ impl DynamicSearchRules {
 
     /// Resolve the applicable actions for the given query.
     pub fn resolve_actions(
-        &self,
+        this: Option<&Self>,
         query_terms: &[LocatedQueryTerm],
         filter: Option<&IndexFilter>,
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
-        preview: Option<RulePreview>,
+        preview: Option<&RulePreview>,
     ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>, Option<ConditionOutcomes>)> {
-        self.as_view().resolve_actions(query_terms, filter, universe, search_context, fuel, preview)
+        DynamicSearchRulesView::resolve_actions(
+            this.map(Self::as_view),
+            query_terms,
+            filter,
+            universe,
+            search_context,
+            fuel,
+            preview,
+        )
     }
 
     /// Provide access to the raw rule representation from an iterator of rule internal ids.

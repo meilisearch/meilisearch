@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use actix_web::web::Data;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{AuthenticationError, Code, ResponseError};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::search::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
@@ -19,7 +20,7 @@ use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
-    SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
+    SearchQueryWithIndex, SearchResult, SearchResultWithIndex, ShowFederationInfo,
 };
 
 pub use preprocessing::{preprocess_filters, retrieve_foreign_keys_settings};
@@ -32,24 +33,77 @@ mod preprocessing;
 pub type RemoteErrors = BTreeMap<String, ResponseError>;
 
 pub struct DocumentSearch {
-    pub queries: Vec<SearchQueryWithIndex>,
-    pub federation: Option<Federation>,
-    pub personalization_service: Arc<PersonalizationService>,
-    pub is_proxy: bool,
-    pub include_metadata: bool,
-    pub request_uid: Uuid,
+    personalization_service: Arc<PersonalizationService>,
+    is_proxy: bool,
+    include_metadata: bool,
+    request_uid: Uuid,
 }
 
 impl DocumentSearch {
-    pub async fn execute<const P: u8>(
-        mut self,
+    pub fn new(
+        personalization_service: Arc<PersonalizationService>,
+        is_proxy: bool,
+        include_metadata: bool,
+        request_uid: Uuid,
+    ) -> Self {
+        Self { personalization_service, is_proxy, include_metadata, request_uid }
+    }
+
+    pub async fn execute_federated<const P: u8>(
+        self,
+        queries: Vec<SearchQueryWithIndex>,
+        federation: Federation,
         guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
         progress: Progress,
-    ) -> Result<DocumentSearchResult, (ResponseError, Option<usize>)> {
+    ) -> Result<(FederatedSearchResult, IndexMap<String, String>), (ResponseError, Option<usize>)>
+    {
+        let search = FederatedSearch { federation };
+        self.execute(search, queries, guarded_index_scheduler, progress).await
+    }
+
+    pub async fn execute_single<const P: u8>(
+        self,
+        query: SearchQueryWithIndex,
+        guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
+        progress: Progress,
+    ) -> Result<(SearchResult, IndexMap<String, String>), ResponseError> {
+        match self.execute_multi(vec![query], guarded_index_scheduler, progress).await {
+            Ok((mut search_results, mut progress)) => {
+                let (_, progress) = progress.pop().unwrap();
+                let search_result = search_results.pop().unwrap();
+                Ok((search_result.result, progress))
+            }
+            Err((err, _)) => Err(err),
+        }
+    }
+
+    pub async fn execute_multi<const P: u8>(
+        self,
+        queries: Vec<SearchQueryWithIndex>,
+        guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
+        progress: Progress,
+    ) -> Result<
+        (Vec<SearchResultWithIndex>, IndexMap<String, IndexMap<String, String>>),
+        (ResponseError, Option<usize>),
+    > {
+        let search = MultiSearch;
+        self.execute(search, queries, guarded_index_scheduler, progress).await
+    }
+
+    async fn execute<S, const P: u8>(
+        self,
+        search: S,
+        mut queries: Vec<SearchQueryWithIndex>,
+        guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
+        progress: Progress,
+    ) -> Result<(S::Output, S::ProgressTrace), (ResponseError, Option<usize>)>
+    where
+        S: MultiQuerySearch,
+    {
         // regardless of federation, check authorization and apply search rules
         let auth_filter = guarded_index_scheduler.filters();
         'check_authorization: {
-            for (query_index, federated_query) in self.queries.iter_mut().enumerate() {
+            for (query_index, federated_query) in queries.iter_mut().enumerate() {
                 let index_uid = federated_query.index_uid.as_str();
                 // Check index from API key
                 if !auth_filter.is_index_authorized(index_uid) {
@@ -71,7 +125,7 @@ impl DocumentSearch {
         let (hydration_cache, preprocessed_queries, remote_errors) = preprocess_filters(
             index_scheduler.clone(),
             &network_partitioner,
-            self.queries,
+            queries,
             features,
             self.is_proxy,
             &progress,
@@ -80,40 +134,113 @@ impl DocumentSearch {
         )
         .await?;
 
-        // Federated search
+        let network_partitioner = &network_partitioner;
+        let context = ExecutionContext {
+            index_scheduler,
+            network_partitioner,
+            hydration_cache,
+            remote_errors,
+            features,
+            document_search: self,
+            progress,
+            auth_filter,
+        };
 
-        if let Some(federation) = self.federation.take() {
-            progress.update_progress(TotalProcessingTimeStep::Process);
-            let (search_result, _) = perform_federated_search(
-                index_scheduler,
-                &network_partitioner,
-                preprocessed_queries,
-                hydration_cache,
-                remote_errors,
-                federation,
-                features,
-                self.is_proxy,
-                self.request_uid,
-                self.include_metadata,
-                ShowFederationInfo::Always,
-                &self.personalization_service,
-                &progress,
-                auth_filter,
-            )
-            .await?;
+        search.execute(preprocessed_queries, context).await
+    }
+}
 
-            return Ok(DocumentSearchResult::Federated(
-                Box::new(search_result),
-                progress.accumulated_durations(),
-            ));
-        }
+struct ExecutionContext<'a> {
+    index_scheduler: Data<IndexScheduler>,
+    network_partitioner: &'a NetworkPartitioner,
+    hydration_cache: Option<HydrationContext>,
+    remote_errors: RemoteErrors,
+    features: RoFeatures,
+    document_search: DocumentSearch,
+    progress: Progress,
+    auth_filter: &'a AuthFilter,
+}
 
-        // Multi-search
+trait MultiQuerySearch {
+    type Output;
+    type ProgressTrace;
+
+    async fn execute(
+        self,
+        queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
+        context: ExecutionContext,
+    ) -> Result<(Self::Output, Self::ProgressTrace), (ResponseError, Option<usize>)>;
+}
+
+struct FederatedSearch {
+    federation: Federation,
+}
+
+impl MultiQuerySearch for FederatedSearch {
+    type Output = FederatedSearchResult;
+    type ProgressTrace = IndexMap<String, String>;
+    async fn execute(
+        self,
+        queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
+        ExecutionContext {
+            index_scheduler,
+            network_partitioner,
+            hydration_cache,
+            remote_errors,
+            features,
+            document_search:
+                DocumentSearch { personalization_service, is_proxy, include_metadata, request_uid },
+            progress,
+            auth_filter,
+        }: ExecutionContext<'_>,
+    ) -> Result<(Self::Output, Self::ProgressTrace), (ResponseError, Option<usize>)> {
+        progress.update_progress(TotalProcessingTimeStep::Process);
+        let (search_result, _) = perform_federated_search(
+            index_scheduler,
+            network_partitioner,
+            queries,
+            hydration_cache,
+            remote_errors,
+            self.federation,
+            features,
+            is_proxy,
+            request_uid,
+            include_metadata,
+            ShowFederationInfo::Always,
+            &personalization_service,
+            &progress,
+            auth_filter,
+        )
+        .await?;
+        Ok((search_result, progress.accumulated_durations()))
+    }
+}
+
+struct MultiSearch;
+
+impl MultiQuerySearch for MultiSearch {
+    type Output = Vec<SearchResultWithIndex>;
+    type ProgressTrace = IndexMap<String, IndexMap<String, String>>;
+    async fn execute(
+        self,
+        queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
+        ExecutionContext {
+            index_scheduler,
+            network_partitioner,
+            hydration_cache,
+            remote_errors,
+            features,
+            document_search:
+                DocumentSearch { personalization_service, is_proxy, include_metadata, request_uid },
+            progress,
+            auth_filter,
+        }: ExecutionContext<'_>,
+    ) -> Result<(Self::Output, Self::ProgressTrace), (ResponseError, Option<usize>)> {
         let search_results: Result<_, (ResponseError, _)> = async {
             let mut multi_search_progress = progress;
-            let mut search_results = Vec::with_capacity(preprocessed_queries.len());
-            let mut progress_by_query = IndexMap::with_capacity(preprocessed_queries.len());
-            for (query_index, query) in preprocessed_queries.into_iter().enumerate() {
+            let mut search_results = Vec::with_capacity(queries.len());
+            let mut progress_by_query = IndexMap::with_capacity(queries.len());
+            for (query_index, query) in queries.into_iter().enumerate() {
                 // recreate the progress for each query to reset the time tracking
                 let progress = multi_search_progress;
                 multi_search_progress = progress.recreate();
@@ -137,17 +264,17 @@ impl DocumentSearch {
 
                 let (search_result, _) = perform_federated_search(
                     index_scheduler.clone(),
-                    &network_partitioner,
+                    network_partitioner,
                     vec![fixed_query],
                     hydration_cache.clone(),
                     remote_errors.clone(),
                     federation,
                     features,
-                    self.is_proxy,
-                    self.request_uid,
-                    self.include_metadata,
+                    is_proxy,
+                    request_uid,
+                    include_metadata,
                     ShowFederationInfo::OnNetworkOnly,
-                    &self.personalization_service,
+                    &personalization_service,
                     &progress,
                     auth_filter,
                 )
@@ -169,9 +296,7 @@ impl DocumentSearch {
         }
         .await;
 
-        search_results.map(|(search_results, progress_by_query)| {
-            DocumentSearchResult::Multi(search_results, progress_by_query)
-        })
+        search_results
     }
 }
 
@@ -212,6 +337,7 @@ pub fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithI
         locales: _,
         personalize,
         federation_options: _,
+        inline_rule: _,
     } = &mut query;
 
     let mut federation = Federation::default();
@@ -285,12 +411,6 @@ impl<T, E: Into<ResponseError>> WithIndex for Result<T, E> {
     fn without_index(self) -> Result<T, (ResponseError, Option<usize>)> {
         self.map_err(|err| (err.into(), None))
     }
-}
-
-#[derive(Debug)]
-pub enum DocumentSearchResult {
-    Federated(Box<FederatedSearchResult>, IndexMap<String, String>),
-    Multi(Vec<SearchResultWithIndex>, IndexMap<String, IndexMap<String, String>>),
 }
 
 const MAX_IN_FLIGHT_REQUESTS: usize = 40;

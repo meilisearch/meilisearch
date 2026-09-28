@@ -198,6 +198,7 @@ pub struct FederatedSearchResult {
     /// Combined search results from all queries
     pub hits: Vec<SearchHit>,
 
+    /// List of vectors per query, if `retrieveVectors` is set to `true`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_vectors: Option<BTreeMap<usize, Embedding>>,
     /// Total processing time in milliseconds
