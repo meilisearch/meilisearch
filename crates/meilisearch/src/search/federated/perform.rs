@@ -175,7 +175,7 @@ pub async fn perform_federated_search(
 
             // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
             search_by_index
-                .check_unused_facets(&params.index_scheduler, &params.auth_filter)
+                .check_unused_facets(&params.index_scheduler, &params.auth_filter, &progress)
                 .without_index()?;
 
             Ok((search_by_index, params, deadline))
@@ -405,7 +405,7 @@ pub async fn perform_federated_search(
 
     // 3.5. merge facets
     let (facet_distribution, facet_stats, facets_by_index) =
-        facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits, progress);
+        facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits);
 
     let after_merge = time::OffsetDateTime::now_utc();
 
@@ -1743,6 +1743,7 @@ impl SearchByIndex {
                     &rtxn,
                     &fidmap,
                     candidates,
+                    progress,
                 )
             })
             .transpose()
@@ -1772,6 +1773,7 @@ impl SearchByIndex {
         &mut self,
         index_scheduler: &IndexScheduler,
         auth_filter: &AuthFilter,
+        progress: &Progress,
     ) -> Result<(), ResponseError> {
         for (index_uid, facets) in std::mem::take(&mut self.federation.facets_by_index) {
             let index = match index_scheduler.user_index(&index_uid, auth_filter) {
@@ -1819,6 +1821,7 @@ impl SearchByIndex {
                     &rtxn,
                     &fidmap,
                     Default::default(),
+                    progress,
                 ) {
                     if self.show_federation_info == ShowFederationInfo::Always {
                         error.message = format!(
@@ -1933,9 +1936,7 @@ impl FacetOrder {
         remote_results: Vec<FederatedSearchResult>,
         mut facets: FederatedFacets,
         rejected_hits: BTreeMap<String, Vec<SearchHit>>,
-        progress: &Progress,
     ) -> (Option<FacetDistributions>, Option<FacetStats>, FederatedFacets) {
-        let _step = progress.update_progress_scoped(TotalProcessingTimeStep::MergeFacets);
         let (facet_distribution, facet_stats, facets_by_index) = match (self, merge_facets) {
             (FacetOrder::ByFacet(facet_order), Some(merge_facets)) => {
                 for remote_facets_by_index in

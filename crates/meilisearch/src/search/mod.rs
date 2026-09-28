@@ -21,7 +21,7 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::search::steps::RetrieveIndexDataStep;
+use meilisearch_types::milli::search::steps::{FacetDistributionStep, RetrieveIndexDataStep};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
@@ -1962,8 +1962,14 @@ pub fn perform_search(
 
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
-            let _step = progress.update_progress_scoped(RetrieveIndexDataStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, &fields_ids_map, candidates)
+            compute_facet_distribution_stats(
+                &facets,
+                index,
+                &rtxn,
+                &fields_ids_map,
+                candidates,
+                progress,
+            )
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -2062,7 +2068,9 @@ fn compute_facet_distribution_stats(
     rtxn: &RoTxn,
     fields_ids_map: &FieldsIdsMap,
     candidates: roaring::RoaringBitmap,
+    progress: &Progress,
 ) -> Result<ComputedFacets, ResponseError> {
+    let _step = progress.update_progress_scoped(RetrieveIndexDataStep::FacetDistribution);
     let mut facet_distribution = index.facets_distribution(rtxn, fields_ids_map);
 
     let max_values_by_facet = index
@@ -2134,7 +2142,8 @@ fn compute_facet_distribution_stats(
     let distribution = facet_distribution
         .candidates(candidates)
         .default_order_by(sort_facet_values_by.get("*"))
-        .execute()?;
+        .execute(progress)?;
+    let _step = progress.update_progress_scoped(FacetDistributionStep::ComputeFacetStats);
     let stats = facet_distribution.compute_stats()?;
     let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
 

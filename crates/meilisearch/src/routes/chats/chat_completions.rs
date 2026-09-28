@@ -1005,6 +1005,8 @@ fn format_facet_distributions(
     search_rules: Option<IndexSearchRules>,
     index_uid: &str,
 ) -> index_scheduler::Result<String> {
+    // TODO: use the progress from the chat completion when we have it
+    let progress = Progress::quiet();
     let features = index_scheduler.features();
     let from_milli = |err| index_scheduler::Error::from_milli(err, Some(index_uid.to_string()));
     let universe = 'filter: {
@@ -1035,7 +1037,7 @@ fn format_facet_distributions(
         .max_values_per_facet(max_values_per_facet)
         .candidates(universe)
         .facets(filterable_attributes)
-        .execute()
+        .execute(&progress)
         .map_err(from_milli)?;
 
     let mut output = String::new();

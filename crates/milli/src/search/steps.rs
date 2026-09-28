@@ -18,14 +18,9 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
-    pub enum FederatingResultsStep {
-        PartitionQueries,
-        StartRemoteSearch,
-        ExecuteLocalSearch,
-        WaitForRemoteResults,
-        MergeResults,
-        HydrateDocuments,
-        MergeFacets,
+    pub enum FacetDistributionStep {
+        ComputeFacetDistribution,
+        ComputeFacetStats,
     }
 }
 
@@ -35,7 +30,6 @@ make_enum_progress! {
         PreprocessFilters,
         Process,
         Hydrate,
-        MergeFacets,
     }
 }
 

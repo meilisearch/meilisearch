@@ -95,15 +95,16 @@ fn test_facet_distribution_with_no_facet_values() {
 
     wtxn.commit().unwrap();
 
+    let progress = Progress::quiet();
     let rtxn = index.read_txn().unwrap();
     let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut distrib = FacetDistribution::new(&rtxn, &index, &fields_ids_map);
     distrib.facets(vec![("genres", OrderBy::default())]);
-    let result = distrib.execute().unwrap();
+    let result = distrib.execute(&progress).unwrap();
     assert_eq!(result["genres"].len(), 0);
 
     let mut distrib = FacetDistribution::new(&rtxn, &index, &fields_ids_map);
     distrib.facets(vec![("tags", OrderBy::default())]);
-    let result = distrib.execute().unwrap();
+    let result = distrib.execute(&progress).unwrap();
     assert_eq!(result["tags"].len(), 2);
 }

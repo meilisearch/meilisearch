@@ -16,9 +16,11 @@ use crate::heed_codec::facet::{
     FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
+use crate::progress::Progress;
 use crate::search::facet::facet_distribution_iter::{
     count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
 };
+use crate::search::steps::FacetDistributionStep;
 use crate::{
     Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index, PatternMatch, Result, UserError,
 };
@@ -336,7 +338,9 @@ impl<'a> FacetDistribution<'a> {
         Ok(distribution)
     }
 
-    pub fn execute(&self) -> Result<BTreeMap<String, IndexMap<String, u64>>> {
+    pub fn execute(&self, progress: &Progress) -> Result<BTreeMap<String, IndexMap<String, u64>>> {
+        let _step =
+            progress.update_progress_scoped(FacetDistributionStep::ComputeFacetDistribution);
         let filterable_attributes_rules = self.index.filterable_attributes_rules(self.rtxn)?;
         self.check_faceted_fields(&filterable_attributes_rules)?;
 
@@ -441,6 +445,7 @@ mod tests {
 
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
+    use crate::progress::Progress;
     use crate::{milli_snap, FacetDistribution, FilterableAttributesRule, OrderBy};
 
     #[test]
@@ -467,9 +472,10 @@ mod tests {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
+        let progress = Progress::quiet();
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
@@ -477,7 +483,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates([0, 1, 2].iter().copied().collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2, "RED": 1}}"###);
@@ -485,7 +491,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates([1, 2].iter().copied().collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         // I think it would be fine if "  blue" was "Blue" instead.
@@ -496,7 +502,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates([2].iter().copied().collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"RED": 1}}"###);
@@ -505,7 +511,7 @@ mod tests {
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates([0, 1, 2].iter().copied().collect())
             .max_values_per_facet(1)
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2}}"###);
@@ -514,7 +520,7 @@ mod tests {
             .facets(iter::once(("colour", OrderBy::Count)))
             .candidates([0, 1, 2].iter().copied().collect())
             .max_values_per_facet(1)
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2}}"###);
@@ -550,9 +556,10 @@ mod tests {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
+        let progress = Progress::quiet();
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
@@ -560,7 +567,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .max_values_per_facet(1)
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000}}"###);
@@ -568,7 +575,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..10_000).collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 4000, "Red": 6000}}"###);
@@ -576,7 +583,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
@@ -584,7 +591,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000, "Red": 3000}}"###);
@@ -593,7 +600,7 @@ mod tests {
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
             .max_values_per_facet(1)
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Blue": 2000}}"###);
@@ -602,7 +609,7 @@ mod tests {
             .facets(iter::once(("colour", OrderBy::Count)))
             .candidates((0..5_000).collect())
             .max_values_per_facet(1)
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), @r###"{"colour": {"Red": 3000}}"###);
@@ -638,9 +645,10 @@ mod tests {
         let txn = index.read_txn().unwrap();
         let fields_ids_map = index.fields_ids_map(&txn).unwrap();
 
+        let progress = Progress::quiet();
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates", @"ac9229ed5964d893af96a7076e2f8af5");
@@ -648,7 +656,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .max_values_per_facet(2)
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "no_candidates_with_max_2", @r###"{"colour": {"0": 10, "1": 10}}"###);
@@ -656,7 +664,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..10_000).collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "candidates_0_10_000", @"ac9229ed5964d893af96a7076e2f8af5");
@@ -664,7 +672,7 @@ mod tests {
         let map = FacetDistribution::new(&txn, &index, &fields_ids_map)
             .facets(iter::once(("colour", OrderBy::default())))
             .candidates((0..5_000).collect())
-            .execute()
+            .execute(&progress)
             .unwrap();
 
         milli_snap!(format!("{map:?}"), "candidates_0_5_000", @"825f23a4090d05756f46176987b7d992");
