@@ -8,6 +8,7 @@ use std::{fmt, mem};
 use heed::types::Bytes;
 use heed::BytesDecode;
 use indexmap::IndexMap;
+use ordered_float::OrderedFloat;
 use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -136,7 +137,7 @@ impl<'a> FacetDistribution<'a> {
                 let mut normalized_distribution = HashMap::new();
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
-                // We collect the facets from the sample of documents
+                // We collect the facet strings from the sample of documents
                 let db = self.index.field_id_docid_facet_strings;
                 for docid in sample {
                     key_buffer.truncate(mem::size_of::<FieldId>());
@@ -175,7 +176,7 @@ impl<'a> FacetDistribution<'a> {
                     }
                 }
 
-                // Make sure the values are ordered by count, first is biggest.
+                // Make sure the values are ordered by count, in descending order.
                 sorted_normalized_distribution.sort_unstable_by_key(|(_, count)| Reverse(*count));
 
                 let iter = sorted_normalized_distribution
@@ -185,7 +186,56 @@ impl<'a> FacetDistribution<'a> {
                     .map(|(original, count)| (original.to_string(), count));
                 distribution.extend(iter);
             }
-            FacetType::Number => todo!(),
+            FacetType::Number => {
+                let mut normalized_distribution = HashMap::new();
+                let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
+
+                // We collect the facet numbers from the sample of documents
+                let db = self.index.field_id_docid_facet_f64s;
+                for docid in sample {
+                    key_buffer.truncate(mem::size_of::<FieldId>());
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = db
+                        .remap_key_type::<Bytes>()
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetF64Codec>();
+
+                    for result in iter {
+                        let ((_fid, _docid, value), ()) = result?;
+                        *normalized_distribution.entry(OrderedFloat(value)).or_insert(0) += 1;
+                    }
+                }
+
+                // TODO if the sample is equal to the candidates just skip the retrieval
+                //      and use the exhaustive sample counts.
+
+                let mut sorted_normalized_distribution = Vec::new();
+                for (OrderedFloat(value), _count) in normalized_distribution {
+                    let key = FacetGroupKey { field_id, level: 0, left_bound: value };
+                    if let Some(FacetGroupLazyValue { size: _, bitmap_bytes }) = self
+                        .index
+                        .facet_id_f64_docids
+                        .remap_data_type::<FacetGroupLazyValueCodec>()
+                        .get(self.rtxn, &key)?
+                    {
+                        // Note that we could compute only the cardinality instead
+                        // of the whole set but the method doesn't exists.
+                        let count = candidates
+                            .intersection_with_serialized_unchecked(Cursor::new(bitmap_bytes))?;
+                        sorted_normalized_distribution.push((value, count.len()));
+                    }
+                }
+
+                // Make sure the values are ordered by count, in descending order.
+                sorted_normalized_distribution.sort_unstable_by_key(|(_, count)| Reverse(*count));
+
+                let iter = sorted_normalized_distribution
+                    .into_iter()
+                    // Note we could avoid fetching too many facet values if we already have enough of them.
+                    .take(self.max_values_per_facet.saturating_sub(distribution.len()))
+                    .map(|(value, count)| (value.to_string(), count));
+                distribution.extend(iter);
+            }
         }
 
         Ok(())
