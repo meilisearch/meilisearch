@@ -15,9 +15,19 @@ pub struct FilterConstraints {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum ConstraintTarget {
-    Fid(Token),
-    Vector { fid: Token, embedder: Option<Token> },
+    Fid(String),
+    Vector { fid: String, embedder: Option<String> },
     Geo,
+}
+
+impl std::borrow::Borrow<str> for ConstraintTarget {
+    fn borrow(&self) -> &str {
+        match self {
+            ConstraintTarget::Fid(field) => field.as_str(),
+            ConstraintTarget::Vector { fid, embedder: _ } => fid.as_str(),
+            ConstraintTarget::Geo => "_geo",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -54,7 +64,10 @@ impl FilterConstraints {
                     polarity,
                 };
                 let mut these_constraints = BTreeMap::new();
-                these_constraints.insert(ConstraintTarget::Fid(fid.clone()), vec![constraint]);
+                these_constraints.insert(
+                    ConstraintTarget::Fid(fid.original_fragment().to_owned()),
+                    vec![constraint],
+                );
                 constraints.push(these_constraints);
             }
             IndexFilterCondition::In { fid, els } => {
@@ -104,7 +117,12 @@ impl FilterConstraints {
                 };
                 let mut these_constraints = BTreeMap::new();
                 these_constraints.insert(
-                    ConstraintTarget::Vector { fid: fid.clone(), embedder: embedder.clone() },
+                    ConstraintTarget::Vector {
+                        fid: fid.original_fragment().to_owned(),
+                        embedder: embedder
+                            .as_ref()
+                            .map(|embedder| embedder.original_fragment().to_owned()),
+                    },
                     vec![constraint],
                 );
                 constraints.push(these_constraints);
