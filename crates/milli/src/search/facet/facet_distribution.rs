@@ -1,11 +1,14 @@
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
+use std::io::Cursor;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
-use heed::types::Bytes;
+use heed::types::{Bytes, DecodeIgnore};
 use heed::BytesDecode;
 use indexmap::IndexMap;
+use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +16,8 @@ use crate::attribute_patterns::match_field_legacy;
 use crate::facet::FacetType;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValue, FacetGroupLazyValueCodec,
+    FacetGroupValue, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::progress::Progress;
@@ -30,8 +34,12 @@ use crate::{
 pub const DEFAULT_VALUES_PER_FACET: usize = 100;
 
 /// Threshold on the number of candidates that will make
-/// the system to choose between one algorithm or another.
-const CANDIDATES_THRESHOLD: u64 = 3000;
+/// the system to choose between linear or tree scanning.
+const LINEAR_SCAN_CANDIDATES_THRESHOLD: u64 = 3000;
+
+/// The number of candidates to use as a sample when
+/// computing facet value counts.
+const SAMPLE_CANDIDATES: usize = 1000;
 
 /// How should we fetch the facets?
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,8 +47,10 @@ pub enum OrderBy {
     /// By lexicographic order...
     #[default]
     Lexicographic,
-    /// Or by number of docids in common?
+    /// by number of docids in common...
     Count,
+    /// Or by count based on a sample of docids?
+    CountSampled,
 }
 
 impl Display for OrderBy {
@@ -48,6 +58,7 @@ impl Display for OrderBy {
         match self {
             OrderBy::Lexicographic => f.write_str("alphabetically"),
             OrderBy::Count => f.write_str("by count"),
+            OrderBy::CountSampled => f.write_str("by count sampled"),
         }
     }
 }
@@ -105,6 +116,79 @@ impl<'a> FacetDistribution<'a> {
     pub fn candidates(&mut self, candidates: RoaringBitmap) -> &mut Self {
         self.candidates = Some(candidates);
         self
+    }
+
+    /// Returns normalized facet strings ordered by most count first
+    /// of the provided candidates.
+    ///
+    /// The returned tuples corresponds to the normalized value,
+    /// the first original value found, and the count.
+    fn facet_distribution_from_sample(
+        &self,
+        field_id: FieldId,
+        facet_type: FacetType,
+        sample: &RoaringBitmap,
+        candidates: &RoaringBitmap,
+        distribution: &mut IndexMap<String, u64>,
+    ) -> heed::Result<()> {
+        match facet_type {
+            FacetType::String => {
+                let mut normalized_distribution = HashMap::new();
+                let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
+
+                // We collect the facets from the sample of documents
+                let db = self.index.field_id_docid_facet_strings;
+                for docid in sample {
+                    key_buffer.truncate(mem::size_of::<FieldId>());
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = db
+                        .remap_key_type::<Bytes>()
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetStringCodec>();
+
+                    for result in iter {
+                        let ((_, _, normalized_value), original) = result?;
+                        let (_, count) = normalized_distribution
+                            .entry(normalized_value)
+                            .or_insert_with(|| (original, 0));
+                        *count += 1;
+                    }
+                }
+
+                // TODO if the sample is equal to the candidates just skip the retrieval
+                //      and use the exhaustive sample counts.
+
+                let mut sorted_normalized_distribution = Vec::new();
+                for (normalized_value, (original, _count)) in normalized_distribution {
+                    let key = FacetGroupKey { field_id, level: 0, left_bound: normalized_value };
+                    if let Some(FacetGroupLazyValue { size: _, bitmap_bytes }) = self
+                        .index
+                        .facet_id_string_docids
+                        .remap_data_type::<FacetGroupLazyValueCodec>()
+                        .get(self.rtxn, &key)?
+                    {
+                        // Note that we could compute only the cardinality instead
+                        // of the whole set but the method doesn't exists.
+                        let count = candidates
+                            .intersection_with_serialized_unchecked(Cursor::new(bitmap_bytes))?;
+                        sorted_normalized_distribution.push((original, count.len()));
+                    }
+                }
+
+                // Make sure the values are ordered by count, first is biggest.
+                sorted_normalized_distribution.sort_unstable_by_key(|(_, count)| Reverse(*count));
+
+                let iter = sorted_normalized_distribution
+                    .into_iter()
+                    // Note we could avoid fetching too many facet values if we already have enough of them.
+                    .take(self.max_values_per_facet.saturating_sub(distribution.len()))
+                    .map(|(original, count)| (original.to_string(), count));
+                distribution.extend(iter);
+            }
+            FacetType::Number => todo!(),
+        }
+
+        Ok(())
     }
 
     /// There is a small amount of candidates OR we ask for facet string values so we
@@ -263,11 +347,58 @@ impl<'a> FacetDistribution<'a> {
 
         let mut distribution = IndexMap::new();
         match (order_by, &self.candidates) {
-            (OrderBy::Lexicographic, Some(cnd)) if cnd.len() <= CANDIDATES_THRESHOLD => {
+            (OrderBy::CountSampled, cnd) => {
+                use rand::seq::IteratorRandom;
+
+                let candidates;
+                let candidates = match cnd {
+                    Some(cnd) => cnd,
+                    None => {
+                        candidates = self.index.documents_ids(self.rtxn)?;
+                        &candidates
+                    }
+                };
+
+                // Collect a sample of documents to work on
+                let sample_candidates = {
+                    let mut sample_candidates = vec![0; SAMPLE_CANDIDATES];
+                    let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+                    let count = candidates.iter().sample_fill(&mut rng, &mut sample_candidates[..]);
+                    RoaringBitmap::from_iter(sample_candidates.into_iter().take(count))
+                };
+
+                self.facet_distribution_from_sample(
+                    field_id,
+                    String,
+                    &sample_candidates,
+                    candidates,
+                    &mut distribution,
+                )?;
+                self.facet_distribution_from_sample(
+                    field_id,
+                    Number,
+                    &sample_candidates,
+                    candidates,
+                    &mut distribution,
+                )?;
+            }
+            (OrderBy::Lexicographic, Some(candidates))
+                if candidates.len() <= LINEAR_SCAN_CANDIDATES_THRESHOLD =>
+            {
                 // Classic search, candidates were specified, we must return facet values only related
                 // to those candidates. We also enter here for facet strings for performance reasons.
-                self.facet_distribution_from_documents(field_id, Number, cnd, &mut distribution)?;
-                self.facet_distribution_from_documents(field_id, String, cnd, &mut distribution)?;
+                self.facet_distribution_from_documents(
+                    field_id,
+                    Number,
+                    candidates,
+                    &mut distribution,
+                )?;
+                self.facet_distribution_from_documents(
+                    field_id,
+                    String,
+                    candidates,
+                    &mut distribution,
+                )?;
             }
             _ => {
                 let universe;
