@@ -5,7 +5,7 @@ use std::io::Cursor;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
-use heed::types::{Bytes, DecodeIgnore};
+use heed::types::Bytes;
 use heed::BytesDecode;
 use indexmap::IndexMap;
 use rand::SeedableRng;
@@ -17,7 +17,7 @@ use crate::facet::FacetType;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValue, FacetGroupLazyValueCodec,
-    FacetGroupValue, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
+    FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
 };
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::progress::Progress;
@@ -274,6 +274,7 @@ impl<'a> FacetDistribution<'a> {
         let search_function = match order_by {
             OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
             OrderBy::Count => count_iterate_over_facet_distribution,
+            OrderBy::CountSampled => unreachable!(), // TODO create a local enum and remove this panic
         };
 
         search_function(
@@ -303,6 +304,7 @@ impl<'a> FacetDistribution<'a> {
         let search_function = match order_by {
             OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
             OrderBy::Count => count_iterate_over_facet_distribution,
+            OrderBy::CountSampled => unreachable!(), // TODO create a local enum and remove this panic
         };
 
         search_function(
