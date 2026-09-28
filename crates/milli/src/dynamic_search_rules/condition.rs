@@ -16,7 +16,6 @@ use crate::{FieldId, IndexFilter, Result, SearchContext, MAX_COUNTED_WORDS};
 
 impl<'a> DynamicSearchRulesView<'a> {
     pub(super) fn prepare_query<'t>(
-        &self,
         query_terms: &[LocatedQueryTerm],
         filter: Option<&IndexFilter>,
         search_context: &'t SearchContext<'t>,

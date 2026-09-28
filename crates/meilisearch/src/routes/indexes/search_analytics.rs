@@ -139,6 +139,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             show_ranking_score,
             show_ranking_score_details,
             show_performance_details: _,
+            inline_rule: _,
         } = query;
 
         let mut ret = Self::default();

@@ -197,6 +197,7 @@ async fn list_rules(
         degraded: _,
         used_negative_operator: _,
         query_vector: _,
+        inline_rule_condition_outcomes: _,
     } = dsrs.search_in_description_and_words(query, &rule_ids, limit, offset)?;
 
     let rules = dsrs

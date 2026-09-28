@@ -12,6 +12,7 @@ use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::milli::dynamic_search_rules::ConditionOutcomes;
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
@@ -192,6 +193,7 @@ pub async fn perform_federated_search(
         mut semantic_hit_count,
         mut results_by_index,
         mut query_vectors,
+        query_outcomes,
         previous_query_data: _,
         facet_order,
     } = search_by_index;
@@ -220,6 +222,7 @@ pub async fn perform_federated_search(
             local_remote_name,
             &remote_results,
             &results_by_index,
+            query_outcomes,
         )
     };
 
@@ -924,6 +927,7 @@ fn build_query_metadata(
     local_remote_name: Option<String>,
     remote_results: &[FederatedSearchResult],
     results_by_index: &[SearchResultByIndex],
+    mut query_outcomes: BTreeMap<usize, ConditionOutcomes>,
 ) -> Vec<SearchMetadata> {
     // Create a map of (remote, index_uid) -> primary_key for quick lookup
     // This prevents collisions when multiple remotes have the same index_uid but different primary keys
@@ -957,13 +961,23 @@ fn build_query_metadata(
 
     // Build metadata in the same order as the original queries
     let mut query_metadata = Vec::new();
-    for (query, index_uid, remote) in precomputed_query_metadata {
+    for (query_index, (query, index_uid, remote)) in
+        precomputed_query_metadata.into_iter().enumerate()
+    {
         let primary_key =
             primary_key_per_index.get(&(remote.as_ref(), &index_uid)).map(|pk| pk.to_string());
         let query_uid = Uuid::now_v7();
         // if the remote is not set, use the local remote name
         let remote = remote.or_else(|| local_remote_name.clone());
-        query_metadata.push(SearchMetadata { query, query_uid, primary_key, index_uid, remote });
+        let inline_rule_condition_outcomes = query_outcomes.remove(&query_index);
+        query_metadata.push(SearchMetadata {
+            query,
+            query_uid,
+            primary_key,
+            index_uid,
+            remote,
+            inline_rule_condition_outcomes,
+        });
     }
     query_metadata
 }
@@ -1313,6 +1327,8 @@ struct SearchByIndex {
     semantic_hit_count: Option<u32>,
     results_by_index: Vec<SearchResultByIndex>,
     query_vectors: BTreeMap<usize, Embedding>,
+    // Outcome of inline rules per query
+    query_outcomes: BTreeMap<usize, ConditionOutcomes>,
     previous_query_data: Option<(RankingRules, usize, String)>,
     // remember the order and name of first index for each facet when merging with index settings
     // to detect if the order is inconsistent for a facet.
@@ -1337,6 +1353,7 @@ impl SearchByIndex {
             semantic_hit_count: None,
             results_by_index: Vec::with_capacity(index_count),
             query_vectors: BTreeMap::new(),
+            query_outcomes: BTreeMap::new(),
             previous_query_data: None,
         }
     }
@@ -1433,7 +1450,7 @@ impl SearchByIndex {
         }
 
         let queries_len = queries.len();
-        for QueryByIndex { query, weight, query_index } in queries {
+        for QueryByIndex { mut query, weight, query_index } in queries {
             let _step = progress.update_progress_scoped(QueryStep::new(query_index, queries_len));
             // use an immediately invoked lambda to capture the result without returning from the function
             let res: Result<(), ResponseError> = (|| {
@@ -1515,6 +1532,9 @@ impl SearchByIndex {
                     None
                 };
 
+                let rule_preview =
+                    query.inline_rule.take().map(|inline_rule| inline_rule.into_preview());
+
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
@@ -1544,8 +1564,12 @@ impl SearchByIndex {
                     .and_then(|dsrs| dsrs.milli_dsrs().transpose())
                     .transpose()?;
 
-                if let Some(dsrs) = &dsrs {
-                    search.dynamic_search_rules(dsrs, params.index_scheduler.dsr_fuel());
+                if dsrs.is_some() || rule_preview.is_some() {
+                    search.dynamic_search_rules(
+                        dsrs.as_ref(),
+                        params.index_scheduler.dsr_fuel(),
+                        rule_preview.as_ref(),
+                    );
                 }
 
                 if let Some(distinct) = self.federation.distinct.as_deref() {
@@ -1579,6 +1603,7 @@ impl SearchByIndex {
                     degraded: query_degraded,
                     used_negative_operator: query_used_negative_operator,
                     query_vector,
+                    inline_rule_condition_outcomes,
                 } = result;
 
                 if query.retrieve_vectors {
@@ -1589,6 +1614,10 @@ impl SearchByIndex {
                         );
                         self.query_vectors.insert(query_index, query_vector);
                     }
+                }
+
+                if let Some(inline_rule_condition_outcomes) = inline_rule_condition_outcomes {
+                    self.query_outcomes.insert(query_index, inline_rule_condition_outcomes);
                 }
 
                 candidates |= query_candidates;

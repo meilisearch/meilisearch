@@ -17,7 +17,7 @@ pub use self::facet::{
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
-use crate::dynamic_search_rules::{DsrFuel, DynamicSearchRules};
+use crate::dynamic_search_rules::{ConditionOutcomes, DsrFuel, DynamicSearchRules, RulePreview};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
 use crate::progress::Progress;
@@ -168,7 +168,8 @@ pub struct Search<'a> {
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
     progress: &'a Progress,
-    dynamic_search_rules: Option<(&'a DynamicSearchRules, DsrFuel)>,
+    dynamic_search_rules:
+        Option<(Option<&'a DynamicSearchRules>, DsrFuel, Option<&'a RulePreview>)>,
     candidates: Option<&'a RoaringBitmap>,
 }
 
@@ -319,10 +320,11 @@ impl<'a> Search<'a> {
 
     pub fn dynamic_search_rules(
         &mut self,
-        dynamic_search_rules: &'a DynamicSearchRules,
+        dynamic_search_rules: Option<&'a DynamicSearchRules>,
         fuel: DsrFuel,
+        rule_preview: Option<&'a RulePreview>,
     ) -> &mut Search<'a> {
-        self.dynamic_search_rules = Some((dynamic_search_rules, fuel));
+        self.dynamic_search_rules = Some((dynamic_search_rules, fuel, rule_preview));
         self
     }
 
@@ -417,8 +419,13 @@ impl<'a> Search<'a> {
             self.progress,
         )?;
 
-        let ResolvedQuery { query_graph_terms, pins, mut scales, used_negative_operator } =
-            self.resolve_query(&mut ctx, self.filter.as_ref(), &mut universe)?;
+        let ResolvedQuery {
+            query_graph_terms,
+            pins,
+            mut scales,
+            used_negative_operator,
+            inline_rule_condition_outcomes,
+        } = self.resolve_query(&mut ctx, self.filter.as_ref(), &mut universe)?;
 
         let (query_graph, located_query_terms) = query_graph_terms.unzip();
 
@@ -447,7 +454,8 @@ impl<'a> Search<'a> {
                     query_graph.as_ref(),
                     can_skip_hits_internally,
                 )?
-            } else if let Some(mut fuel) = self.dynamic_search_rules.as_ref().map(|(_, fuel)| *fuel)
+            } else if let Some(mut fuel) =
+                self.dynamic_search_rules.as_ref().map(|(_, fuel, _)| *fuel)
             {
                 let mut partial_results = Vec::new();
                 'scales: for k in (1..=(scales.len())).rev() {
@@ -523,6 +531,7 @@ impl<'a> Search<'a> {
             degraded,
             used_negative_operator,
             query_vector,
+            inline_rule_condition_outcomes,
         })
     }
 
@@ -617,16 +626,17 @@ impl<'a> Search<'a> {
             None
         };
 
-        let (pins, scales, _) = self
+        let (pins, scales, inline_rule_condition_outcomes) = self
             .dynamic_search_rules
-            .map(|(dsrs, fuel)| {
-                dsrs.resolve_actions(
+            .map(|(dsrs, fuel, preview)| {
+                DynamicSearchRules::resolve_actions(
+                    dsrs,
                     query_graph_terms.as_ref().map(|(_, terms)| terms.as_slice()).unwrap_or(&[]),
                     filter,
                     universe,
                     ctx,
                     fuel,
-                    None,
+                    preview,
                 )
             })
             .transpose()?
@@ -634,7 +644,13 @@ impl<'a> Search<'a> {
 
         *universe -= ignored;
 
-        Ok(ResolvedQuery { query_graph_terms, pins, scales, used_negative_operator })
+        Ok(ResolvedQuery {
+            query_graph_terms,
+            pins,
+            scales,
+            used_negative_operator,
+            inline_rule_condition_outcomes,
+        })
     }
 
     /// Merge the hits in `partial_results` depending on their weight and score details, inject pins, and produce
@@ -813,6 +829,7 @@ pub struct ResolvedQuery {
     pub pins: Vec<PinDoc>,
     pub scales: Vec<ScaleDocs>,
     pub used_negative_operator: bool,
+    pub inline_rule_condition_outcomes: Option<ConditionOutcomes>,
 }
 
 #[derive(Default, Debug)]
@@ -824,6 +841,7 @@ pub struct SearchResult {
     pub degraded: bool,
     pub used_negative_operator: bool,
     pub query_vector: Option<Embedding>,
+    pub inline_rule_condition_outcomes: Option<ConditionOutcomes>,
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]

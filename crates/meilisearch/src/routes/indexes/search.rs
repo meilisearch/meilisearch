@@ -19,9 +19,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
-use crate::documents_retrieval::{
-    fixup_query_federation, preprocess_filters, DocumentSearch, DocumentSearchResult,
-};
+use crate::documents_retrieval::{fixup_query_federation, preprocess_filters, DocumentSearch};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -456,6 +454,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             show_ranking_score: other.show_ranking_score.0,
             show_ranking_score_details: other.show_ranking_score_details.0,
             show_performance_details: other.show_performance_details.0,
+            // inline rule not supported for GET
+            inline_rule: None,
         })
     }
 }
@@ -567,33 +567,21 @@ pub async fn search_with_url_query(
 
         let include_metadata = parse_include_metadata_header(&req);
         let is_proxy = false;
-        let document_retrieval = DocumentSearch {
-            request_uid,
-            queries: vec![SearchQueryWithIndex::from_index_query_federation(
-                index_uid.clone(),
-                query,
-                None,
-            )],
-            federation: None,
+        let document_retrieval = DocumentSearch::new(
+            std::sync::Arc::clone(&personalization_service),
             is_proxy,
             include_metadata,
-            personalization_service: (*personalization_service).clone(),
-        };
+            request_uid,
+        );
 
         let search_result = document_retrieval
-            .execute(index_scheduler, progress)
+            .execute_single(
+                SearchQueryWithIndex::from_index_query_federation(index_uid.clone(), query, None),
+                index_scheduler,
+                progress,
+            )
             .await
-            .map(|result| {
-                let DocumentSearchResult::Multi(mut search_results, mut progress_by_query) = result
-                else {
-                    unreachable!()
-                };
-
-                let (_, progress) = progress_by_query.pop().unwrap();
-                let search_result = search_results.pop().unwrap();
-                (search_result.result, progress)
-            })
-            .map_err(|(mut err, _)| match err.error_code.as_str() {
+            .map_err(|mut err| match err.error_code.as_str() {
                 "index_not_found" => {
                     // If the index is not found, return a 404 status code
                     err.code = StatusCode::NOT_FOUND;
@@ -898,33 +886,21 @@ pub async fn search_with_post(
 
         let include_metadata = parse_include_metadata_header(&req);
         let is_proxy = false;
-        let document_retrieval = DocumentSearch {
-            request_uid,
-            queries: vec![SearchQueryWithIndex::from_index_query_federation(
-                index_uid.clone(),
-                query,
-                None,
-            )],
-            federation: None,
+        let document_retrieval = DocumentSearch::new(
+            std::sync::Arc::clone(&personalization_service),
             is_proxy,
             include_metadata,
-            personalization_service: (*personalization_service).clone(),
-        };
+            request_uid,
+        );
 
         let search_result = document_retrieval
-            .execute(index_scheduler, progress)
+            .execute_single(
+                SearchQueryWithIndex::from_index_query_federation(index_uid.clone(), query, None),
+                index_scheduler,
+                progress,
+            )
             .await
-            .map(|result| {
-                let DocumentSearchResult::Multi(mut search_results, mut progress_by_query) = result
-                else {
-                    unreachable!()
-                };
-
-                let (_, progress) = progress_by_query.pop().unwrap();
-                let search_result = search_results.pop().unwrap();
-                (search_result.result, progress)
-            })
-            .map_err(|(mut err, _)| match err.error_code.as_str() {
+            .map_err(|mut err| match err.error_code.as_str() {
                 "index_not_found" => {
                     // If the index is not found, return a 404 status code
                     err.code = StatusCode::NOT_FOUND;
