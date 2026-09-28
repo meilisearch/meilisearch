@@ -617,7 +617,7 @@ impl<'a> Search<'a> {
             None
         };
 
-        let (pins, scales) = self
+        let (pins, scales, _) = self
             .dynamic_search_rules
             .map(|(dsrs, fuel)| {
                 dsrs.resolve_actions(
@@ -626,6 +626,7 @@ impl<'a> Search<'a> {
                     universe,
                     ctx,
                     fuel,
+                    None,
                 )
             })
             .transpose()?
