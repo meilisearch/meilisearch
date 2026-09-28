@@ -39,7 +39,7 @@ edition = "2021"
 license = "MIT"
 
 [workspace.dependencies]
-tikv-jemallocator = {version = "0.7.0", features = ["debug", "override_allocator_on_supported_platforms"]}
+tikv-jemallocator = {version = "0.7.0", features = ["override_allocator_on_supported_platforms"]}
 
 [profile.release]
 codegen-units = 1
