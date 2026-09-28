@@ -2,11 +2,13 @@
 
 //! Types and functions related to the dynamic search rules.
 
-use heed::{RoTxn, WithoutTls};
+use heed::{BytesDecode, RoTxn, WithoutTls};
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
+use wip::WipOptionExt as _;
 
-use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
+use crate::dynamic_search_rules::preview::RulePreviewWithId;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue, OrderedF64Codec};
 use crate::progress::Progress;
 use crate::search::facet::ascending_facet_sort;
 use crate::search::new::LocatedQueryTerm;
@@ -20,6 +22,7 @@ use crate::{
 mod action;
 mod condition;
 mod fuel;
+mod preview;
 /// Contains type declarations for older versions of dsr objects
 pub mod upgrade;
 
@@ -28,6 +31,10 @@ pub mod fields;
 
 pub use action::{PinAction, RuleActions, ScaleAction};
 pub use fuel::DsrFuel;
+pub use preview::{
+    ConditionOutcomes, FilterConditionOutcome, PreviewConditions, QueryEmptyConditionOutcome,
+    QueryWordsConditionOutcome, RulePreview, TimeConditionOutcome,
+};
 pub use upgrade::{create_metadata, upgrade_dsrs, METADATA_UID};
 
 /// Internal identifier of a rule.
@@ -94,15 +101,17 @@ impl<'a> DynamicSearchRulesView<'a> {
 
     /// Get the raw representation of a rule from its UID.
     pub fn get(self, rule_uid: &str) -> Result<Option<DocumentFromDb<'a, FieldsIdsMap>>> {
+        let Some(docid) = self.get_id(rule_uid)? else { return Ok(None) };
+
+        self.get_from_internal_id(docid)
+    }
+
+    fn get_id(self, rule_uid: &str) -> Result<Option<RuleId>> {
         if rule_uid == METADATA_UID {
             return Ok(None);
         }
 
-        let Some(docid) = self.index.external_documents_ids().get(self.rtxn, rule_uid)? else {
-            return Ok(None);
-        };
-
-        self.get_from_internal_id(docid)
+        Ok(self.index.external_documents_ids().get(self.rtxn, rule_uid)?)
     }
 
     /// Get the raw representation of a rule or the index metadata, from its internal ID.
@@ -131,9 +140,41 @@ impl<'a> DynamicSearchRulesView<'a> {
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
-    ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>)> {
+        preview: Option<RulePreview>,
+    ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>, Option<ConditionOutcomes>)> {
+        let preview = preview
+            .map(|preview| {
+                let preview_id = self.get_id(&preview.uid).transpose().unwrap_or_else(|| {
+                    let mut available_ids = RoaringBitmap::full();
+                    available_ids -= self.index.documents_ids(self.rtxn)?;
+
+                    Ok(available_ids.min().unwrap_wip())
+                })?;
+                Ok::<_, crate::Error>(preview::RulePreviewWithId { preview_id, preview })
+            })
+            .transpose()?;
+
+        let (query_terms, filter_constraints) =
+            self.prepare_query(query_terms, filter, search_context, fuel)?;
+
         let active_rules =
-            self.active_rules_for_query(query_terms, filter, search_context, fuel)?;
+            self.active_rules_for_query(&query_terms, &filter_constraints, search_context, fuel)?;
+
+        let preview_outcome = preview
+            .map(|preview| {
+                let outcome = preview.preview.evaluate_conditions(
+                    &query_terms,
+                    &filter_constraints,
+                    search_context.before_search,
+                    self,
+                )?;
+                Ok::<_, crate::Error>((preview, outcome))
+            })
+            .transpose()?;
+
+        let active_preview = preview_outcome
+            .as_ref()
+            .and_then(|(preview, outcome)| outcome.is_enabled().then_some(preview));
 
         // this used to be a flattened iterator of pin iterators.
         // however we can no longer flatten because we have an iterator of `(pin_iterator, scale_iterator)`
@@ -142,9 +183,10 @@ impl<'a> DynamicSearchRulesView<'a> {
         let mut scales = Vec::new();
 
         for res in self.find_actions(
-            self.rule_ids_sorted_by_precedence(active_rules)?,
+            self.rule_ids_sorted_by_precedence(active_rules, active_preview)?,
             search_context,
             fuel,
+            active_preview,
         ) {
             if pins.len() >= fuel.max_pin_actions() && scales.len() >= fuel.max_scale_actions() {
                 break;
@@ -177,7 +219,9 @@ impl<'a> DynamicSearchRulesView<'a> {
 
         Pin::dedup_and_sort(&mut pins);
 
-        Ok((pins, scales))
+        let outcome = preview_outcome.map(|(_, outcome)| outcome);
+
+        Ok((pins, scales, outcome))
     }
 
     /// Provide access to the raw rule representation from an iterator of rule internal ids.
@@ -276,6 +320,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     fn rule_ids_sorted_by_precedence(
         self,
         mut active_rules: RoaringBitmap,
+        active_preview: Option<&RulePreviewWithId>,
     ) -> Result<impl Iterator<Item = Result<RuleId>> + 'a> {
         let db = self.index.facet_id_f64_docids.remap_types();
 
@@ -296,18 +341,63 @@ impl<'a> DynamicSearchRulesView<'a> {
 
             // partition the active rules depending on whether they are faceted
             active_rules -= &faceted;
+
+            let preview_id_precedence = if let Some(preview) = active_preview {
+                faceted.remove(preview.preview_id);
+                if let Some(precedence) = preview.preview.precedence.0 {
+                    Some((preview.preview_id, precedence))
+                } else {
+                    active_rules.insert(preview.preview_id);
+                    None
+                }
+            } else {
+                None
+            };
             Ok(either::Left(
                 ascending_facet_sort(self.rtxn, db, precedence_field_id, faceted)?
-                    .flat_map(|res| match res {
-                        Ok((bucket, _precedence)) => {
-                            either::Either::Left(bucket.into_iter().map(Ok))
+                    .flat_map(move |res| match res {
+                        Ok((mut bucket, precedence)) => {
+                            let preview_prefix = if let Some((preview_id, preview_precedence)) =
+                                preview_id_precedence
+                            {
+                                let precedence = match OrderedF64Codec::bytes_decode(precedence) {
+                                    Ok(precedence) => precedence as u64,
+                                    Err(err) => {
+                                        tracing::error!(
+                                            "could not deserialize precedence from DB in dsr: {err}"
+                                        );
+                                        u64::MAX
+                                    }
+                                };
+                                if preview_precedence < precedence {
+                                    Some(preview_id)
+                                } else if preview_precedence == precedence {
+                                    bucket.insert(preview_id);
+                                    None
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+                            either::Left(preview_prefix.into_iter().chain(bucket).map(Ok))
                         }
-                        Err(err) => either::Either::Right(std::iter::once(Err(err.into()))),
+                        Err(err) => either::Right(std::iter::once(Err(err.into()))),
                     })
                     .chain(active_rules.into_iter().map(Ok)),
             ))
         } else {
-            Ok(either::Right(active_rules.into_iter().map(Ok)))
+            let preview_prefix = if let Some(preview) = active_preview {
+                if preview.preview.precedence.0.is_some() {
+                    Some(preview.preview_id)
+                } else {
+                    active_rules.insert(preview.preview_id);
+                    None
+                }
+            } else {
+                None
+            };
+            Ok(either::Right(preview_prefix.into_iter().chain(active_rules).map(Ok)))
         }
     }
 }
@@ -356,8 +446,9 @@ impl DynamicSearchRules {
         universe: &mut RoaringBitmap,
         search_context: &SearchContext,
         fuel: DsrFuel,
-    ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>)> {
-        self.as_view().resolve_actions(query_terms, filter, universe, search_context, fuel)
+        preview: Option<RulePreview>,
+    ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>, Option<ConditionOutcomes>)> {
+        self.as_view().resolve_actions(query_terms, filter, universe, search_context, fuel, preview)
     }
 
     /// Provide access to the raw rule representation from an iterator of rule internal ids.
