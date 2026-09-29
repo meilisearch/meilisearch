@@ -2,7 +2,7 @@ use serde::Deserializer;
 
 use super::metadata::Metadata;
 use crate::documents::DocumentIdExtractionError;
-use crate::dynamic_search_rules::{fields, DynamicSearchRulesView, PinAction, RuleActions};
+use crate::dynamic_search_rules::{fields, DynamicSearchRulesView, RuleActions};
 use crate::update::new::document::{Document, Versions};
 use crate::update::new::indexer::de::DocumentIdVisitor;
 use crate::update::new::indexer::DocumentUpdater;
@@ -79,16 +79,8 @@ impl DocumentUpdater for DsrActionsUpdater {
             }
         };
 
-        let pin: Vec<_> = actions
-            .into_iter()
-            .map(|action| {
-                let super::v1_53::DynamicSearchRuleAction::Pin { position } = action.action;
-                let index_uid = action.selector.index_uid;
-                let id = action.selector.id;
-
-                PinAction { index_uid, id, position }
-            })
-            .collect();
+        let pin: Vec<_> =
+            actions.into_iter().map(super::v1_53::RuleAction::into_pin_action).collect();
 
         let actions = RuleActions { pin, scale: Default::default() };
 

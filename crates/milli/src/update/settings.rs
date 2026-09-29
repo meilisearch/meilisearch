@@ -136,6 +136,23 @@ impl<T> Setting<T> {
         *self = new;
         true
     }
+
+    /// Maps a `Setting<T>` to `Setting<U>` by applying a function on the contained value (if `Set`) or returns
+    /// `Reset` (if `Reset`) or `NotSet` (if `NotSet`).
+    ///
+    /// # Warning
+    ///
+    /// Make sure that going from `Setting::<T>::Reset` to `Setting::<U>::Reset` makes sense
+    pub fn map<U, F>(self, f: F) -> Setting<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        match self {
+            Setting::Set(t) => Setting::Set(f(t)),
+            Setting::Reset => Setting::Reset,
+            Setting::NotSet => Setting::NotSet,
+        }
+    }
 }
 
 impl<T: Serialize> Serialize for Setting<T> {
