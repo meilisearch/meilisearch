@@ -47,8 +47,8 @@ pub struct McpApi;
 
 /// Model context protocol (MCP)
 ///
-/// The `/mcp` route exposes [the MCP open protocol](https://modelcontextprotocol.io) that enables seamless integration between LLM
-/// applications and external data sources and tools.
+/// The `/mcp` route exposes an [MCP server](https://www.meilisearch.com/docs/getting_started/integrations/mcp) for
+/// LLM applications to search Meilisearch.
 #[routes::path(
     security(),
     request_body = McpQuery,
