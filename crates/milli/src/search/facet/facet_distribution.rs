@@ -556,8 +556,8 @@ impl<'a> FacetDistribution<'a> {
                             }
                         };
 
-                        let amount = sample_candidate_count;
                         let length = candidates.len() as usize;
+                        let amount = sample_candidate_count.min(length);
                         let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
                         // We efficiently compute a set of indices to fetch from the candidates...
                         let indexes = rand::seq::index::sample(&mut rng, length, amount);
