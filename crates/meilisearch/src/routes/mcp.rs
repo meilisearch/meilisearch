@@ -117,12 +117,12 @@ async fn mcp(
         method::TOOLS_LIST => match McpResult::list_tools() {
             Ok(list_tools) => McpResponse { jsonrpc, id, result: Some(list_tools), error: None },
             Err(err) => {
-                return Ok(HttpResponse::Ok().json(McpResponse {
+                return Ok(HttpResponse::Ok().json(dbg!(McpResponse {
                     jsonrpc,
                     id,
                     result: None,
                     error: Some(McpError::internal_error_from_anyhow(err)),
-                }))
+                })))
             }
         },
         method::RESOURCES_LIST => {
@@ -213,7 +213,7 @@ async fn mcp(
     aggregate.succeed(elapsed(start_time));
     analytics.publish_with_user_agents(aggregate, user_agents);
 
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(dbg!(response)))
 }
 
 trait McpTool {
