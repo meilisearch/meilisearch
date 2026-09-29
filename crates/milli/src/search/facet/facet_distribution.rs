@@ -1,7 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
-use std::io::Cursor;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
 
