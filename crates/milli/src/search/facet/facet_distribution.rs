@@ -400,14 +400,13 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         order_by: OrderBy,
+        sample_candidates: Option<&RoaringBitmap>,
     ) -> heed::Result<IndexMap<String, u64>> {
         use FacetType::{Number, String};
 
         let mut distribution = IndexMap::new();
-        match (order_by, &self.candidates) {
-            (OrderBy::CountSampled, cnd) => {
-                use rand::seq::IteratorRandom;
-
+        match (order_by, &self.candidates, sample_candidates) {
+            (OrderBy::CountSampled, cnd, Some(sample_candidates)) => {
                 let candidates;
                 let candidates = match cnd {
                     Some(cnd) => cnd,
@@ -416,25 +415,6 @@ impl<'a> FacetDistribution<'a> {
                         &candidates
                     }
                 };
-
-                // Collect a sample of documents to work on
-                let before = Instant::now();
-                let sample_candidates = {
-                    let sample_candidate_count: usize =
-                        match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
-                            Ok(count) => count.as_str().parse().unwrap(),
-                            Err(VarError::NotPresent) => SAMPLE_CANDIDATES,
-                            Err(VarError::NotUnicode(e)) => {
-                                panic!("While reading MEILI_SAMPLE_CANDIDATE_COUNT: {e:?}")
-                            }
-                        };
-                    let mut sample_candidates = vec![0; sample_candidate_count];
-                    let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
-                    let count = candidates.iter().sample_fill(&mut rng, &mut sample_candidates[..]);
-                    RoaringBitmap::from_iter(sample_candidates.into_iter().take(count))
-                };
-
-                eprintln!("Computing a sample of candidates took {:?}", before.elapsed());
 
                 self.facet_distribution_from_sample(
                     field_id,
@@ -451,7 +431,7 @@ impl<'a> FacetDistribution<'a> {
                     &mut distribution,
                 )?;
             }
-            (OrderBy::Lexicographic, Some(candidates))
+            (OrderBy::Lexicographic, Some(candidates), _)
                 if candidates.len() <= LINEAR_SCAN_CANDIDATES_THRESHOLD =>
             {
                 // Classic search, candidates were specified, we must return facet values only related
@@ -545,6 +525,7 @@ impl<'a> FacetDistribution<'a> {
         self.check_faceted_fields(&filterable_attributes_rules)?;
 
         let mut distribution = BTreeMap::new();
+        let mut sample_candidates = None;
         for (fid, name) in self.fields_ids_map.iter() {
             if self.select_field(name, &filterable_attributes_rules) {
                 let order_by = self
@@ -552,7 +533,49 @@ impl<'a> FacetDistribution<'a> {
                     .as_ref()
                     .and_then(|facets| facets.get(name).copied())
                     .unwrap_or(self.default_order_by);
-                let values = self.facet_values(fid, order_by)?;
+
+                sample_candidates = match (order_by, sample_candidates) {
+                    (_, Some(sample_candidates)) => Some(sample_candidates),
+                    (OrderBy::CountSampled, None) => {
+                        let before = Instant::now();
+                        let sample_candidate_count: usize =
+                            match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
+                                Ok(count) => count.as_str().parse().unwrap(),
+                                Err(VarError::NotPresent) => SAMPLE_CANDIDATES,
+                                Err(VarError::NotUnicode(e)) => {
+                                    panic!("While reading MEILI_SAMPLE_CANDIDATE_COUNT: {e:?}")
+                                }
+                            };
+
+                        let candidates;
+                        let candidates = match self.candidates.as_ref() {
+                            Some(cnd) => cnd,
+                            None => {
+                                candidates = self.index.documents_ids(self.rtxn)?;
+                                &candidates
+                            }
+                        };
+
+                        let amount = sample_candidate_count;
+                        let length = candidates.len() as usize;
+                        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+                        // We efficiently compute a set of indices to fetch from the candidates...
+                        let indexes = rand::seq::index::sample(&mut rng, length, amount);
+
+                        // ...and construct a RoaringBitmap from the fetched values from these indices.
+                        let sample_candidates = RoaringBitmap::from_iter(
+                            indexes.into_iter().flat_map(|i| candidates.select(i as u32)),
+                        );
+
+                        // TODO remove this ugly log
+                        eprintln!("Computing a sample of candidates took {:?}", before.elapsed());
+
+                        Some(sample_candidates)
+                    }
+                    (_, _) => None,
+                };
+
+                let values = self.facet_values(fid, order_by, sample_candidates.as_ref())?;
                 distribution.insert(name.to_string(), values);
             }
         }
