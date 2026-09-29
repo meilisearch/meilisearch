@@ -324,6 +324,7 @@ fn compute_facet_level_database(
     global_fields_ids_map: &mut GlobalFieldsIdsMap,
     progress: &Progress,
 ) -> Result<()> {
+    progress.update_progress(PostProcessingFacets::FacetDataPreparation);
     let filterable_attributes_rules = index.filterable_attributes_rules(wtxn)?;
     let mut deltas: Vec<_> = facet_field_ids_delta.consume_facet_string_delta().collect();
     // We move all bulks at the front and incrementals (others) at the end.
@@ -370,6 +371,7 @@ fn compute_facet_level_database(
     let mut deltas: Vec<_> = facet_field_ids_delta.consume_facet_number_delta().collect();
     // We move all bulks at the front and incrementals (others) at the end.
     deltas.sort_by_key(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { 0 } else { 1 });
+    progress.update_progress(PostProcessingFacets::NumbersDataPreparation);
 
     for (fid, delta) in deltas {
         let span =
