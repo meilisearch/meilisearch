@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
+use std::env::VarError;
 use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
@@ -417,7 +418,15 @@ impl<'a> FacetDistribution<'a> {
 
                 // Collect a sample of documents to work on
                 let sample_candidates = {
-                    let mut sample_candidates = vec![0; SAMPLE_CANDIDATES];
+                    let sample_candidate_count: usize =
+                        match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
+                            Ok(count) => count.as_str().parse().unwrap(),
+                            Err(VarError::NotPresent) => SAMPLE_CANDIDATES,
+                            Err(VarError::NotUnicode(e)) => {
+                                panic!("While reading MEILI_SAMPLE_CANDIDATE_COUNT: {e:?}")
+                            }
+                        };
+                    let mut sample_candidates = vec![0; sample_candidate_count];
                     let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
                     let count = candidates.iter().sample_fill(&mut rng, &mut sample_candidates[..]);
                     RoaringBitmap::from_iter(sample_candidates.into_iter().take(count))
