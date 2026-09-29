@@ -1015,15 +1015,128 @@
       "synchronous": "DontWait"
     },
     {
-      "route": "tasks?types=upgradeDatabase",
+      "route": "dynamic-search-rules/scale-rule",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "conditions": {
+            "query": {
+              "words": "HERO SUPER"
+            }
+          },
+          "actions": {
+            "scale": [
+              {
+                "ids": ["372631"],
+                "weight": 2.0
+              }
+            ]
+          }
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "taskUid": 6,
+        "indexUid": ".meili_dsr",
+        "status": "enqueued",
+        "type": "dsrUpdate",
+        "enqueuedAt": "[enqueuedAt]"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/search?q=hero super&limit=3",
       "method": "GET",
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "from": 5,
+        "estimatedTotalHits": 341,
+        "hits": [
+          {
+            "genres": [
+              "Family",
+              "Animation"
+            ],
+            "id": 15242,
+            "overview": "When Snoopy receives a letter from his original owner Lila, he goes to visit her in the hospital while Charlie Brown and the gang are on the lookout for him. Suddenly, Snoopy feels that he must go live with Lila, but must say goodbye to all his friends. In his adventure to the hospital, he encounters numerous \"No Dogs Allowed\" signs, an annoying little girl who desires to keep him, and more!",
+            "poster": "https://image.tmdb.org/t/p/w500/vGYhYtoXkpjXTZ7KLQMJehwfLG0.jpg",
+            "release_date": 84758400,
+            "title": "Snoopy, Come Home"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Fantasy"
+            ],
+            "id": 372631,
+            "overview": "The holiday season gets extra chilly as Loki and the frost giant Ymir plot to conquer the world. Marvel heroes Iron Man, Captain America, Hulk, Thor and others must stop the villains from stealing Santa's power – if anyone can actually find the mysterious Mr. Claus. Fortunately, Rocket Raccoon and Groot are also hot on Santa's trail. Heroes, villains, elves and cosmic bounty hunters collide in an epic quest that leaves the fate of the holiday and the world in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/2StM8Vavf7ukvuj9mxg1o7nKxmi.jpg",
+            "release_date": 1450137600,
+            "title": "Marvel Super Hero Adventures: Frost Fight!"
+          },
+          {
+            "genres": [
+              "Animation",
+              "Family"
+            ],
+            "id": 452931,
+            "overview": "Super Hero High is facing off against Korugar Academy in the Intergalactic Games, but Lena Luthor takes advantage of the gathering of Supers to enact her villainous plan.",
+            "poster": "https://image.tmdb.org/t/p/w500/9BkNrjD9fAlp0lo9Kw8Ky4qcnKq.jpg",
+            "release_date": 1494288000,
+            "title": "DC Super Hero Girls: Intergalactic Games"
+          }
+        ],
+        "limit": 3,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "hero super",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "tasks?types=upgradeDatabase,dsrUpdate",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 6,
         "limit": 20,
         "next": null,
         "results": [
+          {
+            "batchUid": 5,
+            "canceledBy": null,
+            "details": {
+              "rule": {
+                "actions": {
+                  "scale": [
+                    {
+                      "ids": [
+                        "372631"
+                      ],
+                      "weight": 2.0
+                    }
+                  ]
+                },
+                "conditions": {
+                  "query": {
+                    "words": "HERO SUPER"
+                  }
+                }
+              },
+              "updatedRules": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[enqueuedAt]",
+            "error": null,
+            "finishedAt": "[finishedAt]",
+            "indexUid": ".meili_dsr",
+            "startedAt": "[startedAt]",
+            "status": "succeeded",
+            "type": "dsrUpdate",
+            "uid": 6
+          },
           {
             "batchUid": 4,
             "canceledBy": null,
@@ -1057,9 +1170,68 @@
             "status": "succeeded",
             "type": "upgradeDatabase",
             "uid": 4
+          },
+          {
+            "batchUid": 3,
+            "canceledBy": null,
+            "details": {
+              "rule": {
+                "actions": {},
+                "active": true,
+                "conditions": {
+                  "time": {
+                    "start": "2023-01-01T09:50:12Z",
+                    "end": "2032-12-31T09:50:12Z"
+                  }
+                }
+              },
+              "updatedRules": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[enqueuedAt]",
+            "error": null,
+            "finishedAt": "[finishedAt]",
+            "indexUid": ".meili_dsr",
+            "startedAt": "[startedAt]",
+            "status": "succeeded",
+            "type": "dsrUpdate",
+            "uid": 3
+          },
+          {
+            "batchUid": 3,
+            "canceledBy": null,
+            "details": {
+              "rule": {
+                "actions": {
+                  "pin": [
+                    {
+                      "id": "15242",
+                      "indexUid": "movies",
+                      "position": 0
+                    }
+                  ]
+                },
+                "active": true,
+                "conditions": {
+                  "query": {
+                    "words": "super hero"
+                  }
+                }
+              },
+              "updatedRules": 1
+            },
+            "indexUid": ".meili_dsr",
+            "status": "succeeded",
+            "enqueuedAt": "[enqueuedAt]",
+            "startedAt": "[startedAt]",
+            "finishedAt": "[finishedAt]",
+            "error": null,
+            "duration": "[duration]",
+            "type": "dsrUpdate",
+            "uid": 2
           }
         ],
-        "total": 2
+        "total": 5
       },
       "synchronous": "WaitForResponse"
     }

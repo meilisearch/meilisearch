@@ -7,7 +7,8 @@ use crate::update::IndexerConfig;
 use crate::{Index, MustStopProcessing, Result};
 
 mod metadata;
-mod v1_53;
+/// v1.53 and below type declarations
+pub mod v1_53;
 mod v1_54;
 
 pub use metadata::{create_metadata, METADATA_UID};

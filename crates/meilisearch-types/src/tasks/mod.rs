@@ -8,7 +8,7 @@ use enum_iterator::Sequence;
 use milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use milli::Object;
 use roaring::RoaringBitmap;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
@@ -197,8 +197,33 @@ pub enum KindWithContent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DsrUpdate {
-    CreateOrUpdate { rule_id: RuleUid, update: DynamicSearchRuleUpdateRequest },
+    CreateOrUpdate {
+        rule_id: RuleUid,
+        #[serde(deserialize_with = "deserialize_legacy_update_request")]
+        update: DynamicSearchRuleUpdateRequest,
+    },
     Deletion(RuleUid),
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum DsrUpdateRequestVersions {
+    Current(DynamicSearchRuleUpdateRequest),
+    V1_53(milli::dynamic_search_rules::upgrade::v1_53::DynamicSearchRuleUpdateRequest),
+}
+
+fn deserialize_legacy_update_request<'de, D>(
+    deserializer: D,
+) -> Result<DynamicSearchRuleUpdateRequest, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(match DsrUpdateRequestVersions::deserialize(deserializer)? {
+        DsrUpdateRequestVersions::Current(update) => update,
+        DsrUpdateRequestVersions::V1_53(update) => {
+            DynamicSearchRuleUpdateRequest::from_v1_53(update)
+        }
+    })
 }
 
 /// Index swap operation

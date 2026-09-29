@@ -279,6 +279,48 @@ pub struct DynamicSearchRuleUpdateRequest {
     pub actions: Setting<RuleActions>,
 }
 
+impl DynamicSearchRuleUpdateRequest {
+    pub fn from_v1_53(
+        legacy: milli::dynamic_search_rules::upgrade::v1_53::DynamicSearchRuleUpdateRequest,
+    ) -> Self {
+        let milli::dynamic_search_rules::upgrade::v1_53::DynamicSearchRuleUpdateRequest {
+            description,
+            precedence,
+            active,
+            conditions,
+            actions,
+        } = legacy;
+
+        let conditions = Self::from_v1_53_conditions(conditions);
+        let actions = Self::from_v1_53_actions(actions);
+
+        Self { description, precedence, active, conditions, actions }
+    }
+
+    fn from_v1_53_conditions(
+        legacy: Setting<milli::dynamic_search_rules::upgrade::v1_53::Conditions>,
+    ) -> Setting<Conditions> {
+        legacy.map(
+            |milli::dynamic_search_rules::upgrade::v1_53::Conditions { time, query, filter }| {
+                let time = time.map(|time| TimeCondition { start: time.start, end: time.end });
+                let query = query
+                    .map(|query| QueryCondition { is_empty: query.is_empty, words: query.words });
+                let filter = filter.map(|filter| FilterCondition { values: filter.values });
+                Conditions { time, query, filter }
+            },
+        )
+    }
+
+    fn from_v1_53_actions(
+        legacy: Setting<Vec<milli::dynamic_search_rules::upgrade::v1_53::RuleAction>>,
+    ) -> Setting<RuleActions> {
+        legacy.map(|actions| {
+            let pin: Vec<_> = actions.into_iter().map(|action| action.into_pin_action()).collect();
+            RuleActions { pin, scale: Default::default() }
+        })
+    }
+}
+
 #[routes::request(db, validate = validate_condition -> DeserrJsonError, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Conditions {
