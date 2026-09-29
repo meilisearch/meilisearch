@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
 use std::fmt::Display;
 use std::ops::ControlFlow;
+use std::time::Instant;
 use std::{fmt, mem};
 
 use heed::types::Bytes;
@@ -417,6 +418,7 @@ impl<'a> FacetDistribution<'a> {
                 };
 
                 // Collect a sample of documents to work on
+                let before = Instant::now();
                 let sample_candidates = {
                     let sample_candidate_count: usize =
                         match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
@@ -431,6 +433,8 @@ impl<'a> FacetDistribution<'a> {
                     let count = candidates.iter().sample_fill(&mut rng, &mut sample_candidates[..]);
                     RoaringBitmap::from_iter(sample_candidates.into_iter().take(count))
                 };
+
+                eprintln!("Computing a sample of candidates took {:?}", before.elapsed());
 
                 self.facet_distribution_from_sample(
                     field_id,
