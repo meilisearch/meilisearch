@@ -194,6 +194,7 @@ impl<'a> FacetDistribution<'a> {
                 let mut normalized_distribution = HashMap::new();
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
+                let before = Instant::now();
                 // We collect the facet numbers from the sample of documents
                 let db = self.index.field_id_docid_facet_f64s;
                 for docid in sample {
@@ -209,10 +210,12 @@ impl<'a> FacetDistribution<'a> {
                         *normalized_distribution.entry(OrderedFloat(value)).or_insert(0) += 1;
                     }
                 }
+                eprintln!("Retrieving the values from the sample took {:?}", before.elapsed());
 
                 // TODO if the sample is equal to the candidates just skip the retrieval
                 //      and use the exhaustive sample counts.
 
+                let before = Instant::now();
                 let mut sorted_normalized_distribution = Vec::new();
                 for (OrderedFloat(value), _count) in normalized_distribution {
                     let key = FacetGroupKey { field_id, level: 0, left_bound: value };
@@ -231,6 +234,10 @@ impl<'a> FacetDistribution<'a> {
                         sorted_normalized_distribution.push((value, count.len()));
                     }
                 }
+                eprintln!(
+                    "Computing the actual intersection of the facets took {:?}",
+                    before.elapsed()
+                );
 
                 // Make sure the values are ordered by count, in descending order.
                 sorted_normalized_distribution.sort_unstable_by_key(|(_, count)| Reverse(*count));
