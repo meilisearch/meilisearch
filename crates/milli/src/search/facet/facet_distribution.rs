@@ -27,7 +27,8 @@ use crate::search::facet::facet_distribution_iter::{
 };
 use crate::search::steps::FacetDistributionStep;
 use crate::{
-    Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index, PatternMatch, Result, UserError,
+    CboRoaringBitmapCodec, Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index,
+    PatternMatch, Result, UserError,
 };
 
 /// The default number of values by facets that will
@@ -170,8 +171,10 @@ impl<'a> FacetDistribution<'a> {
                     {
                         // Note that we could compute only the cardinality instead
                         // of the whole set but the method doesn't exists.
-                        let count = candidates
-                            .intersection_with_serialized_unchecked(Cursor::new(bitmap_bytes))?;
+                        let count = CboRoaringBitmapCodec::intersection_with_serialized(
+                            bitmap_bytes,
+                            candidates,
+                        )?;
                         sorted_normalized_distribution.push((original, count.len()));
                     }
                 }
@@ -220,8 +223,10 @@ impl<'a> FacetDistribution<'a> {
                     {
                         // Note that we could compute only the cardinality instead
                         // of the whole set but the method doesn't exists.
-                        let count = candidates
-                            .intersection_with_serialized_unchecked(Cursor::new(bitmap_bytes))?;
+                        let count = CboRoaringBitmapCodec::intersection_with_serialized(
+                            bitmap_bytes,
+                            candidates,
+                        )?;
                         sorted_normalized_distribution.push((value, count.len()));
                     }
                 }
