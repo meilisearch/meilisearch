@@ -20,7 +20,8 @@ use crate::{
 mod action;
 mod condition;
 mod fuel;
-mod upgrade;
+/// Contains type declarations for older versions of dsr objects
+pub mod upgrade;
 
 /// Fields used in DSR documents
 pub mod fields;
