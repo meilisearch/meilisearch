@@ -599,7 +599,7 @@ impl SettingsDiff {
                 } = new;
 
                 if matches!(binary_quantize, Setting::Set(true))
-                    && matches!(new_binary_quantize, Setting::Set(false))
+                    && matches!(new_binary_quantize, Setting::Set(false) | Setting::Reset)
                 {
                     return Err(UserError::InvalidDisableBinaryQuantization {
                         embedder_name: embedder_name.to_string(),
