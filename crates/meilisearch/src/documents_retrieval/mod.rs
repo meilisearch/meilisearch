@@ -15,7 +15,7 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::documents::{BrowseQueryWithIndex, DocumentsResult};
-use crate::search::federated::types::PreprocessedQuery;
+use crate::search::federated::types::{PreprocessableQuery, PreprocessedQuery};
 use crate::search::federated::NetworkPartitioner;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
@@ -93,7 +93,7 @@ impl DocumentSearch {
     async fn execute<S, const P: u8>(
         self,
         search: S,
-        mut queries: Vec<SearchQueryWithIndex>,
+        mut queries: Vec<S::Input>,
         guarded_index_scheduler: GuardedData<ActionPolicy<P>, Data<IndexScheduler>>,
         progress: Progress,
     ) -> Result<(S::Output, S::ProgressTrace), (ResponseError, Option<usize>)>
@@ -104,7 +104,7 @@ impl DocumentSearch {
         let auth_filter = guarded_index_scheduler.filters();
         'check_authorization: {
             for (query_index, federated_query) in queries.iter_mut().enumerate() {
-                let index_uid = federated_query.index_uid.as_str();
+                let index_uid = federated_query.index_uid().as_str();
                 // Check index from API key
                 if !auth_filter.is_index_authorized(index_uid) {
                     break 'check_authorization Err(AuthenticationError::InvalidToken)
@@ -112,7 +112,7 @@ impl DocumentSearch {
                 }
                 // Apply search rules from tenant token
                 if let Some(search_rules) = auth_filter.get_index_search_rules(index_uid) {
-                    add_search_rules(&mut federated_query.filter, search_rules);
+                    add_search_rules(federated_query.filter_field(), search_rules);
                 }
             }
             Ok(())
@@ -162,12 +162,13 @@ struct ExecutionContext<'a> {
 }
 
 trait MultiQuerySearch {
+    type Input: PreprocessableQuery;
     type Output;
     type ProgressTrace;
 
     async fn execute(
         self,
-        queries: Vec<PreprocessedQuery<SearchQueryWithIndex>>,
+        queries: Vec<PreprocessedQuery<Self::Input>>,
         context: ExecutionContext,
     ) -> Result<(Self::Output, Self::ProgressTrace), (ResponseError, Option<usize>)>;
 }
@@ -177,6 +178,7 @@ struct FederatedSearch {
 }
 
 impl MultiQuerySearch for FederatedSearch {
+    type Input = SearchQueryWithIndex;
     type Output = FederatedSearchResult;
     type ProgressTrace = IndexMap<String, String>;
     async fn execute(
@@ -219,6 +221,7 @@ impl MultiQuerySearch for FederatedSearch {
 struct MultiSearch;
 
 impl MultiQuerySearch for MultiSearch {
+    type Input = SearchQueryWithIndex;
     type Output = Vec<SearchResultWithIndex>;
     type ProgressTrace = IndexMap<String, IndexMap<String, String>>;
     async fn execute(
