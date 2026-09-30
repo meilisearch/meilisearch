@@ -24,7 +24,6 @@ use time::{Date, Duration, OffsetDateTime, Time};
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Handle;
 use tokio::sync::broadcast::error::RecvError;
-use tokio::task;
 use utoipa::{IntoParams, ToSchema};
 
 use super::{SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
@@ -416,7 +415,8 @@ async fn cancel_tasks(
     let task_cancelation =
         KindWithContent::TaskCancelation { query: format!("?{}", req.query_string()), tasks };
 
-    let task = task::spawn_blocking(move || index_scheduler.register(task_cancelation)).await??;
+    let task = crate::blocking::spawn_blocking(move || index_scheduler.register(task_cancelation))
+        .await??;
     let task: SummarizedTaskView = task.into();
 
     // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
@@ -510,7 +510,8 @@ async fn delete_tasks(
     let task_deletion =
         KindWithContent::TaskDeletion { query: format!("?{}", req.query_string()), tasks };
 
-    let task = task::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
+    let task =
+        crate::blocking::spawn_blocking(move || index_scheduler.register(task_deletion)).await??;
     let task: SummarizedTaskView = task.into();
 
     // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0

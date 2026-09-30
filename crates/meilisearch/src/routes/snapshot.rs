@@ -55,7 +55,7 @@ pub async fn create_snapshot(
 
     let task = KindWithContent::SnapshotCreation;
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        crate::blocking::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     debug!(returns = ?task, "Create snapshot");
     Ok(HttpResponse::Accepted().json(task))

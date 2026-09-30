@@ -91,7 +91,7 @@ pub async fn create_api_key(
     _req: HttpRequest,
 ) -> Result<HttpResponse, ResponseError> {
     let v = body.into_inner();
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+    let res = crate::blocking::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let key = auth_controller.create_key(v)?;
         Ok(KeyView::from_key(key, &auth_controller))
     })
@@ -178,7 +178,7 @@ pub async fn list_api_keys(
     list_api_keys: AwebQueryParameter<ListApiKeys, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let paginate = list_api_keys.into_inner().as_pagination();
-    let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+    let page_view = crate::blocking::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let keys = auth_controller.list_keys()?;
         let page_view = paginate
             .auto_paginate_sized(keys.into_iter().map(|k| KeyView::from_key(k, &auth_controller)));
@@ -247,7 +247,7 @@ pub async fn get_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
 
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+    let res = crate::blocking::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let uid =
             Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
         let key = auth_controller.get_key(uid)?;
@@ -323,7 +323,7 @@ pub async fn patch_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
     let patch_api_key = body.into_inner();
-    let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
+    let res = crate::blocking::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let uid =
             Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
         let key = auth_controller.update_key(uid, patch_api_key)?;
@@ -375,7 +375,7 @@ pub async fn delete_api_key(
     path: web::Path<AuthParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
-    tokio::task::spawn_blocking(move || {
+    crate::blocking::spawn_blocking(move || {
         let uid =
             Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
         auth_controller.delete_key(uid)

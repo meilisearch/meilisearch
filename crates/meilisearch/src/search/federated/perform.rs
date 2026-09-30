@@ -157,7 +157,7 @@ pub async fn perform_federated_search(
 
     let mut deadline = Deadline::never();
 
-    let (search_by_index, params, deadline) = tokio::task::spawn_blocking({
+    let (search_by_index, params, deadline) = crate::blocking::spawn_blocking({
         let progress = progress.clone();
         move || -> Result<_, (ResponseError, Option<usize>)> {
             progress.update_progress(PerformRetrievalStep::ExecuteLocal);

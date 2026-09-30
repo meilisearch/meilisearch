@@ -234,7 +234,7 @@ async fn local_process_foreign_filters(
     let progress = progress.clone();
     let auth_filter = auth_filter.clone();
 
-    tokio::task::spawn_blocking(move || {
+    crate::blocking::spawn_blocking(move || {
     let filters_per_foreign_index = group_foreign_filters_by_foreign_index(&foreign_filters);
 
     let mut foreign_filters_external_docids = vec![vec![]; foreign_filters.len()];

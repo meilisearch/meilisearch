@@ -218,7 +218,7 @@ async fn similar(
     }
 
     let progress_clone = progress.clone();
-    let result = tokio::task::spawn_blocking(move || {
+    let result = crate::blocking::spawn_blocking(move || {
         let _step = progress_clone.update_progress_scoped(TotalProcessingTimeStep::Process);
 
         perform_similar(

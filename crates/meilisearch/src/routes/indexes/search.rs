@@ -772,7 +772,7 @@ pub(crate) async fn legacy_search(
         let progress_clone = progress.clone();
         let auth_filter_clone = auth_filter.clone();
         let show_performance_details = query.show_performance_details;
-        let search_result = tokio::task::spawn_blocking(move || {
+        let search_result = crate::blocking::spawn_blocking(move || {
             perform_search(
                 SearchParams {
                     index_uid: index_uid.to_string(),

@@ -88,7 +88,7 @@ async fn export(
         indexes,
     };
     let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task)).await??.into();
+        crate::blocking::spawn_blocking(move || index_scheduler.register(task)).await??.into();
 
     analytics.publish(analytics_aggregate, &req);
 

@@ -565,7 +565,7 @@ async fn search_local(
     let search_query = SearchQuery::from(query);
 
     let progress_clone = progress.clone();
-    let search_result = tokio::task::spawn_blocking(move || {
+    let search_result = crate::blocking::spawn_blocking(move || {
         let index = index_scheduler.user_index(&index_uid, &auth_filter)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;

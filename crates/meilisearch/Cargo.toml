@@ -164,6 +164,9 @@ vietnamese = ["meilisearch-types/vietnamese"]
 swedish-recomposition = ["meilisearch-types/swedish-recomposition"]
 german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
+# Build with the stable mimalloc v2 allocator instead of the default v3.
+# See https://github.com/meilisearch/meilisearch/issues/6572 and #6642.
+mimalloc-v2 = ["mimalloc/v2"]
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.4.2/build.zip"

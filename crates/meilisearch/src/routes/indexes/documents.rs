@@ -452,7 +452,7 @@ pub async fn delete_document(
     };
     let mut task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
@@ -1144,7 +1144,7 @@ async fn retrieve_documents_local(
         filter,
     } = query;
 
-    tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+    crate::blocking::spawn_blocking(move || -> Result<_, ResponseError> {
         let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
         let ids = if let Some(ids) = ids {
             let mut parsed_ids = Vec::with_capacity(ids.len());
@@ -1590,7 +1590,7 @@ async fn document_addition(
                 tempfile::NamedTempFile::from_parts(file, temp_path)
             };
 
-            let res = tokio::task::spawn_blocking(move || {
+            let res = crate::blocking::spawn_blocking(move || {
                 let documents_count =
                     read_ndjson(file.as_file()).map_err(MeilisearchHttpError::DocumentFormat)?;
 
@@ -1610,7 +1610,7 @@ async fn document_addition(
             };
 
             let read_file = copy_body_to_file(temp_file, body, format).await?;
-            tokio::task::spawn_blocking(move || {
+            crate::blocking::spawn_blocking(move || {
                 let documents_count = match format {
                     PayloadType::Json => read_json(&read_file, &mut update_file)?,
                     PayloadType::Csv { delimiter } => {
@@ -1667,7 +1667,7 @@ async fn document_addition(
 
     // FIXME: not new to #6000, but _any_ error here will cause the payload to unduly persist
     let scheduler = index_scheduler.clone();
-    let mut task = match tokio::task::spawn_blocking(move || {
+    let mut task = match crate::blocking::spawn_blocking(move || {
         scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
     })
     .await?
@@ -1800,7 +1800,7 @@ pub async fn delete_documents_batch(
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
     let mut task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
@@ -1917,7 +1917,7 @@ pub async fn delete_documents_by_filter(
 
     let mut task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
@@ -2095,7 +2095,7 @@ pub async fn edit_documents_by_function(
 
     let mut task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??
@@ -2184,7 +2184,7 @@ pub async fn clear_all_documents(
     let mut task = {
         let index_scheduler = index_scheduler.clone();
 
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata(task, custom_metadata, task_network)
         })
         .await??

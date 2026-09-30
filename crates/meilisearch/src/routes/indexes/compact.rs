@@ -66,7 +66,8 @@ pub async fn compact(
     analytics.publish(IndexCompacted::default(), &req);
 
     let task = KindWithContent::IndexCompaction { index_uid: index_uid.to_string() };
-    let task = match tokio::task::spawn_blocking(move || index_scheduler.register(task)).await? {
+    let task = match crate::blocking::spawn_blocking(move || index_scheduler.register(task)).await?
+    {
         Ok(task) => task,
         Err(e) => return Err(e.into()),
     };

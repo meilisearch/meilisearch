@@ -53,7 +53,7 @@ pub async fn patch_network(
         }
         (Some(origin), Some(import_data), Some(metadata)) => {
             if metadata.index_count == 0 {
-                tokio::task::spawn_blocking(move || {
+                crate::blocking::spawn_blocking(move || {
                     index_scheduler.network_no_index_for_remote(import_data.remote_name, origin)
                 })
                 .await
@@ -235,7 +235,7 @@ async fn patch_network_without_origin(
         let mut task = {
             let index_scheduler = index_scheduler.clone();
             let merged_network = merged_network.clone();
-            tokio::task::spawn_blocking(move || {
+            crate::blocking::spawn_blocking(move || {
                 index_scheduler.register_with_custom_metadata_and_network(
                     task,
                     None,
@@ -302,7 +302,7 @@ async fn patch_network_without_origin(
         debug!("returns: {:?}", task);
         Ok(HttpResponse::Accepted().json(task))
     } else {
-        tokio::task::spawn_blocking({
+        crate::blocking::spawn_blocking({
             let merged_network = merged_network.clone();
             move || {
                 let wtxn = index_scheduler.env.write_txn()?;
@@ -385,7 +385,7 @@ async fn patch_network_with_origin(
     let network_topology_change = NetworkTopologyChange::new(old_network, new_network.clone());
     let task = KindWithContent::NetworkTopologyChange(network_topology_change);
     let task = {
-        tokio::task::spawn_blocking(move || {
+        crate::blocking::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata_and_network(
                 task,
                 None,
@@ -405,7 +405,7 @@ pub async fn post_network_change(
     index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
     payload: route::NetworkChange,
 ) -> Result<HttpResponse, ResponseError> {
-    tokio::task::spawn_blocking(move || match payload.message {
+    crate::blocking::spawn_blocking(move || match payload.message {
         route::Message::ExportNoIndexForRemote { remote } => {
             index_scheduler.network_no_index_for_remote(remote, payload.origin)
         }

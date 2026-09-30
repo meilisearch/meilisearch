@@ -128,7 +128,7 @@ pub async fn swap_indexes(
 
     let task = KindWithContent::IndexSwap { swaps };
     let scheduler = index_scheduler.clone();
-    let mut task = tokio::task::spawn_blocking(move || {
+    let mut task = crate::blocking::spawn_blocking(move || {
         scheduler.register_with_custom_metadata(task, None, task_network)
     })
     .await??;
