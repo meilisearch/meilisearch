@@ -203,7 +203,14 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
                         if is_below_threshold {
                             all_candidates -= &bucket;
-                            all_candidates -= &ranking_rule_universes[cur_ranking_rule_index];
+                            all_candidates -= &ranking_rule_universes[0];
+
+                            return Ok(BucketSortOutput {
+                                scores: valid_scores,
+                                docids: valid_docids,
+                                all_candidates,
+                                degraded: true,
+                            });
                         } else {
                             maybe_add_to_results!(bucket);
                         }
@@ -276,7 +283,14 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         {
             if is_below_threshold {
                 all_candidates -= &next_bucket.candidates;
-                all_candidates -= &ranking_rule_universes[cur_ranking_rule_index];
+                all_candidates -= &ranking_rule_universes[0];
+
+                return Ok(BucketSortOutput {
+                    scores: valid_scores,
+                    docids: valid_docids,
+                    all_candidates,
+                    degraded: false,
+                });
             } else {
                 maybe_add_to_results!(next_bucket.candidates);
             }
