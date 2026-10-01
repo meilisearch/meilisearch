@@ -246,14 +246,11 @@ impl State {
         let (state, output) = match state {
             State::Uninitialized => (state, None),
             State::ExactAttribute(query_graph, candidates_per_attribute) => {
-                // TODO it can be much faster to do the intersections before the unions...
-                //      or maybe the candidates_per_attribute are not containing anything outside universe
-                let mut candidates = MultiOps::union(candidates_per_attribute.iter().map(
+                let candidates = MultiOps::union(candidates_per_attribute.iter().map(
                     |FieldCandidates { start_with_exact, exact_word_count }| {
-                        start_with_exact & exact_word_count
+                        (start_with_exact & exact_word_count) & universe
                     },
                 ));
-                candidates &= universe;
                 (
                     State::AttributeStarts(query_graph.clone(), candidates_per_attribute),
                     Some(RankingRuleOutput {
@@ -266,15 +263,13 @@ impl State {
                 )
             }
             State::AttributeStarts(query_graph, candidates_per_attribute) => {
-                // TODO it can be much faster to do the intersections before the unions...
-                //      or maybe the candidates_per_attribute are not containing anything outside universe
-                let mut candidates = MultiOps::union(candidates_per_attribute.into_iter().map(
+                let candidates = MultiOps::union(candidates_per_attribute.into_iter().map(
                     |FieldCandidates { mut start_with_exact, exact_word_count }| {
                         start_with_exact -= exact_word_count;
-                        start_with_exact
+                        start_with_exact & universe
                     },
                 ));
-                candidates &= universe;
+
                 (
                     State::Empty(query_graph.clone()),
                     Some(RankingRuleOutput {
