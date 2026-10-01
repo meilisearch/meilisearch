@@ -273,6 +273,7 @@ impl FeatureData {
             tasks_streaming_route,
             contains_filter,
             legacy_search_as_default: legacy_search,
+            chat_completions,
         } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
@@ -280,6 +281,7 @@ impl FeatureData {
             tasks_streaming_route: tasks_streaming_route
                 || persisted_features.tasks_streaming_route,
             contains_filter: contains_filter || persisted_features.contains_filter,
+            chat_completions: chat_completions || persisted_features.chat_completions,
             legacy_search: persisted_features.legacy_search.or(Some(legacy_search)),
             ..persisted_features
         }));
