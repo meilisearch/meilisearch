@@ -70,6 +70,8 @@ pub mod main_key {
     pub const DICTIONARY_KEY: &str = "dictionary";
     pub const USER_DEFINED_SYNONYMS_KEY: &str = "user-defined-synonyms";
     pub const WORDS_FST_KEY: &str = "words-fst";
+    pub const WORDS_DELTA_FST_KEY: &str = "words-delta-fst";
+    pub const WORDS_TOMBSTONES_FST_KEY: &str = "words-tombstones-fst";
     pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
     pub const CREATED_AT_KEY: &str = "created-at";
     pub const UPDATED_AT_KEY: &str = "updated-at";
@@ -1242,6 +1244,75 @@ impl Index {
         }
     }
 
+    /* words delta fst (segmented words dictionary) */
+
+    pub(crate) fn put_words_delta_fst<A: AsRef<[u8]>>(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        fst: &fst::Set<A>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, Bytes>().put(
+            wtxn,
+            main_key::WORDS_DELTA_FST_KEY,
+            fst.as_fst().as_bytes(),
+        )
+    }
+
+    pub(crate) fn delete_words_delta_fst(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::WORDS_DELTA_FST_KEY)
+    }
+
+    /// Returns the FST of the words recently added to the dictionary
+    /// and not yet merged into the base words FST.
+    pub fn words_delta_fst<'t>(&self, rtxn: &'t RoTxn<'_>) -> Result<fst::Set<Cow<'t, [u8]>>> {
+        match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::WORDS_DELTA_FST_KEY)? {
+            Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
+            None => Ok(fst::Set::default().map_data(Cow::Owned)?),
+        }
+    }
+
+    pub(crate) fn put_words_tombstones_fst<A: AsRef<[u8]>>(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        fst: &fst::Set<A>,
+    ) -> heed::Result<()> {
+        self.main.remap_types::<Str, Bytes>().put(
+            wtxn,
+            main_key::WORDS_TOMBSTONES_FST_KEY,
+            fst.as_fst().as_bytes(),
+        )
+    }
+
+    pub(crate) fn delete_words_tombstones_fst(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
+        self.main.remap_key_type::<Str>().delete(wtxn, main_key::WORDS_TOMBSTONES_FST_KEY)
+    }
+
+    /// Returns the FST of the words recently deleted from the dictionary
+    /// but still present in the base words FST.
+    pub fn words_tombstones_fst<'t>(
+        &self,
+        rtxn: &'t RoTxn<'_>,
+    ) -> Result<fst::Set<Cow<'t, [u8]>>> {
+        match self.main.remap_types::<Str, Bytes>().get(rtxn, main_key::WORDS_TOMBSTONES_FST_KEY)? {
+            Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
+            None => Ok(fst::Set::default().map_data(Cow::Owned)?),
+        }
+    }
+
+    /// Returns the segmented view of the words dictionary: the base words FST
+    /// plus the pending delta (added words) and tombstones (deleted words) FSTs.
+    ///
+    /// A word belongs to the dictionary iff it is in the delta FST, or in the
+    /// base FST and not in the tombstones FST. The delta and tombstones FSTs
+    /// are guaranteed to be disjoint.
+    pub fn words_fst_segments<'t>(&self, rtxn: &'t RoTxn<'_>) -> Result<WordsFstSegments<'t>> {
+        Ok(WordsFstSegments {
+            base: self.words_fst(rtxn)?,
+            delta: self.words_delta_fst(rtxn)?,
+            tombstones: self.words_tombstones_fst(rtxn)?,
+        })
+    }
+
     /* stop words */
 
     pub(crate) fn put_stop_words<A: AsRef<[u8]>>(
@@ -2151,6 +2222,53 @@ pub struct PrefixSettings {
     pub prefix_count_threshold: usize,
     pub max_prefix_length: usize,
     pub compute_prefixes: PrefixSearch,
+}
+
+/// A segmented view of the words dictionary: an immutable base FST plus a
+/// small delta FST of recently added words and a tombstones FST of recently
+/// deleted words, both pending a merge into the base FST.
+///
+/// A word belongs to the dictionary iff it is in the delta FST, or in the
+/// base FST and not in the tombstones FST. The delta and tombstones FSTs are
+/// disjoint by construction.
+#[derive(Clone)]
+pub struct WordsFstSegments<'t> {
+    base: fst::Set<Cow<'t, [u8]>>,
+    delta: fst::Set<Cow<'t, [u8]>>,
+    tombstones: fst::Set<Cow<'t, [u8]>>,
+}
+
+impl<'t> WordsFstSegments<'t> {
+    /// The FST segments to run automatons or streams over, from the largest
+    /// to the smallest. Matches coming from any segment must be checked
+    /// against [`Self::is_deleted`] before being used.
+    pub fn segments(&self) -> impl Iterator<Item = &fst::Set<Cow<'t, [u8]>>> {
+        std::iter::once(&self.base)
+            .chain(if self.delta.is_empty() { None } else { Some(&self.delta) })
+    }
+
+    /// Returns `true` when this word must be ignored in segment matches
+    /// because it has been deleted from the dictionary since the last merge.
+    pub fn is_deleted(&self, word: impl AsRef<[u8]>) -> bool {
+        self.tombstones.contains(word)
+    }
+
+    pub fn contains(&self, word: impl AsRef<[u8]>) -> bool {
+        let word = word.as_ref();
+        self.delta.contains(word) || (self.base.contains(word) && !self.tombstones.contains(word))
+    }
+
+    pub fn base(&self) -> &fst::Set<Cow<'t, [u8]>> {
+        &self.base
+    }
+
+    pub fn delta(&self) -> &fst::Set<Cow<'t, [u8]>> {
+        &self.delta
+    }
+
+    pub fn tombstones(&self) -> &fst::Set<Cow<'t, [u8]>> {
+        &self.tombstones
+    }
 }
 
 // This is unfortunately a duplication of the struct in <meilisearch/src/search/mod.rs>.
