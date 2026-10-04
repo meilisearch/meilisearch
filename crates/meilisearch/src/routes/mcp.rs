@@ -34,7 +34,7 @@ use crate::search_queue::SearchQueue;
 static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::openapi);
 
 #[routes::routes(
-    tag = "MCP connection",
+    tag = "MCP",
     routes(
         "" => post(mcp)
     ),
