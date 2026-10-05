@@ -203,8 +203,10 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
                         if is_below_threshold {
                             all_candidates -= &bucket;
-                            for i in 0..=cur_ranking_rule_index {
-                                all_candidates -= &ranking_rule_universes[i];
+                            for rru in
+                                ranking_rule_universes.iter().take(cur_ranking_rule_index + 1)
+                            {
+                                all_candidates -= rru;
                             }
 
                             return Ok(BucketSortOutput {
@@ -285,8 +287,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         {
             if is_below_threshold {
                 all_candidates -= &next_bucket.candidates;
-                for i in 0..=cur_ranking_rule_index {
-                    all_candidates -= &ranking_rule_universes[i];
+                for rru in ranking_rule_universes.iter().take(cur_ranking_rule_index + 1) {
+                    all_candidates -= rru;
                 }
 
                 return Ok(BucketSortOutput {
