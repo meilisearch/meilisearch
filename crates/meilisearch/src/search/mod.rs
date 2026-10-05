@@ -941,20 +941,6 @@ pub struct InlineDynamicSearchRule {
     actions: RuleActions,
 }
 
-impl InlineDynamicSearchRule {
-    pub fn into_preview(self) -> milli::dynamic_search_rules::RulePreview {
-        let Self { uid, precedence, active, conditions, actions } = self;
-
-        milli::dynamic_search_rules::RulePreview {
-            uid: uid.into_inner(),
-            active,
-            precedence: milli::Precedence(precedence),
-            conditions: conditions.into_preview(),
-            actions,
-        }
-    }
-}
-
 impl SearchQueryWithIndex {
     pub fn has_pagination(&self) -> Option<&'static str> {
         if self.offset.is_some() {
@@ -1883,7 +1869,11 @@ pub fn perform_search(
         })
         .transpose()?;
 
-    let rule_preview = query.inline_rule.take().map(|inline_rule| inline_rule.into_preview());
+    let rule_preview = query
+        .inline_rule
+        .take()
+        .map(|inline_rule| inline_rule.into_preview(features))
+        .transpose()?;
 
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,

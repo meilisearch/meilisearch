@@ -1532,8 +1532,11 @@ impl SearchByIndex {
                     None
                 };
 
-                let rule_preview =
-                    query.inline_rule.take().map(|inline_rule| inline_rule.into_preview());
+                let rule_preview = query
+                    .inline_rule
+                    .take()
+                    .map(|inline_rule| inline_rule.into_preview(params.features))
+                    .transpose()?;
 
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,

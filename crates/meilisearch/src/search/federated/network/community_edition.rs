@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use index_scheduler::RoFeatures;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::network::{Network, RemoteAvailability};
 
@@ -20,4 +21,16 @@ pub(super) fn remote_for_shard(
     _remotes_statuses: &RemoteAvailability,
 ) -> BTreeMap<String, String> {
     Default::default()
+}
+
+impl crate::search::InlineDynamicSearchRule {
+    pub fn into_preview(
+        self,
+        _features: RoFeatures,
+    ) -> Result<meilisearch_types::milli::dynamic_search_rules::RulePreview, ResponseError> {
+        Err(ResponseError::from_msg(
+            "Meilisearch Enterprise Edition is required to use `inlineRule`".into(),
+            Code::RequiresEnterpriseEdition,
+        ))
+    }
 }
