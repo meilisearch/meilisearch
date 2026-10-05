@@ -5,7 +5,6 @@
 use heed::{BytesDecode, RoTxn, WithoutTls};
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
-use wip::WipOptionExt as _;
 
 use crate::dynamic_search_rules::preview::RulePreviewWithId;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue, OrderedF64Codec};
@@ -145,18 +144,10 @@ impl<'a> DynamicSearchRulesView<'a> {
         preview: Option<&RulePreview>,
     ) -> Result<(Vec<PinDoc>, Vec<ScaleDocs>, Option<ConditionOutcomes>)> {
         let preview = preview
-            .map(|preview| {
-                let preview_id = if let Some(this) = this {
-                    this.get_id(&preview.uid).transpose().unwrap_or_else(|| {
-                        let mut available_ids = RoaringBitmap::full();
-                        available_ids -= this.index.documents_ids(this.rtxn)?;
-
-                        Ok(available_ids.min().unwrap_wip())
-                    })?
-                } else {
-                    0
-                };
-                Ok::<_, crate::Error>(preview::RulePreviewWithId { preview_id, preview })
+            .and_then(|preview| match preview.find_id(this) {
+                Ok(Some(preview_id)) => Some(Ok(RulePreviewWithId { preview, preview_id })),
+                Ok(None) => None,
+                Err(err) => Some(Err(err)),
             })
             .transpose()?;
 

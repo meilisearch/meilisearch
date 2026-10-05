@@ -9,6 +9,13 @@ use super::{
 };
 
 impl RulePreview {
+    pub(in crate::dynamic_search_rules) fn find_id(
+        &self,
+        _dsrs: Option<crate::dynamic_search_rules::DynamicSearchRulesView>,
+    ) -> Result<Option<crate::dynamic_search_rules::RuleId>> {
+        Ok(None)
+    }
+
     /// Determine if the preview rule applies according to its conditions and the passed query.
     ///
     /// Returns detailed information about whether which conditions were met or not.

@@ -10,6 +10,7 @@ use std::{
 
 use charabia::TokenKind;
 use filter_parser::{ConstraintCondition, ConstraintConditionKind, FilterConstraints};
+use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
 use super::{
@@ -18,11 +19,37 @@ use super::{
 };
 
 use crate::{
+    dynamic_search_rules::{DynamicSearchRulesView, RuleId},
     search::facet::value_bounds::{to_str_bounds, ValueBounds},
     Result,
 };
 
 impl RulePreview {
+    pub(in crate::dynamic_search_rules) fn find_id(
+        &self,
+        dsrs: Option<DynamicSearchRulesView>,
+    ) -> Result<Option<RuleId>> {
+        let Some(dsrs) = dsrs else { return Ok(Some(0)) };
+
+        match dsrs.get_id(&self.uid)? {
+            Some(existing_id) => Ok(Some(existing_id)),
+            None => {
+                let mut available_ids = RoaringBitmap::full();
+                available_ids -= dsrs.index.documents_ids(dsrs.rtxn)?;
+
+                if let Some(id) = available_ids.min() {
+                    Ok(Some(id))
+                } else {
+                    tracing::warn!(
+                        "Ignoring preview rule because {} rules are already defined",
+                        u32::MAX
+                    );
+                    Ok(None)
+                }
+            }
+        }
+    }
+
     /// Determine if the preview rule applies according to its conditions and the passed query.
     ///
     /// Returns detailed information about whether which conditions were met or not.
