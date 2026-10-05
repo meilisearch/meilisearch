@@ -77,14 +77,6 @@ We recommend using the `$HOME/.cache/meili/lindera` directory:
 export LINDERA_DICTIONARIES_PATH=$HOME/.cache/meili/lindera
 ```
 
-You can set the `MILLI_BENCH_DATASETS_PATH` environment variable to further speed up your builds.
-It'll store some big files used for the benchmarks in the directory of your choice.
-
-We recommend using the `$HOME/.cache/meili/benches` directory:
-```sh
-export MILLI_BENCH_DATASETS_PATH=$HOME/.cache/meili/benches
-```
-
 Furthermore, you can improve incremental compilation by setting the `MEILI_NO_VERGEN` environment variable.
 Setting this variable will prevent the Meilisearch binary from being rebuilt each time the directory that hosts the Meilisearch repository changes.
 Do not enable this environment variable for production builds (as it will break the `version` route, among other things).
