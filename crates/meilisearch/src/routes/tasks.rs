@@ -43,10 +43,6 @@ use crate::extractors::authentication::GuardedData;
         "/{task_id}/documents" => get(get_task_documents_file),
     ),
     tag = "Async task management",
-    tags((
-        name = "Tasks",
-        description = "The tasks route gives information about the progress of the [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html).",
-    )),
 )]
 pub struct TaskApi;
 

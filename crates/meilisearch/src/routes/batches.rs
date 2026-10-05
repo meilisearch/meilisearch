@@ -27,10 +27,6 @@ use crate::extractors::authentication::GuardedData;
         "/stream" => get(get_batches_stream),
         "/{batch_id}" => get(get_batch)
     ),
-    tags((
-        name = "Batches",
-        description = "Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing. For example, multiple document additions to the same index may be batched together. The /batches routes give information about the progress of these batches and let you monitor batch progress and performance.",
-    )),
 )]
 pub struct BatchesApi;
 

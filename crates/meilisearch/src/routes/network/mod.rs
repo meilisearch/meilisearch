@@ -40,12 +40,6 @@ use enterprise_edition as current_edition;
         "/control" => post(post_network_change),
     ),
     tag = "Experimental features",
-    tags((
-        name = "Network",
-        description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
-
-This route is **synchronous**. This means that no task object will be returned, and any change to the network will be made available immediately.",
-    )),
 )]
 pub struct NetworkApi;
 
