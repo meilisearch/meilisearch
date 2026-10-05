@@ -1,0 +1,26 @@
+name: Check benchmarks labels
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check benchmarks labels
+        id: check_labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LABELS=$(gh api -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels -q .[].name)
+          echo "Labels: $LABELS"
+          if [[ ! "$LABELS" =~ "benchmarks needed" && ! "$LABELS" =~ "no benchmarks needed" ]]; then
+            echo "::error::Pull request must contain either the 'benchmarks needed' or 'no benchmarks needed' label."
+            exit 1
+          else
+            echo "The label is set"
+          fi
