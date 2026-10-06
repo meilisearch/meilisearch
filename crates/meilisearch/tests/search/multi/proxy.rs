@@ -1874,6 +1874,368 @@ async fn remote_auto_sharding_auto_search_dsr() {
     }
     "###);
 
+    // perform search with network
+    let query = "returns batman";
+    let request = json!(
+    {
+        "q": query,
+        "useNetwork": true,
+        "showRankingScoreDetails": true,
+        "inlineRule":
+            {
+              "uid": "inline",
+              "conditions": {
+                "query": {
+                  "words": "batman"
+                }
+              },
+              "actions": {
+                "pin": [
+                  {
+                    "id": "450465", // Superman returns
+                    "position": 1
+                  }
+                ],
+                "scale": [
+                  {
+                    "filter": "color = red",
+                    "weight": 1.5
+                  },
+                  {
+                    "filter": "color IN [blue, green]",
+                    "weight": 0.8
+                  },
+                  {
+                    "filter": "genres = Adventure",
+                    "weight": 1.2
+                  },
+                  {
+                    "filter": "genres = Family",
+                    "weight": 0.7
+                  }
+                ]
+              }
+            },
+    });
+
+    let (response, code) =
+        index0.search_with_headers(request.clone(), vec![("Meili-Include-Metadata", "true")]).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".metadata.queryUid"  => "[uuid]"}), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "299537",
+          "color": [
+            "yellow",
+            "blue"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.953042328042328,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "inline",
+                  "weight": 0.8
+                },
+                {
+                  "ruleUid": "inline",
+                  "weight": 1.2
+                }
+              ],
+              "totalWeight": 0.96
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 2,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "Superman Returns",
+          "id": "450465",
+          "color": [
+            "blue",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0,
+            "remote": "ms1"
+          },
+          "_rankingScoreDetails": {
+            "pin": {
+              "order": 0,
+              "position": 1,
+              "precedence": null,
+              "ruleUid": "inline"
+            }
+          }
+        },
+        {
+          "title": "The Dark Knight Returns Part 1",
+          "id": "522681",
+          "color": [
+            "yellow",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394,
+            "remote": "ms1"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "inline",
+                  "weight": 1.5
+                },
+                {
+                  "ruleUid": "inline",
+                  "weight": 1.2
+                }
+              ],
+              "totalWeight": 1.7999999999999998
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Dark Knight Returns Part 2",
+          "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
+          "genres": [
+            "superhero",
+            "Adventure"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.4393939393939394,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "inline",
+                  "weight": 1.5
+                },
+                {
+                  "ruleUid": "inline",
+                  "weight": 0.8
+                },
+                {
+                  "ruleUid": "inline",
+                  "weight": 1.2
+                }
+              ],
+              "totalWeight": 1.4400000000000002
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.5
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 0,
+              "maxTypoCount": 1,
+              "score": 1.0
+            },
+            "proximity": {
+              "order": 3,
+              "score": 1.0
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.8181818181818182
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 1,
+              "score": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "title": "The Badman Returns",
+          "id": "287947",
+          "color": [
+            "green",
+            "blue"
+          ],
+          "genres": [
+            "Comedy",
+            "Family"
+          ],
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.7861552028218695,
+            "remote": "ms2"
+          },
+          "_rankingScoreDetails": {
+            "scale": {
+              "order": 0,
+              "actions": [
+                {
+                  "ruleUid": "inline",
+                  "weight": 0.8
+                },
+                {
+                  "ruleUid": "inline",
+                  "weight": 0.7
+                }
+              ],
+              "totalWeight": 0.5599999999999999
+            },
+            "words": {
+              "order": 1,
+              "matchingWords": 2,
+              "maxMatchingWords": 2,
+              "score": 1.0
+            },
+            "typo": {
+              "order": 2,
+              "typoCount": 1,
+              "maxTypoCount": 2,
+              "score": 0.6666666666666666
+            },
+            "proximity": {
+              "order": 3,
+              "score": 0.75
+            },
+            "attributeRank": {
+              "order": 4,
+              "score": 1.0
+            },
+            "wordPosition": {
+              "order": 5,
+              "score": 0.9047619047619048
+            },
+            "exactness": {
+              "order": 6,
+              "matchType": "noExactMatch",
+              "matchingWords": 1,
+              "maxMatchingWords": 2,
+              "score": 0.2222222222222222
+            }
+          }
+        }
+      ],
+      "query": "returns batman",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "metadata": {
+        "query": "returns batman",
+        "queryUid": "[uuid]",
+        "indexUid": "test",
+        "primaryKey": "id",
+        "remote": "ms0",
+        "inlineRuleConditionOutcomes": {
+          "satisfiesActiveCondition": true,
+          "satisfiesQueryWordsCondition": "satisfied"
+        }
+      },
+      "remoteErrors": {}
+    }
+    "###);
+
     // send DSR
     let (task, status_code) = ms0
         .create_dynamic_search_rule(
