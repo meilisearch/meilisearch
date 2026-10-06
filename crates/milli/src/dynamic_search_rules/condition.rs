@@ -235,11 +235,8 @@ impl<'a> DynamicSearchRulesView<'a> {
             for (target, constraints) in constraints {
                 let matching = match target {
                     ConstraintTarget::Fid(fid) => {
-                        let facet_value_name = format!(
-                            "{}.{}",
-                            fields::CONDITIONS_FILTER_VALUES,
-                            fid.original_fragment()
-                        );
+                        let facet_value_name =
+                            format!("{}.{}", fields::CONDITIONS_FILTER_VALUES, fid);
                         match self.db_fields_ids_map.id(&facet_value_name) {
                             Some(fid) => {
                                 self.resolve_constraints(fid, constraints, active_rules)?
