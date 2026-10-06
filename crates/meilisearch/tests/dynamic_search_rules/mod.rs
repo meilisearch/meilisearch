@@ -4705,3 +4705,1143 @@ async fn multi_search_boost() {
     }
     "###);
 }
+
+#[cfg(feature = "enterprise")]
+mod enterprise_edition {
+    use meili_snap::{json_string, snapshot};
+
+    use crate::{common::Server, dynamic_search_rules::dynamic_search_rules_server, json};
+
+    #[actix_rt::test]
+    async fn search_with_inline_rule() {
+        let server = dynamic_search_rules_server().await;
+        let index = server.index("products");
+
+        let (task, code) = index
+            .add_documents(
+                json!([
+                    { "id": "keep-doc-1", "kind": "keep" },
+                    { "id": "hidden-and-pinned-doc-1", "kind": "hide", },
+                    { "id": "hidden-doc-1", "kind": "hide", },
+                    { "id": "keep-doc-2", "kind": "keep" }
+                ]),
+                None,
+            )
+            .await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(task.uid()).await.succeeded();
+
+        let (task, code) = index.update_settings(json!({ "filterableAttributes": ["kind"] })).await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(task.uid()).await.succeeded();
+
+        let inline_rule = json!({
+          "uid": "inline-rule",
+          "active": true,
+          "actions": {
+            "pin": [{
+              "id": "hidden-and-pinned-doc-1",
+              "position": 0
+            }],
+            "scale": [{
+              "filter": "kind = hide",
+              "weight": 0.0
+            }]
+          },
+          "conditions": {
+            "time": {
+              "start": "2008-08-01T23:00:00Z",
+              "end": "2076-08-12T22:00:00Z",
+            },
+            "query": {
+              "isEmpty": false,
+              "words": "doc"
+            }
+          }
+        });
+
+        let (value, code) = index
+            .search_with_headers(
+                json!({"inlineRule": inline_rule, "q": "doc 2", "showRankingScoreDetails": true}),
+                vec![("Meili-Include-Metadata", "true")],
+            )
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(value, { ".metadata.queryUid" => "[uuid]", ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
+        {
+          "hits": [
+            {
+              "id": "hidden-and-pinned-doc-1",
+              "kind": "hide",
+              "_rankingScoreDetails": {
+                "pin": {
+                  "order": 0,
+                  "position": 0,
+                  "precedence": null,
+                  "ruleUid": "inline-rule"
+                }
+              }
+            },
+            {
+              "id": "keep-doc-2",
+              "kind": "keep",
+              "_rankingScoreDetails": {
+                "words": {
+                  "order": 0,
+                  "matchingWords": 2,
+                  "maxMatchingWords": 2,
+                  "score": 1.0
+                },
+                "typo": {
+                  "order": 1,
+                  "typoCount": 0,
+                  "maxTypoCount": 2,
+                  "score": 1.0
+                },
+                "proximity": {
+                  "order": 2,
+                  "score": 1.0
+                },
+                "attributeRank": {
+                  "order": 3,
+                  "score": 1.0
+                },
+                "wordPosition": {
+                  "order": 4,
+                  "score": 0.9047619047619048
+                },
+                "exactness": {
+                  "order": 5,
+                  "matchType": "noExactMatch",
+                  "matchingWords": 2,
+                  "maxMatchingWords": 2,
+                  "score": 0.3333333333333333
+                }
+              }
+            },
+            {
+              "id": "keep-doc-1",
+              "kind": "keep",
+              "_rankingScoreDetails": {
+                "words": {
+                  "order": 0,
+                  "matchingWords": 1,
+                  "maxMatchingWords": 2,
+                  "score": 0.5
+                },
+                "typo": {
+                  "order": 1,
+                  "typoCount": 0,
+                  "maxTypoCount": 1,
+                  "score": 1.0
+                },
+                "proximity": {
+                  "order": 2,
+                  "score": 1.0
+                },
+                "attributeRank": {
+                  "order": 3,
+                  "score": 1.0
+                },
+                "wordPosition": {
+                  "order": 4,
+                  "score": 0.9090909090909092
+                },
+                "exactness": {
+                  "order": 5,
+                  "matchType": "noExactMatch",
+                  "matchingWords": 1,
+                  "maxMatchingWords": 1,
+                  "score": 0.3333333333333333
+                }
+              }
+            }
+          ],
+          "query": "doc 2",
+          "processingTimeMs": "[duration]",
+          "limit": 20,
+          "offset": 0,
+          "estimatedTotalHits": 3,
+          "requestUid": "[uuid]",
+          "metadata": {
+            "query": "doc 2",
+            "queryUid": "[uuid]",
+            "indexUid": "products",
+            "primaryKey": "id",
+            "inlineRuleConditionOutcomes": {
+              "satisfiesActiveCondition": true,
+              "satisfiesTimeCondition": "satisfied",
+              "satisfiesQueryEmptyCondition": "satisfied",
+              "satisfiesQueryWordsCondition": "satisfied"
+            }
+          }
+        }
+        "###);
+
+        let db_rule = json!({
+          "active": true,
+          "description": "initial version of a db rule present in the db",
+          "precedence": 1,
+          "actions": {
+            "pin": [{
+              "id": "hidden-and-pinned-doc-1",
+              "position": 1
+            }],
+          },
+          "conditions": {
+            "time": {
+              "start": "2008-08-01T23:00:00Z",
+              "end": "2076-08-12T22:00:00Z",
+            },
+            "query": {
+              "isEmpty": false,
+              "words": "doc"
+            }
+          }
+        });
+
+        let (task, code) = server.create_dynamic_search_rule("db-rule", json!(db_rule)).await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(task.uid()).await.succeeded();
+
+        // multi-search to check both with and without the inline rule
+        let (value, code) = server
+            .multi_search_with_headers(
+                json!({
+                  "queries": [
+                    {"indexUid": "products", "q": "doc 2", "showRankingScoreDetails": true},
+                    {"indexUid": "products", "q": "doc 2", "showRankingScoreDetails": true, "inlineRule": inline_rule}
+                  ]
+                }),
+                vec![("Meili-Include-Metadata", "true")],
+            )
+            .await;
+
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(value, { ".results[].metadata.queryUid" => "[uuid]", ".results[].requestUid" => "[uuid]", ".results[].processingTimeMs" => "[duration]" }), @r###"
+        {
+          "results": [
+            {
+              "indexUid": "products",
+              "hits": [
+                {
+                  "id": "keep-doc-2",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 1.0
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 2,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9047619047619048
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "hidden-and-pinned-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "pin": {
+                      "order": 0,
+                      "position": 1,
+                      "precedence": 1,
+                      "ruleUid": "db-rule"
+                    }
+                  }
+                },
+                {
+                  "id": "keep-doc-1",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "hidden-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                }
+              ],
+              "query": "doc 2",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 4,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "query": "doc 2",
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id"
+              }
+            },
+            {
+              "indexUid": "products",
+              "hits": [
+                {
+                  "id": "keep-doc-2",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 1.0
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 2,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9047619047619048
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "hidden-and-pinned-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "pin": {
+                      "order": 0,
+                      "position": 1,
+                      "precedence": 1,
+                      "ruleUid": "db-rule"
+                    }
+                  }
+                },
+                {
+                  "id": "keep-doc-1",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                }
+              ],
+              "query": "doc 2",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 3,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "query": "doc 2",
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id",
+                "inlineRuleConditionOutcomes": {
+                  "satisfiesActiveCondition": true,
+                  "satisfiesTimeCondition": "satisfied",
+                  "satisfiesQueryEmptyCondition": "satisfied",
+                  "satisfiesQueryWordsCondition": "satisfied"
+                }
+              }
+            }
+          ]
+        }
+        "###);
+
+        // updating the db dsr
+        let db_inline_rule = json!({
+          "uid": "db-rule",
+          "active": true,
+          "precedence": 0,
+          "actions": {
+            "pin": [{
+              "id": "hidden-and-pinned-doc-1",
+              "position": 0
+            }],
+          },
+          "conditions": {
+            "time": {
+              "start": "2008-08-01T23:00:00Z",
+              "end": "2076-08-12T22:00:00Z",
+            },
+            "query": {
+              "isEmpty": false,
+              "words": "doc"
+            }
+          }
+        });
+
+        let (value, code) = server
+            .multi_search_with_headers(
+                json!({
+                  "queries": [
+                    {"indexUid": "products", "q": "doc 2", "showRankingScoreDetails": true},
+                    {"indexUid": "products", "q": "doc 2", "showRankingScoreDetails": true, "inlineRule": db_inline_rule}
+                  ]
+                }),
+                vec![("Meili-Include-Metadata", "true")],
+            )
+            .await;
+
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(value, { ".results[].metadata.queryUid" => "[uuid]", ".results[].requestUid" => "[uuid]", ".results[].processingTimeMs" => "[duration]" }), @r###"
+        {
+          "results": [
+            {
+              "indexUid": "products",
+              "hits": [
+                {
+                  "id": "keep-doc-2",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 1.0
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 2,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9047619047619048
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "hidden-and-pinned-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "pin": {
+                      "order": 0,
+                      "position": 1,
+                      "precedence": 1,
+                      "ruleUid": "db-rule"
+                    }
+                  }
+                },
+                {
+                  "id": "keep-doc-1",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "hidden-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                }
+              ],
+              "query": "doc 2",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 4,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "query": "doc 2",
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id"
+              }
+            },
+            {
+              "indexUid": "products",
+              "hits": [
+                {
+                  "id": "hidden-and-pinned-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "pin": {
+                      "order": 0,
+                      "position": 0,
+                      "precedence": 0,
+                      "ruleUid": "db-rule"
+                    }
+                  }
+                },
+                {
+                  "id": "keep-doc-2",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 1.0
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 2,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9047619047619048
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 2,
+                      "maxMatchingWords": 2,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "keep-doc-1",
+                  "kind": "keep",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                },
+                {
+                  "id": "hidden-doc-1",
+                  "kind": "hide",
+                  "_rankingScoreDetails": {
+                    "words": {
+                      "order": 0,
+                      "matchingWords": 1,
+                      "maxMatchingWords": 2,
+                      "score": 0.5
+                    },
+                    "typo": {
+                      "order": 1,
+                      "typoCount": 0,
+                      "maxTypoCount": 1,
+                      "score": 1.0
+                    },
+                    "proximity": {
+                      "order": 2,
+                      "score": 1.0
+                    },
+                    "attributeRank": {
+                      "order": 3,
+                      "score": 1.0
+                    },
+                    "wordPosition": {
+                      "order": 4,
+                      "score": 0.9090909090909092
+                    },
+                    "exactness": {
+                      "order": 5,
+                      "matchType": "noExactMatch",
+                      "matchingWords": 1,
+                      "maxMatchingWords": 1,
+                      "score": 0.3333333333333333
+                    }
+                  }
+                }
+              ],
+              "query": "doc 2",
+              "processingTimeMs": "[duration]",
+              "limit": 20,
+              "offset": 0,
+              "estimatedTotalHits": 4,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "query": "doc 2",
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id",
+                "inlineRuleConditionOutcomes": {
+                  "satisfiesActiveCondition": true,
+                  "satisfiesTimeCondition": "satisfied",
+                  "satisfiesQueryEmptyCondition": "satisfied",
+                  "satisfiesQueryWordsCondition": "satisfied"
+                }
+              }
+            }
+          ]
+        }
+        "###);
+    }
+
+    #[actix_rt::test]
+    async fn unsatisfied_inline_rule() {
+        let server = dynamic_search_rules_server().await;
+        let index = server.index("products");
+
+        let (task, code) =
+            index.update_settings(json!({ "filterableAttributes": ["category", "color"] })).await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(task.uid()).await.succeeded();
+
+        let (task, code) = index
+            .add_documents(
+                json!([
+                    { "id": "red-shorts", "category": "shorts", "color": "red" },
+                    { "id": "blue-shorts", "category": "shorts", "color": "blue" },
+                    { "id": "green-pants", "category": "pants", "color": "green" },
+                    { "id": "blue-pants", "category": "pants", "color": "blue" },
+                    { "id": "orange-pants", "category": "pants", "color": "orange" },
+                    { "id": "red-pants", "category": "pants", "color": "red" },
+                    { "id": "green-shirt", "category": "shirt", "color": "green" },
+                    { "id": "blue-shirt", "category": "shirt", "color": "blue" },
+                    { "id": "orange-shirt", "category": "shirt", "color": "orange" },
+                    { "id": "red-shirt", "category": "shirt", "color": "red" },
+                ]),
+                None,
+            )
+            .await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(task.uid()).await.succeeded();
+
+        let (value, code) = server
+            .multi_search_with_headers(
+                json!({
+                  "queries": [
+                    {
+                      "indexUid": "products",
+                      "page": 0,
+                      "inlineRule": {
+                        "active": false,
+                        "uid": "unsat",
+                        "conditions": {
+                          "time": {
+                            "start": "2070-01-01T00:00:00Z"
+                          },
+                          "query": {
+                            "isEmpty": false,
+                            "words": "super hero"
+                          },
+                          "filter": {
+                            "values" : {
+                              "category": "shirt",
+                              "color": "blue"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "indexUid": "products",
+                      "q": "super hero",
+                      "filter": "category = shirt",
+                      "page": 0,
+                      "inlineRule": {
+                        "active": true,
+                        "uid": "unsat",
+                        "conditions": {
+                          "time": {
+                            "end": "1970-01-01T00:00:00Z"
+                          },
+                          "query": {
+                            "isEmpty": true,
+                          },
+                          "filter": {
+                            "values": {
+                              "notInQuery": "missing value",
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "indexUid": "products",
+                      "q": "super hero",
+                      "filter": "category = shirt AND color = yellow",
+                      "page": 0,
+                      "inlineRule": {
+                        "active": true,
+                        "uid": "unsat",
+                        "conditions": {
+                          "filter": {
+                            "values": {
+                              "category": "shirt",
+                              "color": "blue",
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }),
+                vec![("Meili-Include-Metadata", "true")],
+            )
+            .await;
+
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(value, { ".results[].metadata.queryUid" => "[uuid]", ".results[].requestUid" => "[uuid]", ".results[].processingTimeMs" => "[duration]" }), @r###"
+        {
+          "results": [
+            {
+              "indexUid": "products",
+              "hits": [],
+              "query": "",
+              "processingTimeMs": "[duration]",
+              "hitsPerPage": 20,
+              "page": 0,
+              "totalPages": 1,
+              "totalHits": 10,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id",
+                "inlineRuleConditionOutcomes": {
+                  "satisfiesActiveCondition": false,
+                  "satisfiesTimeCondition": "tooEarly",
+                  "satisfiesQueryEmptyCondition": "queryEmpty",
+                  "satisfiesQueryWordsCondition": {
+                    "missingWord": {
+                      "word": "super"
+                    }
+                  },
+                  "satisfiesFilterCondition": {
+                    "notEnoughFields": {
+                      "field_count_in_filter": 0,
+                      "field_count_in_condition": 2
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "indexUid": "products",
+              "hits": [],
+              "query": "super hero",
+              "processingTimeMs": "[duration]",
+              "hitsPerPage": 20,
+              "page": 0,
+              "totalPages": 0,
+              "totalHits": 0,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "query": "super hero",
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id",
+                "inlineRuleConditionOutcomes": {
+                  "satisfiesActiveCondition": true,
+                  "satisfiesTimeCondition": "tooLate",
+                  "satisfiesQueryEmptyCondition": "queryNotEmpty",
+                  "satisfiesFilterCondition": {
+                    "missingConstraintOnField": {
+                      "field": "notInQuery"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "indexUid": "products",
+              "hits": [],
+              "query": "super hero",
+              "processingTimeMs": "[duration]",
+              "hitsPerPage": 20,
+              "page": 0,
+              "totalPages": 0,
+              "totalHits": 0,
+              "requestUid": "[uuid]",
+              "metadata": {
+                "query": "super hero",
+                "queryUid": "[uuid]",
+                "indexUid": "products",
+                "primaryKey": "id",
+                "inlineRuleConditionOutcomes": {
+                  "satisfiesActiveCondition": true,
+                  "satisfiesFilterCondition": {
+                    "unmetConstraintOnField": {
+                      "field": "color"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+        "###);
+    }
+
+    #[actix_rt::test]
+    async fn error_inline_rule_without_feature() {
+        let server = Server::new().await;
+
+        let index = server.index("products");
+
+        let (task, code) = index
+            .add_documents(
+                json!([
+                    { "id": "keep-doc-1", "kind": "keep" },
+                    { "id": "hidden-and-pinned-doc-1", "kind": "hide", },
+                    { "id": "hidden-doc-1", "kind": "hide", },
+                    { "id": "keep-doc-2", "kind": "keep" }
+                ]),
+                None,
+            )
+            .await;
+        snapshot!(code, @"202 Accepted");
+        server.wait_task(task.uid()).await.succeeded();
+
+        let (value, code) =
+            index.search_post(json!({"inlineRule": {"uid": "feature-not-enabled"}})).await;
+        snapshot!(code, @"400 Bad Request");
+        snapshot!(json_string!(value), @r###"
+        {
+          "message": "using `inlineRules` requires enabling the `dynamic search rules` experimental feature. See https://github.com/orgs/meilisearch/discussions/884",
+          "code": "feature_not_enabled",
+          "type": "invalid_request",
+          "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+        }
+        "###);
+
+        let (value, code) = server
+            .multi_search(json!({
+              "queries": [
+                {"indexUid": "products"},
+                {"indexUid": "products", "inlineRule": {"uid": "feature-not-enabled"}}
+              ]
+            }))
+            .await;
+
+        snapshot!(code, @"400 Bad Request");
+        snapshot!(json_string!(value), @r###"
+        {
+          "message": "Inside `.queries[1]`: using `inlineRules` requires enabling the `dynamic search rules` experimental feature. See https://github.com/orgs/meilisearch/discussions/884",
+          "code": "feature_not_enabled",
+          "type": "invalid_request",
+          "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+        }
+        "###);
+
+        let (value, code) = server
+            .multi_search(json!({
+              "federation": {},
+              "queries": [
+                {"indexUid": "products"},
+                {"indexUid": "products", "inlineRule": {"uid": "feature-not-enabled"}}
+              ]
+            }))
+            .await;
+
+        snapshot!(code, @"400 Bad Request");
+        snapshot!(json_string!(value), @r###"
+        {
+          "message": "Inside `.queries[1]`: using `inlineRules` requires enabling the `dynamic search rules` experimental feature. See https://github.com/orgs/meilisearch/discussions/884",
+          "code": "feature_not_enabled",
+          "type": "invalid_request",
+          "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+        }
+        "###);
+    }
+}
+
+#[cfg(not(feature = "enterprise"))]
+#[actix_rt::test]
+async fn error_inline_rule_in_community_edition() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "keep-doc-1", "kind": "keep" },
+                { "id": "hidden-and-pinned-doc-1", "kind": "hide", },
+                { "id": "hidden-doc-1", "kind": "hide", },
+                { "id": "keep-doc-2", "kind": "keep" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) =
+        index.search_post(json!({"inlineRule": {"uid": "feature-not-enabled"}})).await;
+    snapshot!(code, @"451 Unavailable For Legal Reasons");
+    snapshot!(json_string!(value), @r###"
+    {
+      "message": "Meilisearch Enterprise Edition is required to use `inlineRule`",
+      "code": "requires_enterprise_edition",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#requires_enterprise_edition"
+    }
+    "###);
+
+    let (value, code) = server
+        .multi_search(json!({
+          "queries": [
+            {"indexUid": "products"},
+            {"indexUid": "products", "inlineRule": {"uid": "feature-not-enabled"}}
+          ]
+        }))
+        .await;
+
+    snapshot!(code, @"451 Unavailable For Legal Reasons");
+    snapshot!(json_string!(value), @r###"
+    {
+      "message": "Inside `.queries[1]`: Meilisearch Enterprise Edition is required to use `inlineRule`",
+      "code": "requires_enterprise_edition",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#requires_enterprise_edition"
+    }
+    "###);
+
+    let (value, code) = server
+        .multi_search(json!({
+          "federation": {},
+          "queries": [
+            {"indexUid": "products"},
+            {"indexUid": "products", "inlineRule": {"uid": "feature-not-enabled"}}
+          ]
+        }))
+        .await;
+
+    snapshot!(code, @"451 Unavailable For Legal Reasons");
+    snapshot!(json_string!(value), @r###"
+    {
+      "message": "Inside `.queries[1]`: Meilisearch Enterprise Edition is required to use `inlineRule`",
+      "code": "requires_enterprise_edition",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#requires_enterprise_edition"
+    }
+    "###);
+}
