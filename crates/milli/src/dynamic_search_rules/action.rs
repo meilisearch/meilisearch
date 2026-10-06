@@ -53,6 +53,7 @@ impl<'a> DynamicSearchRulesView<'a> {
         sorted_active_rules: impl IntoIterator<Item = Result<RuleId>> + 'b,
         search_context: &'b SearchContext,
         fuel: DsrFuel,
+        mut active_preview: Option<&'b RulePreviewWithId>,
     ) -> impl Iterator<
         Item = Result<(
             impl Iterator<Item = Result<PinDoc>> + 'b,
@@ -67,66 +68,90 @@ impl<'a> DynamicSearchRulesView<'a> {
             .take(fuel.max_active_rules())
             .map(move |rule_id| {
                 let rule_id = rule_id?;
-                let Some(rule) =
-                    DocumentFromDb::new(rule_id, self.rtxn, self.index, self.db_fields_ids_map)?
-                else {
-                    tracing::warn!(
-                        "rule with internal id `{rule_id}` could not be found in docs db"
-                    );
-                    return Ok(None);
+
+                let res = if let Some(preview) =
+                    active_preview.take_if(|preview| preview.preview_id == rule_id)
+                {
+                    Some((
+                        preview.preview.precedence,
+                        preview.preview.actions.clone(),
+                        preview.preview.uid.clone(),
+                    ))
+                } else if let Some(this) = this {
+                    this.find_actions_from_db(rule_id)?
+                } else {
+                    None
                 };
 
-                let Some(raw_rule_uid) = rule.field(fields::UID)? else {
-                    tracing::warn!(
-                        "Could not find field `uid` for rule with internal id `{rule_id}`"
-                    );
-                    return Ok(None);
-                };
+                let Some((precedence, actions, rule_uid)) = res else { return Ok(None) };
 
-                let rule_uid : Result<String, serde_json::Error> = serde_json::from_str(raw_rule_uid.get());
-                let rule_uid = match rule_uid {
-                    Ok(rule_uid) => rule_uid,
-                    Err(err) => {
-                        tracing::warn!("Could not deserialize field `uid` (raw value: `{}`) for rule with internal id `{rule_id}`: {err}", raw_rule_uid.get());
-                        return Ok(None);
-                    }
-                };
-
-                let Some(actions) = rule.field(fields::ACTIONS)? else {
-                    return Ok(None);
-                };
-
-                let precedence: Result<Option<u64>, _> = match rule.field(fields::PRECEDENCE)? {
-                    Some(precedence) => serde_json::from_str(precedence.get()),
-                    None => Ok(None),
-                };
-
-                let precedence = match precedence {
-                    Ok(precedence) => precedence,
-                    Err(err) => {
-                        tracing::warn!(
-                        "could not deserialize precedence of rule with internal id `{rule_id}`: {err}"
-                    );
-                        return Ok(None);
-                    }
-                };
-
-                let actions: Result<RuleActions, serde_json::Error> =
-                    serde_json::from_str(actions.get());
-                match actions {
-                    Ok(actions) => Ok(Some((
-                        Self::find_pin_actions(Precedence(precedence), actions.pin, search_context, rule_uid.clone()),
-                        Self::find_scale_actions(actions.scale, search_context, rule_uid),
-                    ))),
-                    Err(err) => {
-                        tracing::warn!(
-                        "could not deserialize actions of rule with internal id `{rule_id}`: {err}"
-                    );
-                        Ok(None)
-                    }
-                }
+                Ok(Some((
+                    Self::find_pin_actions(
+                        precedence,
+                        actions.pin,
+                        search_context,
+                        rule_uid.clone(),
+                    ),
+                    Self::find_scale_actions(actions.scale, search_context, rule_uid),
+                )))
             })
             .filter_map(|x| x.transpose())
+    }
+
+    fn find_actions_from_db(
+        self,
+        rule_id: RuleId,
+    ) -> Result<Option<(Precedence, RuleActions, String)>> {
+        let Some(rule) =
+            DocumentFromDb::new(rule_id, self.rtxn, self.index, self.db_fields_ids_map)?
+        else {
+            tracing::warn!("rule with internal id `{rule_id}` could not be found in docs db");
+            return Ok(None);
+        };
+
+        let Some(raw_rule_uid) = rule.field(fields::UID)? else {
+            tracing::warn!("Could not find field `uid` for rule with internal id `{rule_id}`");
+            return Ok(None);
+        };
+
+        let rule_uid: Result<String, serde_json::Error> = serde_json::from_str(raw_rule_uid.get());
+        let rule_uid = match rule_uid {
+            Ok(rule_uid) => rule_uid,
+            Err(err) => {
+                tracing::warn!("Could not deserialize field `uid` (raw value: `{}`) for rule with internal id `{rule_id}`: {err}", raw_rule_uid.get());
+                return Ok(None);
+            }
+        };
+
+        let Some(actions) = rule.field(fields::ACTIONS)? else {
+            return Ok(None);
+        };
+
+        let precedence: Result<Option<u64>, _> = match rule.field(fields::PRECEDENCE)? {
+            Some(precedence) => serde_json::from_str(precedence.get()),
+            None => Ok(None),
+        };
+
+        let precedence = match precedence {
+            Ok(precedence) => precedence,
+            Err(err) => {
+                tracing::warn!(
+                    "could not deserialize precedence of rule with internal id `{rule_id}`: {err}"
+                );
+                return Ok(None);
+            }
+        };
+
+        let actions: Result<RuleActions, serde_json::Error> = serde_json::from_str(actions.get());
+        match actions {
+            Ok(actions) => Ok(Some((Precedence(precedence), actions, rule_uid))),
+            Err(err) => {
+                tracing::warn!(
+                    "could not deserialize actions of rule with internal id `{rule_id}`: {err}"
+                );
+                Ok(None)
+            }
+        }
     }
 }
 
