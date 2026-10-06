@@ -456,6 +456,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             show_ranking_score: other.show_ranking_score.0,
             show_ranking_score_details: other.show_ranking_score_details.0,
             show_performance_details: other.show_performance_details.0,
+            // inline rule not supported for GET
+            inline_rule: None,
         })
     }
 }

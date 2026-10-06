@@ -212,6 +212,7 @@ pub fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithI
         locales: _,
         personalize,
         federation_options: _,
+        inline_rule: _,
     } = &mut query;
 
     let mut federation = Federation::default();

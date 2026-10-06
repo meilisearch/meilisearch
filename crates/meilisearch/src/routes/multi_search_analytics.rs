@@ -70,6 +70,7 @@ impl MultiSearchAggregator {
             locales: _,
             personalize: _,
             use_network: _,
+            inline_rule: _,
         } in &federated_search.queries
         {
             if let Some(federation_options) = federation_options {
