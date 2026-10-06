@@ -1335,7 +1335,17 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
-    request_body = serde_json::Value,
+    request_body(
+        description = "The documents, as a JSON array, as NDJSON with one document per line, or as CSV with a header line.",
+        content(
+            (serde_json::Value = "application/json", example = json!([
+                { "id": 287947, "title": "Shazam", "genres": ["Action", "Comedy"] },
+                { "id": 299537, "title": "Captain Marvel", "genres": ["Action", "Adventure"] }
+            ])),
+            ("application/x-ndjson", example = json!("{\"id\": 287947, \"title\": \"Shazam\", \"genres\": [\"Action\", \"Comedy\"]}\n{\"id\": 299537, \"title\": \"Captain Marvel\", \"genres\": [\"Action\", \"Adventure\"]}\n")),
+            ("text/csv", example = json!("id,title,genres\n287947,Shazam,\"Action, Comedy\"\n299537,Captain Marvel,\"Action, Adventure\"\n")),
+        ),
+    ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -1447,7 +1457,17 @@ pub async fn replace_documents(
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
-    request_body = serde_json::Value,
+    request_body(
+        description = "The documents, as a JSON array, as NDJSON with one document per line, or as CSV with a header line.",
+        content(
+            (serde_json::Value = "application/json", example = json!([
+                { "id": 287947, "title": "Shazam", "genres": ["Action", "Comedy"] },
+                { "id": 299537, "title": "Captain Marvel", "genres": ["Action", "Adventure"] }
+            ])),
+            ("application/x-ndjson", example = json!("{\"id\": 287947, \"title\": \"Shazam\", \"genres\": [\"Action\", \"Comedy\"]}\n{\"id\": 299537, \"title\": \"Captain Marvel\", \"genres\": [\"Action\", \"Adventure\"]}\n")),
+            ("text/csv", example = json!("id,title,genres\n287947,Shazam,\"Action, Comedy\"\n299537,Captain Marvel,\"Action, Adventure\"\n")),
+        ),
+    ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

@@ -59,7 +59,8 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
             // - ident ()
             // - ident = ".."
             // - ident = expr
-            // - request_body special syntax. We'll support `request_body = Type` only, as it is the only one supported in Meilisearch
+            // - request_body special syntax: `request_body = Type`, `request_body(content = Type, ..)` and
+            //   `request_body(content((Type = "content/type", ..), ("other/type", ..)), ..)` for several media types
 
             let lookahead = attr_arg.input.lookahead1();
             let tokens = if lookahead.peek(syn::token::Paren) {
@@ -73,8 +74,14 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
                         .collect();
 
                     for content in request_body_args.iter() {
-                        if let RequestBodyArg::Content { ident: _, eq: _, right_hand } = content {
-                            request_body.replace(right_hand.clone());
+                        match content {
+                            RequestBodyArg::Content { right_hand, .. } => {
+                                request_body.replace(right_hand.clone());
+                            }
+                            RequestBodyArg::Contents { body_type: Some(body_type), .. } => {
+                                request_body.replace(body_type.clone());
+                            }
+                            _ => {}
                         }
                     }
 
@@ -148,8 +155,23 @@ pub(crate) fn try_path(attr: TokenStream, item: TokenStream) -> Result<TokenStre
 }
 
 enum RequestBodyArg {
-    Content { ident: syn::Ident, eq: syn::token::Eq, right_hand: syn::Type },
-    Other { ident: syn::Ident, eq: syn::token::Eq, right_hand: proc_macro2::TokenStream },
+    Content {
+        ident: syn::Ident,
+        eq: syn::token::Eq,
+        right_hand: syn::Type,
+    },
+    /// `content((Type = "content/type", ..), ("other/type", ..))`: one tuple per media type, as utoipa
+    /// defines it. The first tuple that starts with a type gives the type of the body.
+    Contents {
+        ident: syn::Ident,
+        media_types: proc_macro2::TokenStream,
+        body_type: Option<syn::Type>,
+    },
+    Other {
+        ident: syn::Ident,
+        eq: syn::token::Eq,
+        right_hand: proc_macro2::TokenStream,
+    },
 }
 
 impl quote::ToTokens for RequestBodyArg {
@@ -159,6 +181,10 @@ impl quote::ToTokens for RequestBodyArg {
                 ident.to_tokens(tokens);
                 eq.to_tokens(tokens);
                 right_hand.to_tokens(tokens);
+            }
+            RequestBodyArg::Contents { ident, media_types, body_type: _ } => {
+                ident.to_tokens(tokens);
+                syn::token::Paren::default().surround(tokens, |inner| media_types.to_tokens(inner));
             }
             RequestBodyArg::Other { ident, eq, right_hand } => {
                 ident.to_tokens(tokens);
@@ -172,14 +198,35 @@ impl quote::ToTokens for RequestBodyArg {
 impl syn::parse::Parse for RequestBodyArg {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let ident: syn::Ident = input.parse()?;
+
+        if ident == "content" && input.peek(syn::token::Paren) {
+            let list;
+            parenthesized!(list in input);
+            let media_types: proc_macro2::TokenStream = list.fork().parse()?;
+            let mut body_type = None;
+            while !list.is_empty() {
+                let media_type;
+                parenthesized!(media_type in list);
+                if body_type.is_none() {
+                    body_type = media_type.fork().parse::<syn::Type>().ok();
+                }
+                media_type.parse::<proc_macro2::TokenStream>()?;
+                if !list.is_empty() {
+                    list.parse::<Token![,]>()?;
+                }
+            }
+            return Ok(Self::Contents { ident, media_types, body_type });
+        }
+
         let eq = input.parse()?;
 
         Ok(if ident == "content" {
             let right_hand = input.parse()?;
             Self::Content { ident, eq, right_hand }
         } else {
-            let right_hand = input.parse()?;
-            Self::Other { ident, eq, right_hand }
+            // An expression, so that the argument stops at the next comma instead of swallowing the rest.
+            let right_hand: syn::Expr = input.parse()?;
+            Self::Other { ident, eq, right_hand: quote!(#right_hand) }
         })
     }
 }
