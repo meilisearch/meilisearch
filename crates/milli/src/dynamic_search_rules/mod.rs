@@ -20,6 +20,7 @@ use crate::{
 mod action;
 mod condition;
 mod fuel;
+mod preview;
 /// Contains type declarations for older versions of dsr objects
 pub mod upgrade;
 
@@ -28,6 +29,12 @@ pub mod fields;
 
 pub use action::{PinAction, RuleActions, ScaleAction};
 pub use fuel::DsrFuel;
+pub use preview::{
+    ConditionOutcomes, FilterCondition as PreviewFilterCondition, FilterConditionOutcome,
+    PreviewConditions, QueryCondition as PreviewQueryCondition, QueryEmptyConditionOutcome,
+    QueryWordsConditionOutcome, RulePreview, TimeCondition as PreviewTimeCondition,
+    TimeConditionOutcome,
+};
 pub use upgrade::{create_metadata, upgrade_dsrs, METADATA_UID};
 
 /// Internal identifier of a rule.
