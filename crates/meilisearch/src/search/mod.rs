@@ -906,6 +906,21 @@ pub struct SearchQueryWithIndex {
     pub federation_options: Option<FederationOptions>,
 }
 
+#[routes::request(proxied)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineDynamicSearchRule {
+    #[request(required)]
+    uid: IndexUid,
+    #[request(default)]
+    precedence: Option<u64>,
+    #[request(default = true)]
+    active: bool,
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
+    conditions: Conditions,
+    #[request(default)]
+    actions: RuleActions,
+}
+
 impl SearchQueryWithIndex {
     pub fn has_pagination(&self) -> Option<&'static str> {
         if self.offset.is_some() {

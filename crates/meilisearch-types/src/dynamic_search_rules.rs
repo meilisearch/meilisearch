@@ -335,6 +335,17 @@ pub struct Conditions {
     pub filter: Option<FilterCondition>,
 }
 
+impl Conditions {
+    pub fn into_preview(self) -> milli::dynamic_search_rules::PreviewConditions {
+        let Self { time, query, filter } = self;
+        milli::dynamic_search_rules::PreviewConditions {
+            time: time.map(TimeCondition::into_preview),
+            query: query.map(QueryCondition::into_preview),
+            filter: filter.map(FilterCondition::into_preview),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema, Deserr)]
 #[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
@@ -362,6 +373,13 @@ pub struct TimeCondition {
     pub end: Option<OffsetDateTime>,
 }
 
+impl TimeCondition {
+    pub fn into_preview(self) -> milli::dynamic_search_rules::PreviewTimeCondition {
+        let Self { start, end } = self;
+        milli::dynamic_search_rules::PreviewTimeCondition { start, end }
+    }
+}
+
 impl routes::RequestBody for TimeCondition {}
 
 #[routes::request(db, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
@@ -380,11 +398,25 @@ pub struct QueryCondition {
     pub words: Option<String>,
 }
 
+impl QueryCondition {
+    pub fn into_preview(self) -> milli::dynamic_search_rules::PreviewQueryCondition {
+        let Self { is_empty, words } = self;
+        milli::dynamic_search_rules::PreviewQueryCondition { is_empty, words }
+    }
+}
+
 #[routes::request(db, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterCondition {
     #[request(default)]
     pub values: BTreeMap<String, serde_json::Value>,
+}
+
+impl FilterCondition {
+    pub fn into_preview(self) -> milli::dynamic_search_rules::PreviewFilterCondition {
+        let Self { values } = self;
+        milli::dynamic_search_rules::PreviewFilterCondition { values }
+    }
 }
 
 // We manually check the exclusivity of `is_empty` and `contains` because Deserr does not support
