@@ -4,6 +4,7 @@ mod tokenize_document;
 
 pub use extract_word_docids::{WordDocidsCaches, WordDocidsExtractors};
 pub use extract_word_pair_proximity_docids::WordPairProximityDocidsExtractor;
+pub use tokenize_document::tokenizer_builder;
 
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
 use crate::update::new::extract::searchable::tokenize_document::DocumentTokenizer;
