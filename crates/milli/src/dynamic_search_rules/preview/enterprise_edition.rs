@@ -53,16 +53,22 @@ impl RulePreview {
     /// Determine if the preview rule applies according to its conditions and the passed query.
     ///
     /// Returns detailed information about whether which conditions were met or not.
-    pub fn evaluate_conditions(
+    ///
+    /// # Precondition
+    ///
+    /// - `sorted_unique_query_terms` is a sorted list of normalized query terms without duplicates
+    ///
+    /// This precondition is verified by the callers of the DSR modules
+    pub(in crate::dynamic_search_rules) fn evaluate_conditions(
         &self,
-        query_terms: &[&str],
+        sorted_unique_query_terms: &[&str],
         filter_constraints: &FilterConstraints,
         target_time: OffsetDateTime,
     ) -> Result<ConditionOutcomes> {
         let satisfies_active_condition = self.active;
         let satisfies_time_condition = self.apply_time_conditions(target_time);
         let (satisfies_query_empty_condition, satisfies_query_words_condition) =
-            self.apply_query_conditions(query_terms)?;
+            self.apply_query_conditions(sorted_unique_query_terms)?;
         let satisfies_filter_condition = self.apply_filter_conditions(filter_constraints);
 
         Ok(ConditionOutcomes {
@@ -93,9 +99,14 @@ impl RulePreview {
         TimeConditionOutcome::Satisfied
     }
 
+    // # Precondition
+    //
+    // - `sorted_unique_query_terms` is a sorted and does not contain duplicate.
+    //
+    // This precondition is maintained by the DSR module.
     fn apply_query_conditions(
         &self,
-        query_terms: &[&str],
+        sorted_unique_query_terms: &[&str],
     ) -> Result<(QueryEmptyConditionOutcome, QueryWordsConditionOutcome)> {
         let Some(query) = &self.conditions.query else {
             return Ok((
@@ -108,7 +119,7 @@ impl RulePreview {
         let mut words_condition = QueryWordsConditionOutcome::NoConstraint;
 
         if let Some(constraint_is_empty) = query.is_empty {
-            empty_condition = match (constraint_is_empty, query_terms.is_empty()) {
+            empty_condition = match (constraint_is_empty, sorted_unique_query_terms.is_empty()) {
                 (true, false) => QueryEmptyConditionOutcome::QueryNotEmpty,
                 (false, true) => QueryEmptyConditionOutcome::QueryEmpty,
                 (_, _) => QueryEmptyConditionOutcome::Satisfied,
@@ -118,6 +129,12 @@ impl RulePreview {
         if let Some(words) = query.words.as_deref() {
             words_condition = QueryWordsConditionOutcome::Satisfied;
 
+            // FIXME?: using `None`, `None`, `None` for now
+            //
+            // For correctness this should use the DSR index config, however:
+            // - This config is not user-controllable, and `None` `None` `None` currently fits
+            // - There is technically a mismatch because the query terms were tokenized with the settings of the **search index**
+            //   The regular DSR have the same limitation.
             let mut builder = crate::update::new::tokenizer_builder(None, None, None);
             let tokenizer = builder.build();
             for token in tokenizer.tokenize_with_allow_list(words, None) {
@@ -130,7 +147,7 @@ impl RulePreview {
                     continue;
                 }
 
-                if query_terms.binary_search(&lemma).is_err() {
+                if sorted_unique_query_terms.binary_search(&lemma).is_err() {
                     words_condition =
                         QueryWordsConditionOutcome::MissingWord { word: lemma.to_owned() };
                     return Ok((empty_condition, words_condition));
@@ -151,6 +168,8 @@ impl RulePreview {
 
         let nb_constraints = filter_condition.values.len();
         let max_nb_constraints = filter_constraints.max_number_of_constraints();
+        // The check is important for correctness, because if there are some condition constraint but no filter constraint
+        // the 'or_group loop will be skipped and the outcome will be returned as Satisfied, when it is not.
         if nb_constraints > max_nb_constraints {
             return FilterConditionOutcome::NotEnoughFields {
                 field_count_in_filter: max_nb_constraints,
@@ -159,13 +178,14 @@ impl RulePreview {
         }
 
         let mut field_values = BTreeMap::new();
-        let mut field_name = String::new();
-        for (name, value) in &filter_condition.values {
-            field_name.clear();
-            field_name.push_str(name);
-            find_field_values(&mut field_name, &mut field_values, value);
+        {
+            let mut field_name = String::new();
+            for (name, value) in &filter_condition.values {
+                field_name.clear();
+                field_name.push_str(name);
+                find_field_values(&mut field_name, &mut field_values, value);
+            }
         }
-
         let mut filter_condition = FilterConditionOutcome::Satisfied;
 
         'or_groups: for constraints in &filter_constraints.constraints {
@@ -199,6 +219,11 @@ impl RulePreview {
     }
 }
 
+// Populate `field_values` with `(k, v)`, where `k` is a field name,
+// built from `field_name` and its possible subfields, and `v` is the list of permissible
+// values for the field `k`.
+//
+// `value` is an arbitrary JSON value representing the permissible values for `field_name` and its subfields.
 fn find_field_values(
     field_name: &mut String,
     field_values: &mut BTreeMap<String, Vec<either::Either<String, f64>>>,
@@ -210,7 +235,7 @@ fn find_field_values(
             field_values
                 .entry(field_name.clone())
                 .or_default()
-                .push(either::Left(format!("{value}")));
+                .push(either::Left(value.to_string()));
         }
         serde_json::Value::Number(value) => {
             let Some(value) = value.as_f64() else {
@@ -281,15 +306,9 @@ fn resolve_constraints(
             | ConstraintConditionKind::GeoBoundingBox { .. }
             | ConstraintConditionKind::GeoPolygon { .. } => return false,
         };
-        if polarity {
-            // exclude rules that were evaluated to 0
-            if !evaluated {
-                return false;
-            }
-        } else {
-            if evaluated {
-                return false;
-            }
+        if polarity != evaluated {
+            // unmet constraint
+            return false;
         }
     }
     true

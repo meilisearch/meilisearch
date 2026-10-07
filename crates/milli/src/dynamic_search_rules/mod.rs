@@ -153,19 +153,25 @@ impl<'a> DynamicSearchRulesView<'a> {
             })
             .transpose()?;
 
-        let (query_terms, filter_constraints) =
+        let (sorted_unique_query_terms, filter_constraints) =
             Self::prepare_query(query_terms, filter, search_context, fuel)?;
 
         let active_rules = if let Some(this) = this {
-            this.active_rules_for_query(&query_terms, &filter_constraints, search_context, fuel)?
+            this.active_rules_for_query(
+                &sorted_unique_query_terms,
+                &filter_constraints,
+                search_context,
+                fuel,
+            )?
         } else {
             Default::default()
         };
 
         let preview_outcome = preview
             .map(|preview| {
+                // precondition: see postcondition of `prepare_query`
                 let outcome = preview.preview.evaluate_conditions(
-                    &query_terms,
+                    &sorted_unique_query_terms,
                     &filter_constraints,
                     search_context.before_search,
                 )?;

@@ -15,6 +15,9 @@ use crate::search::new::LocatedQueryTerm;
 use crate::{FieldId, IndexFilter, Result, SearchContext, MAX_COUNTED_WORDS};
 
 impl<'a> DynamicSearchRulesView<'a> {
+    // # Postcondition
+    //
+    // - The returned Vec is sorted and does not contain duplicates
     pub(super) fn prepare_query<'t>(
         query_terms: &[LocatedQueryTerm],
         filter: Option<&IndexFilter>,
