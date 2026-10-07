@@ -455,7 +455,11 @@ impl<'t> Matcher<'t, '_, '_, '_> {
 
                             // push text that is positioned before our matches
                             if byte_index < *m_byte_start {
-                                formatted.push(&self.text[byte_index..*m_byte_start]);
+                                let Some(before_match) = self.text.get(byte_index..*m_byte_start)
+                                else {
+                                    continue;
+                                };
+                                formatted.push(before_match);
                             }
 
                             formatted.push(self.highlight_prefix);
@@ -463,17 +467,30 @@ impl<'t> Matcher<'t, '_, '_, '_> {
                             // TODO: This is additional work done, charabia::token::Token byte_len
                             // should already get us the original byte length, however, that doesn't work as
                             // it's supposed to, investigate why
-                            let highlight_byte_index = self.text[*m_byte_start..]
+                            let Some(match_from_byte_start) = self.text.get(*m_byte_start..) else {
+                                continue;
+                            };
+                            let highlight_byte_index = match_from_byte_start
                                 .char_indices()
                                 .nth(m.char_count)
                                 .map_or(*m_byte_end, |(i, _)| min(i + *m_byte_start, *m_byte_end));
-                            formatted.push(&self.text[*m_byte_start..highlight_byte_index]);
+                            let Some(highlighted_match) =
+                                self.text.get(*m_byte_start..highlight_byte_index)
+                            else {
+                                continue;
+                            };
+                            formatted.push(highlighted_match);
 
                             formatted.push(self.highlight_suffix);
 
                             // if it's a prefix highlight, we put the end of the word after the highlight marker.
                             if highlight_byte_index < *m_byte_end {
-                                formatted.push(&self.text[highlight_byte_index..*m_byte_end]);
+                                let Some(end_of_word) =
+                                    self.text.get(highlight_byte_index..*m_byte_end)
+                                else {
+                                    continue;
+                                };
+                                formatted.push(end_of_word);
                             }
 
                             byte_index = *m_byte_end;
@@ -482,7 +499,9 @@ impl<'t> Matcher<'t, '_, '_, '_> {
 
                     // push the rest of the text between last match and the end of crop.
                     if byte_index < crop_byte_end {
-                        formatted.push(&self.text[byte_index..crop_byte_end]);
+                        if let Some(text_rest) = self.text.get(byte_index..crop_byte_end) {
+                            formatted.push(text_rest);
+                        }
                     }
 
                     // push crop marker if it's not the end of the text.
@@ -490,9 +509,13 @@ impl<'t> Matcher<'t, '_, '_, '_> {
                         formatted.push(self.crop_marker);
                     }
 
+                    // avoid concatenating if there is already 1 slice.
                     if formatted.len() == 1 {
-                        // avoid concatenating if there is already 1 slice.
-                        Cow::Borrowed(&self.text[crop_byte_start..crop_byte_end])
+                        let Some(cropped_text) = self.text.get(crop_byte_start..crop_byte_end)
+                        else {
+                            return Cow::Owned(formatted.concat());
+                        };
+                        Cow::Borrowed(cropped_text)
                     } else {
                         Cow::Owned(formatted.concat())
                     }
