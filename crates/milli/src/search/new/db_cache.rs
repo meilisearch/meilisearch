@@ -3,7 +3,6 @@ use std::collections::hash_map::Entry;
 use std::hash::Hash;
 
 use fxhash::FxHashMap;
-use grenad::MergeFunction;
 use heed::types::Bytes;
 use heed::{BytesEncode, Database, RoTxn};
 use roaring::RoaringBitmap;
@@ -124,7 +123,6 @@ impl<'ctx> DatabaseCache<'ctx> {
         K1: Copy + Eq + Hash,
         KC: BytesEncode<'v>,
         KC::EItem: Sized,
-        MF: MergeFunction,
         crate::Error: From<MF::Error>,
     {
         if let Entry::Vacant(entry) = cache.entry(cache_key) {
