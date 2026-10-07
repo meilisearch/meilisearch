@@ -5637,8 +5637,8 @@ mod enterprise_edition {
                   },
                   "satisfiesFilterCondition": {
                     "notEnoughFields": {
-                      "field_count_in_filter": 0,
-                      "field_count_in_condition": 2
+                      "fieldCountInFilter": 0,
+                      "fieldCountInCondition": 2
                     }
                   }
                 }

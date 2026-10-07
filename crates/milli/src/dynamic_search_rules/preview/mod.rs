@@ -157,6 +157,7 @@ pub enum QueryWordsConditionOutcome {
     /// No query words condition
     NoConstraint,
     /// At least the specified word is missing in the query
+    #[serde(rename_all = "camelCase")]
     MissingWord {
         /// Missing word in query
         word: String,
@@ -193,16 +194,19 @@ pub enum FilterConditionOutcome {
     /// No filter condition
     NoConstraint,
     /// At least one field from the condition is missing from the filter
+    #[serde(rename_all = "camelCase")]
     MissingConstraintOnField {
         /// Missing field in filter
         field: String,
     },
     /// At least one field has a condition not met in the filter
+    #[serde(rename_all = "camelCase")]
     UnmetConstraintOnField {
         /// Field with unmet constraint in filter
         field: String,
     },
     /// The filter does not constraint enough field to satisfy the condition
+    #[serde(rename_all = "camelCase")]
     NotEnoughFields {
         /// Number of fields in the filter
         field_count_in_filter: usize,
