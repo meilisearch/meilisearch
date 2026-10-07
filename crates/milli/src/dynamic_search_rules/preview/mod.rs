@@ -237,11 +237,18 @@ impl FilterConditionOutcome {
 impl ConditionOutcomes {
     /// `true` if all conditions are enabled
     pub fn is_enabled(&self) -> bool {
-        self.satisfies_active_condition
-            && self.satisfies_time_condition.is_enabled()
-            && self.satisfies_query_empty_condition.is_enabled()
-            && self.satisfies_query_words_condition.is_enabled()
-            && self.satisfies_filter_condition.is_enabled()
+        let Self {
+            satisfies_active_condition,
+            satisfies_time_condition,
+            satisfies_query_empty_condition,
+            satisfies_query_words_condition,
+            satisfies_filter_condition,
+        } = self;
+        *satisfies_active_condition
+            && satisfies_time_condition.is_enabled()
+            && satisfies_query_empty_condition.is_enabled()
+            && satisfies_query_words_condition.is_enabled()
+            && satisfies_filter_condition.is_enabled()
     }
 }
 
