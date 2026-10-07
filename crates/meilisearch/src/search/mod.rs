@@ -13,11 +13,13 @@ use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::{AuthFilter, IndexSearchRules};
 use meilisearch_types::deserr::DeserrJsonError;
+use meilisearch_types::dynamic_search_rules::Conditions;
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use meilisearch_types::milli::dynamic_search_rules::{ConditionOutcomes, RuleActions};
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
@@ -344,6 +346,12 @@ pub struct SearchQuery {
     /// When true, the response includes a `performanceDetails` object with a timing breakdown of the query processing.
     #[request(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
+    /// An inline [search rule](/capabilities/search_rules/overview) to apply to this query.
+    ///
+    /// - Requires the `dynamicSearchRule` experimental feature
+    /// - Inline rules require the Enterprise Edition of Meilisearch.
+    #[request(default)]
+    pub inline_rule: Option<InlineDynamicSearchRule>,
 }
 
 /// Helper trait for queries that can be networked.
@@ -460,6 +468,7 @@ impl From<SearchParameters> for SearchQuery {
             show_ranking_score: false,
             show_ranking_score_details: false,
             show_performance_details: false,
+            inline_rule: None,
         }
     }
 }
@@ -544,6 +553,7 @@ impl fmt::Debug for SearchQuery {
             show_ranking_score,
             show_ranking_score_details,
             show_performance_details,
+            inline_rule,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -641,6 +651,10 @@ impl fmt::Debug for SearchQuery {
 
         if let Some(use_network) = use_network {
             debug.field("use_network", use_network);
+        }
+
+        if let Some(inline_rule) = inline_rule {
+            debug.field("inline_rule", &inline_rule.uid);
         }
 
         debug.finish()
@@ -904,6 +918,27 @@ pub struct SearchQueryWithIndex {
     /// Federation options for multi-index search
     #[request(default)]
     pub federation_options: Option<FederationOptions>,
+    /// An inline [search rule](/capabilities/search_rules/overview) to apply to this query.
+    ///
+    /// - Requires the `dynamicSearchRule` experimental feature
+    /// - Inline rules require the Enterprise Edition of Meilisearch.
+    #[request(default)]
+    pub inline_rule: Option<InlineDynamicSearchRule>,
+}
+
+#[routes::request(proxied)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineDynamicSearchRule {
+    #[request(required)]
+    uid: IndexUid,
+    #[request(default)]
+    precedence: Option<u64>,
+    #[request(default = true)]
+    active: bool,
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
+    conditions: Conditions,
+    #[request(default)]
+    actions: RuleActions,
 }
 
 impl SearchQueryWithIndex {
@@ -977,6 +1012,7 @@ impl SearchQueryWithIndex {
             show_ranking_score,
             show_ranking_score_details,
             show_performance_details,
+            inline_rule,
         } = query;
 
         SearchQueryWithIndex {
@@ -1010,6 +1046,7 @@ impl SearchQueryWithIndex {
             use_network,
             show_ranking_score,
             show_ranking_score_details,
+            inline_rule,
             show_performance_details: show_performance_details.then_some(true),
             federation_options,
         }
@@ -1049,6 +1086,7 @@ impl SearchQueryWithIndex {
             show_ranking_score_details,
             show_performance_details,
             federation_options,
+            inline_rule,
         } = self;
         (
             index_uid,
@@ -1082,6 +1120,7 @@ impl SearchQueryWithIndex {
                 use_network,
                 show_ranking_score,
                 show_ranking_score_details,
+                inline_rule,
                 show_performance_details: show_performance_details.unwrap_or_default(),
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
@@ -1346,18 +1385,24 @@ pub struct SearchMetadata {
     ///
     /// Never set for regular search and non-federated multi-search because
     /// the query(ies) are already present in the response.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
     /// Unique identifier for the query.
     pub query_uid: Uuid,
     /// UID of the index that was searched.
     pub index_uid: String,
     /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<String>,
     /// Remote that processed the query (federated search only).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote: Option<String>,
+
+    /// Outcome of checking the conditions of the dynamic search rule passed in `inlineRule`.
+    ///
+    /// Only present in response if `inlineRule` was set in query.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline_rule_condition_outcomes: Option<ConditionOutcomes>,
 }
 
 /// Search response containing matching documents and metadata.
@@ -1824,6 +1869,12 @@ pub fn perform_search(
         })
         .transpose()?;
 
+    let rule_preview = query
+        .inline_rule
+        .take()
+        .map(|inline_rule| inline_rule.into_preview(features))
+        .transpose()?;
+
     let (mut search, is_finite_pagination, max_total_hits, offset) = prepare_search(
         index,
         &rtxn,
@@ -1845,8 +1896,12 @@ pub fn perform_search(
         .and_then(|dsrs| dsrs.milli_dsrs().transpose())
         .transpose()?;
 
-    if let Some(dsrs) = &dsrs {
-        search.dynamic_search_rules(dsrs, index_scheduler.dsr_fuel());
+    if dsrs.is_some() || rule_preview.is_some() {
+        search.dynamic_search_rules(
+            dsrs.as_ref(),
+            index_scheduler.dsr_fuel(),
+            rule_preview.as_ref(),
+        );
     }
 
     let (
@@ -1858,6 +1913,7 @@ pub fn perform_search(
             degraded,
             used_negative_operator,
             query_vector,
+            inline_rule_condition_outcomes,
         },
         semantic_hit_count,
     ) = search_from_kind(search_kind, search)?;
@@ -1871,6 +1927,7 @@ pub fn perform_search(
             index_uid: index_uid_for_metadata,
             primary_key,
             remote: None, // Local searches don't have a remote
+            inline_rule_condition_outcomes,
         })
     } else {
         None
@@ -1907,6 +1964,7 @@ pub fn perform_search(
         show_ranking_score,
         show_ranking_score_details,
         show_performance_details: _,
+        inline_rule: _,
     } = query;
 
     let format = AttributesFormat {
@@ -2699,6 +2757,7 @@ pub fn perform_similar(
         degraded: _,
         used_negative_operator: _,
         query_vector: _,
+        inline_rule_condition_outcomes: _,
     } = similar.execute().map_err(|err| match err {
         milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
             ResponseError::from_msg(err.to_string(), Code::InvalidSimilarFilter)

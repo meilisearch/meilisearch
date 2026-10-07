@@ -661,6 +661,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             locales,
             personalize: None,
             use_network,
+            inline_rule: None,
         }
     }
 }

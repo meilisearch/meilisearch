@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use index_scheduler::RoFeatures;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::{Condition, IndexFilter, IndexFilterCondition, Token, SHARD_FIELD};
 use meilisearch_types::network::{Network, RemoteAvailability};
@@ -72,4 +73,23 @@ pub(super) fn remote_for_shard(
             .collect()
     };
     remote_for_shard
+}
+
+impl crate::search::InlineDynamicSearchRule {
+    pub fn into_preview(
+        self,
+        features: RoFeatures,
+    ) -> Result<meilisearch_types::milli::dynamic_search_rules::RulePreview, ResponseError> {
+        features.check_dynamic_search_rules("using `inlineRules`")?;
+
+        let Self { uid, precedence, active, conditions, actions } = self;
+
+        Ok(meilisearch_types::milli::dynamic_search_rules::RulePreview {
+            uid: uid.into_inner(),
+            active,
+            precedence: meilisearch_types::milli::Precedence(precedence),
+            conditions: conditions.into_preview(),
+            actions,
+        })
+    }
 }

@@ -15,17 +15,46 @@ use crate::search::new::LocatedQueryTerm;
 use crate::{FieldId, IndexFilter, Result, SearchContext, MAX_COUNTED_WORDS};
 
 impl<'a> DynamicSearchRulesView<'a> {
-    pub(super) fn active_rules_for_query(
-        &self,
+    // # Postcondition
+    //
+    // - The returned Vec is sorted and does not contain duplicates
+    pub(super) fn prepare_query<'t>(
         query_terms: &[LocatedQueryTerm],
         filter: Option<&IndexFilter>,
+        search_context: &'t SearchContext<'t>,
+        mut fuel: DsrFuel,
+    ) -> Result<(Vec<&'t str>, FilterConstraints)> {
+        let mut query_terms: Vec<&str> = query_terms
+            .iter()
+            .filter_map(|word| {
+                word.value
+                    .original_single_word(search_context)
+                    .map(|word| search_context.word_interner.get(word).as_str())
+            })
+            .collect();
+        query_terms.sort_unstable();
+        query_terms.dedup();
+
+        let constraints = filter
+            .map(|filter| {
+                FilterConstraints::new(&filter.condition, &mut fuel.filter_constraint_fuel)
+            })
+            .unwrap_or_default();
+
+        Ok((query_terms, constraints))
+    }
+
+    pub(super) fn active_rules_for_query(
+        &self,
+        query_terms: &[&str],
+        filter: &FilterConstraints,
         search_context: &SearchContext,
         fuel: DsrFuel,
     ) -> Result<RoaringBitmap> {
         let mut active_rules = self.active_rule_ids(true)?;
         let target_time = search_context.before_search.format(&Rfc3339).unwrap();
         self.apply_time_conditions(&mut active_rules, target_time.as_str())?;
-        self.apply_query_conditions(&mut active_rules, query_terms, search_context, fuel)?;
+        self.apply_query_conditions(&mut active_rules, query_terms, fuel)?;
         self.apply_filter_conditions(&mut active_rules, filter, fuel)?;
 
         Ok(active_rules)
@@ -79,8 +108,7 @@ impl<'a> DynamicSearchRulesView<'a> {
     fn apply_query_conditions(
         &self,
         active_rules: &mut RoaringBitmap,
-        query_terms: &[LocatedQueryTerm],
-        search_context: &SearchContext<'_>,
+        query_terms: &[&str],
         mut fuel: DsrFuel,
     ) -> Result<(), crate::Error> {
         // 1. exclude rules that have a different query emptiness condition
@@ -98,16 +126,6 @@ impl<'a> DynamicSearchRulesView<'a> {
                 *active_rules -= is_not_query_empty_rules;
             }
         };
-        let mut query_terms: Vec<&str> = query_terms
-            .iter()
-            .filter_map(|word| {
-                word.value
-                    .original_single_word(search_context)
-                    .map(|word| search_context.word_interner.get(word).as_str())
-            })
-            .collect();
-        query_terms.sort_unstable();
-        query_terms.dedup();
         let words_count =
             query_terms.len().min(MAX_COUNTED_WORDS).min(fuel.max_counted_words()) as u8;
         if let Some(query_words_fid) = self.db_fields_ids_map.id(fields::CONDITIONS_QUERY_WORDS) {
@@ -190,22 +208,14 @@ impl<'a> DynamicSearchRulesView<'a> {
     fn apply_filter_conditions(
         &self,
         active_rules: &mut RoaringBitmap,
-        filter: Option<&IndexFilter>,
+        constraints: &FilterConstraints,
         mut fuel: DsrFuel,
     ) -> Result<(), crate::Error> {
-        let constraints = filter
-            .map(|filter| {
-                FilterConstraints::new(&filter.condition, &mut fuel.filter_constraint_fuel)
-            })
-            .unwrap_or_default();
-
         let Some(nb_constraints_fid) =
             self.db_fields_ids_map.id(fields::CONDITIONS_FILTER_NB_CONSTRAINTS)
         else {
             return Ok(());
         };
-
-        active_rules.len();
 
         let max_constraints = constraints.max_number_of_constraints();
 
@@ -235,11 +245,8 @@ impl<'a> DynamicSearchRulesView<'a> {
             for (target, constraints) in constraints {
                 let matching = match target {
                     ConstraintTarget::Fid(fid) => {
-                        let facet_value_name = format!(
-                            "{}.{}",
-                            fields::CONDITIONS_FILTER_VALUES,
-                            fid.original_fragment()
-                        );
+                        let facet_value_name =
+                            format!("{}.{}", fields::CONDITIONS_FILTER_VALUES, fid);
                         match self.db_fields_ids_map.id(&facet_value_name) {
                             Some(fid) => {
                                 self.resolve_constraints(fid, constraints, active_rules)?

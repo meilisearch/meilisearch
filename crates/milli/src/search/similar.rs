@@ -149,6 +149,7 @@ impl<'a> Similar<'a> {
             degraded: false,
             used_negative_operator: false,
             query_vector: None,
+            inline_rule_condition_outcomes: None,
         })
     }
 }

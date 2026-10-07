@@ -4,6 +4,7 @@ use heed::RoTxn;
 use itertools::Itertools;
 use roaring::RoaringBitmap;
 
+use crate::dynamic_search_rules::ConditionOutcomes;
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::steps::RetrieveIndexDataStep;
@@ -21,6 +22,7 @@ struct ScoreWithRatioResult {
     degraded: bool,
     used_negative_operator: bool,
     query_vector: Option<Embedding>,
+    inline_rule_condition_outcomes: Option<ConditionOutcomes>,
 }
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
@@ -94,6 +96,7 @@ impl ScoreWithRatioResult {
             degraded: results.degraded,
             used_negative_operator: results.used_negative_operator,
             query_vector: results.query_vector,
+            inline_rule_condition_outcomes: results.inline_rule_condition_outcomes,
         }
     }
 
@@ -234,6 +237,7 @@ impl ScoreWithRatioResult {
                 used_negative_operator: vector_results.used_negative_operator
                     | keyword_results.used_negative_operator,
                 query_vector: vector_results.query_vector,
+                inline_rule_condition_outcomes: keyword_results.inline_rule_condition_outcomes,
             },
             semantic_hit_count,
         ))
@@ -412,6 +416,7 @@ fn return_keyword_results(
         degraded,
         used_negative_operator,
         query_vector,
+        inline_rule_condition_outcomes,
     }: SearchResult,
 ) -> (SearchResult, Option<u32>) {
     let (documents_ids, document_scores) = if offset >= documents_ids.len() ||
@@ -439,6 +444,7 @@ fn return_keyword_results(
             degraded,
             used_negative_operator,
             query_vector,
+            inline_rule_condition_outcomes,
         },
         Some(0),
     )
