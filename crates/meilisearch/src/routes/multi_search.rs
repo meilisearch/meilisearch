@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
-use crate::documents_retrieval::{preprocess_filters, DocumentSearch, DocumentSearchResult};
+use crate::documents_retrieval::{preprocess_filters, DocumentSearch};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
@@ -182,16 +182,45 @@ pub async fn multi_search_with_post(
             .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
 
         let include_metadata = parse_include_metadata_header(&req);
-        let document_retrieval = DocumentSearch {
-            request_uid,
-            queries,
-            federation,
+        let document_retrieval = DocumentSearch::new(
+            std::sync::Arc::clone(&personalization_service),
             is_proxy,
             include_metadata,
-            personalization_service: (*personalization_service).clone(),
-        };
+            request_uid,
+        );
 
-        let search_results = document_retrieval.execute(index_scheduler, progress).await;
+        let search_results = match federation {
+            Some(federation) => document_retrieval
+                .execute_federated(queries, federation, index_scheduler, progress)
+                .await
+                .map(|(search_result, progress)| {
+                    debug!(
+                        request_uid = ?request_uid,
+                        returns = ?&search_result,
+                        progress = ?progress,
+                        "Federated-search"
+                    );
+                    HttpResponse::Ok().json(search_result)
+                }),
+            None => document_retrieval.execute_multi(queries, index_scheduler, progress).await.map(
+                |(search_results, progress_by_query)| {
+                    debug!(
+                        request_uid = ?request_uid,
+                        returns = ?&search_results,
+                        progress = ?progress_by_query
+                        .into_iter()
+                        .flat_map(|(query_index, progress)| {
+                            progress.into_iter().map(move |(key, value)| {
+                                ([query_index.as_str().to_string(), key].join(" -> "), value)
+                            })
+                        })
+                        .collect::<IndexMap<String, String>>(),
+                        "Multi-search"
+                    );
+                    HttpResponse::Ok().json(SearchResults { results: search_results })
+                },
+            ),
+        };
 
         if search_results.is_ok() {
             multi_aggregate.succeed();
@@ -210,33 +239,7 @@ pub async fn multi_search_with_post(
             err
         })?;
 
-        match search_results {
-            DocumentSearchResult::Federated(search_result, progress) => {
-                debug!(
-                    request_uid = ?request_uid,
-                    returns = ?&search_result,
-                    progress = ?progress,
-                    "Federated-search"
-                );
-                Ok(HttpResponse::Ok().json(search_result))
-            }
-            DocumentSearchResult::Multi(search_results, progress_by_query) => {
-                debug!(
-                    request_uid = ?request_uid,
-                    returns = ?&search_results,
-                    progress = ?progress_by_query
-                    .into_iter()
-                    .flat_map(|(query_index, progress)| {
-                        progress.into_iter().map(move |(key, value)| {
-                            ([query_index.as_str().to_string(), key].join(" -> "), value)
-                        })
-                    })
-                    .collect::<IndexMap<String, String>>(),
-                    "Multi-search"
-                );
-                Ok(HttpResponse::Ok().json(SearchResults { results: search_results }))
-            }
-        }
+        Ok(search_results)
     } else {
         legacy_multi_search_with_post(
             index_scheduler,
