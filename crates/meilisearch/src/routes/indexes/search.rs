@@ -254,7 +254,8 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     pub attributes_to_search_on: Option<CS<String>>,
-    /// Exclude from the results any document whose [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) is below this value (between 0.0 and 1.0).
+    /// Stop the search at the first document whose [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) is below this value (between 0.0 and 1.0).
+    /// All the documents after this document are excluded from the hits.
     ///
     /// Excluded hits do not count toward `estimatedTotalHits`, `totalHits`, or facet distribution.
     ///
