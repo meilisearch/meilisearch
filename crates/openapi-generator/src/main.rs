@@ -61,6 +61,9 @@ fn main() -> Result<()> {
     // Mirror request body examples onto their schema so API reference renderers display them
     mirror_request_body_examples(&mut openapi)?;
 
+    // Collapse single-value enum unions so renderers list every accepted value
+    collapse_single_value_enums(&mut openapi);
+
     // Check that all routes have summaries if requested
     if cli.check_summaries {
         check_all_routes_have_summaries(&openapi)?;
@@ -867,11 +870,188 @@ fn mirror_request_body_examples(openapi: &mut Value) -> Result<()> {
     Ok(())
 }
 
+/// Collapses `oneOf` branches that are single-value string enums into one branch.
+///
+/// utoipa emits one `oneOf` branch per unit variant of a Rust enum, each a
+/// single-value `enum`. `oneOf: [{enum: ["a"]}, {enum: ["b"]}]` accepts exactly
+/// the same values as `enum: ["a", "b"]`, but API reference renderers only
+/// expand the first branch, so the reference advertises a single value out of
+/// several. `rankingRules` for instance listed `words` as the only option.
+///
+/// Branches that are not single-value string enums (`Asc(String)` and
+/// `Desc(String)` on `RankingRuleView`, the `null` branch of an `Option`) are
+/// left untouched, and their order relative to the collapsed branch is kept.
+/// Per-branch descriptions are preserved, merged into a Markdown list.
+fn collapse_single_value_enums(value: &mut Value) {
+    match value {
+        Value::Array(items) => items.iter_mut().for_each(collapse_single_value_enums),
+        Value::Object(object) => {
+            object.values_mut().for_each(collapse_single_value_enums);
+
+            let Some(branches) = object.get("oneOf").and_then(Value::as_array) else { return };
+            if branches.iter().filter(|branch| single_value_enum(branch).is_some()).count() < 2 {
+                return;
+            }
+
+            let mut values = Vec::new();
+            let mut descriptions = Vec::new();
+            let mut collapsed = Vec::new();
+            let mut done = false;
+
+            for branch in branches {
+                let Some(name) = single_value_enum(branch) else {
+                    collapsed.push(branch.clone());
+                    continue;
+                };
+
+                if let Some(description) =
+                    branch.get("description").and_then(Value::as_str).map(str::trim)
+                {
+                    descriptions.push(format!("- `{name}`: {description}"));
+                }
+                values.push(Value::String(name.to_string()));
+
+                // The merged branch takes the place of the first collapsed one.
+                if !done {
+                    collapsed.push(Value::Null);
+                    done = true;
+                }
+            }
+
+            let mut merged = Map::new();
+            merged.insert("type".to_string(), Value::String("string".to_string()));
+            merged.insert("enum".to_string(), Value::Array(values));
+            if !descriptions.is_empty() {
+                merged.insert("description".to_string(), Value::String(descriptions.join("\n")));
+            }
+
+            let placeholder = collapsed.iter().position(Value::is_null).expect("placeholder");
+            collapsed[placeholder] = Value::Object(merged);
+
+            // A single remaining branch no longer needs the `oneOf` wrapper.
+            if collapsed.len() == 1 {
+                let only = collapsed.remove(0);
+                object.remove("oneOf");
+                if let Value::Object(only) = only {
+                    for (key, branch_value) in only {
+                        object.entry(key).or_insert(branch_value);
+                    }
+                }
+            } else {
+                object.insert("oneOf".to_string(), Value::Array(collapsed));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Returns the single value of a branch shaped like `{"type": "string", "enum": ["x"]}`.
+///
+/// Branches carrying anything else that constrains the value (`format`,
+/// `pattern`, ...) are rejected, so collapsing never drops a constraint.
+fn single_value_enum(branch: &Value) -> Option<&str> {
+    let branch = branch.as_object()?;
+    if branch.keys().any(|key| !matches!(key.as_str(), "type" | "enum" | "description" | "title")) {
+        return None;
+    }
+    if branch.get("type")?.as_str()? != "string" {
+        return None;
+    }
+    match branch.get("enum")?.as_array()?.as_slice() {
+        [Value::String(value)] => Some(value),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn test_collapse_single_value_enums() {
+        let mut schema = json!({
+            "oneOf": [
+                {"type": "string", "description": "First rule.", "enum": ["words"]},
+                {"type": "string", "description": "Second rule.", "enum": ["typo"]},
+                {"type": "object", "required": ["asc"], "properties": {"asc": {"type": "string"}}}
+            ]
+        });
+
+        collapse_single_value_enums(&mut schema);
+
+        let branches = schema["oneOf"].as_array().unwrap();
+        // The two single-value enums merge, in place of the first one; the
+        // object branch is untouched and keeps its position after them.
+        assert_eq!(branches.len(), 2);
+        assert_eq!(branches[0]["enum"], json!(["words", "typo"]));
+        assert_eq!(branches[0]["description"], "- `words`: First rule.\n- `typo`: Second rule.");
+        assert_eq!(branches[1]["properties"]["asc"]["type"], "string");
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums_drops_the_union_when_alone() {
+        let mut schema = json!({
+            "oneOf": [
+                {"type": "string", "enum": ["byWord"]},
+                {"type": "string", "enum": ["byAttribute"]}
+            ]
+        });
+
+        collapse_single_value_enums(&mut schema);
+
+        assert!(schema.get("oneOf").is_none(), "a lone branch needs no oneOf wrapper");
+        assert_eq!(schema["type"], "string");
+        assert_eq!(schema["enum"], json!(["byWord", "byAttribute"]));
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums_leaves_other_unions_alone() {
+        // Nullable `Option<T>`: the null branch is not a single-value string enum.
+        let nullable = json!({
+            "oneOf": [{"type": "null"}, {"$ref": "#/components/schemas/Foo"}]
+        });
+        // A branch carrying a constraint beyond the value must never be merged.
+        let constrained = json!({
+            "oneOf": [
+                {"type": "string", "enum": ["a"], "format": "date"},
+                {"type": "string", "enum": ["b"]}
+            ]
+        });
+
+        for original in [nullable, constrained] {
+            let mut schema = original.clone();
+            collapse_single_value_enums(&mut schema);
+            assert_eq!(schema, original);
+        }
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums_recurses() {
+        let mut openapi = json!({
+            "components": {
+                "schemas": {
+                    "Outer": {
+                        "type": "object",
+                        "properties": {
+                            "inner": {
+                                "oneOf": [
+                                    {"type": "string", "enum": ["a"]},
+                                    {"type": "string", "enum": ["b"]}
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        collapse_single_value_enums(&mut openapi);
+
+        let inner = &openapi["components"]["schemas"]["Outer"]["properties"]["inner"];
+        assert_eq!(inner["enum"], json!(["a", "b"]));
+    }
 
     #[test]
     fn test_mirror_request_body_examples() {
