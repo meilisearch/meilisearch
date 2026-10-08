@@ -42,8 +42,10 @@ make_enum_progress! {
 
 make_enum_progress! {
     pub enum PostProcessingFacets {
+        FacetDataPreparation,
         StringsBulk,
         StringsIncremental,
+        NumbersDataPreparation,
         NumbersBulk,
         NumbersIncremental,
         FacetSearch,
