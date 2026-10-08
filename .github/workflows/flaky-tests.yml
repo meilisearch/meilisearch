@@ -23,6 +23,8 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
+      - name: Make sure cargo is installed
+        run: cargo clean
       - name: Install cargo-flaky
         run: cargo install cargo-flaky
       - name: Run cargo flaky in the dumps
