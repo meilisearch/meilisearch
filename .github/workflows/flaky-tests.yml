@@ -17,10 +17,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - name: Install needed dependencies
-        run: |
-          apt-get update && apt-get install -y curl
-          apt-get install build-essential -y
       - name: Make sure cargo is installed
         run: cargo --version
       - name: Install cargo-flaky
