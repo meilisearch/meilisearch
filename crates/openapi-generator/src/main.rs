@@ -56,7 +56,10 @@ fn main() -> Result<()> {
     let openapi = MeilisearchApi::openapi();
 
     // Convert to serde_json::Value for modification
-    let openapi: Value = serde_json::to_value(&openapi)?;
+    let mut openapi: Value = serde_json::to_value(&openapi)?;
+
+    // Mirror request body examples onto their schema so API reference renderers display them
+    mirror_request_body_examples(&mut openapi)?;
 
     // Check that all routes have summaries if requested
     if cli.check_summaries {
@@ -818,11 +821,107 @@ fn extract_brace_content(s: &str, open_brace_pos: usize) -> Option<&str> {
     rest.get(1..i - 1)
 }
 
+/// Mirrors each request body's media type `example` onto its `schema.example`.
+///
+/// utoipa emits `request_body(example = ...)` as `content.<mime>.example`. That
+/// location is valid OpenAPI, but the API reference renderer only reads
+/// `content.<mime>.schema.example`, so the example is never displayed. Copying
+/// it to the schema makes it render while leaving the original in place for
+/// other consumers of the spec.
+fn mirror_request_body_examples(openapi: &mut Value) -> Result<()> {
+    let paths = openapi
+        .get_mut("paths")
+        .and_then(Value::as_object_mut)
+        .context("OpenAPI spec missing 'paths' object")?;
+
+    for path_item in paths.values_mut() {
+        let Some(path_item) = path_item.as_object_mut() else { continue };
+
+        for method in HTTP_METHODS {
+            let Some(operation) = path_item.get_mut(*method).and_then(Value::as_object_mut) else {
+                continue;
+            };
+            let Some(content) = operation
+                .get_mut("requestBody")
+                .and_then(Value::as_object_mut)
+                .and_then(|body| body.get_mut("content"))
+                .and_then(Value::as_object_mut)
+            else {
+                continue;
+            };
+
+            for media_type in content.values_mut() {
+                let Some(media_type) = media_type.as_object_mut() else { continue };
+                let Some(example) = media_type.get("example").cloned() else { continue };
+
+                // Never overwrite an example the schema already carries.
+                if let Some(schema) = media_type.get_mut("schema").and_then(Value::as_object_mut) {
+                    if !schema.contains_key("example") {
+                        schema.insert("example".to_string(), example);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn test_mirror_request_body_examples() {
+        let mut openapi = json!({
+            "paths": {
+                "/settings/stop-words": {
+                    "put": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "array", "items": {"type": "string"}},
+                                    "example": ["of", "the"]
+                                }
+                            }
+                        }
+                    },
+                    "get": { "summary": "no request body" }
+                },
+                "/settings/pagination": {
+                    "patch": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    // schema already has an example: it must be preserved
+                                    "schema": {"type": "object", "example": {"maxTotalHits": 50}},
+                                    "example": {"maxTotalHits": 2000}
+                                }
+                            }
+                        }
+                    }
+                },
+                "/health": { "get": { "summary": "no request body" } }
+            }
+        });
+
+        mirror_request_body_examples(&mut openapi).unwrap();
+
+        let media = |path: &str, method: &str| -> Value {
+            openapi["paths"][path][method]["requestBody"]["content"]["application/json"].clone()
+        };
+
+        // The media type example is copied onto the schema and left in place.
+        let stop_words = media("/settings/stop-words", "put");
+        assert_eq!(stop_words["schema"]["example"], json!(["of", "the"]));
+        assert_eq!(stop_words["example"], json!(["of", "the"]));
+
+        // An example already on the schema is never overwritten.
+        let pagination = media("/settings/pagination", "patch");
+        assert_eq!(pagination["schema"]["example"], json!({"maxTotalHits": 50}));
+    }
 
     #[test]
     fn test_normalize_path() {

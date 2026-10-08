@@ -1129,6 +1129,11 @@ pub fn settings(
     Ok(settings)
 }
 
+/// A single ranking rule.
+///
+/// Accepts one of the built-in rules (`words`, `typo`, `proximity`,
+/// `attribute`, `attributeRank`, `wordPosition`, `sort`, `exactness`) or a sort
+/// rule of the form `attribute:asc` or `attribute:desc`.
 #[routes::request(
     // no `setting` because we manually implement De/Serialize for some reason
     no_error, try_from(&String) = FromStr::from_str -> CriterionError)]
