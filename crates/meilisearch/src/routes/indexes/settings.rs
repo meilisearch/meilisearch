@@ -27,7 +27,7 @@ use crate::routes::SummarizedTaskView;
 ///
 /// It also generates a `configure` function that configures the routes for the settings.
 macro_rules! make_setting_routes {
-    ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, analytics: $analytics:ident},)*) => {
+    ($({route: $route:literal, update_verb: $update_verb:ident, value_type: $type:ty, err_type: $err_ty:ty, attr: $attr:ident, camelcase_attr: $camelcase_attr:literal, body_example: $body_example:expr, analytics: $analytics:ident},)*) => {
         const _: fn(&meilisearch_types::settings::Settings<meilisearch_types::settings::Unchecked>) = |s| {
             // This pattern match will fail at compile time if any field in Settings is not listed in the macro
             match *s {
@@ -35,7 +35,7 @@ macro_rules! make_setting_routes {
             }
         };
         $(
-            make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
+            make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $body_example, $analytics);
         )*
 
         #[routes::routes(
@@ -59,7 +59,7 @@ macro_rules! make_setting_routes {
 
 #[macro_export]
 macro_rules! make_setting_route {
-    ($route:literal, $update_verb:ident, $type:ty, $err_type:ty, $attr:ident, $camelcase_attr:literal, $analytics:ident) => {
+    ($route:literal, $update_verb:ident, $type:ty, $err_type:ty, $attr:ident, $camelcase_attr:literal, $body_example:expr, $analytics:ident) => {
         pub mod $attr {
             use actix_web::web::Data;
             use actix_web::{web, HttpRequest, HttpResponse, Resource};
@@ -134,9 +134,15 @@ macro_rules! make_setting_route {
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
-                description = concat!("Updates the `", $camelcase_attr, "` setting for the index. Send the new value in the request body; send null to reset to default."),
+                // The operation description says what the route does; what to
+                // send, and how to reset, belongs to the request body below.
+                description = concat!("Updates the `", $camelcase_attr, "` setting for the index."),
                 params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
-                request_body(content = $type),
+                request_body(
+                    content = $type,
+                    description = concat!("The new value for the `", $camelcase_attr, "` setting. Send `null` to reset it to its default value."),
+                    example = $body_example,
+                ),
                 responses(
                     (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
@@ -268,6 +274,7 @@ make_setting_routes!(
         >,
         attr: filterable_attributes,
         camelcase_attr: "filterableAttributes",
+        body_example: json!(["genres", "director", {"attributePatterns": ["*_ratings"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]),
         analytics: FilterableAttributesAnalytics
     },
     {
@@ -279,6 +286,7 @@ make_setting_routes!(
         >,
         attr: sortable_attributes,
         camelcase_attr: "sortableAttributes",
+        body_example: json!(["release_date", "rating"]),
         analytics: SortableAttributesAnalytics
     },
     {
@@ -290,6 +298,7 @@ make_setting_routes!(
         >,
         attr: displayed_attributes,
         camelcase_attr: "displayedAttributes",
+        body_example: json!(["title", "overview", "genres", "release_date"]),
         analytics: DisplayedAttributesAnalytics
     },
     {
@@ -301,6 +310,7 @@ make_setting_routes!(
         >,
         attr: typo_tolerance,
         camelcase_attr: "typoTolerance",
+        body_example: json!({"enabled": true, "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9}, "disableOnWords": ["Star"], "disableOnAttributes": ["title"]}),
         analytics: TypoToleranceAnalytics
     },
     {
@@ -312,6 +322,7 @@ make_setting_routes!(
         >,
         attr: searchable_attributes,
         camelcase_attr: "searchableAttributes",
+        body_example: json!(["title", "overview", "genres"]),
         analytics: SearchableAttributesAnalytics
     },
     {
@@ -323,6 +334,7 @@ make_setting_routes!(
         >,
         attr: stop_words,
         camelcase_attr: "stopWords",
+        body_example: json!(["of", "the", "to"]),
         analytics: StopWordsAnalytics
     },
     {
@@ -334,6 +346,7 @@ make_setting_routes!(
         >,
         attr: non_separator_tokens,
         camelcase_attr: "nonSeparatorTokens",
+        body_example: json!(["@", "#"]),
         analytics: NonSeparatorTokensAnalytics
     },
     {
@@ -345,6 +358,7 @@ make_setting_routes!(
         >,
         attr: separator_tokens,
         camelcase_attr: "separatorTokens",
+        body_example: json!(["|", "&"]),
         analytics: SeparatorTokensAnalytics
     },
     {
@@ -356,6 +370,7 @@ make_setting_routes!(
         >,
         attr: dictionary,
         camelcase_attr: "dictionary",
+        body_example: json!(["J. R. R.", "W. E. B."]),
         analytics: DictionaryAnalytics
     },
     {
@@ -367,6 +382,7 @@ make_setting_routes!(
         >,
         attr: synonyms,
         camelcase_attr: "synonyms",
+        body_example: json!({"wolverine": ["xmen", "logan"], "logan": ["wolverine"]}),
         analytics: SynonymsAnalytics
     },
     {
@@ -378,6 +394,7 @@ make_setting_routes!(
         >,
         attr: distinct_attribute,
         camelcase_attr: "distinctAttribute",
+        body_example: json!("movie_id"),
         analytics: DistinctAttributeAnalytics
     },
     {
@@ -389,6 +406,7 @@ make_setting_routes!(
         >,
         attr: proximity_precision,
         camelcase_attr: "proximityPrecision",
+        body_example: json!("byAttribute"),
         analytics: ProximityPrecisionAnalytics
     },
     {
@@ -400,6 +418,7 @@ make_setting_routes!(
         >,
         attr: localized_attributes,
         camelcase_attr: "localizedAttributes",
+        body_example: json!([{"attributePatterns": ["*_ja"], "locales": ["jpn"]}]),
         analytics: LocalesAnalytics
     },
     {
@@ -411,6 +430,7 @@ make_setting_routes!(
         >,
         attr: ranking_rules,
         camelcase_attr: "rankingRules",
+        body_example: json!(["words", "typo", "proximity", "attribute", "sort", "exactness"]),
         analytics: RankingRulesAnalytics
     },
     {
@@ -422,6 +442,7 @@ make_setting_routes!(
         >,
         attr: faceting,
         camelcase_attr: "faceting",
+        body_example: json!({"maxValuesPerFacet": 200, "sortFacetValuesBy": {"*": "alpha"}}),
         analytics: FacetingAnalytics
     },
     {
@@ -433,6 +454,7 @@ make_setting_routes!(
         >,
         attr: pagination,
         camelcase_attr: "pagination",
+        body_example: json!({"maxTotalHits": 2000}),
         analytics: PaginationAnalytics
     },
     {
@@ -444,6 +466,7 @@ make_setting_routes!(
         >,
         attr: embedders,
         camelcase_attr: "embedders",
+        body_example: json!({"default": {"source": "openAi", "apiKey": "OPENAI_API_KEY", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}"}}),
         analytics: EmbeddersAnalytics
     },
     {
@@ -455,6 +478,7 @@ make_setting_routes!(
         >,
         attr: search_cutoff_ms,
         camelcase_attr: "searchCutoffMs",
+        body_example: json!(150),
         analytics: SearchCutoffMsAnalytics
     },
     {
@@ -466,6 +490,7 @@ make_setting_routes!(
         >,
         attr: facet_search,
         camelcase_attr: "facetSearch",
+        body_example: json!(true),
         analytics: FacetSearchAnalytics
     },
     {
@@ -477,6 +502,7 @@ make_setting_routes!(
         >,
         attr: prefix_search,
         camelcase_attr: "prefixSearch",
+        body_example: json!("indexingTime"),
         analytics: PrefixSearchAnalytics
     },
     {
@@ -488,6 +514,7 @@ make_setting_routes!(
         >,
         attr: chat,
         camelcase_attr: "chat",
+        body_example: json!({"description": "A movie database", "documentTemplate": "{{doc.title}}"}),
         analytics: ChatAnalytics
     },
     {
@@ -499,6 +526,7 @@ make_setting_routes!(
         >,
         attr: foreign_keys,
         camelcase_attr: "foreignKeys",
+        body_example: json!([{"foreignIndexUid": "directors", "fieldName": "director_id"}]),
         analytics: ForeignKeysAnalytics
     },
 );

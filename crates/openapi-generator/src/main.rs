@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     let openapi = MeilisearchApi::openapi();
 
     // Convert to serde_json::Value for modification
-    let openapi: Value = serde_json::to_value(&openapi)?;
+    let mut openapi: Value = serde_json::to_value(&openapi)?;
 
     // Check that all routes have summaries if requested
     if cli.check_summaries {
@@ -82,6 +82,11 @@ fn main() -> Result<()> {
     if cli.check_params {
         check_params()?;
     }
+
+    // Presentation passes run after the checks, so the checks validate what the
+    // routes actually declare rather than what post-processing produced.
+    mirror_request_body_examples(&mut openapi);
+    collapse_single_value_enums(&mut openapi);
 
     // Determine output path
     let output_path = cli.output_dir.unwrap_or_else(|| PathBuf::from("./"));
@@ -818,11 +823,281 @@ fn extract_brace_content(s: &str, open_brace_pos: usize) -> Option<&str> {
     rest.get(1..i - 1)
 }
 
+/// Mirrors each request body's media type `example` onto its `schema.example`.
+///
+/// utoipa emits `request_body(example = ...)` as `content.<mime>.example`. Both
+/// locations are valid OpenAPI, but `schema.example` is the one most renderers
+/// and code generators read first, so an example that lives only on the media
+/// type goes unused by much of the tooling. The original is left in place.
+fn mirror_request_body_examples(openapi: &mut Value) {
+    let Some(paths) = openapi.get_mut("paths").and_then(Value::as_object_mut) else { return };
+
+    for path_item in paths.values_mut() {
+        for method in HTTP_METHODS {
+            let Some(content) = path_item
+                .get_mut(*method)
+                .and_then(|operation| operation.get_mut("requestBody"))
+                .and_then(|body| body.get_mut("content"))
+                .and_then(Value::as_object_mut)
+            else {
+                continue;
+            };
+
+            for media_type in content.values_mut() {
+                let Some(example) = media_type.get("example").cloned() else { continue };
+                let Some(schema) = media_type.get_mut("schema").and_then(Value::as_object_mut)
+                else {
+                    continue;
+                };
+
+                schema.entry("example").or_insert(example);
+            }
+        }
+    }
+}
+
+/// Collapses `oneOf` branches that are single-value string enums into one branch.
+///
+/// utoipa emits one `oneOf` branch per unit variant of a Rust enum, each a
+/// single-value `enum`. `oneOf: [{enum: ["a"]}, {enum: ["b"]}]` accepts exactly
+/// the same values as `enum: ["a", "b"]`, but API reference renderers only
+/// expand the first branch, so the reference advertises a single value out of
+/// several. `rankingRules` for instance listed `words` as its only option.
+fn collapse_single_value_enums(value: &mut Value) {
+    match value {
+        Value::Array(items) => items.iter_mut().for_each(collapse_single_value_enums),
+        Value::Object(object) => {
+            object.values_mut().for_each(collapse_single_value_enums);
+            collapse_enum_union(object);
+        }
+        _ => {}
+    }
+}
+
+/// Merges the single-value string enum branches of `object`'s `oneOf` into one.
+///
+/// Branches that are not single-value string enums (`Asc(String)` on
+/// `RankingRuleView`, the `null` branch of an `Option`) keep their position
+/// relative to the merged one. Per-branch descriptions are kept, merged into a
+/// Markdown list.
+fn collapse_enum_union(object: &mut JsonObject) {
+    let Some(branches) = object.get("oneOf").and_then(Value::as_array) else { return };
+    if branches.iter().filter_map(single_value_enum).nth(1).is_none() {
+        return;
+    }
+
+    let mut values = Vec::new();
+    let mut descriptions = Vec::new();
+    for (branch, name) in branches.iter().filter_map(|b| Some((b, single_value_enum(b)?))) {
+        if let Some(description) = branch.get("description").and_then(Value::as_str).map(str::trim)
+        {
+            descriptions.push(format!("- `{name}`: {description}"));
+        }
+        values.push(Value::String(name.to_string()));
+    }
+
+    let mut merged = JsonObject::new();
+    merged.insert("type".to_string(), Value::String("string".to_string()));
+    merged.insert("enum".to_string(), Value::Array(values));
+    if !descriptions.is_empty() {
+        merged.insert("description".to_string(), Value::String(descriptions.join("\n")));
+    }
+
+    // The merged branch takes the place of the first collapsed one; `take` makes
+    // every later collapsible branch yield `None` and drop out.
+    let mut merged = Some(Value::Object(merged));
+    let mut collapsed: Vec<Value> = branches
+        .iter()
+        .filter_map(|branch| match single_value_enum(branch) {
+            Some(_) => merged.take(),
+            None => Some(branch.clone()),
+        })
+        .collect();
+
+    // A single remaining branch no longer needs the `oneOf` wrapper.
+    if let [Value::Object(only)] = collapsed.as_mut_slice() {
+        let only = std::mem::take(only);
+        object.remove("oneOf");
+        for (key, branch_value) in only {
+            object.entry(key).or_insert(branch_value);
+        }
+    } else {
+        object.insert("oneOf".to_string(), Value::Array(collapsed));
+    }
+}
+
+/// Returns the single value of a branch shaped like `{"type": "string", "enum": ["x"]}`.
+///
+/// Branches carrying anything else that constrains the value (`format`,
+/// `pattern`, ...) are rejected, so collapsing never drops a constraint.
+fn single_value_enum(branch: &Value) -> Option<&str> {
+    let branch = branch.as_object()?;
+    if branch.keys().any(|key| !matches!(key.as_str(), "type" | "enum" | "description" | "title")) {
+        return None;
+    }
+    if branch.get("type")?.as_str()? != "string" {
+        return None;
+    }
+    match branch.get("enum")?.as_array()?.as_slice() {
+        [Value::String(value)] => Some(value),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// `FilterableAttributesRule` orders its variants so the object one comes
+    /// first; reordering them back silently empties the reference's body
+    /// section, so pin the generated shape here where it is observable.
+    #[test]
+    fn test_filterable_attributes_rule_lists_the_object_variant_first() {
+        let openapi: Value = serde_json::to_value(MeilisearchApi::openapi()).unwrap();
+        let rule = &openapi["components"]["schemas"]["FilterableAttributesRule"];
+
+        let first = &rule["oneOf"][0];
+        assert_eq!(
+            first["$ref"], "#/components/schemas/FilterableAttributesPatterns",
+            "the object variant must stay first, got {first}"
+        );
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums() {
+        let mut schema = json!({
+            "oneOf": [
+                {"type": "string", "description": "First rule.", "enum": ["words"]},
+                {"type": "string", "description": "Second rule.", "enum": ["typo"]},
+                {"type": "object", "required": ["asc"], "properties": {"asc": {"type": "string"}}}
+            ]
+        });
+
+        collapse_single_value_enums(&mut schema);
+
+        let branches = schema["oneOf"].as_array().unwrap();
+        // The two single-value enums merge, in place of the first one; the
+        // object branch is untouched and keeps its position after them.
+        assert_eq!(branches.len(), 2);
+        assert_eq!(branches[0]["enum"], json!(["words", "typo"]));
+        assert_eq!(branches[0]["description"], "- `words`: First rule.\n- `typo`: Second rule.");
+        assert_eq!(branches[1]["properties"]["asc"]["type"], "string");
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums_drops_the_union_when_alone() {
+        let mut schema = json!({
+            "oneOf": [
+                {"type": "string", "enum": ["byWord"]},
+                {"type": "string", "enum": ["byAttribute"]}
+            ]
+        });
+
+        collapse_single_value_enums(&mut schema);
+
+        assert!(schema.get("oneOf").is_none(), "a lone branch needs no oneOf wrapper");
+        assert_eq!(schema["type"], "string");
+        assert_eq!(schema["enum"], json!(["byWord", "byAttribute"]));
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums_leaves_other_unions_alone() {
+        // Nullable `Option<T>`: the null branch is not a single-value string enum.
+        let nullable = json!({
+            "oneOf": [{"type": "null"}, {"$ref": "#/components/schemas/Foo"}]
+        });
+        // A branch carrying a constraint beyond the value must never be merged.
+        let constrained = json!({
+            "oneOf": [
+                {"type": "string", "enum": ["a"], "format": "date"},
+                {"type": "string", "enum": ["b"]}
+            ]
+        });
+
+        for original in [nullable, constrained] {
+            let mut schema = original.clone();
+            collapse_single_value_enums(&mut schema);
+            assert_eq!(schema, original);
+        }
+    }
+
+    #[test]
+    fn test_collapse_single_value_enums_recurses() {
+        let mut openapi = json!({
+            "components": {
+                "schemas": {
+                    "Outer": {
+                        "type": "object",
+                        "properties": {
+                            "inner": {
+                                "oneOf": [
+                                    {"type": "string", "enum": ["a"]},
+                                    {"type": "string", "enum": ["b"]}
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        collapse_single_value_enums(&mut openapi);
+
+        let inner = &openapi["components"]["schemas"]["Outer"]["properties"]["inner"];
+        assert_eq!(inner["enum"], json!(["a", "b"]));
+    }
+
+    #[test]
+    fn test_mirror_request_body_examples() {
+        let mut openapi = json!({
+            "paths": {
+                "/settings/stop-words": {
+                    "put": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "array", "items": {"type": "string"}},
+                                    "example": ["of", "the"]
+                                }
+                            }
+                        }
+                    },
+                    "get": { "summary": "no request body" }
+                },
+                "/settings/pagination": {
+                    "patch": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    // schema already has an example: it must be preserved
+                                    "schema": {"type": "object", "example": {"maxTotalHits": 50}},
+                                    "example": {"maxTotalHits": 2000}
+                                }
+                            }
+                        }
+                    }
+                },
+                "/health": { "get": { "summary": "no request body" } }
+            }
+        });
+
+        mirror_request_body_examples(&mut openapi);
+
+        let media = |path: &str, method: &str| -> Value {
+            openapi["paths"][path][method]["requestBody"]["content"]["application/json"].clone()
+        };
+
+        // The media type example is copied onto the schema and left in place.
+        let stop_words = media("/settings/stop-words", "put");
+        assert_eq!(stop_words["schema"]["example"], json!(["of", "the"]));
+        assert_eq!(stop_words["example"], json!(["of", "the"]));
+
+        // An example already on the schema is never overwritten.
+        let pagination = media("/settings/pagination", "patch");
+        assert_eq!(pagination["schema"]["example"], json!({"maxTotalHits": 50}));
+    }
 
     #[test]
     fn test_normalize_path() {
