@@ -226,7 +226,7 @@ impl Index {
         options.max_dbs(NUMBER_OF_DBS);
 
         let env = unsafe { options.open(path) }?;
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
         let main = env.database_options().name(MAIN).create(&mut wtxn)?;
         let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
         let external_documents_ids =
@@ -351,7 +351,7 @@ impl Index {
 
         // optimistically check if the index is already at the requested version.
         let env = unsafe { options.open(path.as_ref()) }?;
-        let rtxn = env.read_txn()?;
+        let rtxn = env.unique_read_txn()?;
         let Some(main) = env.database_options().name(db_name::MAIN).open(&rtxn)? else {
             return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
@@ -371,7 +371,7 @@ impl Index {
         // really need to rollback then...
         unsafe { options.flags(heed::EnvFlags::PREV_SNAPSHOT) };
         let env = unsafe { options.open(path) }?;
-        let mut wtxn = env.write_txn()?;
+        let mut wtxn = env.unique_write_txn()?;
         let Some(main) = env.database_options().name(db_name::MAIN).open(&wtxn)? else {
             return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
                 db_name: db_name::MAIN,
@@ -449,8 +449,74 @@ impl Index {
     }
 
     /// Returns the size used by the index without the cached pages.
-    pub fn used_size(&self) -> Result<u64> {
-        Ok(self.env.non_free_pages_size()?)
+    pub fn used_size(&self, rtxn: &RoTxn) -> Result<u64> {
+        let Index {
+            env: _,
+            main,
+            external_documents_ids,
+            word_docids,
+            exact_word_docids,
+            synonyms,
+            word_prefix_docids,
+            exact_word_prefix_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+            field_id_word_count_docids,
+            word_prefix_position_docids,
+            word_prefix_fid_docids,
+            facet_id_exists_docids,
+            facet_id_is_null_docids,
+            facet_id_is_empty_docids,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            facet_id_normalized_string_strings,
+            facet_id_string_fst,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
+            embedder_category_id,
+            vector_store,
+            shard_docids,
+            cellulite,
+            documents,
+        } = self;
+
+        let total_size: usize = [
+            main.stat(rtxn)?,
+            external_documents_ids.stat(rtxn)?,
+            word_docids.stat(rtxn)?,
+            exact_word_docids.stat(rtxn)?,
+            synonyms.stat(rtxn)?,
+            word_prefix_docids.stat(rtxn)?,
+            exact_word_prefix_docids.stat(rtxn)?,
+            word_pair_proximity_docids.stat(rtxn)?,
+            word_position_docids.stat(rtxn)?,
+            word_fid_docids.stat(rtxn)?,
+            field_id_word_count_docids.stat(rtxn)?,
+            word_prefix_position_docids.stat(rtxn)?,
+            word_prefix_fid_docids.stat(rtxn)?,
+            facet_id_exists_docids.stat(rtxn)?,
+            facet_id_is_null_docids.stat(rtxn)?,
+            facet_id_is_empty_docids.stat(rtxn)?,
+            facet_id_f64_docids.stat(rtxn)?,
+            facet_id_string_docids.stat(rtxn)?,
+            facet_id_normalized_string_strings.stat(rtxn)?,
+            facet_id_string_fst.stat(rtxn)?,
+            field_id_docid_facet_f64s.stat(rtxn)?,
+            field_id_docid_facet_strings.stat(rtxn)?,
+            embedder_category_id.stat(rtxn)?,
+            vector_store.stat(rtxn)?,
+            shard_docids.stat(rtxn)?,
+            cellulite.item_db_stats(rtxn)?,
+            cellulite.cell_db_stats(rtxn)?,
+            cellulite.update_db_stats(rtxn)?,
+            cellulite.metadata_db_stats(rtxn)?,
+            documents.stat(rtxn)?,
+        ]
+        .iter()
+        .map(DatabaseStat::non_free_page_size)
+        .sum();
+        Ok(total_size as u64)
     }
 
     /// Returns the real size used by the index.
