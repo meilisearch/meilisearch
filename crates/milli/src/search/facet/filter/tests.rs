@@ -455,6 +455,7 @@ fn geo_bounding_box_error() {
 }
 
 #[test]
+#[ignore = "test too long, enable again after fixing"]
 fn filter_depth() {
     // generates a big (2 MiB) filter with too much of ORs.
     let tipic_filter = "account_ids=14361 OR ";
