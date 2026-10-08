@@ -136,11 +136,7 @@ macro_rules! make_setting_route {
                 summary = concat!("Update ", $camelcase_attr),
                 description = concat!("Updates the `", $camelcase_attr, "` setting for the index. Send the new value in the request body; send null to reset to default."),
                 params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
-                request_body(
-                    content = $type,
-                    description = concat!("The new value for the `", $camelcase_attr, "` setting. Send `null` to reset it to its default value."),
-                    example = $body_example,
-                ),
+                request_body(content = $type, example = $body_example),
                 responses(
                     (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {

@@ -237,7 +237,7 @@ pub struct Settings<T> {
         schema_type = Option<Vec<FilterableAttributesRule>>,
         error = DeserrJsonError<InvalidSettingsFilterableAttributes>,
         schema_default = json!([]),
-        example = json!(["release_date", "genre"]),
+        example = json!(["genres", "director", {"attributePatterns": ["*_ratings"], "features": {"facetSearch": false, "filter": {"equality": true, "comparison": true}}}]),
         skip_serializing_if = "Setting::is_not_set",
     )]
     pub filterable_attributes: Setting<Vec<FilterableAttributesRule>>,
