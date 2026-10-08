@@ -37,6 +37,7 @@ pub struct InstanceTogglableFeatures {
     pub tasks_streaming_route: bool,
     pub contains_filter: bool,
     pub legacy_search_as_default: bool,
+    pub chat_completions: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
