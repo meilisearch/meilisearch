@@ -606,7 +606,7 @@ impl WordDocidsExtractors {
                     &mut |field_name| {
                         let fid = match new_fields_ids_map.id(field_name) {
                             Some(field_id) => field_id,
-                            None => panic!("Expected field `{field_name}` in the fields IDs map"),
+                            None => return Ok((0, PatternMatch::NoMatch)),
                         };
 
                         // If the document must be reindexed, early return NoMatch to stop the scanning process.
@@ -614,8 +614,12 @@ impl WordDocidsExtractors {
                             return Ok((fid, PatternMatch::NoMatch));
                         }
 
-                        let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
-                        let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+                        let Some(old_field_metadata) = old_fields_ids_map.metadata(fid) else {
+                            return Ok((fid, PatternMatch::NoMatch));
+                        };
+                        let Some(new_field_metadata) = new_fields_ids_map.metadata(fid) else {
+                            return Ok((fid, PatternMatch::NoMatch));
+                        };
 
                         action = match (old_field_metadata, new_field_metadata) {
                             // At least one field is added or removed from the exact fields => ReindexAllFields
@@ -664,12 +668,15 @@ impl WordDocidsExtractors {
         }
 
         let mut should_tokenize = |field_name: &str| {
-            let field_id = match new_fields_ids_map.id(field_name) {
-                Some(field_id) => field_id,
-                None => panic!("Expected field `{field_name}` in the fields IDs map"),
+            let Some(field_id) = new_fields_ids_map.id(field_name) else {
+                return Ok((0, PatternMatch::NoMatch));
             };
-            let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
-            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+            let Some(old_field_metadata) = old_fields_ids_map.metadata(field_id) else {
+                return Ok((field_id, PatternMatch::NoMatch));
+            };
+            let Some(new_field_metadata) = new_fields_ids_map.metadata(field_id) else {
+                return Ok((field_id, PatternMatch::NoMatch));
+            };
 
             let was_matching_searchable = old_field_metadata.is_searchable();
             let is_matching_searchable = new_field_metadata.is_searchable();
