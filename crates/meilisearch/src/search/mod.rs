@@ -1241,9 +1241,16 @@ pub enum FacetValuesSort {
     #[default]
     Alpha,
     /// Facet values are sorted by decreasing count.
+    ///
     /// The count is the number of records containing this facet value in
     /// the results of the query.
     Count,
+    /// Facets values are sorted by decreasing count.
+    ///
+    /// The engine will use sampling to determine the facet values to include in the count which is
+    /// fast but may skip important values. The count is the number of records containing this facet
+    /// value in the results of the query.
+    CountSampled,
 }
 
 impl From<FacetValuesSort> for OrderBy {
@@ -1251,6 +1258,7 @@ impl From<FacetValuesSort> for OrderBy {
         match val {
             FacetValuesSort::Alpha => OrderBy::Lexicographic,
             FacetValuesSort::Count => OrderBy::Count,
+            FacetValuesSort::CountSampled => OrderBy::CountSampled,
         }
     }
 }

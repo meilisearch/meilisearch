@@ -494,7 +494,7 @@ async fn search_federated(
 
     let facet_hits = match order {
         OrderBy::Lexicographic => lexicographic_merge(results),
-        OrderBy::Count => count_merge(results),
+        OrderBy::Count | OrderBy::CountSampled => count_merge(results),
     };
 
     Ok(FacetSearchResult {
