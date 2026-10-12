@@ -258,10 +258,18 @@ impl VectorStore {
                 if quantizing && !self.quantized {
                     let writer = writer.prepare_changing_distance::<Hamming>(wtxn)?;
                     hannoy_build(wtxn, &progress, rng, cancel, &writer)?;
+                } else if writer.is_empty(wtxn)? {
+                    // If the writer is empty we switch the distance just in case so that we know that we have the
+                    // correct metadata in stores
+                    if self.quantized {
+                        let writer = writer.prepare_changing_distance::<Hamming>(wtxn)?;
+                        hannoy_build(wtxn, &progress, rng, cancel, &writer)?;
+                    } else {
+                        let writer = writer.prepare_changing_distance::<Cosine>(wtxn)?;
+                        hannoy_build(wtxn, &progress, rng, cancel, &writer)?;
+                    }
                 } else if writer.need_build(wtxn)? {
                     hannoy_build(wtxn, &progress, rng, cancel, &writer)?;
-                } else if writer.is_empty(wtxn)? {
-                    continue;
                 }
             }
         }
