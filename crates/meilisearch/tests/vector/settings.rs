@@ -1070,3 +1070,55 @@ async fn composite_checks() {
     }
     "###);
 }
+
+// tests an issue where adding a binary quantized embedder, removing it, then adding a different embedder
+// that is **not** binary quantized causes an issue where the vector store expects the embedder to be using the hamming
+// distance (quantized) but got cosine (not quantized)
+#[actix_rt::test]
+async fn no_binary_quantization_memory() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": { "manualbq": {
+            "source": "userProvided",
+            "dimensions": 3,
+            "binaryQuantized": true,
+          }},
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "manualbq": [0, 0, 0], "manualnobq": [0, 0, 0] }},
+      {"id": 1, "name": "echo", "_vectors": { "manualbq": [1, 1, 1], "manualnobq": [0, 0, 0] }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": { "manualbq": null },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": { "manualnobq": {
+            "source": "userProvided",
+            "dimensions": 3,
+            "binaryQuantized": false,
+          }},
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (_value, code) = index.search_post(json!({"vector": [0, 0, 0], "hybrid": {"embedder": "manualnobq", "semanticRatio": 1.0}})).await;
+    snapshot!(code, @"200 OK");
+}
