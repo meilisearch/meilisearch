@@ -180,8 +180,8 @@ impl Iterator for SortedDocumentsIterator<'_> {
 pub struct SortedDocumentsIteratorBuilder<'ctx> {
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
-    number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
-    string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    number_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    string_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     fields: &'ctx [AscDescId],
     candidates: RoaringBitmap,
     geo_candidates: &'ctx RoaringBitmap,
@@ -388,8 +388,8 @@ pub struct SortedDocuments<'ctx> {
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
     fields: Vec<AscDescId>,
-    number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
-    string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    number_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    string_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     candidates: &'ctx RoaringBitmap,
     geo_candidates: RoaringBitmap,
 }

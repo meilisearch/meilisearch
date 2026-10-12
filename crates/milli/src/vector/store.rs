@@ -53,7 +53,7 @@ pub enum VectorStoreBackend {
 
 pub struct VectorStore {
     backend: VectorStoreBackend,
-    database: hannoy::Database<Unspecified>,
+    database: hannoy::Database<'static, Unspecified>,
     embedder_index: u8,
     quantized: bool,
 }
@@ -63,7 +63,7 @@ impl VectorStore {
 
     pub fn new(
         backend: VectorStoreBackend,
-        database: hannoy::Database<Unspecified>,
+        database: hannoy::Database<'static, Unspecified>,
         embedder_index: u8,
         quantized: bool,
     ) -> Self {
@@ -751,7 +751,7 @@ impl VectorStore {
     fn _arroy_readers<'a, D: arroy::Distance>(
         &'a self,
         rtxn: &'a RoTxn<'a>,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
     ) -> impl Iterator<Item = Result<arroy::Reader<'a, D>, arroy::Error>> + 'a {
         vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
             match arroy::Reader::open(rtxn, index, db) {
@@ -769,7 +769,7 @@ impl VectorStore {
     fn _hannoy_readers<'a, D: hannoy::Distance>(
         &'a self,
         rtxn: &'a RoTxn<'a>,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
     ) -> impl Iterator<Item = Result<hannoy::Reader<D>, hannoy::Error>> + 'a {
         vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
             match hannoy::Reader::open(rtxn, index, db) {

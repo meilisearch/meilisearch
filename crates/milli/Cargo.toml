@@ -90,8 +90,8 @@ rhai = { version = "1.25.1", features = [
     "no_time",
     "sync",
 ] }
-arroy = "0.8.0"
-hannoy = { version = "0.2.0", features = ["arroy"] }
+arroy = { path = "../../../arroy" }
+hannoy = { path = "../../../hannoy", version = "0.2.0", features = ["arroy"] }
 rand = "0.10.2"
 tracing = "0.1.44"
 url = "2.5.8"
