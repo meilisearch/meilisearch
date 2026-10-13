@@ -444,6 +444,22 @@ pub fn normalize_facet(original: &str) -> String {
     CompatibilityDecompositionNormalizer.normalize_str(original.trim()).to_lowercase()
 }
 
+/// Retrieve the content of an env variable or use a default value if not present.
+pub fn fetch_or_default<T: std::str::FromStr>(key: &str, default: T) -> T {
+    match std::env::var(key) {
+        Ok(value) => value.parse().unwrap_or_else(|_| {
+            panic!(
+                "`{key}` environment variable is not parseable as {}: {value}",
+                std::any::type_name::<T>()
+            )
+        }),
+        Err(std::env::VarError::NotPresent) => default,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            panic!("`{key}` environment variable is not set to a {}", std::any::type_name::<T>())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
