@@ -478,11 +478,10 @@ where
             Err(retry) => {
                 tracing::warn!("Failed: {}", retry.error);
                 if let Some(embedder_stats) = &embedder_stats {
-                    let stringified_error = retry.error.to_string();
-                    let mut errors =
-                        embedder_stats.errors.write().unwrap_or_else(|p| p.into_inner());
-                    errors.0 = Some(stringified_error);
-                    errors.1 += 1;
+                    if embedder_stats.register_error(&retry.error) {
+                        tracing::warn!("Error rate threshold reached, stopping retries");
+                        return Err(retry.into_error());
+                    }
                 }
                 if let Some(deadline) = deadline {
                     let now = std::time::Instant::now();
@@ -520,10 +519,7 @@ where
         Ok(response) => Ok(response),
         Err(retry) => {
             if let Some(embedder_stats) = &embedder_stats {
-                let stringified_error = retry.error.to_string();
-                let mut errors = embedder_stats.errors.write().unwrap_or_else(|p| p.into_inner());
-                errors.0 = Some(stringified_error);
-                errors.1 += 1;
+                embedder_stats.register_error(&retry.error);
             };
             Err(retry.into_error())
         }
