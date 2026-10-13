@@ -19,7 +19,7 @@ pub struct FacetsUpdateIncremental {
 }
 
 struct FacetsUpdateIncrementalInner {
-    db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: FieldId,
     group_size: u8,
     min_level_size: u8,

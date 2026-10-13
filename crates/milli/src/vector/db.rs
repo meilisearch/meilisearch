@@ -92,8 +92,8 @@ pub struct FragmentConfig {
 }
 
 pub struct IndexEmbeddingConfigs {
-    main: Database<Unspecified, Unspecified>,
-    embedder_info: Database<Str, EmbedderInfoCodec>,
+    main: Database<'static, Unspecified, Unspecified>,
+    embedder_info: Database<'static, Str, EmbedderInfoCodec>,
 }
 
 pub struct EmbedderInfo {
@@ -313,8 +313,8 @@ impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
 
 impl IndexEmbeddingConfigs {
     pub(crate) fn new(
-        main: Database<Unspecified, Unspecified>,
-        embedder_info: Database<Unspecified, Unspecified>,
+        main: Database<'static, Unspecified, Unspecified>,
+        embedder_info: Database<'static, Unspecified, Unspecified>,
     ) -> Self {
         Self { main, embedder_info: embedder_info.remap_types() }
     }

@@ -331,7 +331,7 @@ impl IndexFilter {
     /// going deeper through the levels.
     fn explore_facet_levels<'data, BoundCodec>(
         rtxn: &'data heed::RoTxn<'data>,
-        db: heed::Database<FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
+        db: heed::Database<'static, FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
         field_id: FieldId,
         left: &'data Bound<<BoundCodec as heed::BytesEncode<'data>>::EItem>,
         right: &'data Bound<<BoundCodec as heed::BytesEncode<'data>>::EItem>,

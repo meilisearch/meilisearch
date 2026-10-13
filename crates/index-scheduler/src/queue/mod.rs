@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
@@ -126,12 +126,12 @@ impl Query {
 
 /// Structure which holds meilisearch's indexes and schedules the tasks
 /// to be performed on them.
-pub struct Queue {
-    pub(crate) tasks: tasks::TaskQueue,
-    pub(crate) batches: batches::BatchQueue,
+pub struct Queue<'e> {
+    pub(crate) tasks: tasks::TaskQueue<'e>,
+    pub(crate) batches: batches::BatchQueue<'e>,
 
     /// Matches a batch id with the associated task ids.
-    pub(crate) batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec>,
+    pub(crate) batch_to_tasks_mapping: Database<'e, BEU32, CboRoaringBitmapCodec>,
 
     /// The list of files referenced by the tasks.
     pub(crate) file_store: FileStore,
@@ -141,8 +141,8 @@ pub struct Queue {
     pub(crate) max_number_of_tasks: usize,
 }
 
-impl Queue {
-    pub(crate) fn private_clone(&self) -> Queue {
+impl<'e> Queue<'e> {
+    pub(crate) fn private_clone(&self) -> Queue<'e> {
         Queue {
             tasks: self.tasks.private_clone(),
             batches: self.batches.private_clone(),
@@ -168,17 +168,16 @@ impl Queue {
 
     /// Create an index scheduler and start its run loop.
     pub(crate) fn new(
-        env: &Env<WithoutTls>,
-        wtxn: &mut UniqueRwTxn,
+        dbo: &meilisearch_types::heed::DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
         options: &IndexSchedulerOptions,
     ) -> Result<Self> {
-        // allow unreachable_code to get rids of the warning in the case of a test build.
         Ok(Self {
             file_store: FileStore::new(&options.update_file_path)?,
-            batch_to_tasks_mapping: env
+            batch_to_tasks_mapping: dbo
                 .create_database(wtxn, Some(db_name::BATCH_TO_TASKS_MAPPING))?,
-            tasks: TaskQueue::new(env, wtxn)?,
-            batches: BatchQueue::new(env, wtxn)?,
+            tasks: TaskQueue::new(dbo, wtxn)?,
+            batches: BatchQueue::new(dbo, wtxn)?,
             max_number_of_tasks: options.max_number_of_tasks,
         })
     }

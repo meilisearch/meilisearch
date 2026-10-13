@@ -3,7 +3,7 @@ use meilisearch_types::dynamic_search_rules::{
     RuleUid, TimeCondition,
 };
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 use meilisearch_types::milli::dynamic_search_rules::{PinAction as NewRuleAction, RuleActions};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -16,7 +16,7 @@ pub(crate) struct LegacyDynamicSearchRulesStore {
 }
 
 impl LegacyDynamicSearchRulesStore {
-    pub fn new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> crate::Result<Self> {
+    pub fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> crate::Result<Self> {
         let persisted = env.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
 
         Ok(Self { persisted })

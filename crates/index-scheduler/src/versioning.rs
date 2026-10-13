@@ -1,5 +1,7 @@
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{
+    self, CommitOrAbort, Database, DatabaseOpener, Env, RoTxn, RwTxn, WithoutTls,
+};
 use meilisearch_types::milli::heed_codec::version::VersionCodec;
 use meilisearch_types::versioning;
 
@@ -17,11 +19,11 @@ mod entry_name {
 }
 
 #[derive(Clone)]
-pub struct Versioning {
-    pub version: Database<Str, VersionCodec>,
+pub struct Versioning<'e> {
+    pub version: Database<'e, Str, VersionCodec>,
 }
 
-impl Versioning {
+impl<'e> Versioning<'e> {
     pub const fn nb_db() -> u32 {
         NUMBER_OF_DATABASES
     }
@@ -50,24 +52,34 @@ impl Versioning {
     }
 
     /// Return `Self` without checking anything about the version
-    pub fn raw_new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> Result<Self, heed::Error> {
-        let version = env.create_database(wtxn, Some(db_name::VERSION))?;
+    pub fn raw_new(
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> Result<Self, heed::Error> {
+        let version = dbo.create_database(wtxn, Some(db_name::VERSION))?;
         Ok(Self { version })
     }
 
-    pub(crate) fn new(env: &Env<WithoutTls>, db_version: (u32, u32, u32)) -> Result<Self> {
-        let mut wtxn = env.unique_write_txn()?;
-        let this = Self::raw_new(env, &mut wtxn)?;
-        let from = match this.get_version(&wtxn)? {
-            Some(version) => version,
-            // fresh DB: use the db version
-            None => {
-                this.set_version(&mut wtxn, db_version)?;
-                db_version
-            }
-        };
-        wtxn.commit()?;
+    pub(crate) fn new(env: &'e Env<WithoutTls>, db_version: (u32, u32, u32)) -> Result<Self> {
+        let wtxn = env.write_txn()?;
+        let mut from = None;
+        let this = env
+            .create_databases_and_commit(wtxn, |dbo, wtxn| {
+                let this = Self::raw_new(dbo, wtxn)?;
+                from = match this.get_version(wtxn)? {
+                    Some(version) => Some(version),
+                    // fresh DB: use the db version
+                    None => {
+                        this.set_version(wtxn, db_version)?;
+                        Some(db_version)
+                    }
+                };
 
+                Ok(CommitOrAbort::<_, ()>::Commit(this))
+            })?
+            .unwrap_commit();
+
+        let from = from.unwrap();
         upgrade_index_scheduler(env, &this, from)?;
 
         // Once we reach this point it means the upgrade process, if there was one is entirely finished
@@ -77,5 +89,14 @@ impl Versioning {
         wtxn.commit()?;
 
         Ok(this)
+    }
+}
+
+impl<'e> meilisearch_types::heed::OnCommit for Versioning<'e> {
+    type Committed = Versioning<'static>;
+
+    fn on_commit(self, token: &heed::CommitToken) -> Self::Committed {
+        let Self { version } = self;
+        Versioning { version: version.on_commit(token) }
     }
 }

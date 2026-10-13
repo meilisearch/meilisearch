@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex, RESERVED_UID_PREFIX};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
@@ -62,12 +62,12 @@ pub struct IndexMapper {
     index_map: Arc<RwLock<IndexMap>>,
 
     /// Map an index name with an index uuid currently available on disk.
-    index_mapping: Database<Str, UuidCodec>,
+    index_mapping: Database<'static, Str, UuidCodec>,
     /// Map an index UUID with the cached stats associated to the index.
     ///
     /// Using an UUID forces to use the index_mapping table to recover the index behind a name, ensuring
     /// consistency wrt index swapping.
-    index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
+    index_stats: Database<'static, UuidCodec, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
@@ -207,7 +207,7 @@ impl IndexMapper {
 
     pub fn new(
         env: &Env<WithoutTls>,
-        wtxn: &mut UniqueRwTxn,
+        wtxn: &mut RwTxn,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,
     ) -> Result<Self> {

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use meilisearch_types::heed::{Database, Env, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status};
 use roaring::RoaringBitmap;

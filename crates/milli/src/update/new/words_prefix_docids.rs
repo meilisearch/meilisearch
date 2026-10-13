@@ -14,14 +14,14 @@ use crate::update::new::indexer::MiniString;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 struct WordPrefixDocids {
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<'static, Bytes, CboRoaringBitmapCodec>,
+    prefix_database: Database<'static, Bytes, CboRoaringBitmapCodec>,
 }
 
 impl WordPrefixDocids {
     fn new(
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<'static, Bytes, CboRoaringBitmapCodec>,
+        prefix_database: Database<'static, Bytes, CboRoaringBitmapCodec>,
     ) -> WordPrefixDocids {
         WordPrefixDocids { database, prefix_database }
     }
@@ -119,14 +119,14 @@ struct PrefixEntry {
 }
 
 struct WordPrefixIntegerDocids {
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<'static, Bytes, CboRoaringBitmapCodec>,
+    prefix_database: Database<'static, Bytes, CboRoaringBitmapCodec>,
 }
 
 impl WordPrefixIntegerDocids {
     fn new(
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<'static, Bytes, CboRoaringBitmapCodec>,
+        prefix_database: Database<'static, Bytes, CboRoaringBitmapCodec>,
     ) -> WordPrefixIntegerDocids {
         WordPrefixIntegerDocids { database, prefix_database }
     }

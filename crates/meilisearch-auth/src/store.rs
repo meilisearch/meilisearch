@@ -7,7 +7,7 @@ use std::str;
 use std::str::FromStr;
 
 use hmac::{Hmac, Mac};
-use meilisearch_types::heed::{BoxedError, WithoutTls};
+use meilisearch_types::heed::{BoxedError, CommitOrAbort, WithoutTls};
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli::heed;
@@ -29,8 +29,9 @@ const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expirat
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Env<WithoutTls>,
-    keys: Database<Bytes, SerdeJson<Key>>,
-    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
+    keys: Database<'static, Bytes, SerdeJson<Key>>,
+    action_keyid_index_expiration:
+        Database<'static, KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
 }
 
 pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
@@ -43,11 +44,16 @@ pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
 
 impl HeedAuthStore {
     pub fn new(env: Env<WithoutTls>) -> Result<Self> {
-        let mut wtxn = env.unique_write_txn()?;
-        let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
-        let action_keyid_index_expiration =
-            env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
-        wtxn.commit()?;
+        let wtxn = env.write_txn()?;
+        let (keys, action_keyid_index_expiration) = env
+            .create_databases_and_commit(wtxn, |dbo, wtxn| {
+                let keys = dbo.create_database(wtxn, Some(KEY_DB_NAME))?;
+                let action_keyid_index_expiration =
+                    dbo.create_database(wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+                Ok(CommitOrAbort::<_, ()>::Commit((keys, action_keyid_index_expiration)))
+            })?
+            .unwrap_commit();
+
         Ok(Self { env, keys, action_keyid_index_expiration })
     }
 

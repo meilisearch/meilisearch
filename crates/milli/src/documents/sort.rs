@@ -232,8 +232,8 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     fn build_facet(
         index: &'ctx crate::Index,
         rtxn: &'ctx heed::RoTxn<'ctx>,
-        number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
-        string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        number_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        string_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         next_fields: &'ctx [AscDescId],
         candidates: RoaringBitmap,
         geo_candidates: &'ctx RoaringBitmap,
@@ -312,8 +312,8 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     fn build_geo(
         index: &'ctx crate::Index,
         rtxn: &'ctx heed::RoTxn<'ctx>,
-        number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
-        string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        number_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        string_db: Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         next_fields: &'ctx [AscDescId],
         candidates: RoaringBitmap,
         geo_candidates: &'ctx RoaringBitmap,

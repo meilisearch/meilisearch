@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{bail, Context};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{
-    Database, Env, EnvOpenOptions, RwTxn, UniqueRoTxn, UniqueRwTxn, Unspecified, WithoutTls,
+    Database, Env, EnvOpenOptions, RwTxn, UniqueRoTxn, Unspecified, WithoutTls,
 };
 use meilisearch_types::milli::index::{db_name, main_key};
 
@@ -95,7 +95,7 @@ fn update_index_stats(
 fn update_date_format(
     index_uid: &str,
     index_env: &Env<WithoutTls>,
-    index_wtxn: &mut UniqueRwTxn,
+    index_wtxn: &mut RwTxn,
 ) -> anyhow::Result<()> {
     let main = try_opening_poly_database_w(index_env, index_wtxn, db_name::MAIN)
         .with_context(|| format!("while updating date format for index `{index_uid}`"))?;

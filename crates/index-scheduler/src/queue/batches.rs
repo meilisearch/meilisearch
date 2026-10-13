@@ -3,7 +3,7 @@ use std::ops::{Bound, RangeBounds};
 
 use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status};
 use roaring::{MultiOps, RoaringBitmap};
@@ -31,25 +31,25 @@ mod db_name {
     pub const BATCH_FINISHED_AT: &str = "batch-finished-at";
 }
 
-pub struct BatchQueue {
+pub struct BatchQueue<'e> {
     /// Contains all the batches accessible by their Id.
-    pub(crate) all_batches: Database<BEU32, SerdeJson<Batch>>,
+    pub(crate) all_batches: Database<'e, BEU32, SerdeJson<Batch>>,
 
     /// All the batches containing a task matching the selected status.
-    pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    pub(crate) status: Database<'e, SerdeBincode<Status>, RoaringBitmapCodec>,
     /// All the batches ids grouped by the kind of their task.
-    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
+    pub(crate) kind: Database<'e, SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the batches associated to an index.
-    pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
+    pub(crate) index_tasks: Database<'e, Str, RoaringBitmapCodec>,
     /// Store the batches containing tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) enqueued_at: Database<'e, BEI128, CboRoaringBitmapCodec>,
     /// Store the batches containing finished tasks started at a specific date
-    pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) started_at: Database<'e, BEI128, CboRoaringBitmapCodec>,
     /// Store the batches containing tasks finished at a specific date
-    pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) finished_at: Database<'e, BEI128, CboRoaringBitmapCodec>,
 }
 
-impl BatchQueue {
+impl<'e> BatchQueue<'e> {
     pub(crate) fn private_clone(&self) -> BatchQueue {
         BatchQueue {
             all_batches: self.all_batches,
@@ -85,15 +85,18 @@ impl BatchQueue {
         Ok(total_size as u64)
     }
 
-    pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> Result<Self> {
+    pub(crate) fn new<T>(
+        dbo: &meilisearch_types::heed::DatabaseOpener<'e, T>,
+        wtxn: &mut RwTxn,
+    ) -> Result<Self> {
         Ok(Self {
-            all_batches: env.create_database(wtxn, Some(db_name::ALL_BATCHES))?,
-            status: env.create_database(wtxn, Some(db_name::BATCH_STATUS))?,
-            kind: env.create_database(wtxn, Some(db_name::BATCH_KIND))?,
-            index_tasks: env.create_database(wtxn, Some(db_name::BATCH_INDEX_TASKS))?,
-            enqueued_at: env.create_database(wtxn, Some(db_name::BATCH_ENQUEUED_AT))?,
-            started_at: env.create_database(wtxn, Some(db_name::BATCH_STARTED_AT))?,
-            finished_at: env.create_database(wtxn, Some(db_name::BATCH_FINISHED_AT))?,
+            all_batches: dbo.create_database(wtxn, Some(db_name::ALL_BATCHES))?,
+            status: dbo.create_database(wtxn, Some(db_name::BATCH_STATUS))?,
+            kind: dbo.create_database(wtxn, Some(db_name::BATCH_KIND))?,
+            index_tasks: dbo.create_database(wtxn, Some(db_name::BATCH_INDEX_TASKS))?,
+            enqueued_at: dbo.create_database(wtxn, Some(db_name::BATCH_ENQUEUED_AT))?,
+            started_at: dbo.create_database(wtxn, Some(db_name::BATCH_STARTED_AT))?,
+            finished_at: dbo.create_database(wtxn, Some(db_name::BATCH_FINISHED_AT))?,
         })
     }
 
@@ -330,7 +333,25 @@ impl BatchQueue {
     }
 }
 
-impl Queue {
+impl<'e> meilisearch_types::heed::OnCommit for BatchQueue<'e> {
+    type Committed = BatchQueue<'static>;
+
+    fn on_commit(self, token: &meilisearch_types::heed::CommitToken) -> Self::Committed {
+        let Self { all_batches, status, kind, index_tasks, enqueued_at, started_at, finished_at } =
+            self;
+        BatchQueue {
+            all_batches: all_batches.on_commit(token),
+            status: status.on_commit(token),
+            kind: kind.on_commit(token),
+            index_tasks: index_tasks.on_commit(token),
+            enqueued_at: enqueued_at.on_commit(token),
+            started_at: started_at.on_commit(token),
+            finished_at: finished_at.on_commit(token),
+        }
+    }
+}
+
+impl Queue<'_> {
     /// Return the batch ids matched by the given query from the index scheduler's point of view.
     pub(crate) fn get_batch_ids(
         &self,

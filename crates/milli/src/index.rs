@@ -201,7 +201,7 @@ pub struct Index {
     pub shard_docids: Database<'static, Str, CboRoaringBitmapCodec>,
 
     /// Geo store based on cellulite™.
-    pub cellulite: Cellulite,
+    pub cellulite: Cellulite<'static>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<'static, BEU32, ObkvCodec>,
@@ -259,7 +259,7 @@ impl Index {
             embedder_category_id: Database<'t, Unspecified, Unspecified>,
             vector_store: hannoy::Database<'t, Unspecified>,
             shard_docids: Database<'t, Str, CboRoaringBitmapCodec>,
-            cellulite: Cellulite,
+            cellulite: Cellulite<'t>,
             documents: Database<'t, BEU32, ObkvCodec>,
         }
 
@@ -332,55 +332,58 @@ impl Index {
 
         let env = unsafe { options.open(path) }?;
         let wtxn = env.write_txn()?;
-        let databases = env
-            .create_databases_and_commit(wtxn, |dbo, wtxn| {
-                let databases = Databases {
-                    main: dbo.database_options().name(MAIN).create(wtxn)?,
-                    word_docids: dbo.create_database(wtxn, Some(WORD_DOCIDS))?,
-                    external_documents_ids: dbo
-                        .create_database(wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?,
-                    exact_word_docids: dbo.create_database(wtxn, Some(EXACT_WORD_DOCIDS))?,
-                    word_prefix_docids: dbo.create_database(wtxn, Some(WORD_PREFIX_DOCIDS))?,
-                    synonyms: dbo.create_database(wtxn, Some(SYNONYMS))?,
-                    exact_word_prefix_docids: dbo
-                        .create_database(wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?,
-                    word_pair_proximity_docids: dbo
-                        .create_database(wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?,
-                    word_position_docids: dbo.create_database(wtxn, Some(WORD_POSITION_DOCIDS))?,
-                    word_fid_docids: dbo.create_database(wtxn, Some(WORD_FIELD_ID_DOCIDS))?,
-                    field_id_word_count_docids: dbo
-                        .create_database(wtxn, Some(FIELD_ID_WORD_COUNT_DOCIDS))?,
-                    word_prefix_position_docids: dbo
-                        .create_database(wtxn, Some(WORD_PREFIX_POSITION_DOCIDS))?,
-                    word_prefix_fid_docids: dbo
-                        .create_database(wtxn, Some(WORD_PREFIX_FIELD_ID_DOCIDS))?,
-                    facet_id_f64_docids: dbo.create_database(wtxn, Some(FACET_ID_F64_DOCIDS))?,
-                    facet_id_string_docids: dbo
-                        .create_database(wtxn, Some(FACET_ID_STRING_DOCIDS))?,
-                    facet_id_normalized_string_strings: dbo
-                        .create_database(wtxn, Some(FACET_ID_NORMALIZED_STRING_STRINGS))?,
-                    facet_id_string_fst: dbo.create_database(wtxn, Some(FACET_ID_STRING_FST))?,
-                    facet_id_exists_docids: dbo
-                        .create_database(wtxn, Some(FACET_ID_EXISTS_DOCIDS))?,
-                    facet_id_is_null_docids: dbo
-                        .create_database(wtxn, Some(FACET_ID_IS_NULL_DOCIDS))?,
-                    facet_id_is_empty_docids: dbo
-                        .create_database(wtxn, Some(FACET_ID_IS_EMPTY_DOCIDS))?,
-                    field_id_docid_facet_f64s: dbo
-                        .create_database(wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?,
-                    field_id_docid_facet_strings: dbo
-                        .create_database(wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?,
-                    embedder_category_id: dbo
-                        .create_database(wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?,
-                    vector_store: dbo.create_database(wtxn, Some(VECTOR_STORE))?,
-                    shard_docids: dbo.create_database(wtxn, Some(SHARD_DOCIDS))?,
-                    cellulite: cellulite::Cellulite::create_from_env(&dbo, wtxn, CELLULITE)?,
-                    documents: dbo.create_database(wtxn, Some(DOCUMENTS))?,
-                };
+        let result = env.create_databases_and_commit(wtxn, |dbo, wtxn| {
+            let databases = Databases {
+                main: dbo.database_options().name(MAIN).create(wtxn)?,
+                word_docids: dbo.create_database(wtxn, Some(WORD_DOCIDS))?,
+                external_documents_ids: dbo.create_database(wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?,
+                exact_word_docids: dbo.create_database(wtxn, Some(EXACT_WORD_DOCIDS))?,
+                word_prefix_docids: dbo.create_database(wtxn, Some(WORD_PREFIX_DOCIDS))?,
+                synonyms: dbo.create_database(wtxn, Some(SYNONYMS))?,
+                exact_word_prefix_docids: dbo
+                    .create_database(wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?,
+                word_pair_proximity_docids: dbo
+                    .create_database(wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?,
+                word_position_docids: dbo.create_database(wtxn, Some(WORD_POSITION_DOCIDS))?,
+                word_fid_docids: dbo.create_database(wtxn, Some(WORD_FIELD_ID_DOCIDS))?,
+                field_id_word_count_docids: dbo
+                    .create_database(wtxn, Some(FIELD_ID_WORD_COUNT_DOCIDS))?,
+                word_prefix_position_docids: dbo
+                    .create_database(wtxn, Some(WORD_PREFIX_POSITION_DOCIDS))?,
+                word_prefix_fid_docids: dbo
+                    .create_database(wtxn, Some(WORD_PREFIX_FIELD_ID_DOCIDS))?,
+                facet_id_f64_docids: dbo.create_database(wtxn, Some(FACET_ID_F64_DOCIDS))?,
+                facet_id_string_docids: dbo.create_database(wtxn, Some(FACET_ID_STRING_DOCIDS))?,
+                facet_id_normalized_string_strings: dbo
+                    .create_database(wtxn, Some(FACET_ID_NORMALIZED_STRING_STRINGS))?,
+                facet_id_string_fst: dbo.create_database(wtxn, Some(FACET_ID_STRING_FST))?,
+                facet_id_exists_docids: dbo.create_database(wtxn, Some(FACET_ID_EXISTS_DOCIDS))?,
+                facet_id_is_null_docids: dbo
+                    .create_database(wtxn, Some(FACET_ID_IS_NULL_DOCIDS))?,
+                facet_id_is_empty_docids: dbo
+                    .create_database(wtxn, Some(FACET_ID_IS_EMPTY_DOCIDS))?,
+                field_id_docid_facet_f64s: dbo
+                    .create_database(wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?,
+                field_id_docid_facet_strings: dbo
+                    .create_database(wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?,
+                embedder_category_id: dbo
+                    .create_database(wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?,
+                vector_store: dbo.create_database(wtxn, Some(VECTOR_STORE))?,
+                shard_docids: dbo.create_database(wtxn, Some(SHARD_DOCIDS))?,
+                cellulite: match cellulite::Cellulite::create_from_dbo(dbo, wtxn, CELLULITE) {
+                    Ok(cellulite) => cellulite,
+                    Err(err) => return Ok(CommitOrAbort::Abort(err)),
+                },
+                documents: dbo.create_database(wtxn, Some(DOCUMENTS))?,
+            };
 
-                Ok(CommitOrAbort::Commit(databases))
-            })?
-            .unwrap_commit();
+            Ok(CommitOrAbort::Commit(databases))
+        })?;
+
+        let databases = match result {
+            CommitOrAbort::Commit(databases) => databases,
+            CommitOrAbort::Abort(err) => return Err(err.into()),
+        };
 
         let Databases {
             main,
@@ -443,6 +446,7 @@ impl Index {
             documents,
         };
 
+        let mut wtxn = this.write_txn()?;
         if let CreateOrOpen::Create { shards } = create_or_open {
             if this.get_version(&wtxn)?.is_none() {
                 this.put_version(
@@ -488,21 +492,32 @@ impl Index {
 
         // optimistically check if the index is already at the requested version.
         let env = unsafe { options.open(path.as_ref()) }?;
-        let rtxn = env.unique_read_txn()?;
-        let Some(main) = env.database_options().name(db_name::MAIN).open(&rtxn)? else {
-            return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
-                db_name: db_name::MAIN,
-                key: None,
-            }));
-        };
-        let rollback_version =
-            main.remap_types::<Str, VersionCodec>().get(&rtxn, main_key::VERSION_KEY)?;
-        if rollback_version == Some(requested_version) {
-            return Ok(RollbackOutcome::NoRollback);
+        let rtxn = env.read_txn()?;
+        let coa = env.open_databases_and_commit(rtxn, |dbo, rtxn| {
+            let Some(main) = dbo.database_options().name(db_name::MAIN).open(rtxn)? else {
+                return Ok(CommitOrAbort::Abort(Err(crate::Error::InternalError(
+                    crate::InternalError::DatabaseMissingEntry {
+                        db_name: db_name::MAIN,
+                        key: None,
+                    },
+                ))));
+            };
+            let rollback_version =
+                main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)?;
+            if rollback_version == Some(requested_version) {
+                return Ok(CommitOrAbort::Abort(Ok(Some(RollbackOutcome::NoRollback))));
+            }
+
+            // explicitly drop the environment before reopening it.
+            Ok(CommitOrAbort::<(), _>::Abort(Ok(None)))
+        })?;
+
+        match coa {
+            CommitOrAbort::Commit(()) | CommitOrAbort::Abort(Ok(None)) => (),
+            CommitOrAbort::Abort(Ok(Some(outcome))) => return Ok(outcome),
+            CommitOrAbort::Abort(Err(err)) => return Err(err.into()),
         }
 
-        // explicitly drop the environment before reopening it.
-        drop(rtxn);
         drop(env);
 
         // really need to rollback then...
@@ -541,7 +556,7 @@ impl Index {
             // which is necessary to actually discard the next snapshot, replacing it with this transaction.
             let now = time::OffsetDateTime::now_utc();
             main.remap_data_type::<SerdeJson<OffsetDateTime>>().put(
-                &mut wtxn,
+                wtxn,
                 main_key::UPDATED_AT_KEY,
                 &OffsetDateTime(now),
             )?;

@@ -13,8 +13,7 @@ use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
 use meilisearch_types::heed::{
-    CompactionOption, Database, Env, EnvOpenOptions, RwTxn, UniqueRoTxn, UniqueRwTxn, Unspecified,
-    WithoutTls,
+    CompactionOption, Database, Env, EnvOpenOptions, RwTxn, RoTxn, Unspe WithoutTls,
 };
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
@@ -234,7 +233,7 @@ fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
 
 fn try_opening_database<KC: 'static, DC: 'static>(
     env: &Env<WithoutTls>,
-    rtxn: &UniqueRoTxn<'_, WithoutTls>,
+    rtxn: &RoTxn<'_, WithoutTls>,
     db_name: &str,
 ) -> anyhow::Result<Database<KC, DC>> {
     env.open_database(rtxn, Some(db_name))
@@ -244,7 +243,7 @@ fn try_opening_database<KC: 'static, DC: 'static>(
 
 fn try_opening_database_w<KC: 'static, DC: 'static>(
     env: &Env<WithoutTls>,
-    rtxn: &UniqueRwTxn,
+    rtxn: &RwTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<KC, DC>> {
     env.open_database(rtxn, Some(db_name))
@@ -254,7 +253,7 @@ fn try_opening_database_w<KC: 'static, DC: 'static>(
 
 fn try_opening_poly_database(
     env: &Env<WithoutTls>,
-    rtxn: &UniqueRoTxn<WithoutTls>,
+    rtxn: &RoTxn<WithoutTls>,
     db_name: &str,
 ) -> anyhow::Result<Database<Unspecified, Unspecified>> {
     env.database_options()
@@ -266,7 +265,7 @@ fn try_opening_poly_database(
 
 fn try_opening_poly_database_w(
     env: &Env<WithoutTls>,
-    rtxn: &UniqueRwTxn,
+    rtxn: &RwTxn,
     db_name: &str,
 ) -> anyhow::Result<Database<Unspecified, Unspecified>> {
     env.database_options()

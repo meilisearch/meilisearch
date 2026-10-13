@@ -112,7 +112,7 @@ pub mod new_incremental;
 /// a bulk update method or an incremental update method.
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    database: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
     delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
     normalized_delta_data: Option<Merger<BufReader<File>, MergeDeladdBtreesetString>>,
@@ -394,7 +394,8 @@ pub(crate) mod test_helpers {
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
         pub env: Env<WithoutTls>,
-        pub content: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        pub content:
+            heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
         pub max_group_size: Cell<u8>,
