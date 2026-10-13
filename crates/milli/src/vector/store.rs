@@ -203,6 +203,7 @@ impl VectorStore {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::documents")]
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
