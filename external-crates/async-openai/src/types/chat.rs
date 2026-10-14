@@ -648,13 +648,20 @@ pub enum ServiceTierResponse {
     Auto, // AWS bedrock answer `auto` here
 }
 
-/// Constrains effort on reasoning for reasoning models. Supported values are `low`, `medium`, and `high`.
+/// Constrains effort on reasoning for reasoning models.
+///
+/// Supported values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`;
+/// not every reasoning model supports every value.
 #[derive(Clone, Serialize, Debug, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
+    None,
+    Minimal,
     Low,
     Medium,
     High,
+    XHigh,
+    Max,
 }
 
 /// Output types that you would like the model to generate for this request.
@@ -1175,5 +1182,22 @@ mod tests {
 
         let parsed: CreateChatCompletionStreamResponse = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.choices[0].delta.content, None);
+    }
+
+    #[test]
+    fn reasoning_effort_accepts_every_documented_value() {
+        for (text, expected) in [
+            ("\"none\"", ReasoningEffort::None),
+            ("\"minimal\"", ReasoningEffort::Minimal),
+            ("\"low\"", ReasoningEffort::Low),
+            ("\"medium\"", ReasoningEffort::Medium),
+            ("\"high\"", ReasoningEffort::High),
+            ("\"xhigh\"", ReasoningEffort::XHigh),
+            ("\"max\"", ReasoningEffort::Max),
+        ] {
+            let effort: ReasoningEffort = serde_json::from_str(text).unwrap();
+            assert_eq!(effort, expected);
+            assert_eq!(serde_json::to_string(&effort).unwrap(), text);
+        }
     }
 }
