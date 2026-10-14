@@ -128,6 +128,8 @@ pub enum EmbedErrorKind {
         })
     })]
     RestSearchMatchesNoFragment { q: Option<String>, media: Option<serde_json::Value> },
+    #[error("the embedder has given up")]
+    RestGiveUp,
 }
 
 fn option_info(info: Option<&str>, prefix: &str) -> String {
@@ -274,6 +276,10 @@ impl EmbedError {
             },
             fault: FaultSource::User,
         }
+    }
+
+    pub(crate) fn rest_give_up() -> EmbedError {
+        Self { kind: EmbedErrorKind::RestGiveUp, fault: FaultSource::Undecided }
     }
 }
 

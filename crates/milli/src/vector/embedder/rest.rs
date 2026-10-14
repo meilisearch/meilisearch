@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use deserr::Deserr;
@@ -347,6 +348,10 @@ impl Embedder {
         threads: &ThreadPoolNoAbort,
         embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Embedding>, EmbedError> {
+        if embedder_stats.give_up.load(Ordering::Relaxed) {
+            return Err(EmbedError::rest_give_up());
+        }
+
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
@@ -497,6 +502,9 @@ where
 
     for attempt in 0..10 {
         if let Some(embedder_stats) = &embedder_stats {
+            if embedder_stats.give_up.load(Ordering::Relaxed) {
+                return Err(EmbedError::rest_give_up());
+            }
             embedder_stats.total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         let response = request_builder().send_json(&body);
@@ -509,8 +517,10 @@ where
             Err(retry) => {
                 tracing::warn!("Failed: {}", retry.error);
                 if let Some(embedder_stats) = &embedder_stats {
-                    if embedder_stats.register_error(&retry.error) {
+                    embedder_stats.register_error(&retry.error);
+                    if embedder_stats.error_rate_threshold_reached() {
                         tracing::warn!("Error rate threshold reached, stopping retries");
+                        embedder_stats.give_up.store(true, Ordering::Relaxed);
                         return Err(retry.into_error());
                     }
                 }
@@ -549,9 +559,10 @@ where
     match result {
         Ok(response) => Ok(response),
         Err(retry) => {
-            if let Some(embedder_stats) = &embedder_stats {
+            if let Some(embedder_stats) = embedder_stats {
                 embedder_stats.register_error(&retry.error);
-            };
+                embedder_stats.give_up.store(true, Ordering::Relaxed);
+            }
             Err(retry.into_error())
         }
     }
