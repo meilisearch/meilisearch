@@ -426,14 +426,14 @@ impl<'a> FacetDistribution<'a> {
                 self.facet_distribution_from_sample(
                     field_id,
                     String,
-                    &sample_candidates,
+                    sample_candidates,
                     candidates,
                     &mut distribution,
                 )?;
                 self.facet_distribution_from_sample(
                     field_id,
                     Number,
-                    &sample_candidates,
+                    sample_candidates,
                     candidates,
                     &mut distribution,
                 )?;
