@@ -9,6 +9,7 @@ use std::sync::atomic::AtomicBool;
 use anyhow::Context;
 use file_store::FileStore;
 use indexmap::IndexMap;
+use meilisearch_types::heed::CommitOrAbort;
 use meilisearch_types::milli::documents::DocumentsBatchReader;
 use meilisearch_types::milli::heed::types::{SerdeJson, Str};
 use meilisearch_types::milli::heed::{Database, EnvOpenOptions, RoTxn, RwTxn};
@@ -20,7 +21,7 @@ use tempfile::NamedTempFile;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::try_opening_database_w;
+use crate::try_opening_database;
 use crate::uuid_codec::UuidCodec;
 
 pub fn v1_11_to_v1_12(
@@ -120,15 +121,21 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let mut sched_wtxn = env.unique_write_txn()?;
+    let sched_rtxn = env.read_txn()?;
+    let (index_mapping, stats_db) = env
+        .open_databases_and_commit(sched_rtxn, |dbo, sched_rtxn| -> anyhow::Result<_> {
+            let index_mapping: Database<Str, UuidCodec> =
+                try_opening_database(dbo, sched_rtxn, "index-mapping")?;
+            let stats_db: Database<UuidCodec, SerdeJson<IndexStats>> =
+                try_opening_database(dbo, sched_rtxn, "index-stats").with_context(|| {
+                    format!("While trying to open {:?}", index_scheduler_path.display())
+                })?;
 
-    let index_mapping: Database<Str, UuidCodec> =
-        try_opening_database_w(&env, &sched_wtxn, "index-mapping")?;
-    let stats_db: Database<UuidCodec, SerdeJson<IndexStats>> =
-        try_opening_database_w(&env, &sched_wtxn, "index-stats").with_context(|| {
-            format!("While trying to open {:?}", index_scheduler_path.display())
-        })?;
+            Ok(CommitOrAbort::<_, ()>::Commit((index_mapping, stats_db)))
+        })?
+        .unwrap_commit();
 
+    let mut sched_wtxn = env.write_txn()?;
     let index_count =
         index_mapping.len(&sched_wtxn).context("while reading the number of indexes")?;
 

@@ -356,3 +356,12 @@ impl<'e> FeatureData<'e> {
         &self.remote_availability
     }
 }
+
+impl meilisearch_types::heed::OnCommit for FeatureData<'_> {
+    type Committed = FeatureData<'static>;
+
+    fn on_commit(self, token: &meilisearch_types::heed::CommitToken) -> Self::Committed {
+        let Self { persisted, runtime, network, remote_availability } = self;
+        FeatureData { persisted: persisted.on_commit(token), runtime, network, remote_availability }
+    }
+}

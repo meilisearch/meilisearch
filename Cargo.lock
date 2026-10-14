@@ -3044,7 +3044,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "heed"
 version = "0.22.1"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#05b96bafcdbc69440ac0307e8151a447b1a6d005"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#d3aa414511a5ea708b43b0384bbaf5ed259e2371"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -3061,12 +3061,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#05b96bafcdbc69440ac0307e8151a447b1a6d005"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#d3aa414511a5ea708b43b0384bbaf5ed259e2371"
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#05b96bafcdbc69440ac0307e8151a447b1a6d005"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#d3aa414511a5ea708b43b0384bbaf5ed259e2371"
 dependencies = [
  "bincode",
  "byteorder",
@@ -4050,7 +4050,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.6"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#05b96bafcdbc69440ac0307e8151a447b1a6d005"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#d3aa414511a5ea708b43b0384bbaf5ed259e2371"
 dependencies = [
  "cc",
  "doxygen-rs",

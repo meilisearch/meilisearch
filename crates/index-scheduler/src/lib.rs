@@ -67,7 +67,9 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, Unspecified, WithoutTls};
+use meilisearch_types::heed::{
+    self, CommitOrAbort, Database, Env, RoTxn, RwTxn, Unspecified, WithoutTls,
+};
 use meilisearch_types::index_uid::UserIndex;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::sharding::Shards;
@@ -189,7 +191,7 @@ pub struct IndexScheduler {
     /// The queue containing both the tasks and the batches.
     pub queue: queue::Queue<'static>,
     /// In charge of creating, opening, storing and returning indexes.
-    pub(crate) index_mapper: IndexMapper,
+    pub(crate) index_mapper: IndexMapper<'static>,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData<'static>,
 
@@ -401,23 +403,37 @@ impl IndexScheduler {
         }?;
 
         // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
-        let version = versioning::Versioning::new(&env, from_db_version)?;
 
-        let mut wtxn = env.write_txn()?;
+        let wtxn = env.write_txn()?;
+        let (version, queue, index_mapper, persisted, legacy_dsr, features, chat_settings) = env
+            .create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
+                let version = versioning::Versioning::new(dbo, wtxn, from_db_version)?;
+                let features = features::FeatureData::new(dbo, wtxn, options.instance_features)?;
+                let queue = Queue::new(dbo, wtxn, &options)?;
+                let index_mapper = IndexMapper::new(dbo, wtxn, &options, budget)?;
+                let chat_settings = dbo.create_database(wtxn, Some(db_name::CHAT_SETTINGS))?;
 
-        let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
-        let queue = Queue::new(&env, &mut wtxn, &options)?;
-        let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
-        let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
+                let persisted = dbo.create_database(wtxn, Some(db_name::PERSISTED))?;
+                let legacy_dsr = dbo.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
 
-        let persisted = env.create_database(&mut wtxn, Some(db_name::PERSISTED))?;
-        let legacy_dsr = env.create_database(&mut wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
+                Ok(CommitOrAbort::<_, ()>::Commit((
+                    version,
+                    queue,
+                    index_mapper,
+                    persisted,
+                    legacy_dsr,
+                    features,
+                    chat_settings,
+                )))
+            })?
+            .unwrap_commit();
+
+        let rtxn = env.read_txn()?;
         let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
-        let mut webhooks = webhooks_db.get(&wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
+        let mut webhooks = webhooks_db.get(&rtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
         webhooks
             .with_cli(options.cli_webhook_url.clone(), options.cli_webhook_authorization.clone());
-
-        wtxn.commit()?;
+        drop(rtxn);
 
         let scheduler = Scheduler::new(&options, auth_env);
 

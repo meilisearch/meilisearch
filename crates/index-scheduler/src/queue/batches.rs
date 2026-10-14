@@ -3,7 +3,7 @@ use std::ops::{Bound, RangeBounds};
 
 use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status};
 use roaring::{MultiOps, RoaringBitmap};
@@ -50,7 +50,7 @@ pub struct BatchQueue<'e> {
 }
 
 impl<'e> BatchQueue<'e> {
-    pub(crate) fn private_clone(&self) -> BatchQueue {
+    pub(crate) fn private_clone(&self) -> BatchQueue<'e> {
         BatchQueue {
             all_batches: self.all_batches,
             status: self.status,
@@ -87,7 +87,7 @@ impl<'e> BatchQueue<'e> {
 
     pub(crate) fn new<T>(
         dbo: &meilisearch_types::heed::DatabaseOpener<'e, T>,
-        wtxn: &mut RwTxn,
+        wtxn: &mut RwTxn<'e>,
     ) -> Result<Self> {
         Ok(Self {
             all_batches: dbo.create_database(wtxn, Some(db_name::ALL_BATCHES))?,

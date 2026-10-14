@@ -46,7 +46,7 @@ impl HeedAuthStore {
     pub fn new(env: Env<WithoutTls>) -> Result<Self> {
         let wtxn = env.write_txn()?;
         let (keys, action_keyid_index_expiration) = env
-            .create_databases_and_commit(wtxn, |dbo, wtxn| {
+            .create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
                 let keys = dbo.create_database(wtxn, Some(KEY_DB_NAME))?;
                 let action_keyid_index_expiration =
                     dbo.create_database(wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;

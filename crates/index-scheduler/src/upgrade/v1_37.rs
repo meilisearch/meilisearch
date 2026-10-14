@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{DatabaseOpener, RwTxn, WithoutTls};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -51,9 +51,13 @@ mod db_keys {
 pub struct MigrateNetwork;
 
 impl super::UpgradeIndexScheduler for MigrateNetwork {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
+    fn upgrade<'e>(
+        &self,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> anyhow::Result<()> {
         let Some(v1_30::Network { local, remotes, leader, version }) =
-            v1_30::get_network(env, wtxn)?
+            v1_30::get_network(dbo, wtxn)?
         else {
             return Ok(());
         };
@@ -77,7 +81,7 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
             .collect();
 
         let network = Network { local, remotes, leader, version, shards };
-        set_network(env, wtxn, &network)?;
+        set_network(dbo, wtxn, &network)?;
         Ok(())
     }
 
@@ -90,7 +94,11 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
     }
 }
 
-fn set_network(env: &Env<WithoutTls>, wtxn: &mut RwTxn<'_>, network: &Network) -> Result<()> {
+fn set_network<'e>(
+    env: &DatabaseOpener<'e, WithoutTls>,
+    wtxn: &mut RwTxn<'e>,
+    network: &Network,
+) -> Result<()> {
     let network_db =
         env.create_database::<Str, SerdeJson<Network>>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
 

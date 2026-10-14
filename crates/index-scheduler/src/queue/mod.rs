@@ -399,3 +399,18 @@ impl<'e> Queue<'e> {
         Ok(res)
     }
 }
+
+impl meilisearch_types::heed::OnCommit for Queue<'_> {
+    type Committed = Queue<'static>;
+
+    fn on_commit(self, token: &meilisearch_types::heed::CommitToken) -> Self::Committed {
+        let Self { tasks, batches, batch_to_tasks_mapping, file_store, max_number_of_tasks } = self;
+        Queue {
+            tasks: tasks.on_commit(token),
+            batches: batches.on_commit(token),
+            batch_to_tasks_mapping: batch_to_tasks_mapping.on_commit(token),
+            file_store,
+            max_number_of_tasks,
+        }
+    }
+}

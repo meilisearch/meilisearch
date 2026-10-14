@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Env, WithoutTls};
+use meilisearch_types::heed::{DatabaseOpener, RwTxn, WithoutTls};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -43,8 +43,12 @@ mod db_keys {
 pub struct MigrateNetwork;
 
 impl super::UpgradeIndexScheduler for MigrateNetwork {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
-        let Some(v1_29::Network { local, remotes, sharding }) = v1_29::get_network(env, wtxn)?
+    fn upgrade<'e>(
+        &self,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> anyhow::Result<()> {
+        let Some(v1_29::Network { local, remotes, sharding }) = v1_29::get_network(dbo, wtxn)?
         else {
             return Ok(());
         };
@@ -60,7 +64,7 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
 
         let network = Network { local, remotes, leader, version: Uuid::nil() };
 
-        set_network(env, wtxn, &network)?;
+        set_network(dbo, wtxn, &network)?;
         Ok(())
     }
 
@@ -73,17 +77,24 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
     }
 }
 
-fn set_network(env: &Env<WithoutTls>, wtxn: &mut RwTxn<'_>, network: &Network) -> Result<()> {
+fn set_network<'e>(
+    dbo: &DatabaseOpener<'e, WithoutTls>,
+    wtxn: &mut RwTxn<'e>,
+    network: &Network,
+) -> Result<()> {
     let network_db =
-        env.create_database::<Str, SerdeJson<Network>>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
+        dbo.create_database::<Str, SerdeJson<Network>>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
 
     network_db.put(wtxn, db_keys::NETWORK, network)?;
     Ok(())
 }
 
-pub fn get_network(env: &Env<WithoutTls>, wtxn: &RwTxn<'_>) -> Result<Option<Network>> {
-    let Some(network_db) = env
-        .open_database::<Str, SerdeJson<Network>, _>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?
+pub fn get_network<'e>(
+    dbo: &DatabaseOpener<'e, WithoutTls>,
+    wtxn: &RwTxn<'e>,
+) -> Result<Option<Network>> {
+    let Some(network_db) =
+        dbo.open_database::<Str, SerdeJson<Network>>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?
     else {
         return Ok(None);
     };

@@ -1,7 +1,5 @@
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{
-    self, CommitOrAbort, Database, DatabaseOpener, Env, RoTxn, RwTxn, WithoutTls,
-};
+use meilisearch_types::heed::{self, Database, DatabaseOpener, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::heed_codec::version::VersionCodec;
 use meilisearch_types::versioning;
 
@@ -60,33 +58,26 @@ impl<'e> Versioning<'e> {
         Ok(Self { version })
     }
 
-    pub(crate) fn new(env: &'e Env<WithoutTls>, db_version: (u32, u32, u32)) -> Result<Self> {
-        let wtxn = env.write_txn()?;
-        let mut from = None;
-        let this = env
-            .create_databases_and_commit(wtxn, |dbo, wtxn| {
-                let this = Self::raw_new(dbo, wtxn)?;
-                from = match this.get_version(wtxn)? {
-                    Some(version) => Some(version),
-                    // fresh DB: use the db version
-                    None => {
-                        this.set_version(wtxn, db_version)?;
-                        Some(db_version)
-                    }
-                };
+    pub(crate) fn new(
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+        db_version: (u32, u32, u32),
+    ) -> Result<Self> {
+        let this = Self::raw_new(dbo, wtxn)?;
+        let from = match this.get_version(wtxn)? {
+            Some(version) => version,
+            // fresh DB: use the db version
+            None => {
+                this.set_version(wtxn, db_version)?;
+                db_version
+            }
+        };
 
-                Ok(CommitOrAbort::<_, ()>::Commit(this))
-            })?
-            .unwrap_commit();
-
-        let from = from.unwrap();
-        upgrade_index_scheduler(env, &this, from)?;
+        upgrade_index_scheduler(dbo, wtxn, &this, from)?;
 
         // Once we reach this point it means the upgrade process, if there was one is entirely finished
         // we can safely say we reached the latest version of the index scheduler
-        let mut wtxn = env.write_txn()?;
-        this.set_current_version(&mut wtxn)?;
-        wtxn.commit()?;
+        this.set_current_version(wtxn)?;
 
         Ok(this)
     }

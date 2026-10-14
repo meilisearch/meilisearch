@@ -355,7 +355,7 @@ pub(crate) mod test_helpers {
 
     use grenad::MergerBuilder;
     use heed::types::Bytes;
-    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn, WithoutTls};
+    use heed::{BytesDecode, BytesEncode, CommitOrAbort, Env, RoTxn, RwTxn, WithoutTls};
     use roaring::RoaringBitmap;
 
     use super::bulk::FacetsUpdateBulkInner;
@@ -421,9 +421,13 @@ pub(crate) mod test_helpers {
             let options = options.map_size(4096 * 4 * 1000 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
             let env = unsafe { options.open(tempdir.path()) }.unwrap();
-            let mut wtxn = env.unique_write_txn().unwrap();
-            let content = env.create_database(&mut wtxn, None).unwrap();
-            wtxn.commit().unwrap();
+            let wtxn = env.write_txn().unwrap();
+            let content = env
+                .create_databases_and_commit(wtxn, |dbo, wtxn| {
+                    dbo.create_database(wtxn, None).map(CommitOrAbort::<_, ()>::Commit)
+                })
+                .unwrap()
+                .unwrap_commit();
 
             FacetIndex {
                 content,
