@@ -770,47 +770,35 @@ async fn run_conversation<C: async_openai::config::Config>(
 
                             global_tool_calls
                                 .entry(*index)
-                                .and_modify(|call| {
-                                    if call.is_internal() {
-                                        call.append(arguments.as_ref().unwrap())
-                                    }
-                                })
-                                .or_insert_with(|| {
-                                    if name.as_deref() == Some(MEILI_SEARCH_IN_INDEX_FUNCTION_NAME)
-                                    {
-                                        Call::Internal {
-                                            id: id.as_ref().unwrap().clone(),
-                                            function_name: name.as_ref().unwrap().clone(),
-                                            arguments: arguments.as_ref().unwrap().clone(),
-                                        }
-                                    } else {
-                                        Call::External
-                                    }
+                                .and_modify(|call| call.append(arguments.as_ref().unwrap()))
+                                .or_insert_with(|| Call {
+                                    id: id.as_ref().unwrap().clone(),
+                                    function_name: name.as_ref().unwrap().clone(),
+                                    arguments: arguments.as_ref().unwrap().clone(),
                                 });
                         }
                     }
                     None => {
                         if !global_tool_calls.is_empty() {
-                            let (meili_calls, _other_calls): (Vec<_>, Vec<_>) =
-                                mem::take(global_tool_calls)
-                                    .into_values()
-                                    .flat_map(|call| match call {
-                                        Call::Internal { id, function_name: name, arguments } => {
-                                            Some(ChatCompletionMessageToolCall {
-                                                id,
-                                                r#type: Some(ChatCompletionToolType::Function),
-                                                function: FunctionCall { name, arguments },
-                                            })
-                                        }
-                                        Call::External => None,
-                                    })
-                                    .partition(|call| {
-                                        call.function.name == MEILI_SEARCH_IN_INDEX_FUNCTION_NAME
-                                    });
+                            let mut calls: Vec<_> =
+                                mem::take(global_tool_calls).into_iter().collect();
+                            calls.sort_by_key(|(index, _)| *index);
+                            let (meili_calls, unknown_calls): (Vec<_>, Vec<_>) = calls
+                                .into_iter()
+                                .flat_map(|(_, call)| call.into_tool_calls())
+                                .partition(|call| {
+                                    call.function.name == MEILI_SEARCH_IN_INDEX_FUNCTION_NAME
+                                });
 
                             chat_completion.messages.push(
                                 ChatCompletionRequestAssistantMessageArgs::default()
-                                    .tool_calls(meili_calls.clone())
+                                    .tool_calls(
+                                        meili_calls
+                                            .iter()
+                                            .chain(&unknown_calls)
+                                            .cloned()
+                                            .collect::<Vec<_>>(),
+                                    )
                                     .build()
                                     .unwrap()
                                     .into(),
@@ -829,6 +817,24 @@ async fn run_conversation<C: async_openai::config::Config>(
                                 start_time,
                             )
                             .await?;
+
+                            // Answer the calls to functions that do not exist, so that the LLM
+                            // retries with the search function instead of being left with an
+                            // assistant message that calls nothing.
+                            for call in unknown_calls {
+                                let content = format!(
+                                    "{} is not a function you can call, use {} instead.",
+                                    call.function.name, MEILI_SEARCH_IN_INDEX_FUNCTION_NAME
+                                );
+                                chat_completion.messages.push(ChatCompletionRequestMessage::Tool(
+                                    ChatCompletionRequestToolMessage {
+                                        tool_call_id: call.id,
+                                        content: ChatCompletionRequestToolMessageContent::Text(
+                                            content,
+                                        ),
+                                    },
+                                ));
+                            }
                         } else {
                             tx.forward_response(&resp).await?;
                         }
@@ -948,31 +954,76 @@ async fn handle_meili_tools(
     Ok(())
 }
 
-/// The structure used to aggregate the function calls to make.
+/// The function OpenAI models sometimes call to request several tool calls at once.
+///
+/// Instead of one `tool_calls` entry per call, the model emits a single call to this
+/// function whose arguments wrap the real calls:
+/// `{"tool_uses": [{"recipient_name": "functions.<name>", "parameters": {...}}, ...]}`.
+/// <https://community.openai.com/t/model-tries-to-call-unknown-function-multi-tool-use-parallel/490653>
+const OPENAI_PARALLEL_TOOL_USE_FUNCTION_NAME: &str = "multi_tool_use.parallel";
+
+/// A function call aggregated from the streamed chunks.
 #[derive(Debug)]
-enum Call {
-    /// Tool calls to tools that must be managed by Meilisearch internally.
-    /// Typically the search functions.
-    Internal { id: String, function_name: String, arguments: String },
-    /// Tool calls that we track but only to know that its not our functions.
-    /// We return the function calls as-is to the end-user.
-    External,
+struct Call {
+    id: String,
+    function_name: String,
+    arguments: String,
 }
 
 impl Call {
-    fn is_internal(&self) -> bool {
-        matches!(self, Call::Internal { .. })
+    fn append(&mut self, more: &str) {
+        self.arguments.push_str(more)
     }
 
-    /// # Panics
+    /// Turns the aggregated call into the tool calls to process.
     ///
-    /// - if called on external calls
-    fn append(&mut self, more: &str) {
-        match self {
-            Call::Internal { arguments, .. } => arguments.push_str(more),
-            Call::External => panic!("Cannot append argument chunks to an external function"),
+    /// A `multi_tool_use.parallel` call is unwrapped into one tool call per `tool_uses`
+    /// entry, so that every search it wraps runs and gets its own result. The entries
+    /// keep the original call id with their position as a suffix.
+    fn into_tool_calls(self) -> Vec<ChatCompletionMessageToolCall> {
+        let Call { id, function_name, arguments } = self;
+        if function_name == OPENAI_PARALLEL_TOOL_USE_FUNCTION_NAME {
+            match serde_json::from_str::<ParallelToolUse>(&arguments) {
+                Ok(ParallelToolUse { tool_uses }) => {
+                    return tool_uses
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, ToolUse { recipient_name, parameters })| {
+                            let name = recipient_name
+                                .strip_prefix("functions.")
+                                .unwrap_or(&recipient_name);
+                            tool_call(format!("{id}_{i}"), name.to_string(), parameters.to_string())
+                        })
+                        .collect();
+                }
+                Err(error) => tracing::warn!(
+                    "Cannot unwrap the {OPENAI_PARALLEL_TOOL_USE_FUNCTION_NAME} call: {error}"
+                ),
+            }
         }
+        vec![tool_call(id, function_name, arguments)]
     }
+}
+
+fn tool_call(id: String, name: String, arguments: String) -> ChatCompletionMessageToolCall {
+    ChatCompletionMessageToolCall {
+        id,
+        r#type: Some(ChatCompletionToolType::Function),
+        function: FunctionCall { name, arguments },
+    }
+}
+
+/// The arguments of a `multi_tool_use.parallel` call.
+#[derive(Deserialize)]
+struct ParallelToolUse {
+    tool_uses: Vec<ToolUse>,
+}
+
+#[derive(Deserialize)]
+struct ToolUse {
+    recipient_name: String,
+    #[serde(default)]
+    parameters: Value,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1055,4 +1106,72 @@ fn format_facet_distributions(
     }
 
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn call(function_name: &str, arguments: &str) -> Call {
+        Call {
+            id: "call_1".into(),
+            function_name: function_name.into(),
+            arguments: arguments.into(),
+        }
+    }
+
+    fn summary(calls: &[ChatCompletionMessageToolCall]) -> Vec<(&str, &str, &str)> {
+        calls
+            .iter()
+            .map(|call| {
+                (call.id.as_str(), call.function.name.as_str(), call.function.arguments.as_str())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn search_call_is_kept_as_is() {
+        let calls =
+            call(MEILI_SEARCH_IN_INDEX_FUNCTION_NAME, r#"{"index_uid":"pages"}"#).into_tool_calls();
+        assert_eq!(
+            summary(&calls),
+            vec![("call_1", MEILI_SEARCH_IN_INDEX_FUNCTION_NAME, r#"{"index_uid":"pages"}"#)]
+        );
+    }
+
+    #[test]
+    fn parallel_tool_use_is_unwrapped_into_one_call_per_entry() {
+        let arguments = r#"{"tool_uses":[
+            {"recipient_name":"functions._meiliSearchInIndex","parameters":{"index_uid":"pages","q":"a","filter":""}},
+            {"recipient_name":"_meiliSearchInIndex","parameters":{"index_uid":"pages","q":"","filter":"id = 2"}},
+            {"recipient_name":"functions.fetch_weather","parameters":{"city":"Paris"}}
+        ]}"#;
+        let calls = call(OPENAI_PARALLEL_TOOL_USE_FUNCTION_NAME, arguments).into_tool_calls();
+        assert_eq!(
+            summary(&calls),
+            vec![
+                (
+                    "call_1_0",
+                    MEILI_SEARCH_IN_INDEX_FUNCTION_NAME,
+                    r#"{"index_uid":"pages","q":"a","filter":""}"#
+                ),
+                (
+                    "call_1_1",
+                    MEILI_SEARCH_IN_INDEX_FUNCTION_NAME,
+                    r#"{"index_uid":"pages","q":"","filter":"id = 2"}"#
+                ),
+                ("call_1_2", "fetch_weather", r#"{"city":"Paris"}"#),
+            ]
+        );
+    }
+
+    #[test]
+    fn malformed_parallel_tool_use_is_kept_as_is() {
+        let calls = call(OPENAI_PARALLEL_TOOL_USE_FUNCTION_NAME, r#"{"tool_uses":"nope"}"#)
+            .into_tool_calls();
+        assert_eq!(
+            summary(&calls),
+            vec![("call_1", OPENAI_PARALLEL_TOOL_USE_FUNCTION_NAME, r#"{"tool_uses":"nope"}"#)]
+        );
+    }
 }
