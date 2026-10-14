@@ -61,7 +61,7 @@ impl Display for OrderBy {
         match self {
             OrderBy::Lexicographic => f.write_str("alphabetically"),
             OrderBy::Count => f.write_str("by count"),
-            OrderBy::CountSampled => f.write_str("by count sampled"),
+            OrderBy::CountSampled => f.write_str("sampled by count"),
         }
     }
 }
