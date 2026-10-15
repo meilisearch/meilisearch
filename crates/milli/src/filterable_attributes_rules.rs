@@ -10,11 +10,24 @@ use crate::attribute_patterns::{
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::AttributePatterns;
 
+/// A rule declaring which attributes can be used for filtering and faceting.
+///
+/// A rule takes one of two forms. The object form lists attribute patterns
+/// together with the filtering and faceting features they enable. The string
+/// form names a single attribute and is a shorthand for an object matching that
+/// attribute with the default features.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 #[serde(untagged)]
 pub enum FilterableAttributesRule {
-    Field(String),
+    // `Pattern` is declared before `Field` so the generated OpenAPI `oneOf`
+    // lists the object variant first: the API reference renderer only expands
+    // the first variant, and the object is the one carrying structure.
+    //
+    // Deserialization does not depend on this order. The manual `Deserr` impl
+    // below dispatches on the value kind, and the two serde shapes (map and
+    // string) are disjoint, so `untagged` cannot mismatch them either.
     Pattern(FilterableAttributesPatterns),
+    Field(String),
 }
 
 // deserr hard to implement here
