@@ -1662,7 +1662,6 @@ async fn legacy_embedding_model() {
 }
 
 // test with a server that responds 500 on 3 out of 4 calls
-#[cfg_attr(target_os = "windows", ignore)] // flaky on windows
 #[actix_rt::test]
 async fn it_still_works() {
     let (_mock, setting) = create_fallible_mock().await;
@@ -1674,6 +1673,7 @@ async fn it_still_works() {
           "embedders": {
               "default": setting,
           },
+          "searchCutoffMs": 90000, // 90 seconds
         }))
         .await;
     snapshot!(code, @"202 Accepted");

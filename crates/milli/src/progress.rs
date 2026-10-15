@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::borrow::Cow;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -10,6 +10,9 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Serialize;
 use utoipa::ToSchema;
+
+use crate::vector::embedder::EMBEDDER_ERROR_RATE_THRESHOLD;
+use crate::vector::error::{EmbedError, EmbedErrorKind};
 
 pub trait Step: 'static + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
@@ -36,10 +39,41 @@ pub struct Progress {
     verbosity_mode: ProgressVerbosityMode,
 }
 
-#[derive(Default)]
 pub struct EmbedderStats {
     pub errors: Arc<RwLock<(Option<String>, u32)>>,
     pub total_count: AtomicUsize,
+    pub rate_limit_count: AtomicUsize,
+    pub give_up: AtomicBool,
+}
+
+impl Default for EmbedderStats {
+    fn default() -> Self {
+        Self {
+            errors: Arc::new(RwLock::new((None, 0))),
+            total_count: AtomicUsize::new(0),
+            rate_limit_count: AtomicUsize::new(0),
+            give_up: AtomicBool::new(false),
+        }
+    }
+}
+
+impl EmbedderStats {
+    pub fn register_error(&self, error: &EmbedError) {
+        let mut errors = self.errors.write().unwrap_or_else(|p| p.into_inner());
+        errors.0 = Some(error.to_string());
+        errors.1 += 1;
+
+        if let EmbedErrorKind::RestTooManyRequests(_) = error.kind {
+            self.rate_limit_count.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn error_rate_threshold_reached(&self) -> bool {
+        let total_count = self.total_count.load(Ordering::Relaxed);
+        let rate_limit_count = self.rate_limit_count.load(Ordering::Relaxed);
+
+        error_rate_threshold_reached(rate_limit_count as f32, total_count as f32)
+    }
 }
 
 impl std::fmt::Debug for EmbedderStats {
@@ -53,6 +87,26 @@ impl std::fmt::Debug for EmbedderStats {
             .field("error_count", &count)
             .finish()
     }
+}
+
+/// Check if the error rate threshold is reached.
+///
+/// The error rate threshold is modulated using a confidence interval.
+/// For example, with an error rate threshold of 0.05, the error per request will be:
+/// | Number of requests made | Acceptable error rate       |
+/// |-------------------------|-----------------------------|
+/// | 1                       | 1.00                        |
+/// | 5                       | 0.50                        |
+/// | 10                      | 0.35                        |
+/// | 100                     | 0.15                        |
+/// | 1000                    | 0.08                        |
+/// | 10000                   | 0.06                        |
+///
+fn error_rate_threshold_reached(error_count: f32, total_count: f32) -> bool {
+    let error_rate = error_count / total_count;
+    let confidence_interval = 1.0 / total_count.sqrt();
+
+    error_rate >= *EMBEDDER_ERROR_RATE_THRESHOLD + confidence_interval
 }
 
 #[derive(Default)]

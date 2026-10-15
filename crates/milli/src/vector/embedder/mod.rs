@@ -6,7 +6,7 @@ pub mod openai;
 pub mod rest;
 
 use std::num::NonZeroUsize;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
 use composite::SubEmbedderOptions;
@@ -15,7 +15,10 @@ use crate::progress::EmbedderStats;
 use crate::prompt::PromptData;
 use crate::vector::error::{EmbedError, NewEmbedderError};
 use crate::vector::{DistributionShift, Embedding};
-use crate::ThreadPoolNoAbort;
+use crate::{fetch_from_env_or, ThreadPoolNoAbort};
+
+pub static EMBEDDER_ERROR_RATE_THRESHOLD: LazyLock<f32> =
+    LazyLock::new(|| fetch_from_env_or("MEILI_EXPERIMENTAL_EMBEDDER_ERROR_RATE_THRESHOLD", 0.20));
 
 /// An embedder can be used to transform text into embeddings.
 #[derive(Debug)]

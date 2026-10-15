@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use deserr::Deserr;
@@ -6,6 +7,7 @@ use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use ureq::http::{HeaderMap, HeaderValue};
 
 use super::EmbeddingCache;
 use crate::error::FaultSource;
@@ -34,10 +36,34 @@ pub enum RetryStrategy {
     GiveUp,
     Retry,
     RetryTokenized,
-    RetryAfterRateLimit,
+    RetryAfterMs(u64),
 }
 
 impl Retry {
+    fn retry_after_or_default(
+        headers: &HeaderMap<HeaderValue>,
+        error: EmbedError,
+        default: RetryStrategy,
+    ) -> Self {
+        let retry_after = headers.get("Retry-After").and_then(|value| value.to_str().ok());
+
+        // If no Retry-After header, use the default
+        let Some(retry_after) = retry_after else {
+            return Self { error, strategy: default };
+        };
+
+        // Retry-After seconds
+        if let Ok(retry_after_secs) = retry_after.parse::<u64>() {
+            let retry_after_ms = retry_after_secs * 1000;
+            return Self { error, strategy: RetryStrategy::RetryAfterMs(retry_after_ms) };
+        }
+
+        // TODO: Retry-After date
+        // We don't support this yet, but it is a valid format
+
+        Self { error, strategy: default }
+    }
+
     pub fn give_up(error: EmbedError) -> Self {
         Self { error, strategy: RetryStrategy::GiveUp }
     }
@@ -50,8 +76,13 @@ impl Retry {
         Self { error, strategy: RetryStrategy::RetryTokenized }
     }
 
-    pub fn rate_limited(error: EmbedError) -> Self {
-        Self { error, strategy: RetryStrategy::RetryAfterRateLimit }
+    pub fn rate_limited(headers: &HeaderMap<HeaderValue>, error: EmbedError) -> Self {
+        // default: retry after 100ms
+        Self::retry_after_or_default(headers, error, RetryStrategy::RetryAfterMs(100))
+    }
+
+    pub fn server_error(headers: &HeaderMap<HeaderValue>, error: EmbedError) -> Self {
+        Self::retry_after_or_default(headers, error, RetryStrategy::Retry)
     }
 
     pub fn into_duration(self, attempt: u32) -> Result<std::time::Duration, EmbedError> {
@@ -59,8 +90,8 @@ impl Retry {
             RetryStrategy::GiveUp => Err(self.error),
             RetryStrategy::Retry => Ok(std::time::Duration::from_millis((10u64).pow(attempt))),
             RetryStrategy::RetryTokenized => Ok(std::time::Duration::from_millis(1)),
-            RetryStrategy::RetryAfterRateLimit => {
-                Ok(std::time::Duration::from_millis(100 + 10u64.pow(attempt)))
+            RetryStrategy::RetryAfterMs(duration) => {
+                Ok(std::time::Duration::from_millis(duration + 10u64.pow(attempt)))
             }
         }
     }
@@ -316,6 +347,10 @@ impl Embedder {
         threads: &ThreadPoolNoAbort,
         embedder_stats: &EmbedderStats,
     ) -> Result<Vec<Embedding>, EmbedError> {
+        if embedder_stats.give_up.load(Ordering::Relaxed) {
+            return Err(EmbedError::rest_give_up());
+        }
+
         // This condition helps reduce the number of active rayon jobs
         // so that we avoid consuming all the LMDB rtxns and avoid stack overflows.
         if threads.active_operations() >= REQUEST_PARALLELISM {
@@ -466,6 +501,9 @@ where
 
     for attempt in 0..10 {
         if let Some(embedder_stats) = &embedder_stats {
+            if embedder_stats.give_up.load(Ordering::Relaxed) {
+                return Err(EmbedError::rest_give_up());
+            }
             embedder_stats.total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         let response = request_builder().send_json(&body);
@@ -478,11 +516,12 @@ where
             Err(retry) => {
                 tracing::warn!("Failed: {}", retry.error);
                 if let Some(embedder_stats) = &embedder_stats {
-                    let stringified_error = retry.error.to_string();
-                    let mut errors =
-                        embedder_stats.errors.write().unwrap_or_else(|p| p.into_inner());
-                    errors.0 = Some(stringified_error);
-                    errors.1 += 1;
+                    embedder_stats.register_error(&retry.error);
+                    if embedder_stats.error_rate_threshold_reached() {
+                        tracing::warn!("Error rate threshold reached, stopping retries");
+                        embedder_stats.give_up.store(true, Ordering::Relaxed);
+                        return Err(retry.into_error());
+                    }
                 }
                 if let Some(deadline) = deadline {
                     let now = std::time::Instant::now();
@@ -519,12 +558,10 @@ where
     match result {
         Ok(response) => Ok(response),
         Err(retry) => {
-            if let Some(embedder_stats) = &embedder_stats {
-                let stringified_error = retry.error.to_string();
-                let mut errors = embedder_stats.errors.write().unwrap_or_else(|p| p.into_inner());
-                errors.0 = Some(stringified_error);
-                errors.1 += 1;
-            };
+            if let Some(embedder_stats) = embedder_stats {
+                embedder_stats.register_error(&retry.error);
+                embedder_stats.give_up.store(true, Ordering::Relaxed);
+            }
             Err(retry.into_error())
         }
     }
@@ -540,21 +577,25 @@ fn check_response(
             if !status.is_success() {
                 let error_response: Option<String> = response.body_mut().read_to_string().ok();
                 let code = status.as_u16();
+                let headers = response.headers();
 
                 return Err(match code {
                     401 => Retry::give_up(EmbedError::rest_unauthorized(
                         error_response,
                         configuration_source,
                     )),
-                    429 => Retry::rate_limited(EmbedError::rest_too_many_requests(error_response)),
+                    429 => Retry::rate_limited(
+                        headers,
+                        EmbedError::rest_too_many_requests(error_response),
+                    ),
                     400 => Retry::give_up(EmbedError::rest_bad_request(
                         error_response,
                         configuration_source,
                     )),
-                    500..=599 => Retry::retry_later(EmbedError::rest_internal_server_error(
-                        code,
-                        error_response,
-                    )),
+                    500..=599 => Retry::server_error(
+                        headers,
+                        EmbedError::rest_internal_server_error(code, error_response),
+                    ),
                     402..=499 => {
                         Retry::give_up(EmbedError::rest_other_status_code(code, error_response))
                     }
