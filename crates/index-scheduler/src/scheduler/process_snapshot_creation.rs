@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::fs;
 use std::sync::atomic::Ordering;
 
@@ -214,11 +213,21 @@ impl IndexScheduler {
 
         // 5. Copy and tarball the flat snapshot
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);
+
         // 5.1 Find the original name of the database
-        // TODO find a better way to get this path
-        let mut base_path = self.env.path().to_owned();
-        base_path.pop();
-        let db_name = base_path.file_name().and_then(OsStr::to_str).unwrap_or("data.ms");
+        let db_name = self
+            .env
+            .path()
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    path = ?self.env.path(),
+                    "Failed to extract database name from environment path, using default 'data.ms'"
+                );
+                "data.ms"
+            });
 
         // 5.2 Tarball the content of the snapshot in a tempfile with a .snapshot extension
         let snapshot_path = self.scheduler.snapshots_path.join(format!("{}.snapshot", db_name));
