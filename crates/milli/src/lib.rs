@@ -445,7 +445,11 @@ pub fn normalize_facet(original: &str) -> String {
 }
 
 /// Retrieve the content of an env variable or use a default value if not present.
-/// If the environment variable is set but is not parseable as the type, the function will panic.
+///
+/// # Panics
+///
+/// - If the value cannot be parsed as the type.
+/// - If the value is not a valid Unicode string.
 pub fn fetch_from_env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
     match std::env::var(key) {
         Ok(value) => value.parse().unwrap_or_else(|_| {
@@ -456,7 +460,7 @@ pub fn fetch_from_env_or<T: std::str::FromStr>(key: &str, default: T) -> T {
         }),
         Err(std::env::VarError::NotPresent) => default,
         Err(std::env::VarError::NotUnicode(_)) => {
-            panic!("`{key}` environment variable is not a valid UTF-8 string")
+            panic!("`{key}` environment variable is not a valid Unicode string")
         }
     }
 }
