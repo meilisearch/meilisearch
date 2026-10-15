@@ -1775,8 +1775,8 @@ async fn it_still_works() {
 
     let (response, code) = index
         .search_post(json!({
-            "hybrid": {"semanticRatio": 1.0, "embedder": "default", "showRankingScoreDetails": true},
-            "q": "chien de chasse"
+            "q": "chien de chasse",
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}, "showRankingScoreDetails": true
         }))
         .await;
     snapshot!(code, @"200 OK");
