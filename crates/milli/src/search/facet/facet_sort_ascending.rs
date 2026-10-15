@@ -31,7 +31,7 @@ use crate::heed_codec::BytesRefCodec;
 /// Note that once a document id is returned by the iterator, it is never returned again.
 pub fn ascending_facet_sort<'t>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: RoaringBitmap,
 ) -> Result<impl Iterator<Item = Result<(RoaringBitmap, &'t [u8])>> + 't> {
@@ -53,7 +53,7 @@ pub fn ascending_facet_sort<'t>(
 
 struct AscendingFacetSort<'t, 'e> {
     rtxn: &'t heed::RoTxn<'e>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     #[allow(clippy::type_complexity)]
     stack: Vec<(

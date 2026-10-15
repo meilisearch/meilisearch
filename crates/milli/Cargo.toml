@@ -19,7 +19,8 @@ bstr = "1.13.1"
 bytemuck = { version = "1.25.2", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.10.0", default-features = false }
-cellulite = { version = "0.3.2", git = "https://github.com/meilisearch/cellulite", branch = "mutexify-open-dbi"}
+# cellulite = { version = "0.3.2", git = "https://github.com/meilisearch/cellulite", branch = "mutexify-open-dbi"}
+cellulite = { version = "0.4.0", path = "../../../cellulite" }
 concat-arrays = "0.1.2"
 convert_case = "0.9.0"
 crossbeam-channel = "0.5.16"
@@ -90,8 +91,8 @@ rhai = { version = "1.25.1", features = [
     "no_time",
     "sync",
 ] }
-arroy = "0.8.0"
-hannoy = { version = "0.2.0", features = ["arroy"] }
+arroy = { path = "../../../arroy" }
+hannoy = { path = "../../../hannoy", version = "0.2.0", features = ["arroy"] }
 rand = "0.10.2"
 tracing = "0.1.44"
 url = "2.5.8"

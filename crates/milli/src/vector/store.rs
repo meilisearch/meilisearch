@@ -53,7 +53,7 @@ pub enum VectorStoreBackend {
 
 pub struct VectorStore {
     backend: VectorStoreBackend,
-    database: hannoy::Database<Unspecified>,
+    database: hannoy::Database<'static, Unspecified>,
     embedder_index: u8,
     quantized: bool,
 }
@@ -63,7 +63,7 @@ impl VectorStore {
 
     pub fn new(
         backend: VectorStoreBackend,
-        database: hannoy::Database<Unspecified>,
+        database: hannoy::Database<'static, Unspecified>,
         embedder_index: u8,
         quantized: bool,
     ) -> Self {
@@ -759,7 +759,7 @@ impl VectorStore {
     fn _arroy_readers<'a, D: arroy::Distance>(
         &'a self,
         rtxn: &'a RoTxn<'a>,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
     ) -> impl Iterator<Item = Result<arroy::Reader<'a, D>, arroy::Error>> + 'a {
         vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
             match arroy::Reader::open(rtxn, index, db) {
@@ -777,7 +777,7 @@ impl VectorStore {
     fn _hannoy_readers<'a, D: hannoy::Distance>(
         &'a self,
         rtxn: &'a RoTxn<'a>,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
     ) -> impl Iterator<Item = Result<hannoy::Reader<D>, hannoy::Error>> + 'a {
         vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
             match hannoy::Reader::open(rtxn, index, db) {
@@ -795,7 +795,7 @@ impl VectorStore {
     fn _arroy_items_in_store<D: arroy::Distance, F, O>(
         &self,
         rtxn: &RoTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         store_id: u8,
         with_items: F,
     ) -> Result<O, arroy::Error>
@@ -814,7 +814,7 @@ impl VectorStore {
     fn _hannoy_items_in_store<D: hannoy::Distance, F, O>(
         &self,
         rtxn: &RoTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         store_id: u8,
         with_items: F,
     ) -> Result<O, hannoy::Error>
@@ -833,7 +833,7 @@ impl VectorStore {
     fn _arroy_add_item<D: arroy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         item_id: arroy::ItemId,
         vector: &[f32],
     ) -> Result<(), arroy::Error> {
@@ -852,7 +852,7 @@ impl VectorStore {
     fn _hannoy_add_item<D: hannoy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         item_id: hannoy::ItemId,
         vector: &[f32],
     ) -> Result<(), hannoy::Error> {
@@ -871,7 +871,7 @@ impl VectorStore {
     fn _arroy_add_item_in_store<D: arroy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         item_id: arroy::ItemId,
         store_id: u8,
         vector: &[f32],
@@ -886,7 +886,7 @@ impl VectorStore {
     fn _hannoy_add_item_in_store<D: hannoy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         item_id: hannoy::ItemId,
         store_id: u8,
         vector: &[f32],
@@ -901,7 +901,7 @@ impl VectorStore {
     fn _arroy_del_item_in_store<D: arroy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         item_id: arroy::ItemId,
         store_id: u8,
         dimensions: usize,
@@ -914,7 +914,7 @@ impl VectorStore {
     fn _hannoy_del_item_in_store<D: hannoy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         item_id: hannoy::ItemId,
         store_id: u8,
         dimensions: usize,
@@ -927,7 +927,7 @@ impl VectorStore {
     fn _arroy_clear_store<D: arroy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         store_id: u8,
         dimensions: usize,
     ) -> Result<(), arroy::Error> {
@@ -939,7 +939,7 @@ impl VectorStore {
     fn _hannoy_clear_store<D: hannoy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         store_id: u8,
         dimensions: usize,
     ) -> Result<(), hannoy::Error> {
@@ -951,7 +951,7 @@ impl VectorStore {
     fn _arroy_del_item<D: arroy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         item_id: arroy::ItemId,
         vector: &[f32],
     ) -> Result<bool, arroy::Error> {
@@ -969,7 +969,7 @@ impl VectorStore {
     fn _hannoy_del_item<D: hannoy::Distance>(
         &self,
         wtxn: &mut RwTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         item_id: hannoy::ItemId,
         vector: &[f32],
     ) -> Result<bool, hannoy::Error> {
@@ -987,7 +987,7 @@ impl VectorStore {
     fn _arroy_nns_by_item<D: arroy::Distance>(
         &self,
         rtxn: &RoTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         item: ItemId,
         limit: usize,
         filter: Option<&RoaringBitmap>,
@@ -1015,7 +1015,7 @@ impl VectorStore {
     fn _hannoy_nns_by_item<D: hannoy::Distance>(
         &self,
         rtxn: &RoTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         item: ItemId,
         limit: usize,
         filter: Option<&RoaringBitmap>,
@@ -1043,7 +1043,7 @@ impl VectorStore {
     fn _arroy_nns_by_vector<D: arroy::Distance>(
         &self,
         rtxn: &RoTxn,
-        db: arroy::Database<D>,
+        db: arroy::Database<'static, D>,
         vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
@@ -1071,7 +1071,7 @@ impl VectorStore {
     fn _hannoy_nns_by_vector<D: hannoy::Distance>(
         &self,
         rtxn: &RoTxn,
-        db: hannoy::Database<D>,
+        db: hannoy::Database<'static, D>,
         vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
@@ -1099,19 +1099,21 @@ impl VectorStore {
         Ok(results)
     }
 
-    fn _arroy_angular_db(&self) -> arroy::Database<arroy::distances::Cosine> {
+    fn _arroy_angular_db(&self) -> arroy::Database<'static, arroy::distances::Cosine> {
         self.database.remap_types()
     }
 
-    fn _arroy_quantized_db(&self) -> arroy::Database<arroy::distances::BinaryQuantizedCosine> {
+    fn _arroy_quantized_db(
+        &self,
+    ) -> arroy::Database<'static, arroy::distances::BinaryQuantizedCosine> {
         self.database.remap_types()
     }
 
-    fn _hannoy_angular_db(&self) -> hannoy::Database<Cosine> {
+    fn _hannoy_angular_db(&self) -> hannoy::Database<'static, Cosine> {
         self.database.remap_data_type()
     }
 
-    fn _hannoy_quantized_db(&self) -> hannoy::Database<Hamming> {
+    fn _hannoy_quantized_db(&self) -> hannoy::Database<'static, Hamming> {
         self.database.remap_data_type()
     }
 
@@ -1344,7 +1346,7 @@ pub enum QuantizationStatus {
 
 fn clear_arroy_store(
     wtxn: &mut RwTxn<'_>,
-    database: arroy::Database<Unspecified>,
+    database: arroy::Database<'static, Unspecified>,
     index: u16,
 ) -> arroy::Result<()> {
     use arroy::distances::Cosine;
@@ -1356,7 +1358,7 @@ fn clear_arroy_store(
 
 fn clear_hannoy_store(
     wtxn: &mut RwTxn<'_>,
-    database: hannoy::Database<Unspecified>,
+    database: hannoy::Database<'static, Unspecified>,
     index: u16,
 ) -> hannoy::Result<()> {
     use hannoy::distances::Cosine;

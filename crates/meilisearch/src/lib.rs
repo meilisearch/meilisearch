@@ -42,6 +42,7 @@ use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
+use meilisearch_types::heed::CommitOrAbort;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
@@ -553,10 +554,13 @@ pub fn update_version_file_for_dumpless_upgrade(
                 .map_size(index_scheduler_opt.task_db_size)
                 .open(&index_scheduler_opt.tasks_path)
         }?;
-        let mut wtxn = env.unique_write_txn()?;
-        let versioning = Versioning::raw_new(&env, &mut wtxn)?;
-        versioning.set_version(&mut wtxn, (from_major, from_minor, from_patch))?;
-        wtxn.commit()?;
+        let wtxn = env.write_txn()?;
+        env.create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_, VersionFileError> {
+            let versioning = Versioning::raw_new(dbo, wtxn)?;
+            versioning.set_version(wtxn, (from_major, from_minor, from_patch))?;
+            Ok(CommitOrAbort::<_, ()>::Commit(()))
+        })?
+        .unwrap_commit();
         // Should be instant since we're the only one using the env
         env.prepare_for_closing().wait();
     }

@@ -65,4 +65,4 @@ opt-level = 3
 opt-level = 3
 
 [patch.crates-io]
-heed = { git = "https://github.com/meilisearch/heed", branch = "mutexify-open-dbi", version = "0.22.1"  }
+heed = { git = "https://github.com/meilisearch/heed", branch = "better-db-opening", version = "0.22.1" }

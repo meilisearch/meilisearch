@@ -13,8 +13,8 @@ use crate::{CboRoaringBitmapCodec, Result};
 
 pub struct WordPrefixDocids<'t, 'i> {
     wtxn: &'t mut heed::RwTxn<'i>,
-    word_docids: Database<Str, CboRoaringBitmapCodec>,
-    word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    word_docids: Database<'static, Str, CboRoaringBitmapCodec>,
+    word_prefix_docids: Database<'static, Str, CboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) max_nb_chunks: Option<usize>,
@@ -24,8 +24,8 @@ pub struct WordPrefixDocids<'t, 'i> {
 impl<'t, 'i> WordPrefixDocids<'t, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i>,
-        word_docids: Database<Str, CboRoaringBitmapCodec>,
-        word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+        word_docids: Database<'static, Str, CboRoaringBitmapCodec>,
+        word_prefix_docids: Database<'static, Str, CboRoaringBitmapCodec>,
     ) -> WordPrefixDocids<'t, 'i> {
         WordPrefixDocids {
             wtxn,
