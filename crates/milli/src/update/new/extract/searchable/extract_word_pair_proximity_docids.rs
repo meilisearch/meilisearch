@@ -156,6 +156,7 @@ impl WordPairProximityDocidsExtractor {
                     &mut |field_name| {
                         new_fields_ids_map
                             .id_with_metadata_or_insert(field_name)
+                            .map(Some)
                             .ok_or(UserError::AttributeLimitReached.into())
                     },
                     &mut |(w1, w2), prox| {
@@ -183,6 +184,7 @@ impl WordPairProximityDocidsExtractor {
                     &mut |field_name| {
                         new_fields_ids_map
                             .id_with_metadata_or_insert(field_name)
+                            .map(Some)
                             .ok_or(UserError::AttributeLimitReached.into())
                     },
                     &mut |(w1, w2), prox| {
@@ -197,6 +199,7 @@ impl WordPairProximityDocidsExtractor {
                     &mut |field_name| {
                         new_fields_ids_map
                             .id_with_metadata_or_insert(field_name)
+                            .map(Some)
                             .ok_or(UserError::AttributeLimitReached.into())
                     },
                     &mut |(w1, w2), prox| {
@@ -213,6 +216,7 @@ impl WordPairProximityDocidsExtractor {
                     &mut |field_name| {
                         new_fields_ids_map
                             .id_with_metadata_or_insert(field_name)
+                            .map(Some)
                             .ok_or(UserError::AttributeLimitReached.into())
                     },
                     &mut |(w1, w2), prox| {
@@ -385,9 +389,7 @@ impl WordPairProximityDocidsExtractor {
                         &mut |field_name| {
                             let fid = match new_fields_ids_map.id(field_name) {
                                 Some(field_id) => field_id,
-                                None => {
-                                    panic!("Expected field `{field_name}` in the fields IDs map")
-                                }
+                                None => return Ok((0, PatternMatch::NoMatch)),
                             };
 
                             // If the document must be reindexed, early return NoMatch to stop the scanning process.
@@ -395,8 +397,12 @@ impl WordPairProximityDocidsExtractor {
                                 return Ok((fid, PatternMatch::NoMatch));
                             }
 
-                            let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
-                            let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+                            let Some(old_field_metadata) = old_fields_ids_map.metadata(fid) else {
+                                return Ok((fid, PatternMatch::NoMatch));
+                            };
+                            let Some(new_field_metadata) = new_fields_ids_map.metadata(fid) else {
+                                return Ok((fid, PatternMatch::NoMatch));
+                            };
 
                             action = match (old_field_metadata, new_field_metadata) {
                                 // At least one field is removed or added from the searchable fields
@@ -445,10 +451,7 @@ impl WordPairProximityDocidsExtractor {
             current_document,
             &old_document_tokenizer,
             &mut word_positions,
-            &mut |field_name| match old_fields_ids_map.id_with_metadata(field_name) {
-                Some(field_id) => Ok(field_id),
-                None => panic!("Expected field `{field_name}` in the fields IDs map"),
-            },
+            &mut |field_name| Ok(old_fields_ids_map.id_with_metadata(field_name)),
             &mut |(w1, w2), prox| {
                 del_word_pair_proximity.push(((w1, w2), prox));
             },
@@ -458,10 +461,7 @@ impl WordPairProximityDocidsExtractor {
             current_document,
             &new_document_tokenizer,
             &mut word_positions,
-            &mut |field_name| match new_fields_ids_map.id_with_metadata(field_name) {
-                Some(field_id) => Ok(field_id),
-                None => panic!("Expected field `{field_name}` in the fields IDs map"),
-            },
+            &mut |field_name| Ok(new_fields_ids_map.id_with_metadata(field_name)),
             &mut |(w1, w2), prox| {
                 add_word_pair_proximity.push(((w1, w2), prox));
             },
@@ -527,7 +527,7 @@ fn process_document_tokens<'doc>(
     document: impl Document<'doc>,
     document_tokenizer: &DocumentTokenizer,
     word_positions: &mut VecDeque<(Rc<str>, u16)>,
-    field_id_and_metadata: &mut impl FnMut(&str) -> Result<(FieldId, Metadata)>,
+    field_id_and_metadata: &mut impl FnMut(&str) -> Result<Option<(FieldId, Metadata)>>,
     word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
 ) -> Result<()> {
     let mut field_id = None;
@@ -550,7 +550,9 @@ fn process_document_tokens<'doc>(
     };
 
     let mut should_tokenize = |field_name: &str| {
-        let (field_id, meta) = field_id_and_metadata(field_name)?;
+        let Some((field_id, meta)) = field_id_and_metadata(field_name)? else {
+            return Ok((0, PatternMatch::NoMatch));
+        };
 
         let pattern_match = if meta.is_searchable() == PatternMatch::Match {
             PatternMatch::Match

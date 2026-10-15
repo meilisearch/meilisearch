@@ -1067,3 +1067,38 @@ fn settings_must_ignore_soft_deleted() {
     let docs = docs.unwrap();
     assert_eq!(docs.len(), 5);
 }
+
+#[test]
+fn settings_update_after_document_update_with_nested_object() {
+    let index = TempIndex::new();
+
+    index
+        .update_settings(|settings| {
+            settings.set_searchable_fields(vec!["title".into()]);
+        })
+        .unwrap();
+
+    index
+        .add_documents(documents!([
+            { "id": 1, "title": "hello" }
+        ]))
+        .unwrap();
+
+    index
+        .add_documents(documents!([
+            { "id": 1, "title": "hello", "author": { "nested": "data" } }
+        ]))
+        .unwrap();
+
+    index
+        .update_settings(|settings| {
+            settings.set_filterable_fields(vec![FilterableAttributesRule::Field(S("title"))]);
+        })
+        .unwrap();
+
+    index
+        .update_settings(|settings| {
+            settings.set_searchable_fields(vec!["title".into(), "author.nested".into()]);
+        })
+        .unwrap();
+}
