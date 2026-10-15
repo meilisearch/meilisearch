@@ -1711,7 +1711,7 @@ async fn it_still_works() {
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
         .await;
-    snapshot!(json_string!(documents, {".results.*._vectors.default.embeddings" => "[vector]"}), @r###"
+    snapshot!(json_string!(documents), @r###"
     {
       "results": [
         {
@@ -1776,7 +1776,7 @@ async fn it_still_works() {
     let (response, code) = index
         .search_post(json!({
             "q": "chien de chasse",
-            "hybrid": {"semanticRatio": 1.0, "embedder": "default"}
+            "hybrid": {"semanticRatio": 1.0, "embedder": "default"},
         }))
         .await;
     snapshot!(code, @"200 OK");
