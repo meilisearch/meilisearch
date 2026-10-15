@@ -23,6 +23,7 @@ use crate::search::{
     add_search_rules, perform_similar, RankingScoreThresholdSimilar, SimilarQuery, SimilarResult,
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
+use crate::search_queue::SearchQueue;
 
 #[routes::routes(
     routes(""=>[get(similar_get), post(similar_post)]),
@@ -95,6 +96,7 @@ pub struct SimilarApi;
 )]
 pub async fn similar_get(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SimilarQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -108,7 +110,7 @@ pub async fn similar_get(
 
     debug!(parameters = ?query, "Similar get");
 
-    let similar = similar(index_scheduler, index_uid, query).await;
+    let similar = similar(index_scheduler, &search_queue, index_uid, query).await;
 
     if let Ok(similar) = &similar {
         aggregate.succeed(similar);
@@ -176,6 +178,7 @@ pub async fn similar_get(
 )]
 pub async fn similar_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: web::Data<SearchQueue>,
     index_uid: web::Path<String>,
     params: AwebJson<SimilarQuery, DeserrJsonError>,
     req: HttpRequest,
@@ -188,7 +191,7 @@ pub async fn similar_post(
 
     let mut aggregate = SimilarAggregator::<SimilarPOST>::from_query(&query);
 
-    let similar = similar(index_scheduler, index_uid, query).await;
+    let similar = similar(index_scheduler, &search_queue, index_uid, query).await;
 
     if let Ok(similar) = &similar {
         aggregate.succeed(similar);
@@ -203,6 +206,7 @@ pub async fn similar_post(
 
 async fn similar(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
+    search_queue: &SearchQueue,
     index_uid: IndexUid,
     mut query: SimilarQuery,
 ) -> Result<SimilarResult, ResponseError> {
@@ -216,6 +220,8 @@ async fn similar(
     if let Some(search_rules) = search_rules.clone() {
         add_search_rules(&mut query.filter, search_rules);
     }
+
+    let _permit = search_queue.try_get_search_permit(&progress).await?;
 
     let progress_clone = progress.clone();
     let result = tokio::task::spawn_blocking(move || {
@@ -231,6 +237,8 @@ async fn similar(
         )
     })
     .await;
+
+    _permit.drop().await;
 
     debug!(progress = ?progress.accumulated_durations(), "Similar");
 
