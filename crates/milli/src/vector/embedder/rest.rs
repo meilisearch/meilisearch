@@ -82,8 +82,7 @@ impl Retry {
     }
 
     pub fn server_error(headers: &HeaderMap<HeaderValue>, error: EmbedError) -> Self {
-        // default: retry after 1s
-        Self::retry_after_or_default(headers, error, RetryStrategy::RetryAfterMs(1000))
+        Self::retry_after_or_default(headers, error, RetryStrategy::Retry)
     }
 
     pub fn into_duration(self, attempt: u32) -> Result<std::time::Duration, EmbedError> {
