@@ -15,10 +15,10 @@ use crate::progress::EmbedderStats;
 use crate::prompt::PromptData;
 use crate::vector::error::{EmbedError, NewEmbedderError};
 use crate::vector::{DistributionShift, Embedding};
-use crate::{fetch_or_default, ThreadPoolNoAbort};
+use crate::{fetch_from_env_or, ThreadPoolNoAbort};
 
 pub static EMBEDDER_ERROR_RATE_THRESHOLD: LazyLock<f32> =
-    LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_EMBEDDER_ERROR_RATE_THRESHOLD", 0.20));
+    LazyLock::new(|| fetch_from_env_or("MEILI_EXPERIMENTAL_EMBEDDER_ERROR_RATE_THRESHOLD", 0.20));
 
 /// An embedder can be used to transform text into embeddings.
 #[derive(Debug)]
