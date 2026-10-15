@@ -416,7 +416,7 @@ impl FederatedFacets {
                 OrderBy::Lexicographic => {
                     values.sort_unstable_by(|left, _, right, _| left.cmp(right))
                 }
-                OrderBy::Count => {
+                OrderBy::Count | OrderBy::CountSampled => {
                     values.sort_unstable_by(|_, left, _, right| {
                         left.cmp(right)
                             // biggest first
@@ -470,7 +470,7 @@ impl FederatedFacets {
                     OrderBy::Lexicographic => {
                         values.sort_unstable_by(|left, _, right, _| left.cmp(right))
                     }
-                    OrderBy::Count => {
+                    OrderBy::Count | OrderBy::CountSampled => {
                         values.sort_unstable_by(|_, left, _, right| {
                             left.cmp(right)
                                 // biggest first
