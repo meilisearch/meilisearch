@@ -138,6 +138,8 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
+        let limit = self.max_values_per_facet.saturating_sub(distribution.len());
+
         match facet_type {
             FacetType::String => {
                 let mut normalized_distribution = HashMap::new();
@@ -162,8 +164,17 @@ impl<'a> FacetDistribution<'a> {
                     }
                 }
 
-                // TODO if the sample is equal to the candidates just skip the retrieval
-                //      and use the exhaustive sample counts.
+                // If the sample is equal to the candidates just skip
+                // the retrieval and use the exhaustive sample counts.
+                if sample.len() == candidates.len() {
+                    let mut sorted: Vec<_> = normalized_distribution.into_iter().collect();
+                    sorted.sort_unstable_by_key(|(_, count)| Reverse(*count));
+                    for (_normalized_value, (original, count)) in sorted.into_iter().take(limit) {
+                        distribution.insert(original.to_string(), count);
+                    }
+
+                    return Ok(());
+                }
 
                 let mut sorted_normalized_distribution = Vec::new();
                 for (normalized_value, (original, _count)) in normalized_distribution {
@@ -190,7 +201,7 @@ impl<'a> FacetDistribution<'a> {
                 let iter = sorted_normalized_distribution
                     .into_iter()
                     // Note we could avoid fetching too many facet values if we already have enough of them.
-                    .take(self.max_values_per_facet.saturating_sub(distribution.len()))
+                    .take(limit)
                     .map(|(original, count)| (original.to_string(), count));
                 distribution.extend(iter);
             }
@@ -214,8 +225,17 @@ impl<'a> FacetDistribution<'a> {
                     }
                 }
 
-                // TODO if the sample is equal to the candidates just skip the retrieval
-                //      and use the exhaustive sample counts.
+                // If the sample is equal to the candidates just skip
+                // the retrieval and use the exhaustive sample counts.
+                if sample.len() == candidates.len() {
+                    let mut sorted: Vec<_> = normalized_distribution.into_iter().collect();
+                    sorted.sort_unstable_by_key(|(_, count)| Reverse(*count));
+                    for (OrderedFloat(value), count) in sorted.into_iter().take(limit) {
+                        distribution.insert(value.to_string(), count);
+                    }
+
+                    return Ok(());
+                }
 
                 let mut sorted_normalized_distribution = Vec::new();
                 for (OrderedFloat(value), _count) in normalized_distribution {
