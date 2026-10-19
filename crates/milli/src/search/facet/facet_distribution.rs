@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::env::VarError;
 use std::fmt::Display;
 use std::ops::ControlFlow;
-use std::time::Instant;
 use std::{fmt, mem};
 
 use heed::types::Bytes;
@@ -200,7 +199,6 @@ impl<'a> FacetDistribution<'a> {
                 let mut normalized_distribution = HashMap::new();
                 let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
 
-                let before = Instant::now();
                 // We collect the facet numbers from the sample of documents
                 let db = self.index.field_id_docid_facet_f64s;
                 for docid in sample {
@@ -216,12 +214,10 @@ impl<'a> FacetDistribution<'a> {
                         *normalized_distribution.entry(OrderedFloat(value)).or_insert(0) += 1;
                     }
                 }
-                eprintln!("Retrieving the values from the sample took {:?}", before.elapsed());
 
                 // TODO if the sample is equal to the candidates just skip the retrieval
                 //      and use the exhaustive sample counts.
 
-                let before = Instant::now();
                 let mut sorted_normalized_distribution = Vec::new();
                 for (OrderedFloat(value), _count) in normalized_distribution {
                     let key = FacetGroupKey { field_id, level: 0, left_bound: value };
@@ -240,10 +236,6 @@ impl<'a> FacetDistribution<'a> {
                         sorted_normalized_distribution.push((value, count.len()));
                     }
                 }
-                eprintln!(
-                    "Computing the actual intersection of the facets took {:?}",
-                    before.elapsed()
-                );
 
                 // Make sure the values are ordered by count, in descending order.
                 sorted_normalized_distribution.sort_unstable_by_key(|(_, count)| Reverse(*count));
@@ -555,7 +547,6 @@ impl<'a> FacetDistribution<'a> {
                         OrderByWithSample::SampledCount { sample: sample_candidates }
                     }
                     (OrderBy::SampledCount, None) => {
-                        let before = Instant::now();
                         let sample_candidate_count: usize =
                             match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
                                 Ok(count) => count.as_str().parse().unwrap(),
@@ -584,9 +575,6 @@ impl<'a> FacetDistribution<'a> {
                         let sample = RoaringBitmap::from_iter(
                             indexes.into_iter().flat_map(|i| candidates.select(i as u32)),
                         );
-
-                        // TODO remove this ugly log
-                        eprintln!("Computing a sample of candidates took {:?}", before.elapsed());
 
                         OrderByWithSample::SampledCount { sample: sample_candidates.insert(sample) }
                     }
