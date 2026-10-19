@@ -10,7 +10,7 @@
 <h4 align="center">
   <a href="https://www.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">Website</a> |
   <a href="https://roadmap.meilisearch.com/tabs/1-under-consideration">Roadmap</a> |
-  <a href="https://www.meilisearch.com/pricing?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">Meilisearch Cloud</a> |
+  <a href="https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">Meilisearch Cloud</a> |
   <a href="https://blog.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">Blog</a> |
   <a href="https://www.meilisearch.com/docs?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">Documentation</a> |
   <a href="https://www.meilisearch.com/docs/faq?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=nav">FAQ</a> |
@@ -25,7 +25,7 @@
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
-[Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) helps you shape a delightful search experience in a snap, offering features that work out of the box to speed up your workflow.
+[Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) is an open-source search engine for fast, relevant full-text, semantic, and hybrid search, built in Rust. Run it on [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro), the managed service from the team that builds it, or self-host it on your own infrastructure.
 
 <p align="center" name="demo">
   <a href="https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-gif#gh-light-mode-only" target="_blank">
@@ -36,18 +36,58 @@
   </a>
 </p>
 
-## 🖥 Examples
+## ☁️ Ways to run Meilisearch
 
-- [**Media**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search movies and streaming platforms to watch them using [hybrid search](https://www.meilisearch.com/solutions/hybrid-search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos).
-- [**Agentic search**](https://what2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Chat with an AI agent to recommend movies and streaming platforms.
-- [**Flickr**](https://flickr.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search and explore one hundred million Flickr images with semantic search.
-- [**Ecommerce**](https://ecommerce.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Ecommerce website using disjunctive [facets](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos), range and rating filtering, and pagination.
-- [**Home Booking**](https://www.meilisearch.com/docs/resources/demos/home_booking?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) - A conversational search demo for finding holiday rentals using natural language.
-- [**Search Playground**](https://www.meilisearch.com/docs/resources/demos/playground?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — An interactive playground to explore Meilisearch search features.
-- [**Personalization**](https://www.meilisearch.com/docs/resources/demos/personalized_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — A demo showcasing personalized search results tailored to individual users.
-- [**SaaS**](https://saas.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search for contacts, deals, and companies in this [multi-tenant](https://www.meilisearch.com/docs/learn/security/multitenancy_tenant_tokens?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) CRM application.
+| | What you get | Get started |
+| --- | --- | --- |
+| **Meilisearch Cloud** | Managed Meilisearch: no servers to deploy or upgrade, plus monitoring, search analytics, and team management. Available in [9 regions](https://www.meilisearch.com/docs/capabilities/platform/infrastructure/regions?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=ways-to-run) across Europe, the Americas, and Asia-Pacific. 14-day trial. | [Create a project](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=ways-to-run) |
+| **Self-hosted, Community Edition** | The open-source engine under the MIT license, on your own infrastructure. | [Quick start](#-quick-start) |
+| **Self-hosted, Enterprise Edition** | Adds sharding and other advanced features. Requires a commercial agreement for production use. | [Editions & licensing](#-editions--licensing) |
 
-See the list of all our [interactive demos](https://www.meilisearch.com/docs/resources/demos/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos).
+Both options run the same engine and expose the same API, so you can start on one and move to the other. See [migrating to Meilisearch Cloud](https://www.meilisearch.com/docs/resources/migration/migrating_cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=ways-to-run).
+
+## 🚀 Quick start
+
+Launch Meilisearch locally with Docker:
+
+```sh
+docker run -it --rm \
+  -p 7700:7700 \
+  -e MEILI_MASTER_KEY='MASTER_KEY' \
+  -v $(pwd)/meili_data:/meili_data \
+  getmeili/meilisearch:latest
+```
+
+Prefer a binary? Run `curl -L https://install.meilisearch.com | sh`, then `./meilisearch`. More options: [install Meilisearch locally](https://www.meilisearch.com/docs/resources/self_hosting/getting_started/install_locally?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
+
+Add a few documents to a `movies` index:
+
+```sh
+curl -X POST 'http://localhost:7700/indexes/movies/documents' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer MASTER_KEY' \
+  --data-binary '[
+    { "id": 1, "title": "Carol", "genres": ["Romance", "Drama"] },
+    { "id": 2, "title": "Wonder Woman", "genres": ["Action", "Adventure"] },
+    { "id": 3, "title": "Life of Pi", "genres": ["Adventure", "Drama"] }
+  ]'
+```
+
+Then search, typo included:
+
+```sh
+curl -X POST 'http://localhost:7700/indexes/movies/search' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer MASTER_KEY' \
+  --data-binary '{ "q": "wondre woman" }'
+```
+
+Meilisearch returns *Wonder Woman* despite the typo. Indexing is asynchronous, so if the search comes back empty, wait a moment and retry.
+
+> [!TIP]
+> **Using Meilisearch Cloud?** The commands are the same. Replace `http://localhost:7700` with your project URL and `MASTER_KEY` with an API key, both shown on your project's overview page. [Create your first Cloud project](https://www.meilisearch.com/docs/getting_started/first_project?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
+
+Next steps: follow a 5-minute quick start for [JavaScript](https://www.meilisearch.com/docs/getting_started/sdks/javascript?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Python](https://www.meilisearch.com/docs/getting_started/sdks/python?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [PHP](https://www.meilisearch.com/docs/getting_started/sdks/php?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Ruby](https://www.meilisearch.com/docs/getting_started/sdks/ruby?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Go](https://www.meilisearch.com/docs/getting_started/sdks/go?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Rust](https://www.meilisearch.com/docs/getting_started/sdks/rust?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), or [React](https://www.meilisearch.com/docs/getting_started/instant_meilisearch/react?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
 
 ## ✨ Features
 - **Hybrid search:** Combine the best of both [semantic](https://www.meilisearch.com/docs/learn/experimental/vector_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features) & full-text search to get the most relevant results
@@ -67,20 +107,22 @@ See the list of all our [interactive demos](https://www.meilisearch.com/docs/res
 - **[Search rules](https://www.meilisearch.com/docs/capabilities/search_rules/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** define custom rules to dynamically adjust search behavior based on context
 - **[Document relations](https://www.meilisearch.com/docs/capabilities/indexing/how_to/document_relations?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** link documents across indexes to enrich search results with related data
 - **[Replication & sharding](https://www.meilisearch.com/docs/resources/self_hosting/sharding/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** scale horizontally by distributing your data across multiple nodes
-- **AI-ready:** works out of the box with [LangChain](https://www.meilisearch.com/with/LangChain?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features) and the [Model Context Protocol (MCP)](https://www.meilisearch.com/docs/getting_started/integrations/mcp?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features)
-- **Easy to install, deploy, and maintain**
+- **AI-ready:** works out of the box with LangChain and MCP (see [AI & LLM integrations](#-ai--llm-integrations))
+- **Easy to install, deploy, and maintain:** a single binary you can run with Docker, cURL, Homebrew, or APT, or skip the servers entirely with [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features)
 
-## 📖 Documentation
 
-You can consult Meilisearch's documentation at [meilisearch.com/docs](https://www.meilisearch.com/docs/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=docs).
+## 🖥 Examples
 
-## 🚀 Getting started
+- [**Media**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search movies and streaming platforms to watch them using [hybrid search](https://www.meilisearch.com/solutions/hybrid-search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos).
+- [**Agentic search**](https://what2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Chat with an AI agent to recommend movies and streaming platforms.
+- [**Flickr**](https://flickr.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search and explore one hundred million Flickr images with semantic search.
+- [**Ecommerce**](https://ecommerce.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Ecommerce website using disjunctive [facets](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos), range and rating filtering, and pagination.
+- [**Home Booking**](https://www.meilisearch.com/docs/resources/demos/home_booking?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) - A conversational search demo for finding holiday rentals using natural language.
+- [**Search Playground**](https://www.meilisearch.com/docs/resources/demos/playground?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — An interactive playground to explore Meilisearch search features.
+- [**Personalization**](https://www.meilisearch.com/docs/resources/demos/personalized_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — A demo showcasing personalized search results tailored to individual users.
+- [**SaaS**](https://saas.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search for contacts, deals, and companies in this [multi-tenant](https://www.meilisearch.com/docs/learn/security/multitenancy_tenant_tokens?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) CRM application.
 
-For basic instructions on how to set up Meilisearch, add documents to an index, and search for documents, take a look at our [documentation](https://www.meilisearch.com/docs?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=get-started) guide.
-
-## 🌍 Supercharge your Meilisearch experience
-
-Say goodbye to server deployment and manual updates with [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch). Additional features include analytics & monitoring in many regions around the world. No credit card is required.
+See the list of all our [interactive demos](https://www.meilisearch.com/docs/resources/demos/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos).
 
 ## 🧰 SDKs & integration tools
 
@@ -90,7 +132,16 @@ Take a look at the complete [Meilisearch integration list](https://www.meilisear
 
 [![Logos belonging to different languages and frameworks supported by Meilisearch, including React, Ruby on Rails, Go, Rust, and PHP](assets/integrations.png)](https://www.meilisearch.com/docs/learn/what_is_meilisearch/sdks?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=sdks-logos)
 
-## ⚙️ Advanced usage
+## 🤖 AI & LLM integrations
+
+- **[MCP server](https://www.meilisearch.com/docs/getting_started/integrations/mcp?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=ai):** Meilisearch ships a native MCP server at the `/mcp` route (experimental), so AI agents and MCP clients can search your indexes directly. It works the same on Meilisearch Cloud and self-hosted instances.
+- **[LangChain](https://www.meilisearch.com/docs/getting_started/integrations/langchain?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=ai):** use Meilisearch as a LangChain vector store.
+- **[Conversational search](https://www.meilisearch.com/docs/capabilities/conversational_search/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=ai):** answer natural-language questions with responses grounded in your indexed data.
+- **[llms.txt](https://www.meilisearch.com/docs/llms.txt):** a machine-readable index of the Meilisearch documentation for LLMs and coding agents.
+
+## 📖 Documentation
+
+The full documentation is at [meilisearch.com/docs](https://www.meilisearch.com/docs/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=docs).
 
 Experienced users will want to keep our [API Reference](https://www.meilisearch.com/docs/reference/api/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced) close at hand.
 
@@ -98,9 +149,46 @@ We also offer a wide range of dedicated guides to all Meilisearch features, such
 
 Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced).
 
+## ❓ FAQ
+
+<details>
+<summary><b>Is there a managed, hosted version of Meilisearch?</b></summary>
+
+Yes. [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq) is the managed service run by the team that builds Meilisearch. It handles deployment, upgrades, and backups, and adds monitoring, search analytics, and team management. See [Ways to run Meilisearch](#️-ways-to-run-meilisearch).
+
+</details>
+
+<details>
+<summary><b>Should I use Meilisearch Cloud or self-host?</b></summary>
+
+Both run the same engine with the same API. Self-hosting gives you full control over your infrastructure, and you operate it yourself. Meilisearch Cloud removes that operational work and adds platform features like monitoring and analytics. You can move a self-hosted instance to Cloud later: see [migrating to Meilisearch Cloud](https://www.meilisearch.com/docs/resources/migration/migrating_cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq).
+
+</details>
+
+<details>
+<summary><b>Can I host Meilisearch in the EU?</b></summary>
+
+Yes. You can self-host anywhere. Meilisearch Cloud offers EU regions in Frankfurt and Paris, and Paris runs on the AWS European Sovereign Cloud. See [Cloud regions](https://www.meilisearch.com/docs/capabilities/platform/infrastructure/regions?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq).
+
+</details>
+
+<details>
+<summary><b>How does Meilisearch compare to Algolia, Elasticsearch, Typesense, or vector databases?</b></summary>
+
+See the side-by-side comparisons in our documentation: [Algolia](https://www.meilisearch.com/docs/resources/comparisons/algolia?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [Elasticsearch](https://www.meilisearch.com/docs/resources/comparisons/elasticsearch?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [Typesense](https://www.meilisearch.com/docs/resources/comparisons/typesense?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [OpenSearch](https://www.meilisearch.com/docs/resources/comparisons/opensearch?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [Pinecone](https://www.meilisearch.com/docs/resources/comparisons/pinecone?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [Qdrant](https://www.meilisearch.com/docs/resources/comparisons/qdrant?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [PostgreSQL](https://www.meilisearch.com/docs/resources/comparisons/postgresql?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), and [MongoDB Atlas Search](https://www.meilisearch.com/docs/resources/comparisons/mongodb?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq). Migration guides are available for [Algolia](https://www.meilisearch.com/docs/resources/migration/algolia_migration?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [Elasticsearch](https://www.meilisearch.com/docs/resources/migration/elasticsearch_migration?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), [Qdrant](https://www.meilisearch.com/docs/resources/migration/qdrant_migration?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq), and [MongoDB Atlas Search](https://www.meilisearch.com/docs/resources/migration/mongodb_migration?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq).
+
+</details>
+
+<details>
+<summary><b>Can I use Meilisearch with AI agents and RAG?</b></summary>
+
+Yes. Meilisearch supports hybrid and semantic search, conversational search, a native MCP server, and LangChain. See [AI & LLM integrations](#-ai--llm-integrations).
+
+</details>
+
 ## 🧾 Editions & Licensing
 
-Meilisearch is available in two editions:
+The Meilisearch engine is available in two editions. Both can be self-hosted. [Meilisearch Cloud](#️-ways-to-run-meilisearch) runs the engine for you as a managed service.
 
 ### 🧪 Community Edition (CE)
 
