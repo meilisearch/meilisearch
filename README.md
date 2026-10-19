@@ -25,7 +25,7 @@
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
-[Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) is an open-source search engine for fast, relevant full-text, semantic, and hybrid search, built in Rust. Run it on [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro), the managed service from the team that builds it, or self-host it on your own infrastructure.
+[Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) is a search engine for fast, relevant full-text, semantic, and hybrid search. The fastest way to start is [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro): create a project in a few minutes, with no servers to run. Meilisearch is also open source (MIT), so you can self-host it on your own infrastructure.
 
 <p align="center" name="demo">
   <a href="https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-gif#gh-light-mode-only" target="_blank">
@@ -48,6 +48,16 @@ Both options run the same engine and expose the same API, so you can start on on
 
 ## 🚀 Quick start
 
+### Option 1: Meilisearch Cloud (recommended)
+
+1. [Create a Meilisearch Cloud project](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start). It takes a few minutes, and there are no servers to run.
+2. Copy your project URL and an API key from your project's overview page.
+3. Run the commands in [Add documents and search](#add-documents-and-search), replacing `http://localhost:7700` with your project URL and `MASTER_KEY` with your API key.
+
+For a step-by-step walkthrough, see [create your first Cloud project](https://www.meilisearch.com/docs/getting_started/first_project?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
+
+### Option 2: Self-host
+
 Launch Meilisearch locally with Docker:
 
 ```sh
@@ -59,6 +69,8 @@ docker run -it --rm \
 ```
 
 Prefer a binary? Run `curl -L https://install.meilisearch.com | sh`, then `./meilisearch`. More options: [install Meilisearch locally](https://www.meilisearch.com/docs/resources/self_hosting/getting_started/install_locally?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
+
+### Add documents and search
 
 Add a few documents to a `movies` index:
 
@@ -83,9 +95,6 @@ curl -X POST 'http://localhost:7700/indexes/movies/search' \
 ```
 
 Meilisearch returns *Wonder Woman* despite the typo. Indexing is asynchronous, so if the search comes back empty, wait a moment and retry.
-
-> [!TIP]
-> **Using Meilisearch Cloud?** The commands are the same. Replace `http://localhost:7700` with your project URL and `MASTER_KEY` with an API key, both shown on your project's overview page. [Create your first Cloud project](https://www.meilisearch.com/docs/getting_started/first_project?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
 
 Next steps: follow a 5-minute quick start for [JavaScript](https://www.meilisearch.com/docs/getting_started/sdks/javascript?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Python](https://www.meilisearch.com/docs/getting_started/sdks/python?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [PHP](https://www.meilisearch.com/docs/getting_started/sdks/php?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Ruby](https://www.meilisearch.com/docs/getting_started/sdks/ruby?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Go](https://www.meilisearch.com/docs/getting_started/sdks/go?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), [Rust](https://www.meilisearch.com/docs/getting_started/sdks/rust?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), or [React](https://www.meilisearch.com/docs/getting_started/instant_meilisearch/react?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
 
@@ -161,7 +170,7 @@ Yes. [Meilisearch Cloud](https://www.meilisearch.com/cloud?utm_campaign=oss&utm_
 <details>
 <summary><b>Should I use Meilisearch Cloud or self-host?</b></summary>
 
-Both run the same engine with the same API. Self-hosting gives you full control over your infrastructure, and you operate it yourself. Meilisearch Cloud removes that operational work and adds platform features like monitoring and analytics. You can move a self-hosted instance to Cloud later: see [migrating to Meilisearch Cloud](https://www.meilisearch.com/docs/resources/migration/migrating_cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq).
+For most teams, start with Meilisearch Cloud. It runs the same engine with the same API, takes care of deploying, upgrading, and operating servers, and adds platform features like monitoring and analytics. Self-host if you need full control over your infrastructure and are ready to operate it yourself. If you start self-hosted, you can move to Cloud later: see [migrating to Meilisearch Cloud](https://www.meilisearch.com/docs/resources/migration/migrating_cloud?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=faq).
 
 </details>
 
