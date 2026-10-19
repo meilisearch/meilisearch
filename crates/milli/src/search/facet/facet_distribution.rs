@@ -53,7 +53,7 @@ pub enum OrderBy {
     /// by number of docids in common...
     Count,
     /// Or by count based on a sample of docids?
-    CountSampled,
+    SampledCount,
 }
 
 impl Display for OrderBy {
@@ -61,9 +61,15 @@ impl Display for OrderBy {
         match self {
             OrderBy::Lexicographic => f.write_str("alphabetically"),
             OrderBy::Count => f.write_str("by count"),
-            OrderBy::CountSampled => f.write_str("sampled by count"),
+            OrderBy::SampledCount => f.write_str("sampled by count"),
         }
     }
+}
+
+pub enum OrderByWithSample<'s> {
+    Lexicographic,
+    Count,
+    SampledCount { sample: &'s RoaringBitmap },
 }
 
 pub struct FacetDistribution<'a> {
@@ -331,13 +337,13 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         candidates: &RoaringBitmap,
-        order_by: OrderBy,
+        lexicographical_order: bool,
         distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
-        let search_function = match order_by {
-            OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
-            OrderBy::Count => count_iterate_over_facet_distribution,
-            OrderBy::CountSampled => unreachable!(), // TODO create a local enum and remove this panic
+        let search_function = if lexicographical_order {
+            lexicographically_iterate_over_facet_distribution
+        } else {
+            count_iterate_over_facet_distribution
         };
 
         search_function(
@@ -361,13 +367,13 @@ impl<'a> FacetDistribution<'a> {
         &self,
         field_id: FieldId,
         candidates: &RoaringBitmap,
-        order_by: OrderBy,
+        lexicographical_order: bool,
         distribution: &mut IndexMap<String, u64>,
     ) -> heed::Result<()> {
-        let search_function = match order_by {
-            OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
-            OrderBy::Count => count_iterate_over_facet_distribution,
-            OrderBy::CountSampled => unreachable!(), // TODO create a local enum and remove this panic
+        let search_function = if lexicographical_order {
+            lexicographically_iterate_over_facet_distribution
+        } else {
+            count_iterate_over_facet_distribution
         };
 
         search_function(
@@ -406,14 +412,13 @@ impl<'a> FacetDistribution<'a> {
     fn facet_values(
         &self,
         field_id: FieldId,
-        order_by: OrderBy,
-        sample_candidates: Option<&RoaringBitmap>,
+        order_by: OrderByWithSample,
     ) -> heed::Result<IndexMap<String, u64>> {
         use FacetType::{Number, String};
 
         let mut distribution = IndexMap::new();
-        match (order_by, &self.candidates, sample_candidates) {
-            (OrderBy::CountSampled, cnd, Some(sample_candidates)) => {
+        match (order_by, &self.candidates) {
+            (OrderByWithSample::SampledCount { sample }, cnd) => {
                 let candidates;
                 let candidates = match cnd {
                     Some(cnd) => cnd,
@@ -426,19 +431,19 @@ impl<'a> FacetDistribution<'a> {
                 self.facet_distribution_from_sample(
                     field_id,
                     String,
-                    sample_candidates,
+                    sample,
                     candidates,
                     &mut distribution,
                 )?;
                 self.facet_distribution_from_sample(
                     field_id,
                     Number,
-                    sample_candidates,
+                    sample,
                     candidates,
                     &mut distribution,
                 )?;
             }
-            (OrderBy::Lexicographic, Some(candidates), _)
+            (OrderByWithSample::Lexicographic, Some(candidates))
                 if candidates.len() <= LINEAR_SCAN_CANDIDATES_THRESHOLD =>
             {
                 // Classic search, candidates were specified, we must return facet values only related
@@ -456,26 +461,28 @@ impl<'a> FacetDistribution<'a> {
                     &mut distribution,
                 )?;
             }
-            _ => {
-                let universe;
-                let candidates = match &self.candidates {
-                    Some(cnd) => cnd,
+            (order_by @ (OrderByWithSample::Lexicographic | OrderByWithSample::Count), cnd) => {
+                let candidates;
+                let candidates = match &cnd {
+                    Some(candidates) => candidates,
                     None => {
-                        universe = self.index.documents_ids(self.rtxn)?;
-                        &universe
+                        candidates = self.index.documents_ids(self.rtxn)?;
+                        &candidates
                     }
                 };
+
+                let lexicographical_order = matches!(order_by, OrderByWithSample::Lexicographic);
 
                 self.facet_numbers_distribution_from_facet_levels(
                     field_id,
                     candidates,
-                    order_by,
+                    lexicographical_order,
                     &mut distribution,
                 )?;
                 self.facet_strings_distribution_from_facet_levels(
                     field_id,
                     candidates,
-                    order_by,
+                    lexicographical_order,
                     &mut distribution,
                 )?;
             }
@@ -541,9 +548,13 @@ impl<'a> FacetDistribution<'a> {
                     .and_then(|facets| facets.get(name).copied())
                     .unwrap_or(self.default_order_by);
 
-                sample_candidates = match (order_by, sample_candidates) {
-                    (_, Some(sample_candidates)) => Some(sample_candidates),
-                    (OrderBy::CountSampled, None) => {
+                let order_by = match (order_by, sample_candidates.as_ref()) {
+                    (OrderBy::Lexicographic, _) => OrderByWithSample::Lexicographic,
+                    (OrderBy::Count, _) => OrderByWithSample::Count,
+                    (OrderBy::SampledCount, Some(sample_candidates)) => {
+                        OrderByWithSample::SampledCount { sample: sample_candidates }
+                    }
+                    (OrderBy::SampledCount, None) => {
                         let before = Instant::now();
                         let sample_candidate_count: usize =
                             match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
@@ -570,19 +581,18 @@ impl<'a> FacetDistribution<'a> {
                         let indexes = rand::seq::index::sample(&mut rng, length, amount);
 
                         // ...and construct a RoaringBitmap from the fetched values from these indices.
-                        let sample_candidates = RoaringBitmap::from_iter(
+                        let sample = RoaringBitmap::from_iter(
                             indexes.into_iter().flat_map(|i| candidates.select(i as u32)),
                         );
 
                         // TODO remove this ugly log
                         eprintln!("Computing a sample of candidates took {:?}", before.elapsed());
 
-                        Some(sample_candidates)
+                        OrderByWithSample::SampledCount { sample: sample_candidates.insert(sample) }
                     }
-                    (_, _) => None,
                 };
 
-                let values = self.facet_values(fid, order_by, sample_candidates.as_ref())?;
+                let values = self.facet_values(fid, order_by)?;
                 distribution.insert(name.to_string(), values);
             }
         }

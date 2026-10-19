@@ -1264,7 +1264,7 @@ impl From<FacetValuesSort> for OrderBy {
         match val {
             FacetValuesSort::Alpha => OrderBy::Lexicographic,
             FacetValuesSort::Count => OrderBy::Count,
-            FacetValuesSort::SampledCount => OrderBy::CountSampled,
+            FacetValuesSort::SampledCount => OrderBy::SampledCount,
         }
     }
 }
