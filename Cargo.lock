@@ -434,6 +434,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "arroy"
 version = "0.8.0"
+source = "git+https://github.com/meilisearch/arroy?branch=better-db-opening#a2c6ee0d0e3c2781a4a1ad65a19a1d072f09c790"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -1075,6 +1076,7 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.4.0"
+source = "git+https://github.com/meilisearch/cellulite?branch=better-db-opening#41e757ccd711d9a99a722e3ec692e7da106c823e"
 dependencies = [
  "crossbeam",
  "geo",
@@ -2950,6 +2952,7 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.2.0"
+source = "git+https://github.com/nnethercott/hannoy?branch=better-db-opening#8c83ea3c736eb110ba8187771f850d3ee93d1f92"
 dependencies = [
  "bytemuck",
  "byteorder",
