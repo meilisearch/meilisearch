@@ -67,11 +67,6 @@ docker run -it --rm \
   getmeili/meilisearch:latest
 ```
 
-```sh
-export MEILI_URL='http://localhost:7700'
-export MEILI_KEY='MASTER_KEY'
-```
-
 Prefer a binary? Run `curl -L https://install.meilisearch.com | sh`, then `./meilisearch --master-key MASTER_KEY`. More options: [install Meilisearch locally](https://www.meilisearch.com/docs/resources/self_hosting/getting_started/install_locally?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
 
 ### 2. Add documents
