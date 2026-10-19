@@ -50,31 +50,31 @@ Both options run the same engine and expose the same API, so you can start on on
 
 ### 1. Get a Meilisearch instance
 
-**Option A: Meilisearch Cloud (recommended).** No install. [Start a 14-day trial](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), then create a project and pick a region. Your project URL and API keys are on the project overview page.
-
-```sh
-export MEILI_URL='YOUR_PROJECT_URL'
-export MEILI_KEY='YOUR_DEFAULT_ADMIN_API_KEY'
-```
+**Option A: Meilisearch Cloud (recommended).** No install. [Start a 14-day trial](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start), then create a project and pick a region. Your project URL and API keys are on the project settings page.
 
 **Option B: Self-host.** Run the open-source engine locally with Docker:
 
 ```sh
 docker run -it --rm \
   -p 7700:7700 \
-  -e MEILI_MASTER_KEY='MASTER_KEY' \
   -v $(pwd)/meili_data:/meili_data \
   getmeili/meilisearch:latest
 ```
 
-Prefer a binary? Run `curl -L https://install.meilisearch.com | sh`, then `./meilisearch --master-key MASTER_KEY`. More options: [install Meilisearch locally](https://www.meilisearch.com/docs/resources/self_hosting/getting_started/install_locally?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
+Prefer a binary? Run:
+```sh
+curl -L https://install.meilisearch.com | sh
+./meilisearch
+```
+
+More options: [install Meilisearch locally](https://www.meilisearch.com/docs/resources/self_hosting/getting_started/install_locally?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=quick-start).
 
 ### 2. Add documents
 
 ```sh
-curl -X POST "$MEILI_URL/indexes/movies/documents" \
+curl -X POST "https://ms-url-example.meilisearch.io/indexes/movies/documents" \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $MEILI_KEY" \
+  -H "Authorization: Bearer apiKey" \
   --data-binary '[
     { "id": 1, "title": "Carol", "genres": ["Romance", "Drama"] },
     { "id": 2, "title": "Wonder Woman", "genres": ["Action", "Adventure"] },
@@ -85,9 +85,9 @@ curl -X POST "$MEILI_URL/indexes/movies/documents" \
 ### 3. Search, typo included
 
 ```sh
-curl -X POST "$MEILI_URL/indexes/movies/search" \
+curl -X POST "https://ms-url-example.meilisearch.io/indexes/movies/search" \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $MEILI_KEY" \
+  -H "Authorization: Bearer apiKey" \
   --data-binary '{ "q": "wondre woman" }'
 ```
 
