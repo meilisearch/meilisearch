@@ -1,6 +1,5 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
-use std::env::VarError;
 use std::fmt::Display;
 use std::ops::ControlFlow;
 use std::{fmt, mem};
@@ -27,8 +26,8 @@ use crate::search::facet::facet_distribution_iter::{
 };
 use crate::search::steps::FacetDistributionStep;
 use crate::{
-    CboRoaringBitmapCodec, Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index,
-    PatternMatch, Result, UserError,
+    fetch_from_env_or, CboRoaringBitmapCodec, Error, FieldId, FieldsIdsMap,
+    FilterableAttributesRule, Index, PatternMatch, Result, UserError,
 };
 
 /// The default number of values by facets that will
@@ -547,14 +546,10 @@ impl<'a> FacetDistribution<'a> {
                         OrderByWithSample::SampledCount { sample: sample_candidates }
                     }
                     (OrderBy::SampledCount, None) => {
-                        let sample_candidate_count: usize =
-                            match std::env::var("MEILI_SAMPLE_CANDIDATE_COUNT") {
-                                Ok(count) => count.as_str().parse().unwrap(),
-                                Err(VarError::NotPresent) => SAMPLE_CANDIDATES,
-                                Err(VarError::NotUnicode(e)) => {
-                                    panic!("While reading MEILI_SAMPLE_CANDIDATE_COUNT: {e:?}")
-                                }
-                            };
+                        let sample_candidate_count = fetch_from_env_or(
+                            "MEILI_EXPERIMENTAL_SAMPLE_CANDIDATE_COUNT",
+                            SAMPLE_CANDIDATES,
+                        );
 
                         let candidates;
                         let candidates = match self.candidates.as_ref() {
