@@ -560,16 +560,23 @@ impl<'a> FacetDistribution<'a> {
                             }
                         };
 
-                        let length = candidates.len() as usize;
-                        let amount = sample_candidate_count.min(length);
-                        let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
-                        // We efficiently compute a set of indices to fetch from the candidates...
-                        let indexes = rand::seq::index::sample(&mut rng, length, amount);
+                        let cardinality = candidates.len() as usize;
+                        // If there are less candidates than the sample we want...
+                        let sample = if sample_candidate_count <= cardinality {
+                            // ...we use all the candidates for the sample...
+                            candidates.clone()
+                        } else {
+                            // ...else we compute them by...
+                            let amount = sample_candidate_count.min(cardinality);
+                            let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
+                            // ...efficiently computing a set of indices to fetch from the candidates...
+                            let indexes = rand::seq::index::sample(&mut rng, cardinality, amount);
 
-                        // ...and construct a RoaringBitmap from the fetched values from these indices.
-                        let sample = RoaringBitmap::from_iter(
-                            indexes.into_iter().flat_map(|i| candidates.select(i as u32)),
-                        );
+                            // ...and constructing a RoaringBitmap from the fetched values from these indices.
+                            RoaringBitmap::from_iter(
+                                indexes.into_iter().flat_map(|i| candidates.select(i as u32)),
+                            )
+                        };
 
                         OrderByWithSample::SampledCount { sample: sample_candidates.insert(sample) }
                     }
