@@ -25,7 +25,7 @@
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
-[Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) is a search engine for fast, relevant full-text, semantic, and hybrid search. The easiest way to get started is [Meilisearch Cloud](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro): create a project and run your first search in minutes, with no servers to manage. The engine is open source under the MIT license, so you can also self-host it.
+[Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) is a search engine for fast, relevant full-text, semantic, and hybrid search. The easiest way to get started and run it in production is [Meilisearch Cloud](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro): create a project and run your first search in minutes, with no servers to deploy, upgrade, or maintain. The engine is open source under the MIT license, so you can also self-host it.
 
 <p align="center" name="demo">
   <a href="https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demo-gif#gh-light-mode-only" target="_blank">
