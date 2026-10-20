@@ -225,55 +225,187 @@ impl Index {
 
         options.max_dbs(NUMBER_OF_DBS);
 
+        struct Databases<'t> {
+            main: Database<'t, Unspecified, Unspecified>,
+            external_documents_ids: Database<'t, Str, BEU32>,
+            word_docids: Database<'t, Str, CboRoaringBitmapCodec>,
+            exact_word_docids: Database<'t, Str, CboRoaringBitmapCodec>,
+            synonyms: Database<'t, SynonymsKeyCodec<String>, SerdeJson<AssociatedSynonyms>>,
+            word_prefix_docids: Database<'t, Str, CboRoaringBitmapCodec>,
+            exact_word_prefix_docids: Database<'t, Str, CboRoaringBitmapCodec>,
+            word_pair_proximity_docids: Database<'t, U8StrStrCodec, CboRoaringBitmapCodec>,
+            word_position_docids: Database<'t, StrBEU16Codec, CboRoaringBitmapCodec>,
+            word_fid_docids: Database<'t, StrBEU16Codec, CboRoaringBitmapCodec>,
+            field_id_word_count_docids: Database<'t, FieldIdWordCountCodec, CboRoaringBitmapCodec>,
+            word_prefix_position_docids: Database<'t, StrBEU16Codec, CboRoaringBitmapCodec>,
+            word_prefix_fid_docids: Database<'t, StrBEU16Codec, CboRoaringBitmapCodec>,
+            facet_id_exists_docids: Database<'t, FieldIdCodec, CboRoaringBitmapCodec>,
+            facet_id_is_null_docids: Database<'t, FieldIdCodec, CboRoaringBitmapCodec>,
+            facet_id_is_empty_docids: Database<'t, FieldIdCodec, CboRoaringBitmapCodec>,
+            facet_id_f64_docids:
+                Database<'t, FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+            facet_id_string_docids:
+                Database<'t, FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+            facet_id_normalized_string_strings:
+                Database<'t, BEU16StrCodec, SerdeJson<BTreeSet<String>>>,
+            facet_id_string_fst: Database<'t, BEU16, FstSetCodec>,
+            field_id_docid_facet_f64s: Database<'t, FieldDocIdFacetF64Codec, Unit>,
+            field_id_docid_facet_strings: Database<'t, FieldDocIdFacetStringCodec, Str>,
+            embedder_category_id: Database<'t, Unspecified, Unspecified>,
+            vector_store: hannoy::Database<'t, Unspecified>,
+            shard_docids: Database<'t, Str, CboRoaringBitmapCodec>,
+            cellulite: Cellulite<'t>,
+            documents: Database<'t, BEU32, ObkvCodec>,
+        }
+
+        impl heed::OnCommit for Databases<'_> {
+            type Committed = Databases<'static>;
+
+            fn on_commit(self, token: &heed::CommitToken) -> Self::Committed {
+                let Databases {
+                    main,
+                    external_documents_ids,
+                    word_docids,
+                    exact_word_docids,
+                    synonyms,
+                    word_prefix_docids,
+                    exact_word_prefix_docids,
+                    word_pair_proximity_docids,
+                    word_position_docids,
+                    word_fid_docids,
+                    field_id_word_count_docids,
+                    word_prefix_position_docids,
+                    word_prefix_fid_docids,
+                    facet_id_exists_docids,
+                    facet_id_is_null_docids,
+                    facet_id_is_empty_docids,
+                    facet_id_f64_docids,
+                    facet_id_string_docids,
+                    facet_id_normalized_string_strings,
+                    facet_id_string_fst,
+                    field_id_docid_facet_f64s,
+                    field_id_docid_facet_strings,
+                    embedder_category_id,
+                    vector_store,
+                    shard_docids,
+                    cellulite,
+                    documents,
+                } = self;
+
+                Databases {
+                    main: main.on_commit(token),
+                    external_documents_ids: external_documents_ids.on_commit(token),
+                    word_docids: word_docids.on_commit(token),
+                    exact_word_docids: exact_word_docids.on_commit(token),
+                    synonyms: synonyms.on_commit(token),
+                    word_prefix_docids: word_prefix_docids.on_commit(token),
+                    exact_word_prefix_docids: exact_word_prefix_docids.on_commit(token),
+                    word_pair_proximity_docids: word_pair_proximity_docids.on_commit(token),
+                    word_position_docids: word_position_docids.on_commit(token),
+                    word_fid_docids: word_fid_docids.on_commit(token),
+                    field_id_word_count_docids: field_id_word_count_docids.on_commit(token),
+                    word_prefix_position_docids: word_prefix_position_docids.on_commit(token),
+                    word_prefix_fid_docids: word_prefix_fid_docids.on_commit(token),
+                    facet_id_exists_docids: facet_id_exists_docids.on_commit(token),
+                    facet_id_is_null_docids: facet_id_is_null_docids.on_commit(token),
+                    facet_id_is_empty_docids: facet_id_is_empty_docids.on_commit(token),
+                    facet_id_f64_docids: facet_id_f64_docids.on_commit(token),
+                    facet_id_string_docids: facet_id_string_docids.on_commit(token),
+                    facet_id_normalized_string_strings: facet_id_normalized_string_strings
+                        .on_commit(token),
+                    facet_id_string_fst: facet_id_string_fst.on_commit(token),
+                    field_id_docid_facet_f64s: field_id_docid_facet_f64s.on_commit(token),
+                    field_id_docid_facet_strings: field_id_docid_facet_strings.on_commit(token),
+                    embedder_category_id: embedder_category_id.on_commit(token),
+                    vector_store: vector_store.on_commit(token),
+                    shard_docids: shard_docids.on_commit(token),
+                    cellulite: cellulite.on_commit(token),
+                    documents: documents.on_commit(token),
+                }
+            }
+        }
+
         let env = unsafe { options.open(path) }?;
-        let mut wtxn = env.unique_write_txn()?;
-        let main = env.database_options().name(MAIN).create(&mut wtxn)?;
-        let word_docids = env.create_database(&mut wtxn, Some(WORD_DOCIDS))?;
-        let external_documents_ids =
-            env.create_database(&mut wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?;
-        let exact_word_docids = env.create_database(&mut wtxn, Some(EXACT_WORD_DOCIDS))?;
-        let word_prefix_docids = env.create_database(&mut wtxn, Some(WORD_PREFIX_DOCIDS))?;
-        let synonyms = env.create_database(&mut wtxn, Some(SYNONYMS))?;
-        let exact_word_prefix_docids =
-            env.create_database(&mut wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?;
-        let word_pair_proximity_docids =
-            env.create_database(&mut wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?;
-        let word_position_docids = env.create_database(&mut wtxn, Some(WORD_POSITION_DOCIDS))?;
-        let word_fid_docids = env.create_database(&mut wtxn, Some(WORD_FIELD_ID_DOCIDS))?;
-        let field_id_word_count_docids =
-            env.create_database(&mut wtxn, Some(FIELD_ID_WORD_COUNT_DOCIDS))?;
-        let word_prefix_position_docids =
-            env.create_database(&mut wtxn, Some(WORD_PREFIX_POSITION_DOCIDS))?;
-        let word_prefix_fid_docids =
-            env.create_database(&mut wtxn, Some(WORD_PREFIX_FIELD_ID_DOCIDS))?;
-        let facet_id_f64_docids = env.create_database(&mut wtxn, Some(FACET_ID_F64_DOCIDS))?;
-        let facet_id_string_docids =
-            env.create_database(&mut wtxn, Some(FACET_ID_STRING_DOCIDS))?;
-        let facet_id_normalized_string_strings =
-            env.create_database(&mut wtxn, Some(FACET_ID_NORMALIZED_STRING_STRINGS))?;
-        let facet_id_string_fst = env.create_database(&mut wtxn, Some(FACET_ID_STRING_FST))?;
-        let facet_id_exists_docids =
-            env.create_database(&mut wtxn, Some(FACET_ID_EXISTS_DOCIDS))?;
-        let facet_id_is_null_docids =
-            env.create_database(&mut wtxn, Some(FACET_ID_IS_NULL_DOCIDS))?;
-        let facet_id_is_empty_docids =
-            env.create_database(&mut wtxn, Some(FACET_ID_IS_EMPTY_DOCIDS))?;
-        let field_id_docid_facet_f64s =
-            env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?;
-        let field_id_docid_facet_strings =
-            env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?;
-        // vector stuff
-        let embedder_category_id =
-            env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
-        let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
+        let wtxn = env.write_txn()?;
+        let databases = env
+            .create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
+                let databases = Databases {
+                    main: dbo.database_options().name(MAIN).create(wtxn)?,
+                    word_docids: dbo.create_database(wtxn, Some(WORD_DOCIDS))?,
+                    external_documents_ids: dbo
+                        .create_database(wtxn, Some(EXTERNAL_DOCUMENTS_IDS))?,
+                    exact_word_docids: dbo.create_database(wtxn, Some(EXACT_WORD_DOCIDS))?,
+                    word_prefix_docids: dbo.create_database(wtxn, Some(WORD_PREFIX_DOCIDS))?,
+                    synonyms: dbo.create_database(wtxn, Some(SYNONYMS))?,
+                    exact_word_prefix_docids: dbo
+                        .create_database(wtxn, Some(EXACT_WORD_PREFIX_DOCIDS))?,
+                    word_pair_proximity_docids: dbo
+                        .create_database(wtxn, Some(WORD_PAIR_PROXIMITY_DOCIDS))?,
+                    word_position_docids: dbo.create_database(wtxn, Some(WORD_POSITION_DOCIDS))?,
+                    word_fid_docids: dbo.create_database(wtxn, Some(WORD_FIELD_ID_DOCIDS))?,
+                    field_id_word_count_docids: dbo
+                        .create_database(wtxn, Some(FIELD_ID_WORD_COUNT_DOCIDS))?,
+                    word_prefix_position_docids: dbo
+                        .create_database(wtxn, Some(WORD_PREFIX_POSITION_DOCIDS))?,
+                    word_prefix_fid_docids: dbo
+                        .create_database(wtxn, Some(WORD_PREFIX_FIELD_ID_DOCIDS))?,
+                    facet_id_f64_docids: dbo.create_database(wtxn, Some(FACET_ID_F64_DOCIDS))?,
+                    facet_id_string_docids: dbo
+                        .create_database(wtxn, Some(FACET_ID_STRING_DOCIDS))?,
+                    facet_id_normalized_string_strings: dbo
+                        .create_database(wtxn, Some(FACET_ID_NORMALIZED_STRING_STRINGS))?,
+                    facet_id_string_fst: dbo.create_database(wtxn, Some(FACET_ID_STRING_FST))?,
+                    facet_id_exists_docids: dbo
+                        .create_database(wtxn, Some(FACET_ID_EXISTS_DOCIDS))?,
+                    facet_id_is_null_docids: dbo
+                        .create_database(wtxn, Some(FACET_ID_IS_NULL_DOCIDS))?,
+                    facet_id_is_empty_docids: dbo
+                        .create_database(wtxn, Some(FACET_ID_IS_EMPTY_DOCIDS))?,
+                    field_id_docid_facet_f64s: dbo
+                        .create_database(wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?,
+                    field_id_docid_facet_strings: dbo
+                        .create_database(wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?,
+                    embedder_category_id: dbo
+                        .create_database(wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?,
+                    vector_store: dbo.create_database(wtxn, Some(VECTOR_STORE))?,
+                    shard_docids: dbo.create_database(wtxn, Some(SHARD_DOCIDS))?,
+                    cellulite: cellulite::Cellulite::create_from_dbo(dbo, wtxn, CELLULITE)?,
+                    documents: dbo.create_database(wtxn, Some(DOCUMENTS))?,
+                };
 
-        // sharding
-        let shard_docids = env.create_database(&mut wtxn, Some(SHARD_DOCIDS))?;
+                Ok(CommitOrAbort::<_, ()>::Commit(databases))
+            })?
+            .unwrap_commit();
 
-        // geo
-        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, CELLULITE)?;
-
-        let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
+        let Databases {
+            main,
+            external_documents_ids,
+            word_docids,
+            exact_word_docids,
+            synonyms,
+            word_prefix_docids,
+            exact_word_prefix_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+            field_id_word_count_docids,
+            word_prefix_position_docids,
+            word_prefix_fid_docids,
+            facet_id_exists_docids,
+            facet_id_is_null_docids,
+            facet_id_is_empty_docids,
+            facet_id_f64_docids,
+            facet_id_string_docids,
+            facet_id_normalized_string_strings,
+            facet_id_string_fst,
+            field_id_docid_facet_f64s,
+            field_id_docid_facet_strings,
+            embedder_category_id,
+            vector_store,
+            shard_docids,
+            cellulite,
+            documents,
+        } = databases;
 
         let this = Index {
             env: env.clone(),
