@@ -533,7 +533,7 @@ impl Index {
             let main = main.remap_key_type::<Str>();
 
             let Some(rollback_version) =
-                main.remap_data_type::<VersionCodec>().get(&wtxn, main_key::VERSION_KEY)?
+                main.remap_data_type::<VersionCodec>().get(wtxn, main_key::VERSION_KEY)?
             else {
                 return Ok(CommitOrAbort::Abort(RollbackOutcome::VersionMismatch {
                     requested_version,
