@@ -372,7 +372,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -383,7 +383,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -434,8 +434,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "arroy"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f88e18ede2cb2f69e1a68ea804c8fc2f19f748da5f28c795271f279f4068afb"
+source = "git+https://github.com/meilisearch/arroy?branch=better-db-opening#bb4cfb1a61eef629e8911a2219e9383f2bfbf9dd"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -1076,8 +1075,8 @@ dependencies = [
 
 [[package]]
 name = "cellulite"
-version = "0.3.2"
-source = "git+https://github.com/meilisearch/cellulite?branch=mutexify-open-dbi#f68e7ebedcccca725bb4d9b535d805c22ffa9cbd"
+version = "0.4.0"
+source = "git+https://github.com/meilisearch/cellulite?branch=better-db-opening#57a0fbcbe82e3846677a4e8395a87dfaa4230795"
 dependencies = [
  "crossbeam",
  "geo",
@@ -1913,7 +1912,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2147,7 +2146,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2953,8 +2952,7 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27b6b2dbf4421103a9a65bf5691ae6b9c2b997d5a6a62ca5f21a728982a442d8"
+source = "git+https://github.com/nnethercott/hannoy?branch=better-db-opening#68ef51473768f9fac85e263775598c296cc4b203"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3048,8 +3046,8 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.22.1"
-source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
+version = "0.23.0"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -3066,12 +3064,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
 dependencies = [
  "bincode",
  "byteorder",
@@ -3632,7 +3630,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4055,7 +4053,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.6"
-source = "git+https://github.com/meilisearch/heed?branch=mutexify-open-dbi#14b1b330cfb536a2023f717a9c79c069448f9080"
+source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
 dependencies = [
  "cc",
  "doxygen-rs",
@@ -4654,7 +4652,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6175,7 +6173,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6413,7 +6411,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6709,7 +6707,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6970,7 +6968,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8123,7 +8121,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
