@@ -777,8 +777,8 @@ where
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn<'_>,
     merger: Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
-    word_docids_db: Database<Str, CboRoaringBitmapCodec>,
-    word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
+    word_docids_db: Database<'static, Str, CboRoaringBitmapCodec>,
+    word_prefix_docids_db: Database<'static, Str, CboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],

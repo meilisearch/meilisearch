@@ -89,7 +89,7 @@ impl<'i> FacetsUpdateBulk<'i> {
 
 /// Implementation of `FacetsUpdateBulk` that is independent of milli's `Index` type
 pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
-    pub db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    pub db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     pub delta_data: Option<Merger<R, MergeDeladdCboRoaringBitmaps>>,
     pub group_size: u8,
     pub min_level_size: u8,

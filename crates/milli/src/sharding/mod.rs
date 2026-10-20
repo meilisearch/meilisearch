@@ -27,7 +27,7 @@ impl Shards {
 }
 
 /// View over the `shard_docids` DB of an index
-pub struct DbShardDocids(Database<Str, CboRoaringBitmapCodec>);
+pub struct DbShardDocids(Database<'static, Str, CboRoaringBitmapCodec>);
 
 impl DbShardDocids {
     /// Create the view from the index.

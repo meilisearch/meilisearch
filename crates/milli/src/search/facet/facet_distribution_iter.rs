@@ -25,7 +25,7 @@ use crate::{CboRoaringBitmapCodec, DocumentId};
 /// keep iterating over the different facet values or stop.
 pub fn lexicographically_iterate_over_facet_distribution<'t, CB>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     field_id: u16,
     candidates: &RoaringBitmap,
     callback: CB,
@@ -148,7 +148,7 @@ where
     CB: FnMut(&'t [u8], u64, DocumentId) -> Result<ControlFlow<()>>,
 {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>,
+    db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>,
     field_id: u16,
     callback: CB,
 }

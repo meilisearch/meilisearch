@@ -131,75 +131,78 @@ pub struct Index {
     pub(crate) env: heed::Env<WithoutTls>,
 
     /// Contains many different types (e.g. the fields ids map).
-    pub(crate) main: Database<Unspecified, Unspecified>,
+    pub(crate) main: Database<'static, Unspecified, Unspecified>,
 
     /// Maps the external documents ids with the internal document id.
-    pub external_documents_ids: Database<Str, BEU32>,
+    pub external_documents_ids: Database<'static, Str, BEU32>,
 
     /// A word and all the documents ids containing the word.
-    pub word_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub word_docids: Database<'static, Str, CboRoaringBitmapCodec>,
 
     /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
-    pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub exact_word_docids: Database<'static, Str, CboRoaringBitmapCodec>,
 
     /// A list of words and the list of synonyms associated to it.
-    pub synonyms: heed::Database<SynonymsKeyCodec<String>, SerdeJson<AssociatedSynonyms>>,
+    pub synonyms: heed::Database<'static, SynonymsKeyCodec<String>, SerdeJson<AssociatedSynonyms>>,
 
     /// A prefix of word and all the documents ids containing this prefix.
-    pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub word_prefix_docids: Database<'static, Str, CboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
-    pub exact_word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub exact_word_prefix_docids: Database<'static, Str, CboRoaringBitmapCodec>,
 
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
-    pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
+    pub word_pair_proximity_docids: Database<'static, U8StrStrCodec, CboRoaringBitmapCodec>,
 
     /// Maps the word and the position with the docids that corresponds to it.
-    pub word_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_position_docids: Database<'static, StrBEU16Codec, CboRoaringBitmapCodec>,
     /// Maps the word and the field id with the docids that corresponds to it.
-    pub word_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_fid_docids: Database<'static, StrBEU16Codec, CboRoaringBitmapCodec>,
 
     /// Maps the field id and the word count with the docids that corresponds to it.
-    pub field_id_word_count_docids: Database<FieldIdWordCountCodec, CboRoaringBitmapCodec>,
+    pub field_id_word_count_docids: Database<'static, FieldIdWordCountCodec, CboRoaringBitmapCodec>,
     /// Maps the word prefix and a position with all the docids where the prefix appears at the position.
-    pub word_prefix_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_prefix_position_docids: Database<'static, StrBEU16Codec, CboRoaringBitmapCodec>,
     /// Maps the word prefix and a field id with all the docids where the prefix appears inside the field
-    pub word_prefix_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_prefix_fid_docids: Database<'static, StrBEU16Codec, CboRoaringBitmapCodec>,
 
     /// Maps the facet field id and the docids for which this field exists
-    pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+    pub facet_id_exists_docids: Database<'static, FieldIdCodec, CboRoaringBitmapCodec>,
     /// Maps the facet field id and the docids for which this field is set as null
-    pub facet_id_is_null_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+    pub facet_id_is_null_docids: Database<'static, FieldIdCodec, CboRoaringBitmapCodec>,
     /// Maps the facet field id and the docids for which this field is considered empty
-    pub facet_id_is_empty_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+    pub facet_id_is_empty_docids: Database<'static, FieldIdCodec, CboRoaringBitmapCodec>,
 
     /// Maps the facet field id and ranges of numbers with the docids that corresponds to them.
-    pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
+    pub facet_id_f64_docids:
+        Database<'static, FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
     /// Maps the facet field id and ranges of strings with the docids that corresponds to them.
-    pub facet_id_string_docids: Database<FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
+    pub facet_id_string_docids:
+        Database<'static, FacetGroupKeyCodec<StrRefCodec>, FacetGroupValueCodec>,
     /// Maps the facet field id of the normalized-for-search string facets with their original versions.
-    pub facet_id_normalized_string_strings: Database<BEU16StrCodec, SerdeJson<BTreeSet<String>>>,
+    pub facet_id_normalized_string_strings:
+        Database<'static, BEU16StrCodec, SerdeJson<BTreeSet<String>>>,
     /// Maps the facet field id of the string facets with an FST containing all the facets values.
-    pub facet_id_string_fst: Database<BEU16, FstSetCodec>,
+    pub facet_id_string_fst: Database<'static, BEU16, FstSetCodec>,
 
     /// Maps the document id, the facet field id and the numbers.
-    pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
+    pub field_id_docid_facet_f64s: Database<'static, FieldDocIdFacetF64Codec, Unit>,
     /// Maps the document id, the facet field id and the strings.
-    pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
+    pub field_id_docid_facet_strings: Database<'static, FieldDocIdFacetStringCodec, Str>,
 
     /// Maps an embedder name to its id in the vector store.
-    pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
+    pub(crate) embedder_category_id: Database<'static, Unspecified, Unspecified>,
     /// Vector store based on hannoy™.
-    pub vector_store: hannoy::Database<Unspecified>,
+    pub vector_store: hannoy::Database<'static, Unspecified>,
 
     /// Maps a shard name to the docids belonging to this shard
-    pub shard_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub shard_docids: Database<'static, Str, CboRoaringBitmapCodec>,
 
     /// Geo store based on cellulite™.
-    pub cellulite: Cellulite,
+    pub cellulite: Cellulite<'static>,
 
     /// Maps the document id to the document as an obkv store.
-    pub(crate) documents: Database<BEU32, ObkvCodec>,
+    pub(crate) documents: Database<'static, BEU32, ObkvCodec>,
 }
 
 pub enum CreateOrOpen {

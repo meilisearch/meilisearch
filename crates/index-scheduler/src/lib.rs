@@ -185,25 +185,25 @@ pub struct IndexScheduler {
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
 
     /// A database containing only the version of the index-scheduler
-    pub version: versioning::Versioning,
+    pub version: versioning::Versioning<'static>,
     /// The queue containing both the tasks and the batches.
-    pub queue: queue::Queue,
+    pub queue: queue::Queue<'static>,
     /// In charge of creating, opening, storing and returning indexes.
-    pub(crate) index_mapper: IndexMapper,
+    pub(crate) index_mapper: IndexMapper<'static>,
     /// In charge of fetching and setting the status of experimental features.
-    features: features::FeatureData,
+    features: features::FeatureData<'static>,
 
     /// Stores the custom chat prompts and other settings of the indexes.
-    pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
+    pub(crate) chat_settings: Database<'static, Str, SerdeJson<ChatCompletionSettings>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
 
     /// A database to store single-keyed data that is persisted across restarts.
-    persisted: Database<Str, Str>,
+    persisted: Database<'static, Str, Str>,
 
     /// A legacy database that used to store dynamic search rules before they became a dedicated index
-    legacy_dsr: Database<Unspecified, Unspecified>,
+    legacy_dsr: Database<'static, Unspecified, Unspecified>,
 
     /// Webhook, loaded and stored in the `persisted` database
     webhooks: Arc<Webhooks>,

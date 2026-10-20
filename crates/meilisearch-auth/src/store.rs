@@ -29,8 +29,9 @@ const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expirat
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Env<WithoutTls>,
-    keys: Database<Bytes, SerdeJson<Key>>,
-    action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
+    keys: Database<'static, Bytes, SerdeJson<Key>>,
+    action_keyid_index_expiration:
+        Database<'static, KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
 }
 
 pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {

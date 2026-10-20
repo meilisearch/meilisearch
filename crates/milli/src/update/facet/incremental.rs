@@ -149,7 +149,7 @@ impl FacetsUpdateIncremental {
 
 /// Implementation of `FacetsUpdateIncremental` that is independent of milli's `Index` type
 pub struct FacetsUpdateIncrementalInner {
-    pub db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    pub db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     pub group_size: u8,
     pub min_level_size: u8,
     pub max_group_size: u8,
