@@ -1,5 +1,5 @@
 use anyhow::bail;
-use meilisearch_types::heed::{Env, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{DatabaseOpener, RwTxn, WithoutTls};
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::versioning;
 use time::OffsetDateTime;
@@ -16,7 +16,11 @@ mod v1_49;
 mod v1_50;
 
 trait UpgradeIndexScheduler {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> anyhow::Result<()>;
+    fn upgrade<'e>(
+        &self,
+        env: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> anyhow::Result<()>;
     /// Whether the migration should be applied, depending on the initial version of the index scheduler before
     /// any migration was applied
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool;
@@ -32,8 +36,9 @@ trait UpgradeIndexScheduler {
 /// If migrations start taking take a long time, it might prevent tasks from being registered.
 /// If this issue manifests, then it can be mitigated by adding a `fn target_version` to `UpgradeIndexScheduler`,
 /// to be able to write intermediate versions and drop the wtxn between applying migrations.
-pub fn upgrade_index_scheduler(
-    env: &Env<WithoutTls>,
+pub fn upgrade_index_scheduler<'e>(
+    dbo: &DatabaseOpener<'e, WithoutTls>,
+    wtxn: &mut RwTxn<'e>,
     versioning: &Versioning,
     initial_version: (u32, u32, u32),
 ) -> anyhow::Result<()> {
@@ -70,7 +75,6 @@ pub fn upgrade_index_scheduler(
     }
 
     info!("Upgrading the task queue");
-    let mut wtxn = env.unique_write_txn()?;
     let migration_count = upgrade_functions.len();
     for (migration_index, upgrade) in upgrade_functions.iter().enumerate() {
         if upgrade.must_upgrade(initial_version) {
@@ -79,7 +83,7 @@ pub fn upgrade_index_scheduler(
                 upgrade.description()
             );
 
-            upgrade.upgrade(env, &mut wtxn)?;
+            upgrade.upgrade(dbo, wtxn)?;
 
             info!(
                 "[{}/{migration_count}]Migration applied: {}",
@@ -94,13 +98,14 @@ pub fn upgrade_index_scheduler(
         }
     }
 
-    versioning.set_version(&mut wtxn, target_version)?;
+    versioning.set_version(wtxn, target_version)?;
     info!("Task queue upgraded, spawning the upgrade database task");
 
-    let queue = TaskQueue::new(env, &mut wtxn)?;
-    let uid = queue.next_task_id(&wtxn)?;
+    let queue = TaskQueue::new(dbo, wtxn)?;
+    let uid = queue.next_task_id(wtxn)?;
+
     queue.register(
-        &mut wtxn,
+        wtxn,
         &Task {
             uid,
             batch_uid: None,
@@ -116,7 +121,6 @@ pub fn upgrade_index_scheduler(
             custom_metadata: None,
         },
     )?;
-    wtxn.commit()?;
 
     Ok(())
 }

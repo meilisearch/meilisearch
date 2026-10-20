@@ -8,11 +8,11 @@ use std::path::Path;
 
 use anyhow::Context;
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{Database, EnvOpenOptions};
+use meilisearch_types::heed::{CommitOrAbort, Database, EnvOpenOptions};
 use meilisearch_types::milli::index::db_name;
 
 use crate::uuid_codec::UuidCodec;
-use crate::{try_opening_database, try_opening_poly_database_w};
+use crate::{try_opening_database, try_opening_poly_database};
 
 pub fn v1_10_to_v1_11(
     db_path: &Path,
@@ -28,18 +28,23 @@ pub fn v1_10_to_v1_11(
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let sched_rtxn = env.unique_read_txn()?;
+    let mut index_count = 0;
+    let mut indexes = Vec::new();
+    let sched_rtxn = env.read_txn()?;
+    env.open_databases_and_commit(sched_rtxn, |dbo, sched_rtxn| -> anyhow::Result<_> {
+        let index_mapping: Database<Str, UuidCodec> =
+            try_opening_database(dbo, sched_rtxn, "index-mapping")?;
 
-    let index_mapping: Database<Str, UuidCodec> =
-        try_opening_database(&env, &sched_rtxn, "index-mapping")?;
+        index_count =
+            index_mapping.len(sched_rtxn).context("while reading the number of indexes")?;
 
-    let index_count =
-        index_mapping.len(&sched_rtxn).context("while reading the number of indexes")?;
+        indexes = index_mapping
+            .iter(sched_rtxn)?
+            .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
+            .collect();
 
-    let indexes: Vec<_> = index_mapping
-        .iter(&sched_rtxn)?
-        .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
-        .collect();
+        Ok(CommitOrAbort::<(), _>::Abort(()))
+    })?;
 
     for (index_index, result) in indexes.into_iter().enumerate() {
         let (uid, uuid) = result?;
@@ -68,24 +73,31 @@ pub fn v1_10_to_v1_11(
             )
         })?;
 
-        let mut index_wtxn = index_env.unique_write_txn().with_context(|| {
+        let index_wtxn = index_env.write_txn().with_context(|| {
             format!(
                 "while obtaining a write transaction for index {uid} at {}",
                 index_path.display()
             )
         })?;
 
-        let database = try_opening_poly_database_w(&index_env, &index_wtxn, db_name::VECTOR_STORE)
-            .with_context(|| format!("while updating date format for index `{uid}`"))?;
+        env.create_databases_and_commit(
+            index_wtxn,
+            |index_dbo, index_wtxn| -> anyhow::Result<_> {
+                let database =
+                    try_opening_poly_database(index_dbo, index_wtxn, db_name::VECTOR_STORE)
+                        .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
-        meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(
-            &index_rtxn,
-            database.remap_types(),
-            &mut index_wtxn,
-            database.remap_types(),
-        )?;
+                meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(
+                    &index_rtxn,
+                    database.remap_types(),
+                    index_wtxn,
+                    database.remap_types(),
+                )?;
 
-        index_wtxn.commit()?;
+                Ok(CommitOrAbort::<_, ()>::Commit(()))
+            },
+        )?
+        .unwrap_commit();
     }
 
     Ok(())
