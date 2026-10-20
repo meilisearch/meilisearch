@@ -8,7 +8,9 @@ use std::path::Path;
 use cellulite::Cellulite;
 use charabia::Tokenizer;
 use heed::types::{SerdeJson, *};
-use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
+use heed::{
+    CommitOrAbort, CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls,
+};
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use rstar::RTree;
@@ -441,6 +443,7 @@ impl Index {
             documents,
         };
 
+        let mut wtxn = this.write_txn()?;
         if let CreateOrOpen::Create { shards } = create_or_open {
             if this.get_version(&wtxn)?.is_none() {
                 this.put_version(
@@ -486,64 +489,81 @@ impl Index {
 
         // optimistically check if the index is already at the requested version.
         let env = unsafe { options.open(path.as_ref()) }?;
-        let rtxn = env.unique_read_txn()?;
-        let Some(main) = env.database_options().name(db_name::MAIN).open(&rtxn)? else {
-            return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
-                db_name: db_name::MAIN,
-                key: None,
-            }));
-        };
-        let rollback_version =
-            main.remap_types::<Str, VersionCodec>().get(&rtxn, main_key::VERSION_KEY)?;
-        if rollback_version == Some(requested_version) {
-            return Ok(RollbackOutcome::NoRollback);
+        let rtxn = env.read_txn()?;
+        let coa = env.open_databases_and_commit(rtxn, |dbo, rtxn| {
+            let Some(main) = dbo.database_options().name(db_name::MAIN).open(rtxn)? else {
+                return Err(crate::Error::InternalError(
+                    crate::InternalError::DatabaseMissingEntry {
+                        db_name: db_name::MAIN,
+                        key: None,
+                    },
+                ));
+            };
+            let rollback_version =
+                main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)?;
+            if rollback_version == Some(requested_version) {
+                return Ok(CommitOrAbort::Abort(Some(RollbackOutcome::NoRollback)));
+            }
+
+            // explicitly drop the environment before reopening it.
+            Ok(CommitOrAbort::<(), _>::Abort(None))
+        })?;
+
+        match coa {
+            CommitOrAbort::Commit(()) | CommitOrAbort::Abort(None) => (),
+            CommitOrAbort::Abort(Some(outcome)) => return Ok(outcome),
         }
 
-        // explicitly drop the environment before reopening it.
-        drop(rtxn);
         drop(env);
 
         // really need to rollback then...
         unsafe { options.flags(heed::EnvFlags::PREV_SNAPSHOT) };
         let env = unsafe { options.open(path) }?;
-        let mut wtxn = env.unique_write_txn()?;
-        let Some(main) = env.database_options().name(db_name::MAIN).open(&wtxn)? else {
-            return Err(crate::Error::InternalError(crate::InternalError::DatabaseMissingEntry {
-                db_name: db_name::MAIN,
-                key: None,
-            }));
-        };
+        let wtxn = env.write_txn()?;
+        let coa = env.create_databases_and_commit(wtxn, |dbo, wtxn| {
+            let Some(main) = dbo.database_options().name(db_name::MAIN).open(wtxn)? else {
+                return Err(crate::Error::InternalError(
+                    crate::InternalError::DatabaseMissingEntry {
+                        db_name: db_name::MAIN,
+                        key: None,
+                    },
+                ));
+            };
 
-        let main = main.remap_key_type::<Str>();
+            let main = main.remap_key_type::<Str>();
 
-        let Some(rollback_version) =
-            main.remap_data_type::<VersionCodec>().get(&wtxn, main_key::VERSION_KEY)?
-        else {
-            return Ok(RollbackOutcome::VersionMismatch {
-                requested_version,
-                rollback_version: None,
-            });
-        };
+            let Some(rollback_version) =
+                main.remap_data_type::<VersionCodec>().get(wtxn, main_key::VERSION_KEY)?
+            else {
+                return Ok(CommitOrAbort::Abort(RollbackOutcome::VersionMismatch {
+                    requested_version,
+                    rollback_version: None,
+                }));
+            };
 
-        if requested_version != rollback_version {
-            return Ok(RollbackOutcome::VersionMismatch {
-                requested_version,
-                rollback_version: Some(rollback_version),
-            });
+            if requested_version != rollback_version {
+                return Ok(CommitOrAbort::Abort(RollbackOutcome::VersionMismatch {
+                    requested_version,
+                    rollback_version: Some(rollback_version),
+                }));
+            }
+
+            // this is a bit of a trick to force a change in the index
+            // which is necessary to actually discard the next snapshot, replacing it with this transaction.
+            let now = time::OffsetDateTime::now_utc();
+            main.remap_data_type::<SerdeJson<OffsetDateTime>>().put(
+                wtxn,
+                main_key::UPDATED_AT_KEY,
+                &OffsetDateTime(now),
+            )?;
+
+            Ok(CommitOrAbort::Commit(()))
+        })?;
+
+        match coa {
+            CommitOrAbort::Commit(()) => Ok(RollbackOutcome::Rollback),
+            CommitOrAbort::Abort(result) => Ok(result),
         }
-
-        // this is a bit of a trick to force a change in the index
-        // which is necessary to actually discard the next snapshot, replacing it with this transaction.
-        let now = time::OffsetDateTime::now_utc();
-        main.remap_data_type::<SerdeJson<OffsetDateTime>>().put(
-            &mut wtxn,
-            main_key::UPDATED_AT_KEY,
-            &OffsetDateTime(now),
-        )?;
-
-        wtxn.commit()?;
-
-        Ok(RollbackOutcome::Rollback)
     }
 
     fn set_creation_dates(
