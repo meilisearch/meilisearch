@@ -305,6 +305,10 @@ impl Display for Error {
         }
         let base_column = self.context.get_utf8_column();
         let size = self.context.fragment().chars().count();
-        write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra())
+        if let Some(extra) = self.context.extra() {
+            write!(f, "{}:{} {}", base_column, base_column + size, extra)
+        } else {
+            write!(f, "{}:{}", base_column, base_column + size)
+        }
     }
 }

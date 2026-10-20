@@ -34,7 +34,7 @@ where
     while let Some((idx, c)) = i.next() {
         if c == quote {
             let (rem, output) = input.take_split(idx);
-            let mut token = T::from(output);
+            let mut token = T::from(output.clone());
             if let Some(value) = escaped.then(|| unescape(output, quote)) {
                 token.modify_fragment(value);
             }
@@ -52,8 +52,8 @@ where
         // if it was preceded by a `\` or if it was anything else we can continue to advance
     }
 
-    let mut token = T::from(input);
-    if let Some(value) = escaped.then(|| unescape(input, quote)) {
+    let mut token = T::from(input.clone());
+    if let Some(value) = escaped.then(|| unescape(input.clone(), quote)) {
         token.modify_fragment(value);
     }
 
@@ -131,7 +131,7 @@ where
 }
 
 pub fn parse_vector_value_cut<'a>(input: Span<'a>, kind: ErrorKind) -> IResult<'a, Token> {
-    parse_vector_value(input).map_err(|e| match e {
+    parse_vector_value(input.clone()).map_err(|e| match e {
         nom::Err::Failure(e) => match e.kind() {
             ErrorKind::Char(c) if *c == '"' || *c == '\'' => {
                 crate::Error::failure_from_kind(input.into(), ErrorKind::VectorFilterInvalidQuotes)
@@ -156,14 +156,14 @@ where
     let geo_reserved_parse_functions = [parse_geo_point, parse_geo_distance, parse_geo];
 
     for parser in geo_reserved_parse_functions {
-        if let Err(err) = parser(input) {
+        if let Err(err) = parser(input.clone()) {
             if err.is_failure() {
                 return Err(err);
             }
         }
     }
 
-    match parse_geo_radius(input) {
+    match parse_geo_radius(input.clone()) {
         Ok(_) => return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoRadius)),
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
@@ -173,7 +173,7 @@ where
         _ => (),
     }
 
-    match parse_geo_bounding_box(input) {
+    match parse_geo_bounding_box(input.clone()) {
         Ok(_) => {
             return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox))
         }
@@ -201,7 +201,7 @@ where
             word_not_keyword,
         )),
         multispace0,
-    )(input)
+    )(input.clone())
     // if we found nothing in the alt it means the user specified something that was not recognized as a value
     .map_err(|e: nom::Err<Error>| {
         e.map_err(|error| {
@@ -211,7 +211,7 @@ where
                 ExpectedValueKind::Other
             };
             Error::new_from_kind(
-                error_word(input).unwrap().1.into(),
+                error_word(input.clone()).unwrap().1.into(),
                 ErrorKind::ExpectedValue(expected_value_kind),
             )
         })
@@ -221,7 +221,7 @@ where
             // if we found encountered a char failure it means the user had an unmatched quote
             if matches!(failure.kind(), ErrorKind::Char(_)) {
                 Error::new_from_kind(
-                    input.into(),
+                    input.clone().into(),
                     ErrorKind::MissingClosingDelimiter(failure.char()),
                 )
             } else {
@@ -280,6 +280,8 @@ fn is_keyword(s: &str) -> bool {
 
 #[cfg(test)]
 pub mod test {
+    use std::sync::Arc;
+
     use nom::Finish;
 
     use super::*;
@@ -311,8 +313,9 @@ pub mod test {
         ];
 
         for (input, expected) in test_case {
-            let input = Span::new_extra(input, input);
-            let result = parse_value::<Token>(input);
+            let all_input = Arc::new(input.into());
+            let input = Span::new_extra(input, all_input);
+            let result = parse_value::<Token>(input.clone());
 
             assert!(
                 result.is_ok(),
@@ -339,7 +342,7 @@ pub mod test {
         ];
 
         for (input, remaining, expected_tok, expected_val) in test_case {
-            let span = Span::new_extra(input, "");
+            let span = Span::new_extra(input, Arc::new("".into()));
             let result = quoted_by::<Token>('"', span);
             assert!(result.is_ok());
 
@@ -354,20 +357,20 @@ pub mod test {
     fn test_unescape() {
         // double quote
         assert_eq!(
-            unescape(Span::new_extra(r#"Hello \"World\""#, ""), '"'),
+            unescape(Span::new_extra(r#"Hello \"World\""#, Arc::new("".into())), '"'),
             r#"Hello "World""#.to_string()
         );
         assert_eq!(
-            unescape(Span::new_extra(r#"Hello \\\"World\\\""#, ""), '"'),
+            unescape(Span::new_extra(r#"Hello \\\"World\\\""#, Arc::new("".into())), '"'),
             r#"Hello \\"World\\""#.to_string()
         );
         // simple quote
         assert_eq!(
-            unescape(Span::new_extra(r"Hello \'World\'", ""), '\''),
+            unescape(Span::new_extra(r"Hello \'World\'", Arc::new("".into())), '\''),
             r#"Hello 'World'"#.to_string()
         );
         assert_eq!(
-            unescape(Span::new_extra(r"Hello \\\'World\\\'", ""), '\''),
+            unescape(Span::new_extra(r"Hello \\\'World\\\'", Arc::new("".into())), '\''),
             r"Hello \\'World\\'".to_string()
         );
     }
@@ -413,8 +416,8 @@ pub mod test {
         ];
 
         for (input, expected, escaped) in test_case {
-            let input = Span::new_extra(input, input);
-            let result = parse_value::<Token>(input);
+            let input = Span::new_extra(input, Arc::new(input.into()));
+            let result = parse_value::<Token>(input.clone());
 
             assert!(
                 result.is_ok(),
@@ -451,8 +454,8 @@ pub mod test {
         ];
 
         for (input, expected) in test_case {
-            let input = Span::new_extra(input, input);
-            let result = parse_value::<Token>(input);
+            let input = Span::new_extra(input, Arc::new(input.into()));
+            let result = parse_value::<Token>(input.clone());
 
             assert!(
                 result.is_err(),

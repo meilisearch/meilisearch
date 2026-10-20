@@ -47,6 +47,7 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
+use std::sync::Arc;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{
@@ -73,7 +74,7 @@ use value::word_exact;
 use crate::condition::parse_vectors_exists;
 use crate::error::IResultExt;
 
-pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
+pub type Span<'a> = LocatedSpan<&'a str, Arc<String>>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error>;
 
@@ -81,7 +82,7 @@ const MAX_FILTER_DEPTH: usize = 150;
 
 #[derive(Debug, Clone)]
 pub struct OwnedSpan {
-    span: LocatedSpan<String, String>,
+    span: LocatedSpan<String, Option<Arc<String>>>,
     utf8_column: usize,
 }
 
@@ -144,7 +145,7 @@ impl TokenLike for LightToken {
     }
 
     fn span(&self) -> OwnedSpan {
-        let span = LocatedSpan::new_extra(self.fragment.to_string(), String::new());
+        let span = LocatedSpan::new_extra(self.fragment.to_string(), None);
         OwnedSpan { span, utf8_column: self.utf8_column }
     }
 }
@@ -164,8 +165,8 @@ impl OwnedSpan {
         self.span.fragment()
     }
 
-    pub fn extra(&self) -> &str {
-        self.span.extra.as_str()
+    pub fn extra(&self) -> Option<&str> {
+        self.span.extra.as_ref().map(|x| x.as_str())
     }
 
     pub fn get_utf8_column(&self) -> usize {
@@ -176,22 +177,8 @@ impl OwnedSpan {
 impl From<Span<'_>> for OwnedSpan {
     fn from(span: Span) -> Self {
         let utf8_column = span.get_utf8_column();
-        let span = LocatedSpan::new_extra(span.fragment().to_string(), span.extra.to_string());
+        let span = LocatedSpan::new_extra(span.fragment().to_string(), Some(span.extra.clone()));
         OwnedSpan { span, utf8_column }
-    }
-}
-
-/// Allow [CowSpan] to be constructed from &[str]
-impl From<&str> for OwnedSpan {
-    fn from(s: &str) -> Self {
-        OwnedSpan::from(Span::new_extra(s, s))
-    }
-}
-
-/// Allow [CowSpan] to be constructed from String
-impl From<String> for OwnedSpan {
-    fn from(s: String) -> Self {
-        OwnedSpan::from(Span::new_extra(&s, &s))
     }
 }
 
@@ -245,13 +232,20 @@ impl TokenLike for Token {
 }
 
 impl Token {
+    pub fn from_raw_text(text: String) -> Self {
+        Self {
+            span: OwnedSpan { span: LocatedSpan::new_extra(text, None), utf8_column: 0 },
+            modified_fragment: None,
+        }
+    }
+
     /// Returns the original fragment of the token.
     pub fn original_fragment(&self) -> &str {
         self.span.fragment()
     }
 
     /// Returns the extra fragment of the token.
-    pub fn extra(&self) -> &str {
+    pub fn extra(&self) -> Option<&str> {
         self.span.extra()
     }
 
@@ -497,8 +491,9 @@ impl FilterCondition {
         if input.trim().is_empty() {
             return Ok(None);
         }
-        let span = Span::new_extra(input, input);
-        match parse_filter(span) {
+        let all_input = Arc::new(input.to_string());
+        let span = Span::new_extra(input, all_input);
+        match parse_filter(span.clone()) {
             Ok((_rem, output)) => Ok(Some(output)),
             Err(nom::Err::Error(e) | nom::Err::Failure(e)) => Err(e),
             Err(nom::Err::Incomplete(needed)) => {
@@ -628,23 +623,26 @@ fn parse_in_body(input: Span) -> IResult<Vec<LightToken>> {
     // everything after `IN` can be a failure
     let (input, _) = tag("[")(input).map_cut(ErrorKind::InOpeningBracket)?;
 
-    let (input, content) = cut(parse_value_list)(input)?;
+    let (input, content) = cut(parse_value_list)(input.clone())?;
 
     // everything after `IN` can be a failure
     let (input, _) = cut_with_err(ws(tag("]")), |_| {
-        if eof::<_, ()>(input).is_ok() {
-            Error::new_from_kind(input.into(), ErrorKind::InClosingBracket)
+        if eof::<_, ()>(input.clone()).is_ok() {
+            Error::new_from_kind(input.clone().into(), ErrorKind::InClosingBracket)
         } else {
-            let expected_value_kind = match parse_value::<LightToken>(input) {
+            let expected_value_kind = match parse_value::<LightToken>(input.clone()) {
                 Err(nom::Err::Error(e)) => match e.kind() {
                     ErrorKind::ReservedKeyword(_) => ExpectedValueKind::ReservedKeyword,
                     _ => ExpectedValueKind::Other,
                 },
                 _ => ExpectedValueKind::Other,
             };
-            Error::new_from_kind(input.into(), ErrorKind::InExpectedValue(expected_value_kind))
+            Error::new_from_kind(
+                input.clone().into(),
+                ErrorKind::InExpectedValue(expected_value_kind),
+            )
         }
-    })(input)?;
+    })(input.clone())?;
 
     Ok((input, content))
 }
@@ -739,8 +737,8 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// foreign      = WS* "_foreign(string WS* "," WS* value WS*)
 /// If we parse `_foreign` we MUST parse the rest of the expression.
 fn parse_foreign(input: Span, depth: usize) -> IResult<FilterCondition> {
-    let (mut params_span, _) = tuple((multispace0, word_exact("_foreign")))(input)?;
-    params_span.extra = input.fragment();
+    let (mut params_span, _) = tuple((multispace0, word_exact("_foreign")))(input.clone())?;
+    params_span.extra = Arc::new(input.fragment().to_string());
 
     // if we were able to parse `_foreign` and can't parse the rest of the input we return a failure
     delimited(char('('), ws(|input| parse_foreign_operator(input, depth)), char(')'))(params_span)
@@ -776,8 +774,8 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     }
 
     let res = FilterCondition::GeoLowerThan {
-        point: [args[0].into(), args[1].into()],
-        radius: args[2].into(),
+        point: [args[0].clone().into(), args[1].clone().into()],
+        radius: args[2].clone().into(),
         resolution: args.get(3).cloned().map(Token::from),
     };
 
@@ -810,14 +808,14 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {
         let context = offending.first().unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            (*context).into(),
+            context.clone().into(),
             ErrorKind::GeoCoordinatesNotPair(offending.len()),
         ));
     }
 
     let res = FilterCondition::GeoBoundingBox {
-        top_right_point: [args[0][0].into(), args[0][1].into()],
-        bottom_left_point: [args[1][0].into(), args[1][1].into()],
+        top_right_point: [args[0][0].clone().into(), args[0][1].clone().into()],
+        bottom_left_point: [args[1][0].clone().into(), args[1][1].clone().into()],
     };
     Ok((input, res))
 }
@@ -844,7 +842,7 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     if args.len() < 3 {
         let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            (*context).into(),
+            context.clone().into(),
             ErrorKind::GeoPolygonNotEnoughPoints(args.len()),
         ));
     }
@@ -852,13 +850,13 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {
         let context = offending.first().unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            (*context).into(),
+            context.clone().into(),
             ErrorKind::GeoCoordinatesNotPair(offending.len()),
         ));
     }
 
     let res = FilterCondition::GeoPolygon {
-        points: args.into_iter().map(|a| [a[0].into(), a[1].into()]).collect(),
+        points: args.into_iter().map(|a| [a[0].clone().into(), a[1].clone().into()]).collect(),
     };
     Ok((input, res))
 }
@@ -871,9 +869,9 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         tag("_geoPoint"),
         // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    ))(input)
+    ))(input.clone())
     .map_err(|e| {
-        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
+        e.map(|_| Error::new_from_kind(input.clone().into(), ErrorKind::ReservedGeo("_geoPoint")))
     })?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
     Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
@@ -887,9 +885,11 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
         tag("_geoDistance"),
         // if we were able to parse `_geoDistance` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    ))(input)
+    ))(input.clone())
     .map_err(|e| {
-        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
+        e.map(|_| {
+            Error::new_from_kind(input.clone().into(), ErrorKind::ReservedGeo("_geoDistance"))
+        })
     })?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
     Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
@@ -903,8 +903,10 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
         word_exact("_geo"),
         // if we were able to parse `_geo` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geo"))))?;
+    ))(input.clone())
+    .map_err(|e| {
+        e.map(|_| Error::new_from_kind(input.clone().into(), ErrorKind::ReservedGeo("_geo")))
+    })?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
     Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geo")))
 }
@@ -936,7 +938,10 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
             ws(char('(')),
             cut(|input| parse_expression(input, depth + 1)),
             cut_with_err(ws(char(')')), |c| {
-                Error::new_from_kind(input.into(), ErrorKind::MissingClosingDelimiter(c.char()))
+                Error::new_from_kind(
+                    input.clone().into(),
+                    ErrorKind::MissingClosingDelimiter(c.char()),
+                )
             }),
         ),
         // Made a random block of functions because we reached the maximum number of elements per alt
@@ -960,9 +965,11 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_geo_distance,
         parse_geo_point,
         parse_error_reserved_keyword,
-    ))(input)
+    ))(input.clone())
     // if the inner parsers did not match enough information to return an accurate error
-    .map_err(|e| e.map_err(|_| Error::new_from_kind(input.into(), ErrorKind::InvalidPrimary)))
+    .map_err(|e| {
+        e.map_err(|_| Error::new_from_kind(input.clone().into(), ErrorKind::InvalidPrimary))
+    })
 }
 
 /// expression     = or
@@ -1173,7 +1180,9 @@ pub mod tests {
         let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
         // the extra field is not checked in the tests so we can set it to nothing
-        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "").into() }
+        unsafe {
+            Span::new_from_raw_offset(offset, lines as u32, value, Arc::new("".into())).into()
+        }
     }
 
     #[track_caller]
@@ -1724,7 +1733,7 @@ pub mod tests {
     #[test]
     fn token_from_str() {
         let s = "test string that should not be parsed";
-        let token: Token = s.into();
+        let token = Token::from_raw_text(s.into());
         assert_eq!(token.fragment(), s);
     }
 }
