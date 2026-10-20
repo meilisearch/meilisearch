@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::ops::ControlFlow;
+use std::sync::LazyLock;
 use std::{fmt, mem};
 
 use heed::types::Bytes;
@@ -566,10 +567,12 @@ impl<'a> FacetDistribution<'a> {
                         OrderByWithSample::SampledCount { sample: sample_candidates }
                     }
                     (OrderBy::SampledCount, None) => {
-                        let sample_candidate_count = fetch_from_env_or(
-                            "MEILI_EXPERIMENTAL_SAMPLE_CANDIDATE_COUNT",
-                            SAMPLE_CANDIDATES,
-                        );
+                        static SAMPLE_CANDIDATES_COUNT: LazyLock<usize> = LazyLock::new(|| {
+                            fetch_from_env_or(
+                                "MEILI_EXPERIMENTAL_SAMPLE_CANDIDATE_COUNT",
+                                SAMPLE_CANDIDATES,
+                            )
+                        });
 
                         let candidates;
                         let candidates = match self.candidates.as_ref() {
@@ -582,12 +585,12 @@ impl<'a> FacetDistribution<'a> {
 
                         let cardinality = candidates.len() as usize;
                         // If there are less candidates than the sample we want...
-                        let sample = if sample_candidate_count <= cardinality {
+                        let sample = if *SAMPLE_CANDIDATES_COUNT >= cardinality {
                             // ...we use all the candidates for the sample...
                             candidates.clone()
                         } else {
                             // ...else we compute them by...
-                            let amount = sample_candidate_count.min(cardinality);
+                            let amount = SAMPLE_CANDIDATES_COUNT.min(cardinality);
                             let mut rng = rand::rngs::SmallRng::seed_from_u64(42);
                             // ...efficiently computing a set of indices to fetch from the candidates...
                             let indexes = rand::seq::index::sample(&mut rng, cardinality, amount);
