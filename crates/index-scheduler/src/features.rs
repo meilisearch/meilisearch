@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, DatabaseOpener, RwTxn, WithoutTls};
 use meilisearch_types::network::route::Status;
 use meilisearch_types::network::{Network, RemoteAvailability};
 
@@ -22,8 +22,8 @@ mod db_keys {
 }
 
 #[derive(Clone)]
-pub(crate) struct FeatureData {
-    persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
+pub(crate) struct FeatureData<'e> {
+    persisted: Database<'e, Str, SerdeJson<RuntimeTogglableFeatures>>,
     runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
     network: Arc<RwLock<Network>>,
     remote_availability: Arc<RemoteAvailability>,
@@ -252,7 +252,7 @@ impl RoFeatures {
     }
 }
 
-impl FeatureData {
+impl<'e> FeatureData<'e> {
     pub(crate) const fn nb_db() -> u32 {
         NUMBER_OF_DATABASES
     }
@@ -262,12 +262,12 @@ impl FeatureData {
     }
 
     pub fn new(
-        env: &Env<WithoutTls>,
-        wtxn: &mut UniqueRwTxn,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
         instance_features: InstanceTogglableFeatures,
     ) -> Result<Self> {
         let runtime_features_db =
-            env.create_database(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
+            dbo.create_database(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
 
         let persisted_features: RuntimeTogglableFeatures =
             runtime_features_db.get(wtxn, db_keys::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
@@ -354,5 +354,14 @@ impl FeatureData {
 
     pub fn remote_availability(&self) -> &RemoteAvailability {
         &self.remote_availability
+    }
+}
+
+impl meilisearch_types::heed::OnCommit for FeatureData<'_> {
+    type Committed = FeatureData<'static>;
+
+    fn on_commit(self, token: &meilisearch_types::heed::CommitToken) -> Self::Committed {
+        let Self { persisted, runtime, network, remote_availability } = self;
+        FeatureData { persisted: persisted.on_commit(token), runtime, network, remote_availability }
     }
 }

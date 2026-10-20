@@ -1,5 +1,5 @@
 use meilisearch_types::heed::types::Str;
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, DatabaseOpener, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::heed_codec::version::VersionCodec;
 use meilisearch_types::versioning;
 
@@ -17,11 +17,11 @@ mod entry_name {
 }
 
 #[derive(Clone)]
-pub struct Versioning {
-    pub version: Database<Str, VersionCodec>,
+pub struct Versioning<'e> {
+    pub version: Database<'e, Str, VersionCodec>,
 }
 
-impl Versioning {
+impl<'e> Versioning<'e> {
     pub const fn nb_db() -> u32 {
         NUMBER_OF_DATABASES
     }
@@ -50,32 +50,44 @@ impl Versioning {
     }
 
     /// Return `Self` without checking anything about the version
-    pub fn raw_new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> Result<Self, heed::Error> {
-        let version = env.create_database(wtxn, Some(db_name::VERSION))?;
+    pub fn raw_new(
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> Result<Self, heed::Error> {
+        let version = dbo.create_database(wtxn, Some(db_name::VERSION))?;
         Ok(Self { version })
     }
 
-    pub(crate) fn new(env: &Env<WithoutTls>, db_version: (u32, u32, u32)) -> Result<Self> {
-        let mut wtxn = env.unique_write_txn()?;
-        let this = Self::raw_new(env, &mut wtxn)?;
-        let from = match this.get_version(&wtxn)? {
+    pub(crate) fn new(
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+        db_version: (u32, u32, u32),
+    ) -> Result<Self> {
+        let this = Self::raw_new(dbo, wtxn)?;
+        let from = match this.get_version(wtxn)? {
             Some(version) => version,
             // fresh DB: use the db version
             None => {
-                this.set_version(&mut wtxn, db_version)?;
+                this.set_version(wtxn, db_version)?;
                 db_version
             }
         };
-        wtxn.commit()?;
 
-        upgrade_index_scheduler(env, &this, from)?;
+        upgrade_index_scheduler(dbo, wtxn, &this, from)?;
 
         // Once we reach this point it means the upgrade process, if there was one is entirely finished
         // we can safely say we reached the latest version of the index scheduler
-        let mut wtxn = env.write_txn()?;
-        this.set_current_version(&mut wtxn)?;
-        wtxn.commit()?;
+        this.set_current_version(wtxn)?;
 
         Ok(this)
+    }
+}
+
+impl<'e> meilisearch_types::heed::OnCommit for Versioning<'e> {
+    type Committed = Versioning<'static>;
+
+    fn on_commit(self, token: &heed::CommitToken) -> Self::Committed {
+        let Self { version } = self;
+        Versioning { version: version.on_commit(token) }
     }
 }

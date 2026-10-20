@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, DatabaseOpener, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::index_uid::{AnyIndex, DsrIndex, UserIndex, RESERVED_UID_PREFIX};
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
@@ -57,17 +57,17 @@ mod db_name {
 /// - Transactions on the association database.
 /// - ClosingEvent signals emitted when closing an environment.
 #[derive(Clone)]
-pub struct IndexMapper {
+pub struct IndexMapper<'e> {
     /// Keep track of the opened indexes. Used mainly by the index resolver.
     index_map: Arc<RwLock<IndexMap>>,
 
     /// Map an index name with an index uuid currently available on disk.
-    index_mapping: Database<Str, UuidCodec>,
+    index_mapping: Database<'e, Str, UuidCodec>,
     /// Map an index UUID with the cached stats associated to the index.
     ///
     /// Using an UUID forces to use the index_mapping table to recover the index behind a name, ensuring
     /// consistency wrt index swapping.
-    index_stats: Database<UuidCodec, SerdeJson<IndexStats>>,
+    index_stats: Database<'e, UuidCodec, SerdeJson<IndexStats>>,
 
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
@@ -179,7 +179,7 @@ impl IndexStats {
     }
 }
 
-impl IndexMapper {
+impl<'e> IndexMapper<'e> {
     pub(crate) const fn nb_db() -> u32 {
         NUMBER_OF_DATABASES
     }
@@ -206,15 +206,15 @@ impl IndexMapper {
     }
 
     pub fn new(
-        env: &Env<WithoutTls>,
-        wtxn: &mut UniqueRwTxn,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,
     ) -> Result<Self> {
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(budget.index_count))),
-            index_mapping: env.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
-            index_stats: env.create_database(wtxn, Some(db_name::INDEX_STATS))?,
+            index_mapping: dbo.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
+            index_stats: dbo.create_database(wtxn, Some(db_name::INDEX_STATS))?,
             base_path: options.indexes_path.clone(),
             index_base_map_size: budget.map_size,
             index_growth_amount: options.index_growth_amount,
@@ -692,6 +692,35 @@ impl IndexMapper {
 
     pub fn set_currently_updating_index(&self, index: Option<(String, Index)>) {
         *self.currently_updating_index.write().unwrap() = index;
+    }
+}
+
+impl meilisearch_types::heed::OnCommit for IndexMapper<'_> {
+    type Committed = IndexMapper<'static>;
+
+    fn on_commit(self, token: &milli::heed::CommitToken) -> Self::Committed {
+        let Self {
+            index_map,
+            index_mapping,
+            index_stats,
+            base_path,
+            index_base_map_size,
+            index_growth_amount,
+            enable_mdb_writemap,
+            indexer_config,
+            currently_updating_index,
+        } = self;
+        IndexMapper {
+            index_map,
+            index_mapping: index_mapping.on_commit(token),
+            index_stats: index_stats.on_commit(token),
+            base_path,
+            index_base_map_size,
+            index_growth_amount,
+            enable_mdb_writemap,
+            indexer_config,
+            currently_updating_index,
+        }
     }
 }
 
