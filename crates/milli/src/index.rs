@@ -263,6 +263,45 @@ impl Index {
             documents: Database<'t, BEU32, ObkvCodec>,
         }
 
+        impl<'e> Databases<'e> {
+            /// Writes the version of the database.
+            fn put_version(
+                &self,
+                wtxn: &mut RwTxn<'_>,
+                (major, minor, patch): (u32, u32, u32),
+            ) -> heed::Result<()> {
+                self.main.remap_types::<Str, VersionCodec>().put(
+                    wtxn,
+                    main_key::VERSION_KEY,
+                    &(major, minor, patch),
+                )
+            }
+
+            /// Get the version of the database. `None` if it was never set.
+            fn get_version(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<(u32, u32, u32)>> {
+                self.main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)
+            }
+
+            /* vector store */
+            /// Writes the vector store
+            fn put_vector_store(
+                &self,
+                wtxn: &mut RwTxn<'_>,
+                backend: VectorStoreBackend,
+            ) -> Result<()> {
+                Ok(self.main.remap_types::<Str, SerdeJson<VectorStoreBackend>>().put(
+                    wtxn,
+                    main_key::VECTOR_STORE_BACKEND,
+                    &backend,
+                )?)
+            }
+
+            /// A view of the list of docids per shard.
+            pub fn shard_docids(&self) -> DbShardDocids<'e> {
+                DbShardDocids::from_database(self.shard_docids)
+            }
+        }
+
         impl heed::OnCommit for Databases<'_> {
             type Committed = Databases<'static>;
 
@@ -378,6 +417,29 @@ impl Index {
                     documents: dbo.create_database(wtxn, Some(DOCUMENTS))?,
                 };
 
+                if let CreateOrOpen::Create { shards } = create_or_open {
+                    if databases.get_version(wtxn)?.is_none() {
+                        databases.put_version(
+                            wtxn,
+                            (
+                                constants::VERSION_MAJOR,
+                                constants::VERSION_MINOR,
+                                constants::VERSION_PATCH,
+                            ),
+                        )?;
+                        // The database before v1.29 defaulted to using arroy, so we
+                        // need to set it explicitly because the new default is hannoy.
+                        databases.put_vector_store(wtxn, VectorStoreBackend::Hannoy)?;
+                    }
+
+                    if let Some(shards) = shards {
+                        let shard_docids = databases.shard_docids();
+                        for shard in shards.as_sorted_slice() {
+                            shard_docids.add_shard(wtxn, &shard.name)?;
+                        }
+                    }
+                }
+
                 Ok(CommitOrAbort::<_, ()>::Commit(databases))
             })?
             .unwrap_commit();
@@ -442,28 +504,6 @@ impl Index {
             cellulite,
             documents,
         };
-
-        let mut wtxn = this.write_txn()?;
-        if let CreateOrOpen::Create { shards } = create_or_open {
-            if this.get_version(&wtxn)?.is_none() {
-                this.put_version(
-                    &mut wtxn,
-                    (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
-                )?;
-                // The database before v1.29 defaulted to using arroy, so we
-                // need to set it explicitly because the new default is hannoy.
-                this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
-            }
-
-            if let Some(shards) = shards {
-                let shard_docids = this.shard_docids();
-                for shard in shards.as_sorted_slice() {
-                    shard_docids.add_shard(&mut wtxn, &shard.name)?;
-                }
-            }
-        }
-
-        wtxn.commit()?;
 
         Index::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
 
@@ -2126,7 +2166,7 @@ impl Index {
     }
 
     /// A view of the list of docids per shard.
-    pub fn shard_docids(&self) -> DbShardDocids {
+    pub fn shard_docids(&self) -> DbShardDocids<'static> {
         DbShardDocids::from_index(self)
     }
 
