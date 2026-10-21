@@ -68,7 +68,7 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{
-    self, CommitOrAbort, Database, Env, RoTxn, RwTxn, Unspecified, WithoutTls,
+    self, CommitOrAbort, Database, Env, OnCommit, RoTxn, RwTxn, Unspecified, WithoutTls,
 };
 use meilisearch_types::index_uid::UserIndex;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
@@ -404,8 +404,47 @@ impl IndexScheduler {
 
         // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
 
+        struct Databases<'e> {
+            version: versioning::Versioning<'e>,
+            queue: Queue<'e>,
+            index_mapper: IndexMapper<'e>,
+            persisted: Database<'e, Str, Str>,
+            legacy_dsr: Database<'e, Unspecified, Unspecified>,
+            features: features::FeatureData<'e>,
+            chat_settings: Database<'e, Str, SerdeJson<ChatCompletionSettings>>,
+            webhooks: Webhooks,
+        }
+
+        impl<'e> OnCommit for Databases<'e> {
+            type Committed = Databases<'static>;
+
+            fn on_commit(self, token: &heed::CommitToken) -> Self::Committed {
+                let Self {
+                    version,
+                    queue,
+                    index_mapper,
+                    persisted,
+                    legacy_dsr,
+                    features,
+                    chat_settings,
+                    webhooks,
+                } = self;
+
+                Databases {
+                    version: version.on_commit(token),
+                    queue: queue.on_commit(token),
+                    index_mapper: index_mapper.on_commit(token),
+                    persisted: persisted.on_commit(token),
+                    legacy_dsr: legacy_dsr.on_commit(token),
+                    features: features.on_commit(token),
+                    chat_settings: chat_settings.on_commit(token),
+                    webhooks,
+                }
+            }
+        }
+
         let wtxn = env.write_txn()?;
-        let (version, queue, index_mapper, persisted, legacy_dsr, features, chat_settings) = env
+        let databases = env
             .create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
                 let version = versioning::Versioning::new(dbo, wtxn, from_db_version)?;
                 let features = features::FeatureData::new(dbo, wtxn, options.instance_features)?;
@@ -416,7 +455,14 @@ impl IndexScheduler {
                 let persisted = dbo.create_database(wtxn, Some(db_name::PERSISTED))?;
                 let legacy_dsr = dbo.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
 
-                Ok(CommitOrAbort::<_, ()>::Commit((
+                let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
+                let mut webhooks = webhooks_db.get(wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
+                webhooks.with_cli(
+                    options.cli_webhook_url.clone(),
+                    options.cli_webhook_authorization.clone(),
+                );
+
+                Ok(CommitOrAbort::<_, ()>::Commit(Databases {
                     version,
                     queue,
                     index_mapper,
@@ -424,16 +470,21 @@ impl IndexScheduler {
                     legacy_dsr,
                     features,
                     chat_settings,
-                )))
+                    webhooks,
+                }))
             })?
             .unwrap_commit();
 
-        let rtxn = env.read_txn()?;
-        let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
-        let mut webhooks = webhooks_db.get(&rtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
-        webhooks
-            .with_cli(options.cli_webhook_url.clone(), options.cli_webhook_authorization.clone());
-        drop(rtxn);
+        let Databases {
+            version,
+            queue,
+            index_mapper,
+            persisted,
+            legacy_dsr,
+            features,
+            chat_settings,
+            webhooks,
+        } = databases;
 
         let scheduler = Scheduler::new(&options, auth_env);
 
