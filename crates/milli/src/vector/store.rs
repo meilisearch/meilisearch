@@ -778,7 +778,7 @@ impl VectorStore {
         &'a self,
         rtxn: &'a RoTxn<'a>,
         db: hannoy::Database<'static, D>,
-    ) -> impl Iterator<Item = Result<hannoy::Reader<D>, hannoy::Error>> + 'a {
+    ) -> impl Iterator<Item = Result<hannoy::Reader<'a, D>, hannoy::Error>> + 'a {
         vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
             match hannoy::Reader::open(rtxn, index, db) {
                 Ok(reader) => match reader.is_empty(rtxn) {
