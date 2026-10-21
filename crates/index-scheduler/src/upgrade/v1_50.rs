@@ -12,12 +12,12 @@ pub struct MigrateDynamicSearchRules;
 impl UpgradeIndexScheduler for MigrateDynamicSearchRules {
     fn upgrade<'e>(
         &self,
-        env: &DatabaseOpener<'e, WithoutTls>,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
         wtxn: &mut RwTxn<'e>,
     ) -> anyhow::Result<()> {
-        let queue = TaskQueue::new(env, wtxn)?;
+        let queue = TaskQueue::new(dbo, wtxn)?;
 
-        let store = LegacyDynamicSearchRulesStore::new(env, wtxn)?;
+        let store = LegacyDynamicSearchRulesStore::new(dbo, wtxn)?;
 
         // collect all existing rules into memory, sparing us borrow issues caused by iterating over the DB while writing tasks
         // with the same wtxn.

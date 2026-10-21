@@ -18,7 +18,7 @@ mod v1_50;
 trait UpgradeIndexScheduler {
     fn upgrade<'e>(
         &self,
-        env: &DatabaseOpener<'e, WithoutTls>,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
         wtxn: &mut RwTxn<'e>,
     ) -> anyhow::Result<()>;
     /// Whether the migration should be applied, depending on the initial version of the index scheduler before

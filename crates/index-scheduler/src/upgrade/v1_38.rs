@@ -15,14 +15,14 @@ pub struct RemoveOrphanBatches;
 impl UpgradeIndexScheduler for RemoveOrphanBatches {
     fn upgrade<'e>(
         &self,
-        env: &DatabaseOpener<'e, WithoutTls>,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
         wtxn: &mut RwTxn<'e>,
     ) -> anyhow::Result<()> {
-        let batch_queue = BatchQueue::new(env, wtxn)?;
+        let batch_queue = BatchQueue::new(dbo, wtxn)?;
         let all_batch_ids = batch_queue.all_batch_ids(wtxn)?;
 
         let batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec> =
-            env.create_database(wtxn, Some(BATCH_TO_TASKS_MAPPING))?;
+            dbo.create_database(wtxn, Some(BATCH_TO_TASKS_MAPPING))?;
 
         let all_batches = batch_queue.all_batches.lazily_decode_data();
         let iter = all_batches.iter(wtxn)?;

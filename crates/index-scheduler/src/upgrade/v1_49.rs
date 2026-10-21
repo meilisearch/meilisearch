@@ -16,8 +16,8 @@ pub(crate) struct LegacyDynamicSearchRulesStore<'e> {
 }
 
 impl<'e> LegacyDynamicSearchRulesStore<'e> {
-    pub fn new(env: &DatabaseOpener<'e, WithoutTls>, wtxn: &mut RwTxn<'e>) -> crate::Result<Self> {
-        let persisted = env.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
+    pub fn new(dbo: &DatabaseOpener<'e, WithoutTls>, wtxn: &mut RwTxn<'e>) -> crate::Result<Self> {
+        let persisted = dbo.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
 
         Ok(Self { persisted })
     }

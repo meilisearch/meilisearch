@@ -239,21 +239,21 @@ fn clear_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
 }
 
 fn try_opening_database<'e, KC: 'static, DC: 'static>(
-    env: &DatabaseOpener<'e, WithoutTls>,
+    dbo: &DatabaseOpener<'e, WithoutTls>,
     rtxn: &RoTxn<'e, WithoutTls>,
     db_name: &str,
 ) -> anyhow::Result<Database<'e, KC, DC>> {
-    env.open_database(rtxn, Some(db_name))
+    dbo.open_database(rtxn, Some(db_name))
         .with_context(|| format!("While opening the {db_name:?} database"))?
         .with_context(|| format!("Missing the {db_name:?} database"))
 }
 
 fn try_opening_poly_database<'e>(
-    env: &DatabaseOpener<'e, WithoutTls>,
+    dbo: &DatabaseOpener<'e, WithoutTls>,
     rtxn: &RoTxn<'e, WithoutTls>,
     db_name: &str,
 ) -> anyhow::Result<Database<'e, Unspecified, Unspecified>> {
-    env.database_options()
+    dbo.database_options()
         .name(db_name)
         .open(rtxn)
         .with_context(|| format!("While opening the {db_name:?} poly database"))?

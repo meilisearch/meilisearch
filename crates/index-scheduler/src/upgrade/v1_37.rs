@@ -95,12 +95,12 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
 }
 
 fn set_network<'e>(
-    env: &DatabaseOpener<'e, WithoutTls>,
+    dbo: &DatabaseOpener<'e, WithoutTls>,
     wtxn: &mut RwTxn<'e>,
     network: &Network,
 ) -> Result<()> {
     let network_db =
-        env.create_database::<Str, SerdeJson<Network>>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
+        dbo.create_database::<Str, SerdeJson<Network>>(wtxn, Some(db_name::EXPERIMENTAL_FEATURES))?;
 
     network_db.put(wtxn, db_keys::NETWORK, network)?;
     Ok(())
