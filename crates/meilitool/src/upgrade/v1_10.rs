@@ -3,13 +3,13 @@ use std::path::Path;
 use anyhow::{bail, Context};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{
-    Database, Env, EnvOpenOptions, RwTxn, UniqueRoTxn, UniqueRwTxn, Unspecified, WithoutTls,
+    CommitOrAbort, Database, DatabaseOpener, EnvOpenOptions, RoTxn, RwTxn, Unspecified, WithoutTls,
 };
 use meilisearch_types::milli::index::{db_name, main_key};
 
 use super::v1_9;
 use crate::uuid_codec::UuidCodec;
-use crate::{try_opening_database_w, try_opening_poly_database, try_opening_poly_database_w};
+use crate::{try_opening_database, try_opening_poly_database};
 
 pub type FieldDistribution = std::collections::BTreeMap<String, u64>;
 
@@ -92,12 +92,12 @@ fn update_index_stats(
     Ok(())
 }
 
-fn update_date_format(
+fn update_date_format<'e>(
     index_uid: &str,
-    index_env: &Env<WithoutTls>,
-    index_wtxn: &mut UniqueRwTxn,
+    index_dbo: &DatabaseOpener<'e, WithoutTls>,
+    index_wtxn: &mut RwTxn<'e>,
 ) -> anyhow::Result<()> {
-    let main = try_opening_poly_database_w(index_env, index_wtxn, db_name::MAIN)
+    let main = try_opening_poly_database(index_dbo, index_wtxn, db_name::MAIN)
         .with_context(|| format!("while updating date format for index `{index_uid}`"))?;
 
     date_round_trip(index_wtxn, index_uid, main, main_key::CREATED_AT_KEY)?;
@@ -106,12 +106,12 @@ fn update_date_format(
     Ok(())
 }
 
-fn find_rest_embedders(
+fn find_rest_embedders<'e>(
     index_uid: &str,
-    index_env: &Env<WithoutTls>,
-    index_txn: &UniqueRoTxn<'_, WithoutTls>,
+    index_dbo: &DatabaseOpener<'e, WithoutTls>,
+    index_txn: &RoTxn<'e, WithoutTls>,
 ) -> anyhow::Result<Vec<String>> {
-    let main = try_opening_poly_database(index_env, index_txn, db_name::MAIN)
+    let main = try_opening_poly_database(index_dbo, index_txn, db_name::MAIN)
         .with_context(|| format!("while checking REST embedders for index `{index_uid}`"))?;
 
     let mut rest_embedders = vec![];
@@ -171,124 +171,131 @@ pub fn v1_9_to_v1_10(
     }
     .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
 
-    let mut sched_wtxn = env.unique_write_txn()?;
+    let sched_wtxn = env.write_txn()?;
+    env.create_databases_and_commit(sched_wtxn, |dbo, sched_wtxn| -> anyhow::Result<_> {
+        let index_mapping: Database<Str, UuidCodec> =
+            try_opening_database(dbo, sched_wtxn, "index-mapping")?;
 
-    let index_mapping: Database<Str, UuidCodec> =
-        try_opening_database_w(&env, &sched_wtxn, "index-mapping")?;
+        let index_stats: Database<UuidCodec, Unspecified> =
+            try_opening_database(dbo, sched_wtxn, "index-stats").with_context(|| {
+                format!("While trying to open {:?}", index_scheduler_path.display())
+            })?;
 
-    let index_stats: Database<UuidCodec, Unspecified> =
-        try_opening_database_w(&env, &sched_wtxn, "index-stats").with_context(|| {
-            format!("While trying to open {:?}", index_scheduler_path.display())
-        })?;
+        let index_count =
+            index_mapping.len(sched_wtxn).context("while reading the number of indexes")?;
 
-    let index_count =
-        index_mapping.len(&sched_wtxn).context("while reading the number of indexes")?;
+        // FIXME: not ideal, we have to pre-populate all indexes to prevent double borrow of sched_wtxn
+        // 1. immutably for the iteration
+        // 2. mutably for updating index stats
+        let indexes: Vec<_> = index_mapping
+            .iter(sched_wtxn)?
+            .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
+            .collect();
 
-    // FIXME: not ideal, we have to pre-populate all indexes to prevent double borrow of sched_wtxn
-    // 1. immutably for the iteration
-    // 2. mutably for updating index stats
-    let indexes: Vec<_> = index_mapping
-        .iter(&sched_wtxn)?
-        .map(|res| res.map(|(uid, uuid)| (uid.to_owned(), uuid)))
-        .collect();
+        let mut rest_embedders = Vec::new();
 
-    let mut rest_embedders = Vec::new();
+        let mut unwrapped_indexes = Vec::new();
 
-    let mut unwrapped_indexes = Vec::new();
+        // check that update can take place
+        for (index_index, result) in indexes.into_iter().enumerate() {
+            let (uid, uuid) = result?;
+            let index_path = db_path.join("indexes").join(uuid.to_string());
 
-    // check that update can take place
-    for (index_index, result) in indexes.into_iter().enumerate() {
-        let (uid, uuid) = result?;
-        let index_path = db_path.join("indexes").join(uuid.to_string());
-
-        println!(
-            "[{}/{index_count}]Checking that update can take place for  `{uid}` at `{}`",
-            index_index + 1,
-            index_path.display()
-        );
-
-        let index_env = unsafe {
-            // FIXME: fetch the 25 magic number from the index file
-            EnvOpenOptions::new()
-                .read_txn_without_tls()
-                .max_dbs(25)
-                .open(&index_path)
-                .with_context(|| {
-                    format!("while opening index {uid} at '{}'", index_path.display())
-                })?
-        };
-
-        let index_txn = index_env.unique_read_txn().with_context(|| {
-            format!(
-                "while obtaining a write transaction for index {uid} at {}",
+            println!(
+                "[{}/{index_count}]Checking that update can take place for  `{uid}` at `{}`",
+                index_index + 1,
                 index_path.display()
-            )
-        })?;
+            );
 
-        println!("\t- Checking for incompatible embedders (REST embedders)");
-        let rest_embedders_for_index = find_rest_embedders(&uid, &index_env, &index_txn)?;
+            let index_env = unsafe {
+                // FIXME: fetch the 25 magic number from the index file
+                EnvOpenOptions::new()
+                    .read_txn_without_tls()
+                    .max_dbs(25)
+                    .open(&index_path)
+                    .with_context(|| {
+                        format!("while opening index {uid} at '{}'", index_path.display())
+                    })?
+            };
 
-        if rest_embedders_for_index.is_empty() {
-            unwrapped_indexes.push((uid, uuid));
-        } else {
-            // no need to add to unwrapped indexes because we'll exit early
-            rest_embedders.push((uid, rest_embedders_for_index));
+            let index_txn = index_env.read_txn().with_context(|| {
+                format!(
+                    "while obtaining a write transaction for index {uid} at {}",
+                    index_path.display()
+                )
+            })?;
+
+            println!("\t- Checking for incompatible embedders (REST embedders)");
+
+            let mut rest_embedders_for_index = Vec::new();
+            index_env.open_databases_and_commit(index_txn, |index_dbo, index_txn| -> anyhow::Result<_> {
+                rest_embedders_for_index = find_rest_embedders(&uid, index_dbo, index_txn)?;
+                Ok(CommitOrAbort::<_, ()>::Commit(()))
+            })?.unwrap_commit();
+
+            if rest_embedders_for_index.is_empty() {
+                unwrapped_indexes.push((uid, uuid));
+            } else {
+                // no need to add to unwrapped indexes because we'll exit early
+                rest_embedders.push((uid, rest_embedders_for_index));
+            }
         }
-    }
 
-    if !rest_embedders.is_empty() {
-        let rest_embedders = rest_embedders
-            .into_iter()
-            .flat_map(|(index, embedders)| std::iter::repeat(index.clone()).zip(embedders))
-            .map(|(index, embedder)| format!("\t- embedder `{embedder}` in index `{index}`"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!("The update cannot take place because there are REST embedder(s). Remove them before proceeding with the update:\n{rest_embedders}\n\n\
-            The database has not been modified and is still a valid v1.9 database.");
-    }
+        if !rest_embedders.is_empty() {
+            let rest_embedders = rest_embedders
+                .into_iter()
+                .flat_map(|(index, embedders)| std::iter::repeat(index.clone()).zip(embedders))
+                .map(|(index, embedder)| format!("\t- embedder `{embedder}` in index `{index}`"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            bail!("The update cannot take place because there are REST embedder(s). Remove them before proceeding with the update:\n{rest_embedders}\n\n\
+                The database has not been modified and is still a valid v1.9 database.");
+        }
 
-    println!("Update can take place, updating");
+        println!("Update can take place, updating");
 
-    for (index_index, (uid, uuid)) in unwrapped_indexes.into_iter().enumerate() {
-        let index_path = db_path.join("indexes").join(uuid.to_string());
+        for (index_index, (uid, uuid)) in unwrapped_indexes.into_iter().enumerate() {
+            let index_path = db_path.join("indexes").join(uuid.to_string());
 
-        println!(
-            "[{}/{index_count}]Updating index `{uid}` at `{}`",
-            index_index + 1,
-            index_path.display()
-        );
-
-        let index_env = unsafe {
-            // FIXME: fetch the 25 magic number from the index file
-            EnvOpenOptions::new()
-                .read_txn_without_tls()
-                .max_dbs(25)
-                .open(&index_path)
-                .with_context(|| {
-                    format!("while opening index {uid} at '{}'", index_path.display())
-                })?
-        };
-
-        let mut index_wtxn = index_env.unique_write_txn().with_context(|| {
-            format!(
-                "while obtaining a write transaction for index `{uid}` at `{}`",
+            println!(
+                "[{}/{index_count}]Updating index `{uid}` at `{}`",
+                index_index + 1,
                 index_path.display()
-            )
-        })?;
+            );
 
-        println!("\t- Updating index stats");
-        update_index_stats(index_stats, &uid, uuid, &mut sched_wtxn)?;
-        println!("\t- Updating date format");
-        update_date_format(&uid, &index_env, &mut index_wtxn)?;
+            let index_env = unsafe {
+                // FIXME: fetch the 25 magic number from the index file
+                EnvOpenOptions::new()
+                    .read_txn_without_tls()
+                    .max_dbs(25)
+                    .open(&index_path)
+                    .with_context(|| {
+                        format!("while opening index {uid} at '{}'", index_path.display())
+                    })?
+            };
 
-        index_wtxn.commit().with_context(|| {
-            format!("while committing the write txn for index `{uid}` at {}", index_path.display())
-        })?;
-    }
+            let index_wtxn = index_env.write_txn().with_context(|| {
+                format!(
+                    "while obtaining a write transaction for index `{uid}` at `{}`",
+                    index_path.display()
+                )
+            })?;
 
-    sched_wtxn.commit().context("while committing the write txn for the index-scheduler")?;
+            println!("\t- Updating index stats");
+            update_index_stats(index_stats, &uid, uuid, sched_wtxn)?;
+            println!("\t- Updating date format");
 
-    println!("Upgrading database succeeded");
+            env.create_databases_and_commit(index_wtxn, |index_dbo, index_wtxn| -> anyhow::Result<_> {
+                update_date_format(&uid, index_dbo, index_wtxn)?;
+                Ok(CommitOrAbort::<_, ()>::Commit(()))
+            }).with_context(|| {
+                format!("while committing the write txn for index `{uid}` at {}", index_path.display())
+            })?.unwrap_commit();
+        }
 
-    Ok(())
+
+        println!("Upgrading database succeeded");
+
+        Ok(CommitOrAbort::<_, ()>::Commit(()))
+    }).map(drop)
 }

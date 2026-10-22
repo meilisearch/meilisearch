@@ -3,7 +3,7 @@ use meilisearch_types::dynamic_search_rules::{
     RuleUid, TimeCondition,
 };
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, DatabaseOpener, RwTxn, WithoutTls};
 use meilisearch_types::milli::dynamic_search_rules::{PinAction as NewRuleAction, RuleActions};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -11,13 +11,13 @@ use time::OffsetDateTime;
 use crate::db_name;
 
 #[derive(Clone)]
-pub(crate) struct LegacyDynamicSearchRulesStore {
-    pub(crate) persisted: Database<Str, SerdeJson<LegacyDynamicSearchRule>>,
+pub(crate) struct LegacyDynamicSearchRulesStore<'e> {
+    pub(crate) persisted: Database<'e, Str, SerdeJson<LegacyDynamicSearchRule>>,
 }
 
-impl LegacyDynamicSearchRulesStore {
-    pub fn new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> crate::Result<Self> {
-        let persisted = env.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
+impl<'e> LegacyDynamicSearchRulesStore<'e> {
+    pub fn new(dbo: &DatabaseOpener<'e, WithoutTls>, wtxn: &mut RwTxn<'e>) -> crate::Result<Self> {
+        let persisted = dbo.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
 
         Ok(Self { persisted })
     }

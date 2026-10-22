@@ -27,14 +27,21 @@ impl Shards {
 }
 
 /// View over the `shard_docids` DB of an index
-pub struct DbShardDocids(Database<Str, CboRoaringBitmapCodec>);
+pub struct DbShardDocids<'e>(Database<'e, Str, CboRoaringBitmapCodec>);
 
-impl DbShardDocids {
+impl<'e> DbShardDocids<'e> {
     /// Create the view from the index.
     ///
     /// A transaction will be necessary to actually access the view.
     pub fn from_index(index: &Index) -> Self {
-        Self(index.shard_docids)
+        Self::from_database(index.shard_docids)
+    }
+
+    /// Create the view from the internal database.
+    ///
+    /// A transaction will be necessary to actually access the view.
+    pub fn from_database(db: Database<'e, Str, CboRoaringBitmapCodec>) -> Self {
+        Self(db)
     }
 
     /// Intersection of the specified roaring with the docids for the specified shard.

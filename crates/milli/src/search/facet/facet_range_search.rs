@@ -14,7 +14,7 @@ use crate::{CboRoaringBitmapCodec, Result};
 /// the two bounds.
 pub fn find_docids_of_facet_within_bounds<'t, BoundCodec>(
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
+    db: heed::Database<'static, FacetGroupKeyCodec<BoundCodec>, FacetGroupValueCodec>,
     field_id: u16,
     left: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
     right: &'t Bound<<BoundCodec as BytesEncode<'t>>::EItem>,
@@ -69,7 +69,7 @@ where
 /// Fetch the document ids that have a facet with a value between the two given bounds
 struct FacetRangeSearch<'t, 'b, 'bitmap> {
     rtxn: &'t heed::RoTxn<'t>,
-    db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>,
+    db: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupLazyValueCodec>,
     field_id: u16,
     left: Bound<&'b [u8]>,
     right: Bound<&'b [u8]>,

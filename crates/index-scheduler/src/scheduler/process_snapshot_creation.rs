@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::sync::atomic::Ordering;
 
-use meilisearch_types::heed::CompactionOption;
+use meilisearch_types::heed::{CommitOrAbort, CompactionOption};
 use meilisearch_types::index_uid::AnyIndex;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::tasks::{Status, Task};
@@ -26,54 +26,59 @@ unsafe fn remove_tasks(
     let env_options = EnvOpenOptions::new();
     let mut env_options = env_options.read_txn_without_tls();
     let env = env_options.max_dbs(TaskQueue::nb_db()).map_size(index_base_map_size).open(dst)?;
-    let mut wtxn = env.unique_write_txn()?;
-    let task_queue = TaskQueue::new(&env, &mut wtxn)?;
+    let wtxn = env.write_txn()?;
+    env.create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
+        let task_queue = TaskQueue::new(dbo, wtxn)?;
 
-    // Destructuring to ensure the code below gets updated if a database gets added in the future.
-    let TaskQueue {
-        all_tasks,
-        status,
-        kind,
-        index_tasks: _, // snapshot creation tasks are not index tasks
-        canceled_by,
-        enqueued_at,
-        started_at,
-        finished_at,
-    } = task_queue;
+        // Destructuring to ensure the code below gets updated if a database gets added in the future.
+        let TaskQueue {
+            all_tasks,
+            status,
+            kind,
+            index_tasks: _, // snapshot creation tasks are not index tasks
+            canceled_by,
+            enqueued_at,
+            started_at,
+            finished_at,
+        } = task_queue;
 
-    for task in tasks {
-        all_tasks.delete(&mut wtxn, &task.uid)?;
+        for task in tasks {
+            all_tasks.delete(wtxn, &task.uid)?;
 
-        let mut tasks = status.get(&wtxn, &task.status)?.unwrap_or_default();
-        tasks.remove(task.uid);
-        status.put(&mut wtxn, &task.status, &tasks)?;
-
-        let mut tasks = kind.get(&wtxn, &task.kind.as_kind())?.unwrap_or_default();
-        tasks.remove(task.uid);
-        kind.put(&mut wtxn, &task.kind.as_kind(), &tasks)?;
-
-        canceled_by.delete(&mut wtxn, &task.uid)?;
-
-        let timestamp = task.enqueued_at.unix_timestamp_nanos();
-        let mut tasks = enqueued_at.get(&wtxn, &timestamp)?.unwrap_or_default();
-        tasks.remove(task.uid);
-        enqueued_at.put(&mut wtxn, &timestamp, &tasks)?;
-
-        if let Some(task_started_at) = task.started_at {
-            let timestamp = task_started_at.unix_timestamp_nanos();
-            let mut tasks = started_at.get(&wtxn, &timestamp)?.unwrap_or_default();
+            let mut tasks = status.get(wtxn, &task.status)?.unwrap_or_default();
             tasks.remove(task.uid);
-            started_at.put(&mut wtxn, &timestamp, &tasks)?;
+            status.put(wtxn, &task.status, &tasks)?;
+
+            let mut tasks = kind.get(wtxn, &task.kind.as_kind())?.unwrap_or_default();
+            tasks.remove(task.uid);
+            kind.put(wtxn, &task.kind.as_kind(), &tasks)?;
+
+            canceled_by.delete(wtxn, &task.uid)?;
+
+            let timestamp = task.enqueued_at.unix_timestamp_nanos();
+            let mut tasks = enqueued_at.get(wtxn, &timestamp)?.unwrap_or_default();
+            tasks.remove(task.uid);
+            enqueued_at.put(wtxn, &timestamp, &tasks)?;
+
+            if let Some(task_started_at) = task.started_at {
+                let timestamp = task_started_at.unix_timestamp_nanos();
+                let mut tasks = started_at.get(wtxn, &timestamp)?.unwrap_or_default();
+                tasks.remove(task.uid);
+                started_at.put(wtxn, &timestamp, &tasks)?;
+            }
+
+            if let Some(task_finished_at) = task.finished_at {
+                let timestamp = task_finished_at.unix_timestamp_nanos();
+                let mut tasks = finished_at.get(wtxn, &timestamp)?.unwrap_or_default();
+                tasks.remove(task.uid);
+                finished_at.put(wtxn, &timestamp, &tasks)?;
+            }
         }
 
-        if let Some(task_finished_at) = task.finished_at {
-            let timestamp = task_finished_at.unix_timestamp_nanos();
-            let mut tasks = finished_at.get(&wtxn, &timestamp)?.unwrap_or_default();
-            tasks.remove(task.uid);
-            finished_at.put(&mut wtxn, &timestamp, &tasks)?;
-        }
-    }
-    wtxn.commit()?;
+        Ok(CommitOrAbort::<_, ()>::Commit(()))
+    })?
+    .unwrap_commit();
+
     Ok(())
 }
 

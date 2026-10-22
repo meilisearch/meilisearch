@@ -67,7 +67,9 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, Unspecified, WithoutTls};
+use meilisearch_types::heed::{
+    self, CommitOrAbort, Database, Env, OnCommit, RoTxn, RwTxn, Unspecified, WithoutTls,
+};
 use meilisearch_types::index_uid::UserIndex;
 use meilisearch_types::milli::dynamic_search_rules::DsrFuel;
 use meilisearch_types::milli::sharding::Shards;
@@ -185,25 +187,25 @@ pub struct IndexScheduler {
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
 
     /// A database containing only the version of the index-scheduler
-    pub version: versioning::Versioning,
+    pub version: versioning::Versioning<'static>,
     /// The queue containing both the tasks and the batches.
-    pub queue: queue::Queue,
+    pub queue: queue::Queue<'static>,
     /// In charge of creating, opening, storing and returning indexes.
-    pub(crate) index_mapper: IndexMapper,
+    pub(crate) index_mapper: IndexMapper<'static>,
     /// In charge of fetching and setting the status of experimental features.
-    features: features::FeatureData,
+    features: features::FeatureData<'static>,
 
     /// Stores the custom chat prompts and other settings of the indexes.
-    pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
+    pub(crate) chat_settings: Database<'static, Str, SerdeJson<ChatCompletionSettings>>,
 
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
 
     /// A database to store single-keyed data that is persisted across restarts.
-    persisted: Database<Str, Str>,
+    persisted: Database<'static, Str, Str>,
 
     /// A legacy database that used to store dynamic search rules before they became a dedicated index
-    legacy_dsr: Database<Unspecified, Unspecified>,
+    legacy_dsr: Database<'static, Unspecified, Unspecified>,
 
     /// Webhook, loaded and stored in the `persisted` database
     webhooks: Arc<Webhooks>,
@@ -320,7 +322,7 @@ impl IndexScheduler {
                 run_loop_iteration: _,
         } = self;
 
-        let total_size = env.stat().non_free_page_size()
+        let total_size = env.unnamed_database_stat().non_free_page_size()
             + chat_settings.stat(rtxn)?.non_free_page_size()
             + persisted.stat(rtxn)?.non_free_page_size()
             + legacy_dsr.stat(rtxn)?.non_free_page_size();
@@ -401,23 +403,88 @@ impl IndexScheduler {
         }?;
 
         // We **must** start by upgrading the version because it'll also upgrade the required database before we can open them
-        let version = versioning::Versioning::new(&env, from_db_version)?;
 
-        let mut wtxn = env.unique_write_txn()?;
+        struct Databases<'e> {
+            version: versioning::Versioning<'e>,
+            queue: Queue<'e>,
+            index_mapper: IndexMapper<'e>,
+            persisted: Database<'e, Str, Str>,
+            legacy_dsr: Database<'e, Unspecified, Unspecified>,
+            features: features::FeatureData<'e>,
+            chat_settings: Database<'e, Str, SerdeJson<ChatCompletionSettings>>,
+            webhooks: Webhooks,
+        }
 
-        let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
-        let queue = Queue::new(&env, &mut wtxn, &options)?;
-        let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
-        let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
+        impl<'e> OnCommit for Databases<'e> {
+            type Committed = Databases<'static>;
 
-        let persisted = env.create_database(&mut wtxn, Some(db_name::PERSISTED))?;
-        let legacy_dsr = env.create_database(&mut wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
-        let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
-        let mut webhooks = webhooks_db.get(&wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
-        webhooks
-            .with_cli(options.cli_webhook_url.clone(), options.cli_webhook_authorization.clone());
+            fn on_commit(self, token: &heed::CommitToken) -> Self::Committed {
+                let Self {
+                    version,
+                    queue,
+                    index_mapper,
+                    persisted,
+                    legacy_dsr,
+                    features,
+                    chat_settings,
+                    webhooks,
+                } = self;
 
-        wtxn.commit()?;
+                Databases {
+                    version: version.on_commit(token),
+                    queue: queue.on_commit(token),
+                    index_mapper: index_mapper.on_commit(token),
+                    persisted: persisted.on_commit(token),
+                    legacy_dsr: legacy_dsr.on_commit(token),
+                    features: features.on_commit(token),
+                    chat_settings: chat_settings.on_commit(token),
+                    webhooks,
+                }
+            }
+        }
+
+        let wtxn = env.write_txn()?;
+        let databases = env
+            .create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
+                let version = versioning::Versioning::new(dbo, wtxn, from_db_version)?;
+                let features = features::FeatureData::new(dbo, wtxn, options.instance_features)?;
+                let queue = Queue::new(dbo, wtxn, &options)?;
+                let index_mapper = IndexMapper::new(dbo, wtxn, &options, budget)?;
+                let chat_settings = dbo.create_database(wtxn, Some(db_name::CHAT_SETTINGS))?;
+
+                let persisted = dbo.create_database(wtxn, Some(db_name::PERSISTED))?;
+                let legacy_dsr = dbo.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
+
+                let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
+                let mut webhooks = webhooks_db.get(wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
+                webhooks.with_cli(
+                    options.cli_webhook_url.clone(),
+                    options.cli_webhook_authorization.clone(),
+                );
+
+                Ok(CommitOrAbort::<_, ()>::Commit(Databases {
+                    version,
+                    queue,
+                    index_mapper,
+                    persisted,
+                    legacy_dsr,
+                    features,
+                    chat_settings,
+                    webhooks,
+                }))
+            })?
+            .unwrap_commit();
+
+        let Databases {
+            version,
+            queue,
+            index_mapper,
+            persisted,
+            legacy_dsr,
+            features,
+            chat_settings,
+            webhooks,
+        } = databases;
 
         let scheduler = Scheduler::new(&options, auth_env);
 

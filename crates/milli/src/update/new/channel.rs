@@ -501,7 +501,7 @@ pub enum Database {
 }
 
 impl Database {
-    pub fn database(&self, index: &Index) -> heed::Database<Bytes, Bytes> {
+    pub fn database(&self, index: &Index) -> heed::Database<'static, Bytes, Bytes> {
         match self {
             Database::Main => index.main.remap_types(),
             Database::Documents => index.documents.remap_types(),

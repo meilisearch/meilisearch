@@ -112,7 +112,7 @@ pub mod new_incremental;
 /// a bulk update method or an incremental update method.
 pub struct FacetsUpdate<'i> {
     index: &'i Index,
-    database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+    database: heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
     delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
     normalized_delta_data: Option<Merger<BufReader<File>, MergeDeladdBtreesetString>>,
@@ -355,7 +355,7 @@ pub(crate) mod test_helpers {
 
     use grenad::MergerBuilder;
     use heed::types::Bytes;
-    use heed::{BytesDecode, BytesEncode, Env, RoTxn, RwTxn, WithoutTls};
+    use heed::{BytesDecode, BytesEncode, CommitOrAbort, Env, RoTxn, RwTxn, WithoutTls};
     use roaring::RoaringBitmap;
 
     use super::bulk::FacetsUpdateBulkInner;
@@ -394,7 +394,8 @@ pub(crate) mod test_helpers {
             BytesEncode<'a> + BytesDecode<'a, DItem = <BoundCodec as BytesEncode<'a>>::EItem>,
     {
         pub env: Env<WithoutTls>,
-        pub content: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
+        pub content:
+            heed::Database<'static, FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         pub group_size: Cell<u8>,
         pub min_level_size: Cell<u8>,
         pub max_group_size: Cell<u8>,
@@ -420,9 +421,13 @@ pub(crate) mod test_helpers {
             let options = options.map_size(4096 * 4 * 1000 * 100);
             let tempdir = tempfile::TempDir::new().unwrap();
             let env = unsafe { options.open(tempdir.path()) }.unwrap();
-            let mut wtxn = env.unique_write_txn().unwrap();
-            let content = env.create_database(&mut wtxn, None).unwrap();
-            wtxn.commit().unwrap();
+            let wtxn = env.write_txn().unwrap();
+            let content = env
+                .create_databases_and_commit(wtxn, |dbo, wtxn| {
+                    dbo.create_database(wtxn, None).map(CommitOrAbort::<_, ()>::Commit)
+                })
+                .unwrap()
+                .unwrap_commit();
 
             FacetIndex {
                 content,

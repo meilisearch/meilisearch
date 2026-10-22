@@ -352,7 +352,7 @@ mod tests {
     use crate::utils::clamp_to_page_size;
     use crate::IndexScheduler;
 
-    impl IndexMapper {
+    impl IndexMapper<'_> {
         fn test() -> (Self, Env<WithoutTls>, IndexSchedulerHandle) {
             let (index_scheduler, handle) = IndexScheduler::test(true, vec![]);
             (index_scheduler.index_mapper, index_scheduler.env, handle)

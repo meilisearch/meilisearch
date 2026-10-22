@@ -16,10 +16,10 @@ pub struct DocumentOperation {
     pub kind: DocumentOperationKind,
 }
 
-pub struct ExternalDocumentsIds(Database<Str, BEU32>);
+pub struct ExternalDocumentsIds(Database<'static, Str, BEU32>);
 
 impl ExternalDocumentsIds {
-    pub fn new(db: Database<Str, BEU32>) -> ExternalDocumentsIds {
+    pub fn new(db: Database<'static, Str, BEU32>) -> ExternalDocumentsIds {
         ExternalDocumentsIds(db)
     }
 

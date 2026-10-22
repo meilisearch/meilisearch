@@ -1,7 +1,7 @@
 use std::ops::{Bound, RangeBounds};
 
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
@@ -30,29 +30,29 @@ mod db_name {
     pub const FINISHED_AT: &str = "finished-at";
 }
 
-pub struct TaskQueue {
+pub struct TaskQueue<'e> {
     /// The main database, it contains all the tasks accessible by their Id.
-    pub(crate) all_tasks: Database<BEU32, SerdeJson<Task>>,
+    pub(crate) all_tasks: Database<'e, BEU32, SerdeJson<Task>>,
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
-    pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    pub(crate) status: Database<'e, SerdeBincode<Status>, RoaringBitmapCodec>,
     /// All the tasks ids grouped by their kind.
-    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
+    pub(crate) kind: Database<'e, SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the tasks associated to an index.
-    pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
+    pub(crate) index_tasks: Database<'e, Str, RoaringBitmapCodec>,
     /// Store the tasks that were canceled by a task uid
-    pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
+    pub(crate) canceled_by: Database<'e, BEU32, RoaringBitmapCodec>,
     /// Store the task ids of tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) enqueued_at: Database<'e, BEI128, CboRoaringBitmapCodec>,
     /// Store the task ids of finished tasks which started being processed at a specific date
-    pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) started_at: Database<'e, BEI128, CboRoaringBitmapCodec>,
     /// Store the task ids of tasks which finished at a specific date
-    pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) finished_at: Database<'e, BEI128, CboRoaringBitmapCodec>,
 }
 
-impl TaskQueue {
-    pub(crate) fn private_clone(&self) -> TaskQueue {
+impl<'e> TaskQueue<'e> {
+    pub(crate) fn private_clone(&self) -> TaskQueue<'e> {
         TaskQueue {
             all_tasks: self.all_tasks,
             status: self.status,
@@ -96,16 +96,19 @@ impl TaskQueue {
         Ok(total_size as u64)
     }
 
-    pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> Result<Self> {
+    pub(crate) fn new(
+        dbo: &meilisearch_types::heed::DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> meilisearch_types::heed::Result<Self> {
         Ok(Self {
-            all_tasks: env.create_database(wtxn, Some(db_name::ALL_TASKS))?,
-            status: env.create_database(wtxn, Some(db_name::STATUS))?,
-            kind: env.create_database(wtxn, Some(db_name::KIND))?,
-            index_tasks: env.create_database(wtxn, Some(db_name::INDEX_TASKS))?,
-            canceled_by: env.create_database(wtxn, Some(db_name::CANCELED_BY))?,
-            enqueued_at: env.create_database(wtxn, Some(db_name::ENQUEUED_AT))?,
-            started_at: env.create_database(wtxn, Some(db_name::STARTED_AT))?,
-            finished_at: env.create_database(wtxn, Some(db_name::FINISHED_AT))?,
+            all_tasks: dbo.create_database(wtxn, Some(db_name::ALL_TASKS))?,
+            status: dbo.create_database(wtxn, Some(db_name::STATUS))?,
+            kind: dbo.create_database(wtxn, Some(db_name::KIND))?,
+            index_tasks: dbo.create_database(wtxn, Some(db_name::INDEX_TASKS))?,
+            canceled_by: dbo.create_database(wtxn, Some(db_name::CANCELED_BY))?,
+            enqueued_at: dbo.create_database(wtxn, Some(db_name::ENQUEUED_AT))?,
+            started_at: dbo.create_database(wtxn, Some(db_name::STARTED_AT))?,
+            finished_at: dbo.create_database(wtxn, Some(db_name::FINISHED_AT))?,
         })
     }
 
@@ -354,7 +357,34 @@ impl TaskQueue {
     }
 }
 
-impl Queue {
+impl<'e> meilisearch_types::heed::OnCommit for TaskQueue<'e> {
+    type Committed = TaskQueue<'static>;
+
+    fn on_commit(self, token: &meilisearch_types::heed::CommitToken) -> Self::Committed {
+        let Self {
+            all_tasks,
+            status,
+            kind,
+            index_tasks,
+            canceled_by,
+            enqueued_at,
+            started_at,
+            finished_at,
+        } = self;
+        TaskQueue {
+            all_tasks: all_tasks.on_commit(token),
+            status: status.on_commit(token),
+            kind: kind.on_commit(token),
+            index_tasks: index_tasks.on_commit(token),
+            canceled_by: canceled_by.on_commit(token),
+            enqueued_at: enqueued_at.on_commit(token),
+            started_at: started_at.on_commit(token),
+            finished_at: finished_at.on_commit(token),
+        }
+    }
+}
+
+impl Queue<'_> {
     /// Return the task ids matched by the given query from the index scheduler's point of view.
     pub(crate) fn get_task_ids(
         &self,

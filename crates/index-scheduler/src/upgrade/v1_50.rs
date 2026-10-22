@@ -1,4 +1,4 @@
-use meilisearch_types::heed::{Env, UniqueRwTxn, WithoutTls};
+use meilisearch_types::heed::{DatabaseOpener, RwTxn, WithoutTls};
 use meilisearch_types::tasks::{KindWithContent, Status, Task};
 use time::OffsetDateTime;
 
@@ -10,10 +10,14 @@ use crate::Result;
 pub struct MigrateDynamicSearchRules;
 
 impl UpgradeIndexScheduler for MigrateDynamicSearchRules {
-    fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut UniqueRwTxn) -> anyhow::Result<()> {
-        let queue = TaskQueue::new(env, wtxn)?;
+    fn upgrade<'e>(
+        &self,
+        dbo: &DatabaseOpener<'e, WithoutTls>,
+        wtxn: &mut RwTxn<'e>,
+    ) -> anyhow::Result<()> {
+        let queue = TaskQueue::new(dbo, wtxn)?;
 
-        let store = LegacyDynamicSearchRulesStore::new(env, wtxn)?;
+        let store = LegacyDynamicSearchRulesStore::new(dbo, wtxn)?;
 
         // collect all existing rules into memory, sparing us borrow issues caused by iterating over the DB while writing tasks
         // with the same wtxn.
