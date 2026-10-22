@@ -342,7 +342,7 @@ pub mod test {
         ];
 
         for (input, remaining, expected_tok, expected_val) in test_case {
-            let span = Span::new_extra(input, Arc::new("".into()));
+            let span = Span::new_extra(input, Arc::new(input.into()));
             let result = quoted_by::<Token>('"', span);
             assert!(result.is_ok());
 

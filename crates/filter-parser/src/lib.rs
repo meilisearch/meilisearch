@@ -47,6 +47,7 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
+use std::ops::Range;
 use std::sync::Arc;
 
 pub use condition::{parse_condition, parse_to, Condition};
@@ -67,6 +68,7 @@ use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
+use nom::Slice as _;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
@@ -82,8 +84,9 @@ const MAX_FILTER_DEPTH: usize = 150;
 
 #[derive(Debug, Clone)]
 pub struct OwnedSpan {
-    span: LocatedSpan<String, Option<Arc<String>>>,
-    utf8_column: usize,
+    original: Arc<String>,
+    // points in range of the `original` string
+    range: Range<usize>,
 }
 
 pub trait TokenLike {
@@ -102,83 +105,32 @@ pub trait TokenLike {
     }
 }
 
-/// Light version of a token.
-/// This kind of token doesn't keep the context of the original input.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LightToken {
-    fragment: String,
-    utf8_column: usize,
-    /// If you need to modify the original input you can use the `modified_fragment` field
-    /// to store your modified input.
-    modified_fragment: Option<String>,
-}
-
-impl From<LightToken> for Token {
-    fn from(light_token: LightToken) -> Self {
-        Token { span: light_token.span(), modified_fragment: light_token.modified_fragment }
-    }
-}
-
-impl From<&str> for LightToken {
-    fn from(fragment: &str) -> Self {
-        LightToken { fragment: fragment.to_string(), utf8_column: 0, modified_fragment: None }
-    }
-}
-
-impl From<String> for LightToken {
-    fn from(fragment: String) -> Self {
-        LightToken { fragment, utf8_column: 0, modified_fragment: None }
-    }
-}
-
-impl TokenLike for LightToken {
-    fn fragment(&self) -> &str {
-        self.modified_fragment.as_ref().unwrap_or(&self.fragment)
-    }
-
-    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
-        Self { fragment: self.fragment, utf8_column: self.utf8_column, modified_fragment }
-    }
-
-    fn modify_fragment(&mut self, new: String) {
-        self.modified_fragment = Some(new);
-    }
-
-    fn span(&self) -> OwnedSpan {
-        let span = LocatedSpan::new_extra(self.fragment.to_string(), None);
-        OwnedSpan { span, utf8_column: self.utf8_column }
-    }
-}
-
-impl From<Span<'_>> for LightToken {
-    fn from(span: Span) -> Self {
-        LightToken {
-            fragment: span.fragment().to_string(),
-            utf8_column: span.get_utf8_column(),
-            modified_fragment: None,
-        }
-    }
-}
-
 impl OwnedSpan {
+    pub fn from_raw_text(s: String) -> Self {
+        Self { range: 0..s.len(), original: Arc::new(s) }
+    }
+
     pub fn fragment(&self) -> &str {
-        self.span.fragment()
+        // Panic: range is in range of the original
+        &self.original()[self.range.clone()]
     }
 
-    pub fn extra(&self) -> Option<&str> {
-        self.span.extra.as_ref().map(|x| x.as_str())
+    pub fn original(&self) -> &str {
+        self.original.as_str()
     }
 
-    pub fn get_utf8_column(&self) -> usize {
-        self.utf8_column
+    pub fn as_span(&self) -> LocatedSpan<&str> {
+        let original_span = LocatedSpan::new(self.original());
+        original_span.slice(self.range.clone())
     }
 }
 
 impl From<Span<'_>> for OwnedSpan {
     fn from(span: Span) -> Self {
-        let utf8_column = span.get_utf8_column();
-        let span = LocatedSpan::new_extra(span.fragment().to_string(), Some(span.extra.clone()));
-        OwnedSpan { span, utf8_column }
+        let offset = span.location_offset();
+        let (fragment, extra) = span.into_fragment_and_extra();
+        let end_range = usize::min(extra.len(), offset + fragment.len());
+        OwnedSpan { original: extra, range: offset..end_range }
     }
 }
 
@@ -233,10 +185,7 @@ impl TokenLike for Token {
 
 impl Token {
     pub fn from_raw_text(text: String) -> Self {
-        Self {
-            span: OwnedSpan { span: LocatedSpan::new_extra(text, None), utf8_column: 0 },
-            modified_fragment: None,
-        }
+        Self { span: OwnedSpan::from_raw_text(text), modified_fragment: None }
     }
 
     /// Returns the original fragment of the token.
@@ -244,9 +193,9 @@ impl Token {
         self.span.fragment()
     }
 
-    /// Returns the extra fragment of the token.
-    pub fn extra(&self) -> Option<&str> {
-        self.span.extra()
+    /// Returns the original text of the filter.
+    pub fn original(&self) -> &str {
+        self.span.original()
     }
 
     /// Returns the modified value of the token.
@@ -268,10 +217,6 @@ impl Token {
         } else {
             Err(Error::new_from_kind(self.span.clone(), ErrorKind::NonFiniteFloat))
         }
-    }
-
-    pub fn get_utf8_column(&self) -> usize {
-        self.span.get_utf8_column()
     }
 }
 
@@ -306,7 +251,7 @@ impl VectorFilter {
 pub enum IndexFilterCondition {
     Not(Box<Self>),
     Condition { fid: Token, op: Condition },
-    In { fid: Token, els: Vec<LightToken> },
+    In { fid: Token, els: Vec<Token> },
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
@@ -368,7 +313,7 @@ impl IndexFilterCondition {
 pub enum FilterCondition {
     Not(Box<Self>),
     Condition { fid: Token, op: Condition },
-    In { fid: Token, els: Vec<LightToken> },
+    In { fid: Token, els: Vec<Token> },
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
@@ -617,7 +562,7 @@ where
 }
 
 /// "IN" WS* "[" value_list "]"
-fn parse_in_body(input: Span) -> IResult<Vec<LightToken>> {
+fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
@@ -630,7 +575,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<LightToken>> {
         if eof::<_, ()>(input.clone()).is_ok() {
             Error::new_from_kind(input.clone().into(), ErrorKind::InClosingBracket)
         } else {
-            let expected_value_kind = match parse_value::<LightToken>(input.clone()) {
+            let expected_value_kind = match parse_value::<Token>(input.clone()) {
                 Err(nom::Err::Error(e)) => match e.kind() {
                     ErrorKind::ReservedKeyword(_) => ExpectedValueKind::ReservedKeyword,
                     _ => ExpectedValueKind::Other,
@@ -737,8 +682,7 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// foreign      = WS* "_foreign(string WS* "," WS* value WS*)
 /// If we parse `_foreign` we MUST parse the rest of the expression.
 fn parse_foreign(input: Span, depth: usize) -> IResult<FilterCondition> {
-    let (mut params_span, _) = tuple((multispace0, word_exact("_foreign")))(input.clone())?;
-    params_span.extra = Arc::new(input.fragment().to_string());
+    let (params_span, _) = tuple((multispace0, word_exact("_foreign")))(input.clone())?;
 
     // if we were able to parse `_foreign` and can't parse the rest of the input we return a failure
     delimited(char('('), ws(|input| parse_foreign_operator(input, depth)), char(')'))(params_span)
@@ -1162,12 +1106,6 @@ impl std::fmt::Display for Token {
     }
 }
 
-impl std::fmt::Display for LightToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{{}}}", self.fragment())
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use FilterCondition as Fc;
@@ -1176,13 +1114,12 @@ pub mod tests {
 
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
     pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token {
+        let all = format!("{before}{value}");
         // if the string is empty we still need to return 1 for the line number
         let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
-        // the extra field is not checked in the tests so we can set it to nothing
-        unsafe {
-            Span::new_from_raw_offset(offset, lines as u32, value, Arc::new("".into())).into()
-        }
+        // we need to set the extra field correctly because it is used while converting to a Token
+        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, Arc::new(all)).into() }
     }
 
     #[track_caller]

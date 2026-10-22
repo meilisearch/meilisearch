@@ -9,8 +9,7 @@ use meilisearch_types::index_uid::{ForeignIndexUid, IndexUid, SourceFieldName, S
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::search::steps::{PerformRetrievalStep, TotalProcessingTimeStep};
 use meilisearch_types::milli::{
-    self, filtered_universe, Filter, IndexFilter, IndexFilterCondition, LightToken, Token,
-    TokenLike,
+    self, filtered_universe, Filter, IndexFilter, IndexFilterCondition, Token, TokenLike,
 };
 use meilisearch_types::{Document, ForeignKeysPerIndex};
 use serde_json::{Map, Value};
@@ -227,7 +226,7 @@ async fn local_process_foreign_filters(
     foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
     auth_filter: &AuthFilter,
-) -> Result<Vec<Vec<LightToken>>, ResponseError> {
+) -> Result<Vec<Vec<Token>>, ResponseError> {
     let _step = progress.update_progress_scoped(PerformRetrievalStep::ExecuteLocal);
     let index_scheduler = index_scheduler.clone();
     let foreign_filters = foreign_filters.to_vec();
@@ -282,7 +281,7 @@ async fn local_process_foreign_filters(
         // Build the In filter for each filter
         for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids)
         {
-            let inner: Result<Vec<_>, _> = foreign_index.external_id_of(&foreign_rtxn, &fields_ids_map, docids)?.into_iter().map(|id| id.map(|id| id.into())).collect();
+            let inner: Result<Vec<_>, _> = foreign_index.external_id_of(&foreign_rtxn, &fields_ids_map, docids)?.into_iter().map(|id| id.map(|id| Token::from_raw_text(id))).collect();
 
             // Safety (Data oriented): `filter_index` is an index into the `foreign_filters_external_docids` vector, so it's safe to dereference it
             foreign_filters_external_docids[*filter_index] = inner?;
@@ -298,7 +297,7 @@ async fn federated_process_foreign_filters(
     foreign_filters: &[ForeignFilterWithContext],
     progress: &Progress,
     auth_filter: &AuthFilter,
-) -> Result<(Vec<Vec<LightToken>>, RemoteErrors), ResponseError> {
+) -> Result<(Vec<Vec<Token>>, RemoteErrors), ResponseError> {
     let params =
         ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
@@ -351,7 +350,7 @@ async fn federated_process_foreign_filters(
             let mut federation_hit = take_federation_hit(&mut document);
             let external_docid = take_document_id_from_federation_hit(&mut federation_hit);
             foreign_filters_external_docids[query_id]
-                .push(LightToken::from(external_docid.into_inner()));
+                .push(Token::from_raw_text(external_docid.into_inner()));
         }
     }
 
