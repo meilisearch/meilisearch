@@ -281,7 +281,7 @@ async fn local_process_foreign_filters(
         // Build the In filter for each filter
         for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids)
         {
-            let inner: Result<Vec<_>, _> = foreign_index.external_id_of(&foreign_rtxn, &fields_ids_map, docids)?.into_iter().map(|id| id.map(|id| Token::from_raw_text(id))).collect();
+            let inner: Result<Vec<_>, _> = foreign_index.external_id_of(&foreign_rtxn, &fields_ids_map, docids)?.into_iter().map(|id| id.map(Token::from_raw_text)).collect();
 
             // Safety (Data oriented): `filter_index` is an index into the `foreign_filters_external_docids` vector, so it's safe to dereference it
             foreign_filters_external_docids[*filter_index] = inner?;
