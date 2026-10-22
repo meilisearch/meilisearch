@@ -953,7 +953,9 @@ fn single_value_enum(branch: &Value) -> Option<&str> {
 /// renders each of them literally. A paragraph written over four source lines
 /// is then published over four ragged lines. Markdown reads those breaks the
 /// other way around: a single break inside a paragraph is a space, and a blank
-/// line is what separates two paragraphs.
+/// line is what separates two paragraphs. A run of `n` breaks is published as
+/// `n - 1`, so an author asks for a visible empty line with one more blank line
+/// than the break they want to keep.
 ///
 /// Descriptions under `example` and `default` are left alone: those hold
 /// payloads, so a `description` field inside one belongs to the data rather
@@ -978,12 +980,15 @@ fn normalize_descriptions(value: &mut Value) {
 
 /// Joins the lines Markdown joins and keeps the breaks Markdown keeps.
 ///
-/// Soft-wrapped lines are joined back into the single line they describe, and a
-/// run of blank lines becomes the one break the author asked for. Block
+/// Soft-wrapped lines are joined back into the single line they describe, and
+/// each blank line becomes one of the breaks the author asked for: one blank
+/// line is a line break, two are a line break and a visible empty line. Block
 /// structure keeps its own lines: list items, headings, tables, blockquotes and
 /// fenced code blocks, whose content is left byte for byte as it was written.
 fn reflow_markdown(description: &str) -> String {
-    let mut blocks: Vec<String> = Vec::new();
+    let mut reflowed = String::new();
+    // Blank lines seen since the last line of text, each standing for a break.
+    let mut blank_lines = 0;
     // Whether the block being built is a paragraph the next line can continue.
     let mut open = false;
     let mut in_code_block = false;
@@ -992,9 +997,8 @@ fn reflow_markdown(description: &str) -> String {
         // Inside a fence every line is content, blank ones included, and its
         // indentation is part of the code sample.
         if in_code_block {
-            let block = blocks.last_mut().expect("the opening fence pushed a block");
-            block.push('\n');
-            block.push_str(raw);
+            reflowed.push('\n');
+            reflowed.push_str(raw);
             in_code_block = !raw.trim_start().starts_with("```");
             continue;
         }
@@ -1005,20 +1009,27 @@ fn reflow_markdown(description: &str) -> String {
         let line = raw.trim_end();
         let content = line.trim_start();
 
-        // A blank line ends the block; the break it stands for is the newline
-        // the blocks are joined with.
+        // A blank line ends the block, and counts towards the breaks that
+        // separate it from the next one. Those leading the description have
+        // nothing to separate.
         if content.is_empty() {
+            blank_lines += !reflowed.is_empty() as usize;
             open = false;
             continue;
         }
 
         if open && !opens_block(content) {
-            let block = blocks.last_mut().expect("an open block is being built");
-            block.push(' ');
-            block.push_str(content);
+            reflowed.push(' ');
+            reflowed.push_str(content);
         } else {
-            blocks.push(line.to_string());
+            // Two blocks the author did not separate still need the one break
+            // their structure implies.
+            if !reflowed.is_empty() {
+                reflowed.extend(std::iter::repeat_n('\n', blank_lines.max(1)));
+            }
+            reflowed.push_str(line);
         }
+        blank_lines = 0;
 
         in_code_block = content.starts_with("```");
         // A fence, a heading and a table row own their line: none of them is
@@ -1026,7 +1037,7 @@ fn reflow_markdown(description: &str) -> String {
         open = !in_code_block && !hard_break && !owns_its_line(content);
     }
 
-    blocks.join("\n")
+    reflowed
 }
 
 /// Returns true when the line opens a block of its own instead of continuing
@@ -1355,18 +1366,29 @@ mod tests {
         );
     }
 
-    /// A blank line separates two paragraphs, and the renderer breaks on every
-    /// newline, so one newline is the break the author asked for.
+    /// The renderer breaks on every newline, so each blank line of the source
+    /// stands for one break: one separates two lines, two leave an empty line
+    /// between them.
     #[test]
-    fn test_reflow_markdown_turns_a_run_of_blank_lines_into_one_break() {
+    fn test_reflow_markdown_gives_one_break_per_blank_line() {
         assert_eq!(
             reflow_markdown("First paragraph.\n\nSecond one."),
             "First paragraph.\nSecond one."
         );
         assert_eq!(
-            reflow_markdown("First paragraph.\n\n\n\nSecond one."),
-            "First paragraph.\nSecond one."
+            reflow_markdown("First paragraph.\n\n\nSecond one."),
+            "First paragraph.\n\nSecond one."
         );
+        assert_eq!(
+            reflow_markdown("First paragraph.\n\n\n\nSecond one."),
+            "First paragraph.\n\n\nSecond one."
+        );
+    }
+
+    /// The blank lines around the description separate it from nothing.
+    #[test]
+    fn test_reflow_markdown_drops_the_surrounding_blank_lines() {
+        assert_eq!(reflow_markdown("\n\n\nOne sentence.\n\n\n"), "One sentence.");
     }
 
     /// Breaks that Markdown gives a meaning to must survive, or the reference
@@ -1443,55 +1465,20 @@ mod tests {
         assert_eq!(rule["default"]["description"], "None\nset");
     }
 
-    /// The reference is published from the generated specification, so the
-    /// whole of it has to go through the pass: every blank line a doc comment
-    /// uses to separate two paragraphs comes out as the single break the
-    /// renderer needs, wherever that description sits in the document.
+    /// Descriptions sit in three distant regions of the document, and the
+    /// reference publishes all three. A walk that stops short of one of them
+    /// leaves its descriptions ragged without failing anything else.
     #[test]
-    fn test_generated_spec_is_reflowed_throughout() {
+    fn test_generated_spec_is_reflowed_in_every_region() {
         let before: Value = serde_json::to_value(MeilisearchApi::openapi()).unwrap();
         let mut after = before.clone();
         normalize_descriptions(&mut after);
 
-        assert_ne!(after, before, "the pass left the whole specification untouched");
-
-        let mut blank_lines = Vec::new();
-        collect_descriptions_with_blank_lines(&after, "", &mut blank_lines);
-        assert!(
-            blank_lines.is_empty(),
-            "these descriptions were not reflowed: {:?}",
-            &blank_lines[..blank_lines.len().min(5)]
-        );
-    }
-
-    /// Collects the paths of the descriptions still holding a blank line.
-    fn collect_descriptions_with_blank_lines(node: &Value, path: &str, found: &mut Vec<String>) {
-        match node {
-            Value::Object(object) => {
-                for (key, child) in object {
-                    let child_path =
-                        if path.is_empty() { key.clone() } else { format!("{path}.{key}") };
-                    match (key.as_str(), child) {
-                        // Payloads keep their line breaks, and a fenced code
-                        // block keeps the blank lines of its code sample.
-                        ("example" | "default", _) => {}
-                        ("description", Value::String(description)) => {
-                            if description.contains("\n\n") && !description.contains("```") {
-                                found.push(child_path);
-                            }
-                        }
-                        (_, child) => {
-                            collect_descriptions_with_blank_lines(child, &child_path, found)
-                        }
-                    }
-                }
-            }
-            Value::Array(items) => {
-                for (i, child) in items.iter().enumerate() {
-                    collect_descriptions_with_blank_lines(child, &format!("{path}[{i}]"), found);
-                }
-            }
-            _ => {}
+        for region in ["paths", "components", "tags"] {
+            assert_ne!(
+                after[region], before[region],
+                "the pass left `{region}` untouched, so it never walked into it"
+            );
         }
     }
 }
