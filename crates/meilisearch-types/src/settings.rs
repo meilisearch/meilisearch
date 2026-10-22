@@ -102,7 +102,9 @@ pub struct TypoSettings {
         skip_serializing_if = "Setting::is_not_set",
     )]
     pub enabled: Setting<bool>,
-    /// Minimum word length before typos are allowed. Contains `oneTypo` (min length for 1 typo) and `twoTypos` (min length for 2 typos). Example: `{ "oneTypo": 5, "twoTypos": 9 }`.
+    /// Minimum word length before typos are allowed. Contains `oneTypo` (min length for 1 typo) and `twoTypos` (min length for 2 typos).
+    ///
+    /// Example: `{ "oneTypo": 5, "twoTypos": 9 }`.
     #[request(
         schema_type = Option<MinWordSizeTyposSetting>,
         error = DeserrJsonError<InvalidSettingsTypoTolerance>,

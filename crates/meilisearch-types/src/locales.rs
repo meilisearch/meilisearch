@@ -14,7 +14,9 @@ pub struct LocalizedAttributesRuleView {
     pub attribute_patterns: AttributePatterns,
     /// The list of locales (languages) to apply to matching attributes. When
     /// these attributes are indexed, Meilisearch will use language-specific
-    /// tokenization rules. Examples: `["en", "fr"]` or `["jpn", "zho"]`.
+    /// tokenization rules.
+    ///
+    /// Examples: `["en", "fr"]` or `["jpn", "zho"]`.
     #[request(required)]
     pub locales: Vec<Locale>,
 }
