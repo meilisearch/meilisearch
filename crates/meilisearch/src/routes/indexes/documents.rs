@@ -745,7 +745,9 @@ impl TryFrom<Document> for MergedDocument {
 /// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
 /// body to specify filters, sort order, and which fields to return.
 ///
+///
 /// **Note:** Sending an empty payload (`{}`) returns all documents in the index.
+///
 ///
 /// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
@@ -857,7 +859,9 @@ pub async fn documents_by_query_post(
 ///
 /// Retrieve documents in batches using query parameters for offset, limit, and optional filtering.
 ///
+///
 /// **Deprecated:** This endpoint will be deprecated in a future release. Use `POST /indexes/{index_uid}/documents/fetch` instead, which supports more parameters and array-based filter expressions.
+///
 ///
 /// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
@@ -1335,6 +1339,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 ///
 /// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
 ///
+///
 /// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
 ///
 /// For a partial update see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
@@ -1439,6 +1444,7 @@ pub async fn replace_documents(
 /// Thus, any fields not present in the new document are kept and remained
 /// unchanged.
 ///
+///
 /// **Important:** Partial updates apply only to top-level fields. Updating an object attribute
 /// replaces the entire object, removing any subfields not present in the update. Dot notation
 /// in an update request creates a new flat attribute rather than updating an existing nested field.
@@ -1446,6 +1452,7 @@ pub async fn replace_documents(
 /// If the provided index does not exist, it will be created.
 ///
 /// **Accepted content types:** `application/json`, `application/x-ndjson`, `text/csv`.
+///
 ///
 /// **Note:** Use the reserved `_geo` object to add geo coordinates: `{"lat": 48.8566, "lng": 2.3522}`.
 ///

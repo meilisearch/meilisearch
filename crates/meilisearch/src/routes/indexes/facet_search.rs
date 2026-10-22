@@ -252,11 +252,14 @@ impl Aggregate for FacetSearchAggregator {
 /// Search for facet values matching a query within a given facet attribute. Use this to build
 /// autocomplete or dropdown UIs for facet filters.
 ///
+///
 /// **Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list.
 /// Facet search will not work without this configuration.
 ///
+///
 /// **Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
 /// returns `Jane Austen`, but searching for `Austen` does not.
+///
 ///
 /// **Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
 /// to search them as facets.

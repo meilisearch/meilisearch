@@ -953,9 +953,9 @@ fn single_value_enum(branch: &Value) -> Option<&str> {
 /// renders each of them literally. A paragraph written over four source lines
 /// is then published over four ragged lines. Markdown reads those breaks the
 /// other way around: a single break inside a paragraph is a space, and a blank
-/// line is what separates two paragraphs. A run of `n` breaks is published as
-/// `n - 1`, so an author asks for a visible empty line with one more blank line
-/// than the break they want to keep.
+/// line is what separates two paragraphs. One blank line is published as a line
+/// break, and two or more as a line break and the empty line a description uses
+/// to set a callout apart from the prose around it.
 ///
 /// Descriptions under `example` and `default` are left alone: those hold
 /// payloads, so a `description` field inside one belongs to the data rather
@@ -980,11 +980,13 @@ fn normalize_descriptions(value: &mut Value) {
 
 /// Joins the lines Markdown joins and keeps the breaks Markdown keeps.
 ///
-/// Soft-wrapped lines are joined back into the single line they describe, and
-/// each blank line becomes one of the breaks the author asked for: one blank
-/// line is a line break, two are a line break and a visible empty line. Block
-/// structure keeps its own lines: list items, headings, tables, blockquotes and
-/// fenced code blocks, whose content is left byte for byte as it was written.
+/// Soft-wrapped lines are joined back into the single line they describe, one
+/// blank line becomes a line break, and two or more become a line break and an
+/// empty line. The empty line stops there: a reference has no use for a wider
+/// gap, and utoipa does not turn a doc comment's blank lines into a predictable
+/// number of breaks anyway. Block structure keeps its own lines: list items,
+/// headings, tables, blockquotes and fenced code blocks, whose content is left
+/// byte for byte as it was written.
 fn reflow_markdown(description: &str) -> String {
     let mut reflowed = String::new();
     // Blank lines seen since the last line of text, each standing for a break.
@@ -1023,9 +1025,9 @@ fn reflow_markdown(description: &str) -> String {
             reflowed.push_str(content);
         } else {
             // Two blocks the author did not separate still need the one break
-            // their structure implies.
+            // their structure implies, and no gap is ever wider than one line.
             if !reflowed.is_empty() {
-                reflowed.extend(std::iter::repeat_n('\n', blank_lines.max(1)));
+                reflowed.extend(std::iter::repeat_n('\n', blank_lines.clamp(1, 2)));
             }
             reflowed.push_str(line);
         }
@@ -1366,23 +1368,20 @@ mod tests {
         );
     }
 
-    /// The renderer breaks on every newline, so each blank line of the source
-    /// stands for one break: one separates two lines, two leave an empty line
-    /// between them.
+    /// The renderer breaks on every newline: one blank line asks for a line
+    /// break, and more than one for the empty line that sets a callout apart.
+    /// utoipa turns a doc comment's blank lines into a number of breaks that
+    /// does not track how many were written, so the gap stops at one line
+    /// however many were asked for.
     #[test]
-    fn test_reflow_markdown_gives_one_break_per_blank_line() {
+    fn test_reflow_markdown_opens_at_most_one_empty_line() {
         assert_eq!(
             reflow_markdown("First paragraph.\n\nSecond one."),
             "First paragraph.\nSecond one."
         );
-        assert_eq!(
-            reflow_markdown("First paragraph.\n\n\nSecond one."),
-            "First paragraph.\n\nSecond one."
-        );
-        assert_eq!(
-            reflow_markdown("First paragraph.\n\n\n\nSecond one."),
-            "First paragraph.\n\n\nSecond one."
-        );
+        for spaced in ["A paragraph.\n\n\nA callout.", "A paragraph.\n\n\n\n\nA callout."] {
+            assert_eq!(reflow_markdown(spaced), "A paragraph.\n\nA callout.");
+        }
     }
 
     /// The blank lines around the description separate it from nothing.
