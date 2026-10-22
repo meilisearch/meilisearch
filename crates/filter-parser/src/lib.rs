@@ -1295,324 +1295,324 @@ pub mod tests {
 
         insta::assert_snapshot!(p("channel = Ponce = 12"), @r###"
         Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule.
-        17:21 channel = Ponce = 12
+        17-20 `channel = Ponce = 12`
         "###);
 
         insta::assert_snapshot!(p("channel =    "), @r###"
         Was expecting a value but instead got nothing.
-        14:14 channel =
+        14 `channel =    `
         "###);
 
         insta::assert_snapshot!(p("channel = 🐻"), @r###"
         Was expecting a value but instead got `🐻`.
-        11:12 channel = 🐻
+        11 `channel = 🐻`
         "###);
 
         insta::assert_snapshot!(p("channel = 🐻 AND followers < 100"), @r###"
         Was expecting a value but instead got `🐻`.
-        11:12 channel = 🐻 AND followers < 100
+        11 `channel = 🐻 AND followers < 100`
         "###);
 
-        insta::assert_snapshot!(p("'OR'"), @r"
+        insta::assert_snapshot!(p("'OR'"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `\'OR\'`.
-        1:5 'OR'
-        ");
+        1-4 `'OR'`
+        "###);
 
         insta::assert_snapshot!(p("OR"), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
-        1:3 OR
+        1-2 `OR`
         "###);
 
-        insta::assert_snapshot!(p("channel Ponce"), @r"
+        insta::assert_snapshot!(p("channel Ponce"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `channel Ponce`.
-        1:14 channel Ponce
-        ");
+        1-13 `channel Ponce`
+        "###);
 
-        insta::assert_snapshot!(p("channel = Ponce OR"), @r"
+        insta::assert_snapshot!(p("channel = Ponce OR"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` but instead got nothing.
-        19:19 channel = Ponce OR
-        ");
+        19 `channel = Ponce OR`
+        "###);
 
-        insta::assert_snapshot!(p("_geoRadius"), @r"
+        insta::assert_snapshot!(p("_geoRadius"), @r###"
         The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
-        11:11 _geoRadius
-        ");
+        11 `_geoRadius`
+        "###);
 
-        insta::assert_snapshot!(p("_geoRadius = 12"), @r"
+        insta::assert_snapshot!(p("_geoRadius = 12"), @r###"
         The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
-        11:16 _geoRadius = 12
-        ");
+        11-15 `_geoRadius = 12`
+        "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox"), @r"
+        insta::assert_snapshot!(p("_geoBoundingBox"), @r###"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        16:16 _geoBoundingBox
-        ");
+        16 `_geoBoundingBox`
+        "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r"
+        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r###"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        16:21 _geoBoundingBox = 12
-        ");
+        16-20 `_geoBoundingBox = 12`
+        "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r"
+        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        17:26 _geoBoundingBox(1.0, 1.0)
-        ");
+        17-25 `_geoBoundingBox(1.0, 1.0)`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r###"
         The `_geoPolygon` filter expects at least 3 points but only 1 were specified
-        18:19 _geoPolygon([1,2,3])
-        ");
+        18 `_geoPolygon([1,2,3])`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r"
+        insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r###"
         The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
-        13:19 _geoPolygon(1,2,3)
-        ");
+        13-18 `_geoPolygon(1,2,3)`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2],[1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2],[1,2,3])"), @r###"
         Was expecting 2 coordinates but instead found 3.
-        26:27 _geoPolygon([1,2],[1,2],[1,2,3])
-        ");
+        26 `_geoPolygon([1,2],[1,2],[1,2,3])`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r###"
         The `_geoPolygon` filter expects at least 3 points but only 2 were specified
-        24:25 _geoPolygon([1,2],[1,2,3])
-        ");
+        24 `_geoPolygon([1,2],[1,2,3])`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon(1)"), @r"
+        insta::assert_snapshot!(p("_geoPolygon(1)"), @r###"
         The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
-        13:15 _geoPolygon(1)
-        ");
+        13-14 `_geoPolygon(1)`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2)"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2)"), @r###"
         The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
-        17:18 _geoPolygon([1,2)
-        ");
+        17 `_geoPolygon([1,2)`
+        "###);
 
         insta::assert_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        1:22 _geoPoint(12, 13, 14)
+        1-21 `_geoPoint(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        13:34 position <= _geoPoint(12, 13, 14)
+        13-33 `position <= _geoPoint(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("_geoDistance(12, 13, 14)"), @r###"
         `_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        1:25 _geoDistance(12, 13, 14)
+        1-24 `_geoDistance(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geoDistance(12, 13, 14)"), @r###"
         `_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        13:37 position <= _geoDistance(12, 13, 14)
+        13-36 `position <= _geoDistance(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("_geo(12, 13, 14)"), @r###"
         `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        1:17 _geo(12, 13, 14)
+        1-16 `_geo(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geo(12, 13, 14)"), @r###"
         `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        13:29 position <= _geo(12, 13, 14)
+        13-28 `position <= _geo(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geoRadius(12, 13, 14)"), @r###"
         The `_geoRadius` filter is an operation and can't be used as a value.
-        13:35 position <= _geoRadius(12, 13, 14)
+        13-34 `position <= _geoRadius(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("channel = 'ponce"), @r###"
         Expression `\'ponce` is missing the following closing delimiter: `'`.
-        11:17 channel = 'ponce
+        11-16 `channel = 'ponce`
         "###);
 
         insta::assert_snapshot!(p("channel = \"ponce"), @r###"
         Expression `\"ponce` is missing the following closing delimiter: `"`.
-        11:17 channel = "ponce
+        11-16 `channel = "ponce`
         "###);
 
         insta::assert_snapshot!(p("channel = mv OR (followers >= 1000"), @r###"
         Expression `(followers >= 1000` is missing the following closing delimiter: `)`.
-        17:35 channel = mv OR (followers >= 1000
+        17-34 `channel = mv OR (followers >= 1000`
         "###);
 
         insta::assert_snapshot!(p("channel = mv OR followers >= 1000)"), @r###"
         Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule.
-        34:35 channel = mv OR followers >= 1000)
+        34 `channel = mv OR followers >= 1000)`
         "###);
 
-        insta::assert_snapshot!(p("colour NOT EXIST"), @r"
+        insta::assert_snapshot!(p("colour NOT EXIST"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `colour NOT EXIST`.
-        1:17 colour NOT EXIST
-        ");
+        1-16 `colour NOT EXIST`
+        "###);
 
-        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r"
+        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `subscribers 100 TO1000`.
-        1:23 subscribers 100 TO1000
-        ");
+        1-22 `subscribers 100 TO1000`
+        "###);
 
         insta::assert_snapshot!(p("channel = ponce ORdog != 'bernese mountain'"), @r###"
         Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
-        17:44 channel = ponce ORdog != 'bernese mountain'
+        17-43 `channel = ponce ORdog != 'bernese mountain'`
         "###);
 
         insta::assert_snapshot!(p(r###"name = "\x""###), @r###"
         The filter is incomplete and requires Unknown additional bytes to be parsed.
-        1:12 name = "\x"
+        1-11 `name = "\x"`
         "###);
 
         insta::assert_snapshot!(p("colour IN blue, green]"), @r###"
         Expected `[` after `IN` keyword.
-        11:23 colour IN blue, green]
+        11-22 `colour IN blue, green]`
         "###);
 
         insta::assert_snapshot!(p("colour IN [blue, green, 'blue' > 2]"), @r###"
         Expected only comma-separated field names inside `IN[..]` but instead found `> 2]`.
-        32:36 colour IN [blue, green, 'blue' > 2]
+        32-35 `colour IN [blue, green, 'blue' > 2]`
         "###);
 
         insta::assert_snapshot!(p("colour IN [blue, green, AND]"), @r###"
         Expected only comma-separated field names inside `IN[..]` but instead found `AND]`.
-        25:29 colour IN [blue, green, AND]
+        25-28 `colour IN [blue, green, AND]`
         "###);
 
         insta::assert_snapshot!(p("colour IN [blue, green"), @r###"
         Expected matching `]` after the list of field names given to `IN[`
-        23:23 colour IN [blue, green
+        23 `colour IN [blue, green`
         "###);
 
         insta::assert_snapshot!(p("colour IN ['blue, green"), @r###"
         Expression `\'blue, green` is missing the following closing delimiter: `'`.
-        12:24 colour IN ['blue, green
+        12-23 `colour IN ['blue, green`
         "###);
 
         insta::assert_snapshot!(p("x = EXISTS"), @r###"
         Was expecting a value but instead got `EXISTS`, which is a reserved keyword. To use `EXISTS` as a field name or a value, surround it by quotes.
-        5:11 x = EXISTS
+        5-10 `x = EXISTS`
         "###);
 
         insta::assert_snapshot!(p("AND = 8"), @r###"
         Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes.
-        1:4 AND = 8
+        1-3 `AND = 8`
         "###);
 
         insta::assert_snapshot!(p("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        38:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
+        38-105 `((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))`
         "###);
 
         insta::assert_snapshot!(
             p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        597:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
+        597-801 `NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1`
         "###
         );
 
-        insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r"
+        insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        10:25 _vectors _vectors EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r"
+        10-24 `_vectors _vectors EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r###"
         Was expecting embedder name but found nothing.
-        10:11 _vectors. embedderName EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r"
+        10 `_vectors. embedderName EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        10:30 _vectors .embedderName EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r"
+        10-29 `_vectors .embedderName EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r###"
         Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
-        22:23 _vectors.embedderName. EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
+        22 `_vectors.embedderName. EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r###"
         The quotes in one of the values are inconsistent.
-        10:30 _vectors."embedderName EXISTS
-        "#);
-        insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r#"
+        10-29 `_vectors."embedderName EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r###"
         The vector filter has leftover tokens.
-        23:31 _vectors."embedderNam"e EXISTS
-        "#);
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r"
+        23-30 `_vectors."embedderNam"e EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r###"
         Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
-        39:40 _vectors.embedderName.documentTemplate. EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r"
+        39 `_vectors.embedderName.documentTemplate. EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r###"
         The vector filter is missing a fragment name.
-        32:39 _vectors.embedderName.fragments EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r"
+        32-38 `_vectors.embedderName.fragments EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r###"
         The vector filter's fragment name is invalid.
-        33:40 _vectors.embedderName.fragments. EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r"
+        33-39 `_vectors.embedderName.fragments. EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        38:49 _vectors.embedderName.fragments.test test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r"
+        38-48 `_vectors.embedderName.fragments.test test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r###"
         The vector filter's fragment name is invalid.
-        33:45 _vectors.embedderName.fragments. test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r"
+        33-44 `_vectors.embedderName.fragments. test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        23:46 _vectors.embedderName .fragments. test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r"
+        23-45 `_vectors.embedderName .fragments. test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        23:45 _vectors.embedderName .fragments.test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r"
+        23-44 `_vectors.embedderName .fragments.test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r###"
         Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `fargments`. Did you mean `fragments`?
-        23:32 _vectors.embedderName.fargments.test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName."userProvided" EXISTS"#), @r#"
+        23-31 `_vectors.embedderName.fargments.test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName."userProvided" EXISTS"#), @r###"
         Was expecting this part to be unquoted.
-        24:36 _vectors.embedderName."userProvided" EXISTS
-        "#);
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.userProvided.fragments.test EXISTS"#), @r"
+        24-35 `_vectors.embedderName."userProvided" EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.userProvided.fragments.test EXISTS"#), @r###"
         Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `userProvided` and `fragments`.
-        36:45 _vectors.embedderName.userProvided.fragments.test EXISTS
-        ");
+        36-44 `_vectors.embedderName.userProvided.fragments.test EXISTS`
+        "###);
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
-        5:7 NOT OR EXISTS AND EXISTS NOT EXISTS
+        5-6 `NOT OR EXISTS AND EXISTS NOT EXISTS`
         "###);
 
-        insta::assert_snapshot!(p(r#"value NULL"#), @r"
+        insta::assert_snapshot!(p(r#"value NULL"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NULL`.
-        1:11 value NULL
-        ");
-        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r"
+        1-10 `value NULL`
+        "###);
+        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT NULL`.
-        1:15 value NOT NULL
-        ");
-        insta::assert_snapshot!(p(r#"value EMPTY"#), @r"
+        1-14 `value NOT NULL`
+        "###);
+        insta::assert_snapshot!(p(r#"value EMPTY"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value EMPTY`.
-        1:12 value EMPTY
-        ");
-        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r"
+        1-11 `value EMPTY`
+        "###);
+        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT EMPTY`.
-        1:16 value NOT EMPTY
-        ");
-        insta::assert_snapshot!(p(r#"value IS"#), @r"
+        1-15 `value NOT EMPTY`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS`.
-        1:9 value IS
-        ");
-        insta::assert_snapshot!(p(r#"value IS NOT"#), @r"
+        1-8 `value IS`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS NOT"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT`.
-        1:13 value IS NOT
-        ");
-        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r"
+        1-12 `value IS NOT`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS EXISTS`.
-        1:16 value IS EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r"
+        1-15 `value IS EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT EXISTS`.
-        1:20 value IS NOT EXISTS
-        ");
+        1-19 `value IS NOT EXISTS`
+        "###);
     }
 
     #[test]
