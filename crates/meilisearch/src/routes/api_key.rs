@@ -41,13 +41,6 @@ pub struct ApiKeyApi;
 /// Create API key
 ///
 /// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
-///
-/// **Required fields:** `actions`, `indexes`, `expiresAt`.
-/// **Optional fields:** `name`, `description`, `uid`.
-///
-/// Set `expiresAt` to `null` to create a key that never expires.
-/// Use `"*"` in the `actions` array to grant all permissions (not recommended for production).
-/// Use `["*"]` in the `indexes` array to grant access to all indexes.
 #[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,

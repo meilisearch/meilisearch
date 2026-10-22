@@ -50,10 +50,10 @@ pub struct CreateApiKey {
         try_from(&String) = Uuid::from_str -> uuid::Error
     )]
     pub uid: KeyId,
-    /// A list of actions permitted for the key. `["*"]` for all actions. The
-    /// `*` character can be used as a wildcard when located at the last
-    /// position. e.g. `documents.*` to authorize access on all documents
-    /// endpoints.
+    /// A list of actions permitted for the key. `["*"]` for all actions, which
+    /// is not recommended for production. The `*` character can be used as a
+    /// wildcard when located at the last position. e.g. `documents.*` to
+    /// authorize access on all documents endpoints.
     ///
     /// Valid actions include: `search`, `documents.add`,
     /// `documents.get`, `documents.delete`, `indexes.create`, `indexes.get`,
