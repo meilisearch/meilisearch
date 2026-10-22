@@ -141,6 +141,7 @@ pub struct FilterableAttributesFeatures {
     #[deserr(default)]
     pub facet_search: bool,
     /// Controls which filter operators are allowed for matching attributes.
+    ///
     /// See `FilterFeatures` for available options.
     #[serde(default)]
     #[deserr(default)]

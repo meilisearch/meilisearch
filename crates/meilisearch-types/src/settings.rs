@@ -214,7 +214,9 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 #[routes::request(setting)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Settings<T> {
-    /// Fields returned in search results. Affects only search endpoints, not get-document endpoints. See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
+    /// Fields returned in search results. Affects only search endpoints, not get-document endpoints.
+    ///
+    /// See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
     #[request(
         error = DeserrJsonError<InvalidSettingsDisplayedAttributes>,
         schema_type = Option<Vec<String>>,
@@ -224,7 +226,9 @@ pub struct Settings<T> {
     )]
     pub displayed_attributes: WildcardSetting,
 
-    /// Fields searched for query words, in order of importance. Defines [attribute ranking order](https://www.meilisearch.com/docs/learn/relevancy/attribute_ranking_order). See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
+    /// Fields searched for query words, in order of importance. Defines [attribute ranking order](https://www.meilisearch.com/docs/learn/relevancy/attribute_ranking_order).
+    ///
+    /// See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
     #[request(
         schema_type = Option<Vec<String>>,
         error = DeserrJsonError<InvalidSettingsSearchableAttributes>,
@@ -324,7 +328,9 @@ pub struct Settings<T> {
     )]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
 
-    /// Field whose value must be unique in the returned documents. One document per distinct value. See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
+    /// Field whose value must be unique in the returned documents. One document per distinct value.
+    ///
+    /// See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
     #[request(
         default,
         error = DeserrJsonError<InvalidSettingsDistinctAttribute>,
