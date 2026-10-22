@@ -1,5 +1,7 @@
 use bumpalo::Bump;
 use heed::RoTxn;
+use itertools::Itertools;
+use serde_json::value::RawValue;
 use serde_json::Value;
 
 use super::document::{
@@ -137,6 +139,75 @@ impl<'doc> Update<'doc> {
                 DocumentFromVersions::new(&self.new),
             )
         }
+    }
+
+    /// Iterates over the values that changed in fields retained by `selector`.
+    ///
+    /// For each changed field, returns the name of the field, the current value, and the updated value.
+    pub fn iter_changed_top_level_fields<Mapper: FieldIdMapper>(
+        &self,
+        selector: &'doc mut impl FnMut(&str) -> PatternMatch,
+        rtxn: &'doc RoTxn,
+        index: &'doc Index,
+        mapper: &'doc Mapper,
+    ) -> impl Iterator<Item = Result<(&'doc str, Option<&'doc RawValue>, Option<&'doc RawValue>)>> + 'doc
+    {
+        let mut cached_current = None;
+
+        let binding = self.only_changed_fields();
+        let binding = binding.iter_top_level_fields();
+        let updated_fields = binding
+            .filter_map_ok(move |(field_name, updated_value)| {
+                if selector(field_name) == PatternMatch::NoMatch {
+                    return None;
+                }
+
+                let current = match &mut cached_current {
+                    Some(current) => current,
+                    None => match self.current(rtxn, index, mapper) {
+                        Ok(current) => cached_current.insert(current),
+                        Err(err) => return Some(Err(err)),
+                    },
+                };
+
+                match current.top_level_field(field_name).transpose() {
+                    None => Some(Ok((field_name, None, Some(updated_value)))),
+                    Some(Err(err)) => Some(Err(err)),
+                    Some(Ok(current_value)) => {
+                        if current_value.get() == updated_value.get() {
+                            None
+                        } else {
+                            Some(Ok((field_name, Some(current_value), Some(updated_value))))
+                        }
+                    }
+                }
+            })
+            .map(|x| Result::flatten(x))
+            .map(|x| x);
+
+        // if self.from_scratch {
+        //     let current = match &mut cached_current {
+        //         Some(current) => current,
+        //         None => match self.current(rtxn, index, mapper) {
+        //             Ok(current) => cached_current.insert(current),
+        //             Err(err) => return Some(Err(err)),
+        //         },
+        //     };
+        //     let deleted_fields = current
+        //         .iter_top_level_fields()
+        //         .filter_map_ok(|(field_name, current_value)| {
+        //             match self.only_changed_fields().top_level_field(field_name).transpose() {
+        //                 None => Some(Ok((field_name, Some(current_value), None))),
+        //                 Some(Err(err)) => Some(Err(err)),
+        //                 Some(Ok(_)) => None,
+        //             }
+        //         })
+        //         .map(|x| Result::flatten(x))
+        //         .map(|x| x);
+        //     either::Left(updated_fields.chain(deleted_fields))
+        // } else {
+        updated_fields
+        //}
     }
 
     /// Returns whether the updated version of the document is different from the current version for the subset of fields selected by `selector`.
