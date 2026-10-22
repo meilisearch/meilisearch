@@ -91,7 +91,7 @@ rhai = { version = "1.25.1", features = [
     "sync",
 ] }
 arroy = "0.9.0"
-hannoy = { git = "https://github.com/nnethercott/hannoy", branch = "better-db-opening", version = "0.2.0", features = ["arroy"] }
+hannoy = { version = "0.3.0", features = ["arroy"] }
 rand = "0.10.2"
 tracing = "0.1.44"
 url = "2.5.8"

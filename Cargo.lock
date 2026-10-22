@@ -2953,8 +2953,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.2.0"
-source = "git+https://github.com/nnethercott/hannoy?branch=better-db-opening#85840ee3db59aade85ba30ea0f35d637cbd5b61e"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3b0cef4cfd297a07b1261e6a899a292766bf901e163fc72b6d3eab381be59e6"
 dependencies = [
  "bytemuck",
  "byteorder",
