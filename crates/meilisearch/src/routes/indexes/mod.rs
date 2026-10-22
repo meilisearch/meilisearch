@@ -56,7 +56,7 @@ mod similar_analytics;
     tags(
         (
             name = "Indexes",
-            description = "An index is an entity that gathers a set of [documents](https://www.meilisearch.com/docs/learn/getting_started/documents) with its own [settings](https://www.meilisearch.com/docs/reference/api/settings). Learn more about indexes.",
+            description = "An index is an entity that gathers a set of [documents](https://www.meilisearch.com/docs/learn/getting_started/documents) with its own [settings](https://www.meilisearch.com/docs/reference/api/settings).\n\nLearn more about indexes.",
         ),
     ),
 )]
