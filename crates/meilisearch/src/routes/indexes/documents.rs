@@ -128,6 +128,7 @@ pub struct GetDocument {
     /// Comma-separated list of document attributes to include in the
     /// response. Use `*` to retrieve all attributes. By default, all
     /// attributes listed in the `displayedAttributes` setting are returned.
+    ///
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     #[param(required = false, value_type = Option<Vec<String>>)]
@@ -486,7 +487,9 @@ pub struct BrowseQueryGet {
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the
     /// response. Use `*` to retrieve all attributes. By default, all
-    /// attributes are returned. Example: `title,description,price`.
+    /// attributes are returned.
+    ///
+    /// Example: `title,description,price`.
     #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
@@ -504,12 +507,15 @@ pub struct BrowseQueryGet {
     ids: Option<CS<String>>,
     /// Filter expression to select which documents to return. Attributes must be added to the
     /// `filterableAttributes` index setting before they can be used in filters. Only accepts
-    /// string expressions (not array syntax). Example: `genres = action AND rating > 4`.
+    /// string expressions (not array syntax).
+    ///
+    /// Example: `genres = action AND rating > 4`.
     #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
     /// Attribute(s) to sort the documents by. Format: `attribute:asc` or
     /// `attribute:desc`. Multiple sort criteria can be comma-separated.
+    ///
     /// Example: `price:asc,rating:desc`.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
@@ -554,7 +560,9 @@ pub struct BrowseQuery {
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
-    /// fields you need. Example: `["title", "description", "price"]`.
+    /// fields you need.
+    ///
+    /// Example: `["title", "description", "price"]`.
     #[request(default, error = DeserrJsonError<InvalidDocumentFields>, example = json!(["title, description"]))]
     pub fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
@@ -572,14 +580,17 @@ pub struct BrowseQuery {
     /// Filter expression to select which documents to return. Attributes must be added to the
     /// `filterableAttributes` index setting before they can be used in filters. Accepts a string
     /// or an array of arrays of strings for AND/OR combinations.
+    ///
     /// Example string: `"genres = action AND rating > 4"`.
+    ///
     /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
     pub filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
-    /// (ascending) or `desc` (descending). Example: `["price:asc",
-    /// "rating:desc"]` sorts by price ascending, then by rating descending.
+    /// (ascending) or `desc` (descending).
+    ///
+    /// Example: `["price:asc", "rating:desc"]` sorts by price ascending, then by rating descending.
     #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     pub sort: Option<Vec<String>>,
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
