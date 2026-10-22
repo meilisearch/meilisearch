@@ -71,7 +71,7 @@ pub struct TaskView {
     /// The total time spent processing this task, formatted as an ISO-8601
     /// duration (e.g., `PT0.5S` for 0.5 seconds). This is `null` for tasks
     /// that haven't finished processing yet.
-    #[schema(value_type = Option<String>, example = json!(null))]
+    #[schema(value_type = Option<String>, example = json!("PT0.5S"))]
     #[serde(serialize_with = "serialize_duration", default)]
     pub duration: Option<Duration>,
     /// The timestamp when this task was added to the queue, formatted as an
