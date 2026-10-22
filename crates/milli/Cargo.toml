@@ -19,7 +19,7 @@ bstr = "1.13.1"
 bytemuck = { version = "1.25.2", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.10.0", default-features = false }
-cellulite = { version = "0.4.0", git = "https://github.com/meilisearch/cellulite", branch = "better-db-opening" }
+cellulite = "0.4.0"
 concat-arrays = "0.1.2"
 convert_case = "0.9.0"
 crossbeam-channel = "0.5.16"
@@ -35,7 +35,7 @@ grenad = { version = "0.5.0", default-features = false, features = [
     "rayon",
     "tempfile",
 ] }
-heed = { git = "https://github.com/meilisearch/heed", branch = "better-db-opening", version = "0.23.0", default-features = false, features = [
+heed = { version = "0.23.0", default-features = false, features = [
     "serde-json",
     "serde-bincode",
 ] }
@@ -90,7 +90,7 @@ rhai = { version = "1.25.1", features = [
     "no_time",
     "sync",
 ] }
-arroy = { git = "https://github.com/meilisearch/arroy", branch = "better-db-opening" }
+arroy = "0.9.0"
 hannoy = { git = "https://github.com/nnethercott/hannoy", branch = "better-db-opening", version = "0.2.0", features = ["arroy"] }
 rand = "0.10.2"
 tracing = "0.1.44"

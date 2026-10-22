@@ -433,8 +433,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "arroy"
-version = "0.8.0"
-source = "git+https://github.com/meilisearch/arroy?branch=better-db-opening#bb4cfb1a61eef629e8911a2219e9383f2bfbf9dd"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36d4f3fe47cf9258aa7a3bcfe3946549cebc03e8461d20559ce7ff4b1052833a"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -1076,7 +1077,8 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.4.0"
-source = "git+https://github.com/meilisearch/cellulite?branch=better-db-opening#57a0fbcbe82e3846677a4e8395a87dfaa4230795"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62fe8bc36e9755a1326ce6c8ac15362f78f2bd7508032518443cb9b21f8d2112"
 dependencies = [
  "crossbeam",
  "geo",
@@ -2952,7 +2954,7 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.2.0"
-source = "git+https://github.com/nnethercott/hannoy?branch=better-db-opening#aef70bb0ceeea0e1ff0e0231f9ff09969825f112"
+source = "git+https://github.com/nnethercott/hannoy?branch=better-db-opening#85840ee3db59aade85ba30ea0f35d637cbd5b61e"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3047,7 +3049,8 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "heed"
 version = "0.23.0"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19596d4caf0a0800d6f03dd1290bdcf6e74bea8ea0bca52cc399a725a02e78c6"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -3064,12 +3067,14 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.20.0"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
 
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c255bdf46e07fb840d120a36dcc81f385140d7191c76a7391672675c01a55d"
 dependencies = [
  "bincode",
  "byteorder",
@@ -4053,7 +4058,8 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.6"
-source = "git+https://github.com/meilisearch/heed?branch=better-db-opening#3f95f64bc61ba39ddd27f954c0842da0c5b9c00f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaeb9bd22e73bd1babffff614994b341e9b2008de7bb73bf1f7e9154f1978f8b"
 dependencies = [
  "cc",
  "doxygen-rs",
