@@ -293,7 +293,6 @@ pub fn v1_9_to_v1_10(
             })?.unwrap_commit();
         }
 
-        // sched_wtxn.commit().context("while committing the write txn for the index-scheduler")?;
 
         println!("Upgrading database succeeded");
 
