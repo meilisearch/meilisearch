@@ -19,6 +19,7 @@ pub struct LocalizedAttributesRuleView {
     /// these attributes are indexed, Meilisearch will use language-specific
     /// tokenization rules.
     ///
+    ///
     /// Examples: `["en", "fr"]` or `["jpn", "zho"]`.
     #[request(required)]
     pub locales: Vec<Locale>,

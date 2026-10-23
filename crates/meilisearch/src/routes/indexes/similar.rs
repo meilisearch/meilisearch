@@ -284,6 +284,7 @@ pub struct SimilarQueryGet {
     /// By default, all attributes listed
     /// in the `displayedAttributes` setting are returned.
     ///
+    ///
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarAttributesToRetrieve>)]
     #[param(required = false, value_type = Vec<String>)]
@@ -301,6 +302,7 @@ pub struct SimilarQueryGet {
     /// Filter expression to narrow down which documents can be returned as
     /// similar. Uses the same syntax as search filters. Only documents
     /// matching this filter will be considered when finding similar documents.
+    ///
     ///
     /// Example: `genres = action AND year > 2000`.
     #[param(required = false)]

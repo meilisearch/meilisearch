@@ -319,9 +319,11 @@ pub struct SearchQueryGet {
     pub personalize_user_context: Option<String>,
     /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
     ///
+    ///
     /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
     ///
     /// When `false` or omitted, the query runs locally.
+    ///
     ///
     /// Documents with the same id are assumed identical for deduplication.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]

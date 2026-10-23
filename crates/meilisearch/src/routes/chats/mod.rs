@@ -70,6 +70,7 @@ pub struct ChatsParam {
 ///
 /// Get the details of a chat workspace by its unique identifier.
 ///
+///
 /// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
     security(("Bearer" = ["chats.get", "*"])),
@@ -117,6 +118,7 @@ pub async fn get_chat(
 /// Delete a chat workspace
 ///
 /// Delete a chat workspace and its settings by its unique identifier.
+///
 ///
 /// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
@@ -190,6 +192,7 @@ pub struct ChatWorkspaceView {
 /// List chat workspaces
 ///
 /// List all chat workspaces registered on the instance, with pagination.
+///
 ///
 /// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(

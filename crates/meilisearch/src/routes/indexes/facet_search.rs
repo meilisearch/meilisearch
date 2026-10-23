@@ -98,9 +98,11 @@ pub struct FacetSearchQuery {
     pub exhaustive_facet_count: Option<bool>,
     /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
     ///
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
+    ///
     ///
     /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
     ///
