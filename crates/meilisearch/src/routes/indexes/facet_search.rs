@@ -41,7 +41,7 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Facet Search",
-            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n**Note:** Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n\n**Note:** Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
+            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n\n**Notes:**\n\n- Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n- Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
         ),
     ),
 )]
@@ -96,20 +96,18 @@ pub struct FacetSearchQuery {
     /// Return exhaustive facet count instead of an estimate
     #[request(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
     pub exhaustive_facet_count: Option<bool>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
+    ///
     ///
     /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
 }
@@ -252,14 +250,15 @@ impl Aggregate for FacetSearchAggregator {
 /// Search for facet values matching a query within a given facet attribute. Use this to build
 /// autocomplete or dropdown UIs for facet filters.
 ///
+///
 /// **Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list.
 /// Facet search will not work without this configuration.
 ///
-/// **Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
-/// returns `Jane Austen`, but searching for `Austen` does not.
 ///
-/// **Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
-/// to search them as facets.
+/// **Notes:**
+///
+/// - Facet search only considers the first word of `facetQuery`. Searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.
+/// - Numeric facet values are not searchable. Convert numbers to strings if you need to search them as facets.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),

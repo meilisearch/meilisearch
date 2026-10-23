@@ -170,6 +170,7 @@ pub struct SearchQuery {
     ///
     /// Use `["*"]` to highlight in all attributes from `attributesToRetrieve`.
     ///
+    ///
     /// By default, matches are wrapped in `<em>` and `</em>`; you can override this with `highlightPreTag` and `highlightPostTag`.
     ///
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
@@ -246,6 +247,7 @@ pub struct SearchQuery {
     ///
     /// **`frequency`**: Returns documents containing all query terms first. If there are not enough, removes one term at a time starting with the word that is most frequent in the dataset, giving more weight to rarer terms (e.g. in "white cotton shirt", prioritizes documents containing "white" if "shirt" is very common).
     ///
+    ///
     /// Default: `last`.
     #[request(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
@@ -316,20 +318,18 @@ pub struct SearchQuery {
     /// Personalization must be [enabled](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted instances).
     #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>)]
     pub personalize: Option<Personalize>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
+    ///
     ///
     /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
@@ -666,7 +666,10 @@ impl fmt::Debug for SearchQuery {
 #[routes::request(proxied, override_error = DeserrJsonError<InvalidSearchHybridQuery>)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
-    /// Balance between keyword search (0.0) and semantic search (1.0). Defaults to 0.5.
+    /// Balance between keyword search (0.0) and semantic search (1.0).
+    ///
+    ///
+    /// Defaults to 0.5.
     #[request(default, schema_type = f32, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     pub semantic_ratio: SemanticRatio,
     /// Name of the embedder configured in index settings.
@@ -896,20 +899,18 @@ pub struct SearchQueryWithIndex {
     /// Personalize search results
     #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none", )]
     pub personalize: Option<Personalize>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
+    ///
     ///
     /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// Display the global ranking score of a document

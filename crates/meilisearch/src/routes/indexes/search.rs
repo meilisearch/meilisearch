@@ -156,6 +156,7 @@ pub struct SearchQueryGet {
     ///
     /// Use `["*"]` to highlight in all attributes from `attributesToRetrieve`.
     ///
+    ///
     /// By default, matches are wrapped in `<em>` and `</em>`; you can override this with `highlightPreTag` and `highlightPostTag`.
     ///
     /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
@@ -242,6 +243,7 @@ pub struct SearchQueryGet {
     ///
     /// **`frequency`**: Returns documents containing all query terms first. If there are not enough, removes one term at a time starting with the word that is most frequent in the dataset, giving more weight to rarer terms (e.g. in "white cotton shirt", prioritizes documents containing "white" if "shirt" is very common).
     ///
+    ///
     /// Default: `last`.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
@@ -315,15 +317,13 @@ pub struct SearchQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
+    ///
     /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
     ///
     /// When `false` or omitted, the query runs locally.
     ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` or omitted = local (default).
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     ///
     /// Documents with the same id are assumed identical for deduplication.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
@@ -492,9 +492,11 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 ///
 /// > Equivalent to the [search with POST route](/docs/reference/api/search/search-with-post) in the Meilisearch API.
 ///
-/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
 ///
-/// **Note:** The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
+/// **Notes:**
+///
+/// - By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+/// - The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
@@ -811,6 +813,7 @@ pub(crate) async fn legacy_search(
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with GET route](/docs/reference/api/search/search-with-get) in the Meilisearch API.
+///
 ///
 /// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
 #[routes::path(

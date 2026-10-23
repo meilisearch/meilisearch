@@ -56,7 +56,7 @@ mod similar_analytics;
     tags(
         (
             name = "Indexes",
-            description = "An index is an entity that gathers a set of [documents](https://www.meilisearch.com/docs/learn/getting_started/documents) with its own [settings](https://www.meilisearch.com/docs/reference/api/settings). Learn more about indexes.",
+            description = "An index is an entity that gathers a set of [documents](https://www.meilisearch.com/docs/learn/getting_started/documents) with its own [settings](https://www.meilisearch.com/docs/reference/api/settings).\n\nLearn more about indexes.",
         ),
     ),
 )]
@@ -378,6 +378,7 @@ pub struct UpdateIndexRequest {
 /// Update index
 ///
 /// Update the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) or uid of an index.
+///
 ///
 /// Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
 #[routes::path(

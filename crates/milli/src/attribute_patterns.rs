@@ -27,7 +27,7 @@ impl utoipa::PartialSchema for AttributePatterns {
             ))
             .description(Some(
                 "A collection of patterns used to match attribute names. Patterns can \
-                include wildcards (`*`) for flexible matching. For example, `title` \
+                include wildcards (`*`) for flexible matching.\n\n\nFor example, `title` \
                 matches exactly, `overview_*` matches any attribute starting with \
                 `overview_`, and `*_date` matches any attribute ending with `_date`.",
             ))
