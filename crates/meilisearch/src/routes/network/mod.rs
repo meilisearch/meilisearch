@@ -46,6 +46,9 @@ pub struct NetworkApi;
 /// Get network topology
 ///
 /// Return the list of Meilisearch instances currently known to this node (self and remotes).
+///
+///
+/// This route is only available when the `network` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
     security(("Bearer" = ["network.get", "*"])),
     responses(
@@ -253,6 +256,9 @@ impl Aggregate for PatchNetworkAnalytics {
 /// Configure network topology
 ///
 /// Add or remove remote nodes from the network. Changes apply to the current instance’s view of the cluster.
+///
+///
+/// This route is only available when the `network` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
@@ -291,6 +297,9 @@ async fn patch_network(
 /// Send messages to control the progress of a network topology change task.
 ///
 /// The route is mostly used internally when sending a PATCH to the network, but is accessible for manual control as well.
+///
+///
+/// This route is only available when the `network` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
     request_body = route::NetworkChange,
     security(("Bearer" = ["network.update", "*"])),
