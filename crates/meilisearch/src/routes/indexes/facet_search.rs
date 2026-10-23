@@ -41,7 +41,7 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Facet Search",
-            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n**Note:** Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n\n**Note:** Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
+            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n\n**Notes:**\n\n- Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n- Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
         ),
     ),
 )]
@@ -255,12 +255,10 @@ impl Aggregate for FacetSearchAggregator {
 /// Facet search will not work without this configuration.
 ///
 ///
-/// **Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
-/// returns `Jane Austen`, but searching for `Austen` does not.
+/// **Notes:**
 ///
-///
-/// **Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
-/// to search them as facets.
+/// - Facet search only considers the first word of `facetQuery`. Searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.
+/// - Numeric facet values are not searchable. Convert numbers to strings if you need to search them as facets.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),

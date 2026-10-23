@@ -361,10 +361,11 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 /// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
 ///
 ///
-/// **Note:** Task cancellation is atomic — either all matched tasks are canceled or none are.
+/// **Notes:**
 ///
+/// - Task cancellation is atomic: either all matched tasks are canceled or none are.
+/// - Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
 ///
-/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
 ///
 /// **Tip:** You can cancel `taskCancelation` type tasks as long as they are `enqueued` or `processing`,
 /// because cancellation tasks are processed in reverse order of enqueueing.
@@ -450,14 +451,11 @@ async fn cancel_tasks(
 /// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
 ///
 ///
-/// **Note:** Only finished tasks (`succeeded`, `failed`, or `canceled`) can be deleted.
-/// You cannot delete `enqueued` or `processing` tasks.
+/// **Notes:**
 ///
-///
-/// **Note:** Task deletion is atomic — either all matched tasks are deleted or none are.
-///
-///
-/// **Note:** Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
+/// - Only finished tasks (`succeeded`, `failed`, or `canceled`) can be deleted. You cannot delete `enqueued` or `processing` tasks.
+/// - Task deletion is atomic: either all matched tasks are deleted or none are.
+/// - Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
 #[routes::path(
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),

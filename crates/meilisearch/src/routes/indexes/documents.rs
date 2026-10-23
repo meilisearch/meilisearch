@@ -779,10 +779,10 @@ impl TryFrom<Document> for MergedDocument {
 /// body to specify filters, sort order, and which fields to return.
 ///
 ///
-/// **Note:** Sending an empty payload (`{}`) returns all documents in the index.
+/// **Notes:**
 ///
-///
-/// **Note:** Documents are not returned following the order of their primary keys.
+/// - Sending an empty payload (`{}`) returns all documents in the index.
+/// - Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),

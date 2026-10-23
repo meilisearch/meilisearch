@@ -493,10 +493,10 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 /// > Equivalent to the [search with POST route](/docs/reference/api/search/search-with-post) in the Meilisearch API.
 ///
 ///
-/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+/// **Notes:**
 ///
-///
-/// **Note:** The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
+/// - By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+/// - The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
