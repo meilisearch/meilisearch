@@ -96,6 +96,8 @@ pub struct FacetSearchQuery {
     /// Return exhaustive facet count instead of an estimate
     #[request(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
     pub exhaustive_facet_count: Option<bool>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -104,12 +106,6 @@ pub struct FacetSearchQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
 }

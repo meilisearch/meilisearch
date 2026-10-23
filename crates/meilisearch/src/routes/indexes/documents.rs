@@ -142,6 +142,8 @@ pub struct GetDocument {
     #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -150,12 +152,6 @@ pub struct GetDocument {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
     use_network: Option<bool>,
@@ -520,6 +516,8 @@ pub struct BrowseQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -528,12 +526,6 @@ pub struct BrowseQueryGet {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
     pub use_network: Option<bool>,
@@ -593,6 +585,8 @@ pub struct BrowseQuery {
     /// Example: `["price:asc", "rating:desc"]` sorts by price ascending, then by rating descending.
     #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     pub sort: Option<Vec<String>>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -601,12 +595,6 @@ pub struct BrowseQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidDocumentUseNetwork>)]
     pub use_network: Option<bool>,
 }
