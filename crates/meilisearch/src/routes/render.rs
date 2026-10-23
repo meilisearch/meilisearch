@@ -60,6 +60,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// Returns the template and the rendered result, allowing to preview how Meilisearch renders
 /// templates without indexing any document.
 ///
+///
 /// This route is only available when the `renderRoute` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(
     security(("Bearer" = ["settings.get,documents.get", "*.get", "*"])),
