@@ -582,7 +582,7 @@ enum HealthStatus {
 /// The health check endpoint enables you to periodically test the health of your Meilisearch instance.
 #[routes::path(
     responses(
-        (status = 200, description = "The instance answers requests and has no pending restart, so `status` holds `available`.", body = HealthResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "The instance is available.", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
             }
