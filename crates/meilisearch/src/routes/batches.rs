@@ -34,6 +34,7 @@ pub struct BatchesApi;
 ///
 /// Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
 ///
+///
 /// For example, multiple document additions to the same index may be batched together. Retrieve a single batch by its unique identifier to monitor its progress and performance.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
@@ -130,6 +131,7 @@ pub struct AllBatches {
 /// List batches
 ///
 /// Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
+///
 ///
 /// For example, multiple document additions to the same index may be batched together. List batches to monitor their progress and performance.
 ///

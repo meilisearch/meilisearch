@@ -379,6 +379,7 @@ pub struct UpdateIndexRequest {
 ///
 /// Update the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) or uid of an index.
 ///
+///
 /// Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
 #[routes::path(
     security(("Bearer" = ["indexes.update", "indexes.*", "*"])),

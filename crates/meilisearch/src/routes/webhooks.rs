@@ -406,7 +406,7 @@ async fn post_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
-        (status = 200, description = "Webhook updated successfully. Returns the webhook with metadata and redacted authorization headers.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook updated successfully.\n\n\nReturns the webhook with metadata and redacted authorization headers.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {

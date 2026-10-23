@@ -748,7 +748,10 @@ async fn register_new_settings(
 )]
 /// List settings
 ///
-/// Retrieve all settings of an index in a single request. Returns every configurable option and its current or default value.
+/// Retrieve all settings of an index in a single request.
+///
+///
+/// Returns every configurable option and its current or default value.
 pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
