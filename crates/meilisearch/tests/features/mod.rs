@@ -207,6 +207,19 @@ async fn experimental_feature_metrics() {
 }
 
 #[actix_rt::test]
+async fn experimental_feature_chat_completions_from_config() {
+    // instance flag for chat completions enables the feature at startup
+    let dir = TempDir::new().unwrap();
+    let enable_chat = Opt { experimental_chat_completions: true, ..default_settings(dir.path()) };
+    let server = Server::new_with_options(enable_chat).await.unwrap();
+
+    let (response, code) = server.get_features().await;
+
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response["chatCompletions"], @"true");
+}
+
+#[actix_rt::test]
 async fn errors() {
     let server = Server::new().await;
 
