@@ -47,6 +47,8 @@ mod error;
 mod value;
 
 use std::fmt::Debug;
+use std::ops::Range;
+use std::sync::Arc;
 
 pub use condition::{parse_condition, parse_to, Condition};
 use condition::{
@@ -66,6 +68,7 @@ use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
+use nom::Slice as _;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
@@ -73,7 +76,7 @@ use value::word_exact;
 use crate::condition::parse_vectors_exists;
 use crate::error::IResultExt;
 
-pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
+pub type Span<'a> = LocatedSpan<&'a str, Arc<String>>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error>;
 
@@ -81,8 +84,9 @@ const MAX_FILTER_DEPTH: usize = 150;
 
 #[derive(Debug, Clone)]
 pub struct OwnedSpan {
-    span: LocatedSpan<String, String>,
-    utf8_column: usize,
+    original: Arc<String>,
+    // points in range of the `original` string
+    range: Range<usize>,
 }
 
 pub trait TokenLike {
@@ -101,97 +105,32 @@ pub trait TokenLike {
     }
 }
 
-/// Light version of a token.
-/// This kind of token doesn't keep the context of the original input.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LightToken {
-    fragment: String,
-    utf8_column: usize,
-    /// If you need to modify the original input you can use the `modified_fragment` field
-    /// to store your modified input.
-    modified_fragment: Option<String>,
-}
-
-impl From<LightToken> for Token {
-    fn from(light_token: LightToken) -> Self {
-        Token { span: light_token.span(), modified_fragment: light_token.modified_fragment }
-    }
-}
-
-impl From<&str> for LightToken {
-    fn from(fragment: &str) -> Self {
-        LightToken { fragment: fragment.to_string(), utf8_column: 0, modified_fragment: None }
-    }
-}
-
-impl From<String> for LightToken {
-    fn from(fragment: String) -> Self {
-        LightToken { fragment, utf8_column: 0, modified_fragment: None }
-    }
-}
-
-impl TokenLike for LightToken {
-    fn fragment(&self) -> &str {
-        self.modified_fragment.as_ref().unwrap_or(&self.fragment)
-    }
-
-    fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
-        Self { fragment: self.fragment, utf8_column: self.utf8_column, modified_fragment }
-    }
-
-    fn modify_fragment(&mut self, new: String) {
-        self.modified_fragment = Some(new);
-    }
-
-    fn span(&self) -> OwnedSpan {
-        let span = LocatedSpan::new_extra(self.fragment.to_string(), String::new());
-        OwnedSpan { span, utf8_column: self.utf8_column }
-    }
-}
-
-impl From<Span<'_>> for LightToken {
-    fn from(span: Span) -> Self {
-        LightToken {
-            fragment: span.fragment().to_string(),
-            utf8_column: span.get_utf8_column(),
-            modified_fragment: None,
-        }
-    }
-}
-
 impl OwnedSpan {
+    pub fn from_raw_text(s: String) -> Self {
+        Self { range: 0..s.len(), original: Arc::new(s) }
+    }
+
     pub fn fragment(&self) -> &str {
-        self.span.fragment()
+        // Panic: range is in range of the original
+        &self.original()[self.range.clone()]
     }
 
-    pub fn extra(&self) -> &str {
-        self.span.extra.as_str()
+    pub fn original(&self) -> &str {
+        self.original.as_str()
     }
 
-    pub fn get_utf8_column(&self) -> usize {
-        self.utf8_column
+    pub fn as_span(&self) -> LocatedSpan<&str> {
+        let original_span = LocatedSpan::new(self.original());
+        original_span.slice(self.range.clone())
     }
 }
 
 impl From<Span<'_>> for OwnedSpan {
     fn from(span: Span) -> Self {
-        let utf8_column = span.get_utf8_column();
-        let span = LocatedSpan::new_extra(span.fragment().to_string(), span.extra.to_string());
-        OwnedSpan { span, utf8_column }
-    }
-}
-
-/// Allow [CowSpan] to be constructed from &[str]
-impl From<&str> for OwnedSpan {
-    fn from(s: &str) -> Self {
-        OwnedSpan::from(Span::new_extra(s, s))
-    }
-}
-
-/// Allow [CowSpan] to be constructed from String
-impl From<String> for OwnedSpan {
-    fn from(s: String) -> Self {
-        OwnedSpan::from(Span::new_extra(&s, &s))
+        let offset = span.location_offset();
+        let (fragment, extra) = span.into_fragment_and_extra();
+        let end_range = usize::min(extra.len(), offset + fragment.len());
+        OwnedSpan { original: extra, range: offset..end_range }
     }
 }
 
@@ -245,14 +184,18 @@ impl TokenLike for Token {
 }
 
 impl Token {
+    pub fn from_raw_text(text: String) -> Self {
+        Self { span: OwnedSpan::from_raw_text(text), modified_fragment: None }
+    }
+
     /// Returns the original fragment of the token.
     pub fn original_fragment(&self) -> &str {
         self.span.fragment()
     }
 
-    /// Returns the extra fragment of the token.
-    pub fn extra(&self) -> &str {
-        self.span.extra()
+    /// Returns the original text of the filter.
+    pub fn original(&self) -> &str {
+        self.span.original()
     }
 
     /// Returns the modified value of the token.
@@ -274,10 +217,6 @@ impl Token {
         } else {
             Err(Error::new_from_kind(self.span.clone(), ErrorKind::NonFiniteFloat))
         }
-    }
-
-    pub fn get_utf8_column(&self) -> usize {
-        self.span.get_utf8_column()
     }
 }
 
@@ -312,7 +251,7 @@ impl VectorFilter {
 pub enum IndexFilterCondition {
     Not(Box<Self>),
     Condition { fid: Token, op: Condition },
-    In { fid: Token, els: Vec<LightToken> },
+    In { fid: Token, els: Vec<Token> },
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
@@ -374,7 +313,7 @@ impl IndexFilterCondition {
 pub enum FilterCondition {
     Not(Box<Self>),
     Condition { fid: Token, op: Condition },
-    In { fid: Token, els: Vec<LightToken> },
+    In { fid: Token, els: Vec<Token> },
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token, embedder: Option<Token>, filter: VectorFilter },
@@ -497,8 +436,9 @@ impl FilterCondition {
         if input.trim().is_empty() {
             return Ok(None);
         }
-        let span = Span::new_extra(input, input);
-        match parse_filter(span) {
+        let all_input = Arc::new(input.to_string());
+        let span = Span::new_extra(input, all_input);
+        match parse_filter(span.clone()) {
             Ok((_rem, output)) => Ok(Some(output)),
             Err(nom::Err::Error(e) | nom::Err::Failure(e)) => Err(e),
             Err(nom::Err::Incomplete(needed)) => {
@@ -622,29 +562,32 @@ where
 }
 
 /// "IN" WS* "[" value_list "]"
-fn parse_in_body(input: Span) -> IResult<Vec<LightToken>> {
+fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
     let (input, _) = tag("[")(input).map_cut(ErrorKind::InOpeningBracket)?;
 
-    let (input, content) = cut(parse_value_list)(input)?;
+    let (input, content) = cut(parse_value_list)(input.clone())?;
 
     // everything after `IN` can be a failure
     let (input, _) = cut_with_err(ws(tag("]")), |_| {
-        if eof::<_, ()>(input).is_ok() {
-            Error::new_from_kind(input.into(), ErrorKind::InClosingBracket)
+        if eof::<_, ()>(input.clone()).is_ok() {
+            Error::new_from_kind(input.clone().into(), ErrorKind::InClosingBracket)
         } else {
-            let expected_value_kind = match parse_value::<LightToken>(input) {
+            let expected_value_kind = match parse_value::<Token>(input.clone()) {
                 Err(nom::Err::Error(e)) => match e.kind() {
                     ErrorKind::ReservedKeyword(_) => ExpectedValueKind::ReservedKeyword,
                     _ => ExpectedValueKind::Other,
                 },
                 _ => ExpectedValueKind::Other,
             };
-            Error::new_from_kind(input.into(), ErrorKind::InExpectedValue(expected_value_kind))
+            Error::new_from_kind(
+                input.clone().into(),
+                ErrorKind::InExpectedValue(expected_value_kind),
+            )
         }
-    })(input)?;
+    })(input.clone())?;
 
     Ok((input, content))
 }
@@ -739,8 +682,7 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// foreign      = WS* "_foreign(string WS* "," WS* value WS*)
 /// If we parse `_foreign` we MUST parse the rest of the expression.
 fn parse_foreign(input: Span, depth: usize) -> IResult<FilterCondition> {
-    let (mut params_span, _) = tuple((multispace0, word_exact("_foreign")))(input)?;
-    params_span.extra = input.fragment();
+    let (params_span, _) = tuple((multispace0, word_exact("_foreign")))(input.clone())?;
 
     // if we were able to parse `_foreign` and can't parse the rest of the input we return a failure
     delimited(char('('), ws(|input| parse_foreign_operator(input, depth)), char(')'))(params_span)
@@ -776,8 +718,8 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     }
 
     let res = FilterCondition::GeoLowerThan {
-        point: [args[0].into(), args[1].into()],
-        radius: args[2].into(),
+        point: [args[0].clone().into(), args[1].clone().into()],
+        radius: args[2].clone().into(),
         resolution: args.get(3).cloned().map(Token::from),
     };
 
@@ -810,14 +752,14 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {
         let context = offending.first().unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            (*context).into(),
+            context.clone().into(),
             ErrorKind::GeoCoordinatesNotPair(offending.len()),
         ));
     }
 
     let res = FilterCondition::GeoBoundingBox {
-        top_right_point: [args[0][0].into(), args[0][1].into()],
-        bottom_left_point: [args[1][0].into(), args[1][1].into()],
+        top_right_point: [args[0][0].clone().into(), args[0][1].clone().into()],
+        bottom_left_point: [args[1][0].clone().into(), args[1][1].clone().into()],
     };
     Ok((input, res))
 }
@@ -844,7 +786,7 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     if args.len() < 3 {
         let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            (*context).into(),
+            context.clone().into(),
             ErrorKind::GeoPolygonNotEnoughPoints(args.len()),
         ));
     }
@@ -852,13 +794,13 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {
         let context = offending.first().unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            (*context).into(),
+            context.clone().into(),
             ErrorKind::GeoCoordinatesNotPair(offending.len()),
         ));
     }
 
     let res = FilterCondition::GeoPolygon {
-        points: args.into_iter().map(|a| [a[0].into(), a[1].into()]).collect(),
+        points: args.into_iter().map(|a| [a[0].clone().into(), a[1].clone().into()]).collect(),
     };
     Ok((input, res))
 }
@@ -871,9 +813,9 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         tag("_geoPoint"),
         // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    ))(input)
+    ))(input.clone())
     .map_err(|e| {
-        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
+        e.map(|_| Error::new_from_kind(input.clone().into(), ErrorKind::ReservedGeo("_geoPoint")))
     })?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
     Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
@@ -887,9 +829,11 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
         tag("_geoDistance"),
         // if we were able to parse `_geoDistance` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    ))(input)
+    ))(input.clone())
     .map_err(|e| {
-        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
+        e.map(|_| {
+            Error::new_from_kind(input.clone().into(), ErrorKind::ReservedGeo("_geoDistance"))
+        })
     })?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
     Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
@@ -903,8 +847,10 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
         word_exact("_geo"),
         // if we were able to parse `_geo` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geo"))))?;
+    ))(input.clone())
+    .map_err(|e| {
+        e.map(|_| Error::new_from_kind(input.clone().into(), ErrorKind::ReservedGeo("_geo")))
+    })?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
     Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geo")))
 }
@@ -936,7 +882,10 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
             ws(char('(')),
             cut(|input| parse_expression(input, depth + 1)),
             cut_with_err(ws(char(')')), |c| {
-                Error::new_from_kind(input.into(), ErrorKind::MissingClosingDelimiter(c.char()))
+                Error::new_from_kind(
+                    input.clone().into(),
+                    ErrorKind::MissingClosingDelimiter(c.char()),
+                )
             }),
         ),
         // Made a random block of functions because we reached the maximum number of elements per alt
@@ -960,9 +909,11 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_geo_distance,
         parse_geo_point,
         parse_error_reserved_keyword,
-    ))(input)
+    ))(input.clone())
     // if the inner parsers did not match enough information to return an accurate error
-    .map_err(|e| e.map_err(|_| Error::new_from_kind(input.into(), ErrorKind::InvalidPrimary)))
+    .map_err(|e| {
+        e.map_err(|_| Error::new_from_kind(input.clone().into(), ErrorKind::InvalidPrimary))
+    })
 }
 
 /// expression     = or
@@ -1155,12 +1106,6 @@ impl std::fmt::Display for Token {
     }
 }
 
-impl std::fmt::Display for LightToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{{}}}", self.fragment())
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use FilterCondition as Fc;
@@ -1169,11 +1114,12 @@ pub mod tests {
 
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
     pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token {
+        let all = format!("{before}{value}");
         // if the string is empty we still need to return 1 for the line number
         let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
-        // the extra field is not checked in the tests so we can set it to nothing
-        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "").into() }
+        // we need to set the extra field correctly because it is used while converting to a Token
+        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, Arc::new(all)).into() }
     }
 
     #[track_caller]
@@ -1349,324 +1295,324 @@ pub mod tests {
 
         insta::assert_snapshot!(p("channel = Ponce = 12"), @r###"
         Found unexpected characters at the end of the filter: `= 12`. You probably forgot an `OR` or an `AND` rule.
-        17:21 channel = Ponce = 12
+        17-20 `channel = Ponce = 12`
         "###);
 
         insta::assert_snapshot!(p("channel =    "), @r###"
         Was expecting a value but instead got nothing.
-        14:14 channel =
+        14 `channel =    `
         "###);
 
         insta::assert_snapshot!(p("channel = 🐻"), @r###"
         Was expecting a value but instead got `🐻`.
-        11:12 channel = 🐻
+        11 `channel = 🐻`
         "###);
 
         insta::assert_snapshot!(p("channel = 🐻 AND followers < 100"), @r###"
         Was expecting a value but instead got `🐻`.
-        11:12 channel = 🐻 AND followers < 100
+        11 `channel = 🐻 AND followers < 100`
         "###);
 
-        insta::assert_snapshot!(p("'OR'"), @r"
+        insta::assert_snapshot!(p("'OR'"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `\'OR\'`.
-        1:5 'OR'
-        ");
+        1-4 `'OR'`
+        "###);
 
         insta::assert_snapshot!(p("OR"), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
-        1:3 OR
+        1-2 `OR`
         "###);
 
-        insta::assert_snapshot!(p("channel Ponce"), @r"
+        insta::assert_snapshot!(p("channel Ponce"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `channel Ponce`.
-        1:14 channel Ponce
-        ");
+        1-13 `channel Ponce`
+        "###);
 
-        insta::assert_snapshot!(p("channel = Ponce OR"), @r"
+        insta::assert_snapshot!(p("channel = Ponce OR"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` but instead got nothing.
-        19:19 channel = Ponce OR
-        ");
+        19 `channel = Ponce OR`
+        "###);
 
-        insta::assert_snapshot!(p("_geoRadius"), @r"
+        insta::assert_snapshot!(p("_geoRadius"), @r###"
         The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
-        11:11 _geoRadius
-        ");
+        11 `_geoRadius`
+        "###);
 
-        insta::assert_snapshot!(p("_geoRadius = 12"), @r"
+        insta::assert_snapshot!(p("_geoRadius = 12"), @r###"
         The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
-        11:16 _geoRadius = 12
-        ");
+        11-15 `_geoRadius = 12`
+        "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox"), @r"
+        insta::assert_snapshot!(p("_geoBoundingBox"), @r###"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        16:16 _geoBoundingBox
-        ");
+        16 `_geoBoundingBox`
+        "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r"
+        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r###"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        16:21 _geoBoundingBox = 12
-        ");
+        16-20 `_geoBoundingBox = 12`
+        "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r"
+        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        17:26 _geoBoundingBox(1.0, 1.0)
-        ");
+        17-25 `_geoBoundingBox(1.0, 1.0)`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r###"
         The `_geoPolygon` filter expects at least 3 points but only 1 were specified
-        18:19 _geoPolygon([1,2,3])
-        ");
+        18 `_geoPolygon([1,2,3])`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r"
+        insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r###"
         The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
-        13:19 _geoPolygon(1,2,3)
-        ");
+        13-18 `_geoPolygon(1,2,3)`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2],[1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2],[1,2,3])"), @r###"
         Was expecting 2 coordinates but instead found 3.
-        26:27 _geoPolygon([1,2],[1,2],[1,2,3])
-        ");
+        26 `_geoPolygon([1,2],[1,2],[1,2,3])`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r###"
         The `_geoPolygon` filter expects at least 3 points but only 2 were specified
-        24:25 _geoPolygon([1,2],[1,2,3])
-        ");
+        24 `_geoPolygon([1,2],[1,2,3])`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon(1)"), @r"
+        insta::assert_snapshot!(p("_geoPolygon(1)"), @r###"
         The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
-        13:15 _geoPolygon(1)
-        ");
+        13-14 `_geoPolygon(1)`
+        "###);
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2)"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2)"), @r###"
         The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
-        17:18 _geoPolygon([1,2)
-        ");
+        17 `_geoPolygon([1,2)`
+        "###);
 
         insta::assert_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        1:22 _geoPoint(12, 13, 14)
+        1-21 `_geoPoint(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        13:34 position <= _geoPoint(12, 13, 14)
+        13-33 `position <= _geoPoint(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("_geoDistance(12, 13, 14)"), @r###"
         `_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        1:25 _geoDistance(12, 13, 14)
+        1-24 `_geoDistance(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geoDistance(12, 13, 14)"), @r###"
         `_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        13:37 position <= _geoDistance(12, 13, 14)
+        13-36 `position <= _geoDistance(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("_geo(12, 13, 14)"), @r###"
         `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        1:17 _geo(12, 13, 14)
+        1-16 `_geo(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geo(12, 13, 14)"), @r###"
         `_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
-        13:29 position <= _geo(12, 13, 14)
+        13-28 `position <= _geo(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("position <= _geoRadius(12, 13, 14)"), @r###"
         The `_geoRadius` filter is an operation and can't be used as a value.
-        13:35 position <= _geoRadius(12, 13, 14)
+        13-34 `position <= _geoRadius(12, 13, 14)`
         "###);
 
         insta::assert_snapshot!(p("channel = 'ponce"), @r###"
         Expression `\'ponce` is missing the following closing delimiter: `'`.
-        11:17 channel = 'ponce
+        11-16 `channel = 'ponce`
         "###);
 
         insta::assert_snapshot!(p("channel = \"ponce"), @r###"
         Expression `\"ponce` is missing the following closing delimiter: `"`.
-        11:17 channel = "ponce
+        11-16 `channel = "ponce`
         "###);
 
         insta::assert_snapshot!(p("channel = mv OR (followers >= 1000"), @r###"
         Expression `(followers >= 1000` is missing the following closing delimiter: `)`.
-        17:35 channel = mv OR (followers >= 1000
+        17-34 `channel = mv OR (followers >= 1000`
         "###);
 
         insta::assert_snapshot!(p("channel = mv OR followers >= 1000)"), @r###"
         Found unexpected characters at the end of the filter: `)`. You probably forgot an `OR` or an `AND` rule.
-        34:35 channel = mv OR followers >= 1000)
+        34 `channel = mv OR followers >= 1000)`
         "###);
 
-        insta::assert_snapshot!(p("colour NOT EXIST"), @r"
+        insta::assert_snapshot!(p("colour NOT EXIST"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `colour NOT EXIST`.
-        1:17 colour NOT EXIST
-        ");
+        1-16 `colour NOT EXIST`
+        "###);
 
-        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r"
+        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `subscribers 100 TO1000`.
-        1:23 subscribers 100 TO1000
-        ");
+        1-22 `subscribers 100 TO1000`
+        "###);
 
         insta::assert_snapshot!(p("channel = ponce ORdog != 'bernese mountain'"), @r###"
         Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
-        17:44 channel = ponce ORdog != 'bernese mountain'
+        17-43 `channel = ponce ORdog != 'bernese mountain'`
         "###);
 
         insta::assert_snapshot!(p(r###"name = "\x""###), @r###"
         The filter is incomplete and requires Unknown additional bytes to be parsed.
-        1:12 name = "\x"
+        1-11 `name = "\x"`
         "###);
 
         insta::assert_snapshot!(p("colour IN blue, green]"), @r###"
         Expected `[` after `IN` keyword.
-        11:23 colour IN blue, green]
+        11-22 `colour IN blue, green]`
         "###);
 
         insta::assert_snapshot!(p("colour IN [blue, green, 'blue' > 2]"), @r###"
         Expected only comma-separated field names inside `IN[..]` but instead found `> 2]`.
-        32:36 colour IN [blue, green, 'blue' > 2]
+        32-35 `colour IN [blue, green, 'blue' > 2]`
         "###);
 
         insta::assert_snapshot!(p("colour IN [blue, green, AND]"), @r###"
         Expected only comma-separated field names inside `IN[..]` but instead found `AND]`.
-        25:29 colour IN [blue, green, AND]
+        25-28 `colour IN [blue, green, AND]`
         "###);
 
         insta::assert_snapshot!(p("colour IN [blue, green"), @r###"
         Expected matching `]` after the list of field names given to `IN[`
-        23:23 colour IN [blue, green
+        23 `colour IN [blue, green`
         "###);
 
         insta::assert_snapshot!(p("colour IN ['blue, green"), @r###"
         Expression `\'blue, green` is missing the following closing delimiter: `'`.
-        12:24 colour IN ['blue, green
+        12-23 `colour IN ['blue, green`
         "###);
 
         insta::assert_snapshot!(p("x = EXISTS"), @r###"
         Was expecting a value but instead got `EXISTS`, which is a reserved keyword. To use `EXISTS` as a field name or a value, surround it by quotes.
-        5:11 x = EXISTS
+        5-10 `x = EXISTS`
         "###);
 
         insta::assert_snapshot!(p("AND = 8"), @r###"
         Was expecting a value but instead got `AND`, which is a reserved keyword. To use `AND` as a field name or a value, surround it by quotes.
-        1:4 AND = 8
+        1-3 `AND = 8`
         "###);
 
         insta::assert_snapshot!(p("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        38:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
+        38-105 `((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))`
         "###);
 
         insta::assert_snapshot!(
             p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        597:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
+        597-801 `NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1`
         "###
         );
 
-        insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r"
+        insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        10:25 _vectors _vectors EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r"
+        10-24 `_vectors _vectors EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r###"
         Was expecting embedder name but found nothing.
-        10:11 _vectors. embedderName EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r"
+        10 `_vectors. embedderName EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        10:30 _vectors .embedderName EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r"
+        10-29 `_vectors .embedderName EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r###"
         Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
-        22:23 _vectors.embedderName. EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
+        22 `_vectors.embedderName. EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r###"
         The quotes in one of the values are inconsistent.
-        10:30 _vectors."embedderName EXISTS
-        "#);
-        insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r#"
+        10-29 `_vectors."embedderName EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r###"
         The vector filter has leftover tokens.
-        23:31 _vectors."embedderNam"e EXISTS
-        "#);
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r"
+        23-30 `_vectors."embedderNam"e EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r###"
         Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
-        39:40 _vectors.embedderName.documentTemplate. EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r"
+        39 `_vectors.embedderName.documentTemplate. EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r###"
         The vector filter is missing a fragment name.
-        32:39 _vectors.embedderName.fragments EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r"
+        32-38 `_vectors.embedderName.fragments EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r###"
         The vector filter's fragment name is invalid.
-        33:40 _vectors.embedderName.fragments. EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r"
+        33-39 `_vectors.embedderName.fragments. EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        38:49 _vectors.embedderName.fragments.test test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r"
+        38-48 `_vectors.embedderName.fragments.test test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r###"
         The vector filter's fragment name is invalid.
-        33:45 _vectors.embedderName.fragments. test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r"
+        33-44 `_vectors.embedderName.fragments. test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        23:46 _vectors.embedderName .fragments. test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r"
+        23-45 `_vectors.embedderName .fragments. test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r###"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
-        23:45 _vectors.embedderName .fragments.test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r"
+        23-44 `_vectors.embedderName .fragments.test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r###"
         Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `fargments`. Did you mean `fragments`?
-        23:32 _vectors.embedderName.fargments.test EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"_vectors.embedderName."userProvided" EXISTS"#), @r#"
+        23-31 `_vectors.embedderName.fargments.test EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName."userProvided" EXISTS"#), @r###"
         Was expecting this part to be unquoted.
-        24:36 _vectors.embedderName."userProvided" EXISTS
-        "#);
-        insta::assert_snapshot!(p(r#"_vectors.embedderName.userProvided.fragments.test EXISTS"#), @r"
+        24-35 `_vectors.embedderName."userProvided" EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.userProvided.fragments.test EXISTS"#), @r###"
         Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `userProvided` and `fragments`.
-        36:45 _vectors.embedderName.userProvided.fragments.test EXISTS
-        ");
+        36-44 `_vectors.embedderName.userProvided.fragments.test EXISTS`
+        "###);
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
-        5:7 NOT OR EXISTS AND EXISTS NOT EXISTS
+        5-6 `NOT OR EXISTS AND EXISTS NOT EXISTS`
         "###);
 
-        insta::assert_snapshot!(p(r#"value NULL"#), @r"
+        insta::assert_snapshot!(p(r#"value NULL"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NULL`.
-        1:11 value NULL
-        ");
-        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r"
+        1-10 `value NULL`
+        "###);
+        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT NULL`.
-        1:15 value NOT NULL
-        ");
-        insta::assert_snapshot!(p(r#"value EMPTY"#), @r"
+        1-14 `value NOT NULL`
+        "###);
+        insta::assert_snapshot!(p(r#"value EMPTY"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value EMPTY`.
-        1:12 value EMPTY
-        ");
-        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r"
+        1-11 `value EMPTY`
+        "###);
+        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT EMPTY`.
-        1:16 value NOT EMPTY
-        ");
-        insta::assert_snapshot!(p(r#"value IS"#), @r"
+        1-15 `value NOT EMPTY`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS`.
-        1:9 value IS
-        ");
-        insta::assert_snapshot!(p(r#"value IS NOT"#), @r"
+        1-8 `value IS`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS NOT"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT`.
-        1:13 value IS NOT
-        ");
-        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r"
+        1-12 `value IS NOT`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS EXISTS`.
-        1:16 value IS EXISTS
-        ");
-        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r"
+        1-15 `value IS EXISTS`
+        "###);
+        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r###"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT EXISTS`.
-        1:20 value IS NOT EXISTS
-        ");
+        1-19 `value IS NOT EXISTS`
+        "###);
     }
 
     #[test]
@@ -1724,7 +1670,7 @@ pub mod tests {
     #[test]
     fn token_from_str() {
         let s = "test string that should not be parsed";
-        let token: Token = s.into();
+        let token = Token::from_raw_text(s.into());
         assert_eq!(token.fragment(), s);
     }
 }

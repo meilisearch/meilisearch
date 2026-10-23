@@ -395,7 +395,7 @@ impl IndexFilter {
             }
             IndexFilterCondition::In { fid, els } if fid.fragment() == SHARD_FIELD => els
                 .iter()
-                .map(|el| Condition::Equal(el.clone().into()))
+                .map(|el| Condition::Equal(el.clone()))
                 .map(|op| Self::evaluate_shard_operator(rtxn, index, universe_hint, &op))
                 .union(),
             IndexFilterCondition::In { fid, els } => {
@@ -409,7 +409,7 @@ impl IndexFilter {
                 };
 
                 els.iter()
-                    .map(|el| Condition::Equal(el.clone().into()))
+                    .map(|el| Condition::Equal(el.clone()))
                     .map(|op| {
                         Self::evaluate_operator(
                             rtxn,
