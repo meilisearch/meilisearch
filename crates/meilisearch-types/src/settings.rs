@@ -82,10 +82,16 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 #[routes::request(setting, no_error, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MinWordSizeTyposSetting {
-    /// Minimum word length to accept one typo. Shorter words must match exactly. For example, if set to 5, "apple" can have one typo but "app" cannot.
+    /// Minimum word length to accept one typo. Shorter words must match exactly.
+    ///
+    ///
+    /// For example, if set to 5, "apple" can have one typo but "app" cannot.
     #[request(schema_type = Option<u8>, schema_default = 5, example = json!(5), skip_serializing_if = "Setting::is_not_set")]
     pub one_typo: Setting<u8>,
-    /// Minimum word length to accept two typos. Must be greater than or equal to `oneTypo`. For example, if set to 9, "computing" can have two typos.
+    /// Minimum word length to accept two typos. Must be greater than or equal to `oneTypo`.
+    ///
+    ///
+    /// For example, if set to 9, "computing" can have two typos.
     #[request(schema_type = Option<u8>, schema_default = 9, example = json!(9), skip_serializing_if = "Setting::is_not_set")]
     pub two_typos: Setting<u8>,
 }
@@ -129,7 +135,10 @@ pub struct TypoSettings {
         skip_serializing_if = "Setting::is_not_set",
     )]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
-    /// When true, typo tolerance is disabled on numeric tokens. For example, 123 will not match 132.
+    /// When true, typo tolerance is disabled on numeric tokens.
+    ///
+    ///
+    /// For example, 123 will not match 132.
     #[request(
         schema_type = Option<bool>,
         schema_default = false,

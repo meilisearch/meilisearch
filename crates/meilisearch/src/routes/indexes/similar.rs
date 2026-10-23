@@ -256,20 +256,32 @@ pub struct SimilarQueryGet {
     #[deserr(error = DeserrQueryParamError<InvalidSimilarEmbedder>)]
     pub embedder: String,
     /// Number of similar documents to skip in the response. Use together with
-    /// `limit` for pagination through large result sets. For example, to get
-    /// similar documents 21-40, set `offset=20` and `limit=20`. Defaults to
+    /// `limit` for pagination through large result sets.
+    ///
+    ///
+    /// For example, to get
+    /// similar documents 21-40, set `offset=20` and `limit=20`.
+    ///
+    ///
+    /// Defaults to
     /// `0`.
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSimilarOffset>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
     /// Maximum number of similar documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
-    /// results but may increase response time. Defaults to `20`.
+    /// results but may increase response time.
+    ///
+    ///
+    /// Defaults to `20`.
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSimilarLimit>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the response.
-    /// Use `*` to retrieve all attributes. By default, all attributes listed
+    /// Use `*` to retrieve all attributes.
+    ///
+    ///
+    /// By default, all attributes listed
     /// in the `displayedAttributes` setting are returned.
     ///
     /// Example: `title,description,price`.
@@ -278,7 +290,10 @@ pub struct SimilarQueryGet {
     attributes_to_retrieve: Option<CS<String>>,
     /// When `true`, includes the vector embeddings for each returned document.
     /// Useful for debugging or when you need to inspect the vector data. Note
-    /// that this can significantly increase response size. Defaults to
+    /// that this can significantly increase response size.
+    ///
+    ///
+    /// Defaults to
     /// `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRetrieveVectors>)]
     #[param(required = false, value_type = bool, default)]
@@ -294,6 +309,8 @@ pub struct SimilarQueryGet {
     /// When `true`, includes a global `_rankingScore` field in each document
     /// showing how similar it is to the target document. The score is a value
     /// between 0 and 1, where higher values indicate greater similarity.
+    ///
+    ///
     /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScore>)]
     #[param(required = false, value_type = bool, default)]
@@ -301,7 +318,10 @@ pub struct SimilarQueryGet {
     /// When `true`, includes a detailed `_rankingScoreDetails` object in each
     /// document breaking down how the similarity score was calculated. Useful
     /// for debugging and understanding why certain documents are considered
-    /// more similar. Defaults to `false`.
+    /// more similar.
+    ///
+    ///
+    /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScoreDetails>)]
     #[param(required = false, value_type = bool, default)]
     show_ranking_score_details: Param<bool>,

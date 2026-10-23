@@ -21,7 +21,10 @@ pub struct BatchView {
     /// percentage of completion. This is `null` for completed batches.
     #[schema(value_type = Option<ProgressView>)]
     pub progress: Option<ProgressView>,
-    /// Aggregated details from all tasks in this batch. For example, if the
+    /// Aggregated details from all tasks in this batch.
+    ///
+    ///
+    /// For example, if the
     /// batch contains multiple document addition tasks, this will show the
     /// total number of documents received and indexed across all tasks.
 

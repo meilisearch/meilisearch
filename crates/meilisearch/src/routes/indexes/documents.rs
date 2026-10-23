@@ -126,7 +126,10 @@ pub struct DocumentsApi;
 #[schema(rename_all = "camelCase")]
 pub struct GetDocument {
     /// Comma-separated list of document attributes to include in the
-    /// response. Use `*` to retrieve all attributes. By default, all
+    /// response. Use `*` to retrieve all attributes.
+    ///
+    ///
+    /// By default, all
     /// attributes listed in the `displayedAttributes` setting are returned.
     ///
     /// Example: `title,description,price`.
@@ -137,7 +140,10 @@ pub struct GetDocument {
     /// When `true`, includes the vector embeddings in the response for this
     /// document. This is useful when you need to inspect or export vector
     /// data. Note that this can significantly increase response size if the
-    /// document has multiple embedders configured. Defaults to `false`.
+    /// document has multiple embedders configured.
+    ///
+    ///
+    /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
@@ -470,19 +476,29 @@ pub async fn delete_document(
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct BrowseQueryGet {
     /// Number of documents to skip in the response. Use this parameter
-    /// together with `limit` to paginate through large document sets. For
-    /// example, to get documents 21-40, set `offset=20` and `limit=20`.
+    /// together with `limit` to paginate through large document sets.
+    ///
+    ///
+    /// For example, to get documents 21-40, set `offset=20` and `limit=20`.
+    ///
+    ///
     /// Defaults to `0`.
     #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     /// Maximum number of documents to return in a single response. Use
-    /// together with `offset` for pagination. Defaults to `20`.
+    /// together with `offset` for pagination.
+    ///
+    ///
+    /// Defaults to `20`.
     #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the
-    /// response. Use `*` to retrieve all attributes. By default, all
+    /// response. Use `*` to retrieve all attributes.
+    ///
+    ///
+    /// By default, all
     /// attributes are returned.
     ///
     /// Example: `title,description,price`.
@@ -491,7 +507,10 @@ pub struct BrowseQueryGet {
     fields: OptionStarOrList<String>,
     /// When `true`, includes vector embeddings in the response for documents
     /// that have them. This is useful when you need to inspect or export
-    /// vector data. Defaults to `false`.
+    /// vector data.
+    ///
+    ///
+    /// Defaults to `false`.
     #[param(required = false, default, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
@@ -539,13 +558,22 @@ pub struct BrowseQueryGet {
 #[derive(Debug, Clone)]
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
-    /// for pagination through large document sets. For example, to get
-    /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
+    /// for pagination through large document sets.
+    ///
+    ///
+    /// For example, to get
+    /// documents 151-170, set `offset=150` and `limit=20`.
+    ///
+    ///
+    /// Defaults to `0`.
     #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
     pub offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
-    /// results but may increase response time and memory usage. Defaults to
+    /// results but may increase response time and memory usage.
+    ///
+    ///
+    /// Defaults to
     /// `20`.
     #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     pub limit: usize,
@@ -560,7 +588,10 @@ pub struct BrowseQuery {
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
-    /// size. Defaults to `false`.
+    /// size.
+    ///
+    ///
+    /// Defaults to `false`.
     #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
     pub retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
@@ -1217,7 +1248,10 @@ pub struct UpdateDocumentsQuery {
     pub primary_key: Option<String>,
     /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
     /// character. Only valid when the content type is `text/csv`; using this parameter with
-    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
+    /// `application/json` or `application/x-ndjson` will return an error.
+    ///
+    ///
+    /// Default: `,`.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
@@ -1956,7 +1990,10 @@ pub struct DocumentEditionByFunction {
     /// index will be processed. Attributes must be in `filterableAttributes` to be used.
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
-    /// Arbitrary data to pass into the function scope. By default the function only has access
+    /// Arbitrary data to pass into the function scope.
+    ///
+    ///
+    /// By default the function only has access
     /// to the current document being edited via the `doc` variable.
     #[request(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,

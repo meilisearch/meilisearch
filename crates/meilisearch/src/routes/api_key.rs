@@ -100,11 +100,17 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
-    /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
+    /// Number of keys to skip. Use with `limit` for pagination.
+    ///
+    ///
+    /// Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
     #[param(required = false, value_type = usize, default = 0)]
     pub offset: Param<usize>,
-    /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
+    /// Maximum number of keys to return. Use with `offset` for pagination.
+    ///
+    ///
+    /// Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
     #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,

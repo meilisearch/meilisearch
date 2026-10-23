@@ -128,7 +128,10 @@ impl TaskView {
 
 /// Contains type-specific details about a task's execution.
 ///
-/// The fields present depend on the task type. For example, document addition
+/// The fields present depend on the task type.
+///
+///
+/// For example, document addition
 /// tasks will have `receivedDocuments` and `indexedDocuments`, while settings
 /// update tasks will have the applied settings.
 #[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]

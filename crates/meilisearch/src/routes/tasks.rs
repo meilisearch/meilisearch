@@ -63,7 +63,10 @@ pub struct TasksFilterQuery {
     #[param(required = false, value_type = Option<bool>, example = true)]
     pub reverse: Option<Param<bool>>,
 
-    /// Permits to filter tasks by their batch uid. By default, when the
+    /// Permits to filter tasks by their batch uid.
+    ///
+    ///
+    /// By default, when the
     /// `batchUids` query parameter is not set, all task uids are returned.
     /// It's possible to specify several batch uids by separating them with
     /// the `,` character.
@@ -71,7 +74,10 @@ pub struct TasksFilterQuery {
     #[param(required = false, value_type = Option<Vec<u32>>, example = json!([1, 2, 3]))]
     pub batch_uids: OptionStarOrList<BatchId>,
 
-    /// Permits to filter tasks by their uid. By default, when the uids query
+    /// Permits to filter tasks by their uid.
+    ///
+    ///
+    /// By default, when the uids query
     /// parameter is not set, all task uids are returned. It's possible to
     /// specify several uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
@@ -83,20 +89,29 @@ pub struct TasksFilterQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>)]
     #[param(required = false, value_type = Option<Vec<u32>>, example = json!([374]))]
     pub canceled_by: OptionStarOrList<u32>,
-    /// Permits to filter tasks by their related type. By default, when `types`
+    /// Permits to filter tasks by their related type.
+    ///
+    ///
+    /// By default, when `types`
     /// query parameter is not set, all task types are returned. It's possible
     /// to specify several types by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>)]
     #[param(required = false, value_type = Option<Vec<String>>, example = json!([Kind::DocumentAdditionOrUpdate]))]
     pub types: OptionStarOrList<Kind>,
-    /// Permits to filter tasks by their status. By default, when `statuses`
+    /// Permits to filter tasks by their status.
+    ///
+    ///
+    /// By default, when `statuses`
     /// query parameter is not set, all task statuses are returned. It's
     /// possible to specify several statuses by separating them with the `,`
     /// character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>)]
     #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled, Status::Enqueued, Status::Processing]))]
     pub statuses: OptionStarOrList<Status>,
-    /// Permits to filter tasks by their related index. By default, when
+    /// Permits to filter tasks by their related index.
+    ///
+    ///
+    /// By default, when
     /// `indexUids` query parameter is not set, the tasks of all the indexes
     /// are returned. It is possible to specify several indexes by separating
     /// them with the `,` character.
@@ -200,20 +215,29 @@ pub struct TaskDeletionOrCancelationQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>)]
     #[param(required = false, value_type = Option<Vec<u32>>, example = json!([374]))]
     pub canceled_by: OptionStarOrList<u32>,
-    /// Permits to filter tasks by their related type. By default, when `types`
+    /// Permits to filter tasks by their related type.
+    ///
+    ///
+    /// By default, when `types`
     /// query parameter is not set, all task types are returned. It's possible
     /// to specify several types by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>)]
     #[param(required = false, value_type = Option<Vec<Kind>>, example = json!([Kind::DocumentDeletion]))]
     pub types: OptionStarOrList<Kind>,
-    /// Permits to filter tasks by their status. By default, when `statuses`
+    /// Permits to filter tasks by their status.
+    ///
+    ///
+    /// By default, when `statuses`
     /// query parameter is not set, all task statuses are returned. It's
     /// possible to specify several statuses by separating them with the `,`
     /// character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>)]
     #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled]))]
     pub statuses: OptionStarOrList<Status>,
-    /// Permits to filter tasks by their related index. By default, when
+    /// Permits to filter tasks by their related index.
+    ///
+    ///
+    /// By default, when
     /// `indexUids` query parameter is not set, the tasks of all the indexes
     /// are returned. It is possible to specify several indexes by separating
     /// them with the `,` character.
