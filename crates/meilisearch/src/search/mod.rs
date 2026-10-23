@@ -316,6 +316,8 @@ pub struct SearchQuery {
     /// Personalization must be [enabled](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted instances).
     #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>)]
     pub personalize: Option<Personalize>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -324,12 +326,6 @@ pub struct SearchQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
@@ -896,6 +892,8 @@ pub struct SearchQueryWithIndex {
     /// Personalize search results
     #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none", )]
     pub personalize: Option<Personalize>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -904,12 +902,6 @@ pub struct SearchQueryWithIndex {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// Display the global ranking score of a document
