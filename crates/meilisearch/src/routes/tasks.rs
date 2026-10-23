@@ -561,7 +561,7 @@ pub struct AllTasks {
 ///
 /// The `/tasks` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
 ///
-/// Tasks are returned in descending order of uid by default, so the most recently created or updated tasks appear first. Results are paginated and can be filtered using query parameters such as `indexUids`, `statuses`, `types`, and date ranges.
+/// Tasks are returned in descending order of uid by default, so the most recently created or updated tasks appear first.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
