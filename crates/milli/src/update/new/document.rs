@@ -1,10 +1,12 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::sync::RwLock;
 
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use heed::{RoTxn, WithoutTls};
+use permissive_json_pointer::SPLIT_SYMBOL;
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
@@ -333,6 +335,51 @@ where
     }
 }
 
+fn parse_raw_value<'de, 'bump: 'de>(
+    raw_value: &'de RawValue,
+    alloc: &'bump Bump,
+) -> Result<bumparaw_collections::Value<'de>> {
+    Ok(bumparaw_collections::Value::from_raw_value(raw_value, alloc)
+        .map_err(InternalError::SerdeJson)?)
+}
+
+fn find_subfields(
+    value: bumparaw_collections::Value<'_>,
+    field_buf: &mut bumpalo::collections::String<'_>,
+    fields_ids_map: &mut GlobalFieldsIdsMap<'_>,
+    alloc: &Bump,
+) -> Result<()> {
+    match value {
+        bumparaw_collections::Value::Array(raw_vec) => {
+            for value in raw_vec {
+                let value = parse_raw_value(value, alloc)?;
+                find_subfields(value, field_buf, fields_ids_map, alloc)?;
+            }
+        }
+        bumparaw_collections::Value::Object(raw_map) => {
+            for (subfield, value) in raw_map {
+                let current_pos = field_buf.len();
+                {
+                    // unwrap: writing to a string won't fail
+                    write!(field_buf, "{SPLIT_SYMBOL}{subfield}").unwrap();
+
+                    fields_ids_map
+                        .id_or_insert(&field_buf)
+                        .ok_or(UserError::AttributeLimitReached)?;
+
+                    dbg!(&field_buf);
+
+                    let value = parse_raw_value(value, alloc)?;
+                    find_subfields(value, field_buf, fields_ids_map, alloc)?;
+                }
+                field_buf.truncate(current_pos);
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 /// Turn this document into an obkv, whose fields are indexed by the provided `FieldIdMapper`.
 ///
 /// The produced obkv is suitable for storing into the documents DB, meaning:
@@ -348,6 +395,7 @@ pub fn write_to_obkv<'s, 'a, 'map, 'buffer>(
     document: &'s impl Document<'s>,
     vector_document: Option<&'s impl VectorDocument<'s>>,
     embedder_actions: &'a BTreeMap<String, EmbedderAction>,
+    iter_subfields: bool,
     fields_ids_map: &'a mut GlobalFieldsIdsMap<'map>,
     mut document_buffer: &'a mut bumpalo::collections::Vec<'buffer, u8>,
 ) -> Result<&'a KvReaderFieldId>
@@ -356,6 +404,9 @@ where
 {
     // will be used in 'inject_vectors
     let vectors_value: Box<RawValue>;
+
+    let doc_alloc = document_buffer.bump();
+    let mut field_buffer = bumpalo::collections::String::new_in(doc_alloc);
 
     document_buffer.clear();
     let mut unordered_field_buffer = Vec::new();
@@ -367,6 +418,14 @@ where
         let (field_name, value) = res?;
         let field_id =
             fields_ids_map.id_or_insert(field_name).ok_or(UserError::AttributeLimitReached)?;
+
+        if iter_subfields {
+            field_buffer.clear();
+            field_buffer.push_str(field_name);
+            let value = parse_raw_value(value, doc_alloc)?;
+            find_subfields(value, &mut field_buffer, fields_ids_map, doc_alloc)?;
+        }
+
         unordered_field_buffer.push((field_id, value));
     }
 

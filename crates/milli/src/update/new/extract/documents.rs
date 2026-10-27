@@ -142,6 +142,7 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         &content,
                         vector_content.as_ref(),
                         embedder_actions,
+                        true,
                         &mut new_fields_ids_map,
                         &mut document_buffer,
                     )?;
@@ -173,6 +174,7 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         &content,
                         inserted_vectors.as_ref(),
                         embedder_actions,
+                        true,
                         &mut new_fields_ids_map,
                         &mut document_buffer,
                     )?;
@@ -239,6 +241,7 @@ impl<'extractor> SettingsChangeExtractor<'extractor> for SettingsChangeDocumentE
                 &content,
                 Some(&vector_content),
                 self.embedder_actions,
+                false,
                 &mut new_fields_ids_map,
                 &mut document_buffer,
             )?;
