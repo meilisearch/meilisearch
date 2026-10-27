@@ -364,7 +364,7 @@ fn find_subfields(
                     write!(field_buf, "{SPLIT_SYMBOL}{subfield}").unwrap();
 
                     fields_ids_map
-                        .id_or_insert(&field_buf)
+                        .id_or_insert(field_buf)
                         .ok_or(UserError::AttributeLimitReached)?;
 
                     dbg!(&field_buf);
