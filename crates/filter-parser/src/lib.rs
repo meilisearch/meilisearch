@@ -129,8 +129,11 @@ impl From<Span<'_>> for OwnedSpan {
     fn from(span: Span) -> Self {
         let offset = span.location_offset();
         let (fragment, extra) = span.into_fragment_and_extra();
+        // defensive cropping of end_range to the end of the referenced string and start_range to at most end_range
+        // this guarantees that begin_range..end_range is in range of extra
         let end_range = usize::min(extra.len(), offset + fragment.len());
-        OwnedSpan { original: extra, range: offset..end_range }
+        let begin_range = usize::min(offset, end_range);
+        OwnedSpan { original: extra, range: begin_range..end_range }
     }
 }
 
