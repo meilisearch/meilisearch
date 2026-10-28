@@ -248,7 +248,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         } = &mut state;
 
         let rank = *next_max_cost - cost;
-        let score = G::rank_to_score(Rank { rank: rank as u32, max_rank: *next_max_cost as u32 });
+        let score = G::rank_to_score(Rank { rank, max_rank: *next_max_cost });
 
         let mut universe = universe.clone();
 

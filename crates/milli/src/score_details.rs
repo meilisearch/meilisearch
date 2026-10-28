@@ -568,8 +568,8 @@ pub enum ScoringStrategy {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Words {
-    pub matching_words: u32,
-    pub max_matching_words: u32,
+    pub matching_words: u64,
+    pub max_matching_words: u64,
 }
 
 impl Words {
@@ -588,8 +588,8 @@ impl Words {
 /// if no words from the query appear exactly in the document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ExactWords {
-    pub matching_words: u32,
-    pub max_matching_words: u32,
+    pub matching_words: u64,
+    pub max_matching_words: u64,
 }
 
 impl ExactWords {
@@ -610,8 +610,8 @@ impl ExactWords {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Typo {
-    pub typo_count: u32,
-    pub max_typo_count: u32,
+    pub typo_count: u64,
+    pub max_typo_count: u64,
 }
 
 impl Typo {
@@ -643,11 +643,11 @@ pub struct Rank {
     ///
     /// The higher the better. Documents with a rank of 0 have a score of 0 and are typically never returned
     /// (they don't match the query).
-    pub rank: u32,
+    pub rank: u64,
     /// The maximum possible rank. Documents with this rank have a score of 1.
     ///
     /// The max rank should not be 0.
-    pub max_rank: u32,
+    pub max_rank: u64,
 }
 
 impl Rank {
