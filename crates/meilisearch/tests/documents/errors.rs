@@ -101,7 +101,7 @@ async fn get_all_documents_bad_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1:6 doggo",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1-5 `doggo`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -134,20 +134,20 @@ async fn get_all_documents_bad_filter() {
 
     let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r#"
+    snapshot!(json_string!(response), @r###"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1:6 doggo",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1-5 `doggo`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
-    "#);
+    "###);
 
     let (response, code) = index.get_all_documents_raw("?filter=doggo=bernese").await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo=bernese",
+      "message": "Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1-5 `doggo=bernese`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -523,14 +523,14 @@ async fn delete_document_by_filter() {
     // send bad filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": "hello"})).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(response, @r#"
+    snapshot!(response, @r###"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `hello`.\n1:6 hello",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `hello`.\n1-5 `hello`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
-    "#);
+    "###);
 
     // send empty filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": ""})).await;
@@ -604,7 +604,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"doggo = bernese\""
       },
       "error": {
-        "message": "Index `EMPTY_INDEX`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
+        "message": "Index `EMPTY_INDEX`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1-5 `doggo = bernese`",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -636,7 +636,7 @@ async fn delete_document_by_filter() {
         "originalFilter": "\"catto = jorts\""
       },
       "error": {
-        "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attribute patterns are: `id`, `title`.\n1:6 catto = jorts",
+        "message": "Index `SHARED_DOCUMENTS`: Attribute `catto` is not filterable. Available filterable attribute patterns are: `id`, `title`.\n1-5 `catto = jorts`",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -661,7 +661,7 @@ async fn delete_documents_by_filter_foreign_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10-15 `_foreign(author, id = a1)`",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -674,7 +674,7 @@ async fn delete_documents_by_filter_foreign_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Filter condition `_foreign` is not supported for this endpoint.\n10:16 _foreign(author, id = a1)",
+      "message": "Filter condition `_foreign` is not supported for this endpoint.\n10-15 `_foreign(author, id = a1)`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -698,7 +698,7 @@ async fn edit_documents_by_function_foreign_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+      "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10-15 `_foreign(author, id = a1)`",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -710,7 +710,7 @@ async fn edit_documents_by_function_foreign_filter() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Index `[uuid]`: Filter condition `_foreign` is not supported for this endpoint.\n10:16 _foreign(author, id = a1)",
+      "message": "Index `[uuid]`: Filter condition `_foreign` is not supported for this endpoint.\n10-15 `_foreign(author, id = a1)`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -793,20 +793,20 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.fetch_documents(json!({ "filter": "cool doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(response, @r#"
+    snapshot!(response, @r###"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `cool doggo`.\n1:11 cool doggo",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `cool doggo`.\n1-10 `cool doggo`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
-    "#);
+    "###);
 
     let (response, code) = index.fetch_documents(json!({ "filter": "doggo = bernese" })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Attribute `doggo` is not filterable. Available filterable attribute patterns are: `color`.\n1:6 doggo = bernese",
+      "message": "Attribute `doggo` is not filterable. Available filterable attribute patterns are: `color`.\n1-5 `doggo = bernese`",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"

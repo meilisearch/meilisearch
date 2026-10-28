@@ -760,7 +760,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:12 \"doggos.age\" > \"2\"",
+              "message": "Index `[uuid]`: Attribute `doggos.age` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2-11 `\"doggos.age\" > \"2\"`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -786,7 +786,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2:8 \"doggos\" EXISTS",
+              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n2-7 `\"doggos\" EXISTS`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -843,14 +843,14 @@ async fn vector_filter_missing_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "The vector filter is missing a fragment name.\n24:31 _vectors.rest.fragments EXISTS",
+      "message": "The vector filter is missing a fragment name.\n24-30 `_vectors.rest.fragments EXISTS`",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -865,7 +865,7 @@ async fn vector_filter_nonexistent_embedder() {
         .await;
     snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n11:16 _vectors.\"other\" EXISTS",
+      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n11-15 `_vectors.\"other\" EXISTS`",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -887,7 +887,7 @@ async fn vector_filter_all_embedders_user_provided() {
         .await;
     snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n11:23 _vectors.\"userProvided\" EXISTS",
+      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n11-22 `_vectors.\"userProvided\" EXISTS`",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1028,7 +1028,7 @@ async fn vector_filter_non_existant_fragment() {
         .await;
     snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n28:36 _vectors.\"rest\".fragments.\"withBred\" EXISTS",
+      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n28-35 `_vectors.\"rest\".fragments.\"withBred\" EXISTS`",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1127,14 +1127,14 @@ async fn vector_filter_feature_gate() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "using a vector filter requires enabling the `multimodal` experimental feature. See https://github.com/orgs/meilisearch/discussions/846\n1:9 _vectors EXISTS",
+      "message": "using a vector filter requires enabling the `multimodal` experimental feature. See https://github.com/orgs/meilisearch/discussions/846\n1-8 `_vectors EXISTS`",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]

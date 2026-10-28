@@ -591,9 +591,9 @@ fn test_basic_geo_bounding_box() {
     insta::assert_snapshot!(
         error,
         @r###"
-        The top latitude `-80` is below the bottom latitude `80`.
-        32:33 _geoBoundingBox([-80, 0], [80, 0])
-        "###
+    The top latitude `-80` is below the bottom latitude `80`.
+    32 `_geoBoundingBox([-80, 0], [80, 0])`
+    "###
     );
 
     // send a top latitude lower than the bottow latitude
@@ -606,9 +606,9 @@ fn test_basic_geo_bounding_box() {
     insta::assert_snapshot!(
         error,
         @r###"
-        The top latitude `-10` is below the bottom latitude `10`.
-        32:33 _geoBoundingBox([-10, 0], [10, 0])
-        "###
+    The top latitude `-10` is below the bottom latitude `10`.
+    32 `_geoBoundingBox([-10, 0], [10, 0])`
+    "###
     );
 }
 

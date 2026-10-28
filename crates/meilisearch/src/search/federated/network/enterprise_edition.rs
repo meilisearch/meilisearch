@@ -25,8 +25,8 @@ pub fn partition_shards<Q: ProxyQuery>(
         let mut query = query.proxy_with_remote(remote);
 
         let shard_filter = Some(IndexFilter::from(IndexFilterCondition::Condition {
-            fid: Token::from(SHARD_FIELD),
-            op: Condition::Equal(Token::from(shard.as_ref())),
+            fid: Token::from_raw_text(SHARD_FIELD.into()),
+            op: Condition::Equal(Token::from_raw_text(shard.as_ref().to_owned())),
         }));
 
         let filter = Q::filter_field(&mut query);

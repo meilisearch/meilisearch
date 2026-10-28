@@ -58,7 +58,10 @@ pub(super) fn evaluate(
 
     let embedders = match embedder {
         Some(embedder) => vec![embedder],
-        None => embedding_configs.iter().map(|config| Token::from(config.name.as_str())).collect(),
+        None => embedding_configs
+            .iter()
+            .map(|config| Token::from_raw_text(config.name.clone()))
+            .collect(),
     };
 
     let mut docids = embedders

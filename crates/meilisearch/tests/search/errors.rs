@@ -646,14 +646,14 @@ async fn filter_invalid_syntax_object() {
         &json!({"filterableAttributes": ["title"]}),
         &json!({"filter": "title & Glass"}),
         |response, code| {
-            snapshot!(response, @r#"
+            snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1-13 `title & Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
             }
-            "#);
+            "###);
             snapshot!(code, @"400 Bad Request");
         },
     )
@@ -667,14 +667,14 @@ async fn filter_invalid_syntax_array() {
         &json!({"filterableAttributes": ["title"]}),
         &json!({"filter": ["title & Glass"]}),
         |response, code| {
-            snapshot!(response, @r#"
+            snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1-13 `title & Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
             }
-            "#);
+            "###);
             snapshot!(code, @"400 Bad Request");
         },
     )
@@ -690,7 +690,7 @@ async fn filter_invalid_syntax_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
+              "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15-31 `title = Glass XOR title = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -711,7 +711,7 @@ async fn filter_invalid_attribute_array() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n2:6 \"many\" = \"Glass\"",
+              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n2-5 `\"many\" = \"Glass\"`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -732,7 +732,7 @@ async fn filter_invalid_attribute_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n2:6 \"many\" = \"Glass\"",
+              "message": "Index `[uuid]`: Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n2-5 `\"many\" = \"Glass\"`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -753,7 +753,7 @@ async fn filter_reserved_geo_attribute_array() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
+              "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-12 `_geo = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -774,7 +774,7 @@ async fn filter_reserved_geo_attribute_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
+              "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-12 `_geo = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -795,7 +795,7 @@ async fn filter_reserved_attribute_array() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
+              "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-20 `_geoDistance = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -816,7 +816,7 @@ async fn filter_reserved_attribute_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
+              "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-20 `_geoDistance = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -837,7 +837,7 @@ async fn filter_reserved_geo_point_array() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+              "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-17 `_geoPoint = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -858,7 +858,7 @@ async fn filter_reserved_geo_point_string() {
         |response, code| {
             snapshot!(response, @r###"
             {
-              "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+              "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-17 `_geoPoint = Glass`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1274,27 +1274,27 @@ async fn search_with_contains_without_enabling_the_feature() {
     index
         .search(json!({ "filter": "doggo CONTAINS kefir" }), |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(json_string!(response), @r#"
+            snapshot!(json_string!(response), @r###"
             {
-              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7-14 `doggo CONTAINS kefir`",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
             }
-            "#);
+            "###);
         })
         .await;
     index
         .search(json!({ "filter": "doggo != echo AND doggo CONTAINS kefir" }), |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(json_string!(response), @r#"
+            snapshot!(json_string!(response), @r###"
             {
-              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
+              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25-32 `doggo != echo AND doggo CONTAINS kefir`",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
             }
-            "#);
+            "###);
         })
         .await;
 
@@ -1303,26 +1303,26 @@ async fn search_with_contains_without_enabling_the_feature() {
         index.search_post(json!({ "filter": ["doggo != echo", "doggo CONTAINS kefir"] })).await;
 
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r#"
+    snapshot!(json_string!(response), @r###"
     {
-      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7-14 `doggo CONTAINS kefir`",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
-    "#);
+    "###);
     let (response, code) =
         index.search_post(json!({ "filter": ["doggo != echo", ["doggo CONTAINS kefir"]] })).await;
 
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r#"
+    snapshot!(json_string!(response), @r###"
     {
-      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7-14 `doggo CONTAINS kefir`",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
