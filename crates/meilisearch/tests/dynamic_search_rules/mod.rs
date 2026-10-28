@@ -3199,7 +3199,7 @@ async fn bad_scale_action() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "invalid `.actions.scale[0].filter`: Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `genres OR`.\n1:10 genres OR",
+      "message": "invalid `.actions.scale[0].filter`: Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `genres OR`.\n1-9 `genres OR`",
       "code": "invalid_dynamic_search_rule_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
@@ -3245,7 +3245,7 @@ async fn bad_scale_action() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "invalid `.actions.scale[0].filter`: filter condition `_foreign` is not supported in dynamic search rule actions.\n10:11 _foreign(f, genres = Adventure)",
+      "message": "invalid `.actions.scale[0].filter`: filter condition `_foreign` is not supported in dynamic search rule actions.\n10 `_foreign(f, genres = Adventure)`",
       "code": "invalid_dynamic_search_rule_actions",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"

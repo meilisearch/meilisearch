@@ -339,14 +339,14 @@ async fn filter_invalid_syntax_object() {
 
     index
         .similar(json!({"id": 287947, "filter": "title & Glass", "embedder": "manual"}), |response, code| {
-            snapshot!(response, @r#"
+            snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1-13 `title & Glass`",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
             }
-            "#);
+            "###);
             snapshot!(code, @"400 Bad Request");
         })
         .await;
@@ -377,14 +377,14 @@ async fn filter_invalid_syntax_array() {
 
     index
         .similar(json!({"id": 287947, "filter": ["title & Glass"], "embedder": "manual"}), |response, code| {
-            snapshot!(response, @r#"
+            snapshot!(response, @r###"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1-13 `title & Glass`",
               "code": "invalid_similar_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
             }
-            "#);
+            "###);
             snapshot!(code, @"400 Bad Request");
         })
         .await;
@@ -414,7 +414,7 @@ async fn filter_invalid_syntax_string() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15:32 title = Glass XOR title = Glass",
+        "message": "Found unexpected characters at the end of the filter: `XOR title = Glass`. You probably forgot an `OR` or an `AND` rule.\n15-31 `title = Glass XOR title = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -460,7 +460,7 @@ async fn filter_invalid_attribute_array() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(response, @r###"
                 {
-                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1-4 `many = Glass`",
                   "code": "invalid_similar_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -501,7 +501,7 @@ async fn filter_invalid_attribute_string() {
                 snapshot!(code, @"400 Bad Request");
                 snapshot!(response, @r###"
                 {
-                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1:5 many = Glass",
+                  "message": "Attribute `many` is not filterable. Available filterable attribute patterns are: `title`.\n1-4 `many = Glass`",
                   "code": "invalid_similar_filter",
                   "type": "invalid_request",
                   "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -536,7 +536,7 @@ async fn filter_reserved_geo_attribute_array() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-12 `_geo = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -576,7 +576,7 @@ async fn filter_reserved_geo_attribute_string() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:13 _geo = Glass",
+        "message": "`_geo` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-12 `_geo = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -616,7 +616,7 @@ async fn filter_reserved_attribute_array() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
+        "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-20 `_geoDistance = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -656,7 +656,7 @@ async fn filter_reserved_attribute_string() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-       "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:21 _geoDistance = Glass",
+       "message": "`_geoDistance` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-20 `_geoDistance = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -696,7 +696,7 @@ async fn filter_reserved_geo_point_array() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+        "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-17 `_geoPoint = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"
@@ -736,7 +736,7 @@ async fn filter_reserved_geo_point_string() {
     server.wait_task(value.uid()).await.succeeded();
 
     let expected_response = json!({
-       "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1:18 _geoPoint = Glass",
+       "message": "`_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.\n1-17 `_geoPoint = Glass`",
         "code": "invalid_similar_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_similar_filter"

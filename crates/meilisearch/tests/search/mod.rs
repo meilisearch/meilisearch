@@ -1935,7 +1935,7 @@ async fn test_nested_fields() {
             assert_eq!(code, 400, "{response}");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n2:8 \"nested\" = \"array\"",
+              "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n2-7 `\"nested\" = \"array\"`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1954,7 +1954,7 @@ async fn test_nested_fields() {
             assert_eq!(code, 400, "{response}");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n2:8 \"nested\" = \"I lied\"",
+              "message": "Index `[uuid]`: Attribute `nested` is not filterable. Available filterable attribute patterns are: `nested.machin`, `nested.object`, `title`.\n2-7 `\"nested\" = \"I lied\"`",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

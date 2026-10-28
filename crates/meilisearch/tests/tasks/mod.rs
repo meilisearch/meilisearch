@@ -458,7 +458,7 @@ async fn test_summarized_delete_documents_by_filter() {
         "originalFilter": "\"doggo = bernese\""
       },
       "error": {
-        "message": "Index `[uuid]`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1:6 doggo = bernese",
+        "message": "Index `[uuid]`: Attribute `doggo` is not filterable. This index does not have configured filterable attributes.\n1-5 `doggo = bernese`",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
@@ -1107,7 +1107,7 @@ async fn export_foreign_filter() {
         "indexes": "[index_details]"
       },
       "error": {
-        "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10:16 _foreign(author, id = a1)",
+        "message": "using a foreign filter requires enabling the `foreign_keys` experimental feature. See https://github.com/orgs/meilisearch/discussions/873\n10-15 `_foreign(author, id = a1)`",
         "code": "feature_not_enabled",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -1153,7 +1153,7 @@ async fn export_foreign_filter() {
         "indexes": "[index_details]"
       },
       "error": {
-        "message": "Index `[uuid]`: Filter condition `_foreign` is not supported for this endpoint.\n10:16 _foreign(author, id = a1)",
+        "message": "Index `[uuid]`: Filter condition `_foreign` is not supported for this endpoint.\n10-15 `_foreign(author, id = a1)`",
         "code": "invalid_document_filter",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_filter"

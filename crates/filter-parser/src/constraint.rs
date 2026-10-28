@@ -76,7 +76,7 @@ impl FilterConstraints {
                     els.iter()
                         .map(|el| IndexFilterCondition::Condition {
                             fid: fid.clone(),
-                            op: Condition::Equal(el.clone().into()),
+                            op: Condition::Equal(el.clone()),
                         })
                         .collect(),
                 );
