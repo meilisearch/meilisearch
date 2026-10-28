@@ -11,7 +11,7 @@ use meilisearch_types::{compression, VERSION_FILE_NAME};
 use crate::heed::EnvOpenOptions;
 use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
 use crate::queue::TaskQueue;
-use crate::{Error, IndexScheduler, Result};
+use crate::{clamp_to_page_size, Error, IndexScheduler, Result};
 
 pub(crate) const UPDATE_FILES_DIR_NAME: &str = "update_files";
 
@@ -25,7 +25,13 @@ unsafe fn remove_tasks(
 ) -> Result<()> {
     let env_options = EnvOpenOptions::new();
     let mut env_options = env_options.read_txn_without_tls();
-    let env = env_options.max_dbs(TaskQueue::nb_db()).map_size(index_base_map_size).open(dst)?;
+    // heed rejects a map_size that isn't a multiple of the system page size —
+    // on platforms with a larger page size (e.g. Windows, 4096B) an unclamped
+    // value here makes snapshot creation fail.
+    let env = env_options
+        .max_dbs(TaskQueue::nb_db())
+        .map_size(clamp_to_page_size(index_base_map_size))
+        .open(dst)?;
     let wtxn = env.write_txn()?;
     env.create_databases_and_commit(wtxn, |dbo, wtxn| -> Result<_> {
         let task_queue = TaskQueue::new(dbo, wtxn)?;
