@@ -17,7 +17,9 @@ use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::update::settings::SettingsDelta;
-use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
+use crate::vector::db::{
+    EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta, RenderingFailureDelta,
+};
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
@@ -251,6 +253,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     default_must_regenerate,
                                     false,
                                     false,
+                                    RenderingFailureDelta::default(),
                                 );
                             }
                         } else {
@@ -464,7 +467,15 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                                 true,
                             )?;
                         } else if is_new_embedder {
-                            chunks.set_status(document.docid(), false, true, false, false);
+                            // TODO: I don't understand this case
+                            chunks.set_status(
+                                document.docid(),
+                                false,
+                                true,
+                                false,
+                                false,
+                                RenderingFailureDelta::default(),
+                            );
                         }
                     }
                 }
@@ -663,10 +674,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     where
         'a: 'doc,
     {
-        self.set_status(docid, old_is_user_provided, true, false, true);
-
-        match &mut self.kind {
+        let mut failure_delta = RenderingFailureDelta::default();
+        let result = match &mut self.kind {
             ChunkType::Fragments { fragments, session } => {
+                // fragments render failures are always ignored
+                let ignore_document_template_failures = true;
                 let doc_alloc = session.doc_alloc();
                 let reindex_all_fragments =
                                 // when the vectors were user-provided, Meilisearch cannot know if they come from a particular fragment,
@@ -690,51 +702,59 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         &(),
                         session,
                         unused_vectors_distribution,
-                    )?;
-                    return Ok(());
-                }
+                        ignore_document_template_failures,
+                        &mut failure_delta,
+                    )
+                } else {
+                    settings_delta.try_for_each_fragment_diff(
+                        session.embedder_name(),
+                        |fragment_diff| -> Result<()> {
+                            let extractor =
+                                RequestFragmentExtractor::new(fragment_diff.new, doc_alloc)
+                                    .ignore_errors();
+                            let old = if full_reindex {
+                                None
+                            } else {
+                                fragment_diff.old.map(|old| {
+                                    RequestFragmentExtractor::new(old, doc_alloc).ignore_errors()
+                                })
+                            };
+                            let metadata = Metadata {
+                                docid,
+                                external_docid,
+                                extractor_id: extractor.extractor_id(),
+                            };
 
-                settings_delta.try_for_each_fragment_diff(
-                    session.embedder_name(),
-                    |fragment_diff| -> Result<()> {
-                        let extractor = RequestFragmentExtractor::new(fragment_diff.new, doc_alloc)
-                            .ignore_errors();
-                        let old = if full_reindex {
-                            None
-                        } else {
-                            fragment_diff.old.map(|old| {
-                                RequestFragmentExtractor::new(old, doc_alloc).ignore_errors()
-                            })
-                        };
-                        let metadata = Metadata {
-                            docid,
-                            external_docid,
-                            extractor_id: extractor.extractor_id(),
-                        };
-
-                        match extractor.diff_settings(&document, &(), old.as_ref())? {
-                            ExtractorDiff::Removed => {
-                                OnEmbed::process_embedding_response(
-                                    session.on_embed_mut(),
-                                    crate::vector::session::EmbeddingResponse {
+                            match extractor.diff_settings(
+                                &document,
+                                &(),
+                                old.as_ref(),
+                                ignore_document_template_failures,
+                                &mut failure_delta,
+                            )? {
+                                ExtractorDiff::Removed => {
+                                    OnEmbed::process_embedding_response(
+                                        session.on_embed_mut(),
+                                        crate::vector::session::EmbeddingResponse {
+                                            metadata,
+                                            embedding: None,
+                                        },
+                                    );
+                                }
+                                ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
+                                    session.request_embedding(
                                         metadata,
-                                        embedding: None,
-                                    },
-                                );
+                                        input,
+                                        unused_vectors_distribution,
+                                    )?;
+                                }
+                                ExtractorDiff::Unchanged => { /* nothing to do */ }
                             }
-                            ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
-                                session.request_embedding(
-                                    metadata,
-                                    input,
-                                    unused_vectors_distribution,
-                                )?;
-                            }
-                            ExtractorDiff::Unchanged => { /* nothing to do */ }
-                        }
 
-                        Result::Ok(())
-                    },
-                )?;
+                            Result::Ok(())
+                        },
+                    )
+                }
             }
             ChunkType::DocumentTemplate {
                 document_template,
@@ -765,13 +785,13 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 let metadata =
                     Metadata { docid, external_docid, extractor_id: extractor.extractor_id() };
 
-                let extractor_diff = if *ignore_document_template_failures {
-                    let extractor = extractor.ignore_errors();
-                    let old_extractor = old_extractor.map(DocumentTemplateExtractor::ignore_errors);
-                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
-                } else {
-                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
-                };
+                let extractor_diff = extractor.diff_settings(
+                    document,
+                    &external_docid,
+                    old_extractor.as_ref(),
+                    *ignore_document_template_failures,
+                    &mut failure_delta,
+                )?;
 
                 match extractor_diff {
                     ExtractorDiff::Removed => {
@@ -782,19 +802,22 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                             session.on_embed_mut(),
                             crate::vector::session::EmbeddingResponse { metadata, embedding: None },
                         );
+
+                        Ok(())
                     }
                     ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
                         if old_is_user_provided || full_reindex {
                             session.on_embed_mut().clear_vectors(docid);
                         }
-                        session.request_embedding(metadata, input, unused_vectors_distribution)?;
+                        session.request_embedding(metadata, input, unused_vectors_distribution)
                     }
-                    ExtractorDiff::Unchanged => { /* do nothing */ }
+                    ExtractorDiff::Unchanged => Ok(()),
                 }
-                self.set_status(docid, old_is_user_provided, true, false, true);
             }
-        }
-        Ok(())
+        };
+
+        self.set_status(docid, old_is_user_provided, true, false, true, failure_delta);
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -813,14 +836,8 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     where
         'a: 'doc,
     {
-        self.set_status(
-            docid,
-            old_is_user_provided,
-            old_must_regenerate,
-            false,
-            new_must_regenerate,
-        );
-        match &mut self.kind {
+        let mut failure_delta = RenderingFailureDelta::default();
+        let result = match &mut self.kind {
             ChunkType::DocumentTemplate {
                 document_template,
                 ignore_document_template_failures,
@@ -833,35 +850,24 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     new_fields_ids_map,
                 );
 
-                if *ignore_document_template_failures {
-                    update_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex.ignore_errors()],
-                        old_document,
-                        new_document,
-                        &external_docid,
-                        old_must_regenerate,
-                        old_is_user_provided,
-                        session,
-                        unused_vectors_distribution,
-                    )
-                } else {
-                    update_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex],
-                        old_document,
-                        new_document,
-                        &external_docid,
-                        old_must_regenerate,
-                        old_is_user_provided,
-                        session,
-                        unused_vectors_distribution,
-                    )
-                }?
+                update_autogenerated(
+                    docid,
+                    external_docid,
+                    [ex],
+                    old_document,
+                    new_document,
+                    &external_docid,
+                    old_must_regenerate,
+                    old_is_user_provided,
+                    session,
+                    unused_vectors_distribution,
+                    *ignore_document_template_failures,
+                    &mut failure_delta,
+                )
             }
             ChunkType::Fragments { fragments, session } => {
+                // fragments render failures are always ignored
+                let ignore_document_template_failures = true;
                 let doc_alloc = session.doc_alloc();
                 let extractors = fragments.iter().map(|fragment| {
                     RequestFragmentExtractor::new(fragment, doc_alloc).ignore_errors()
@@ -881,26 +887,38 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         &(),
                         session,
                         unused_vectors_distribution,
-                    )?;
-                    return Ok(());
+                        ignore_document_template_failures,
+                        &mut failure_delta,
+                    )
+                } else {
+                    update_autogenerated(
+                        docid,
+                        external_docid,
+                        extractors,
+                        old_document,
+                        new_document,
+                        &(),
+                        old_must_regenerate,
+                        false,
+                        session,
+                        unused_vectors_distribution,
+                        ignore_document_template_failures,
+                        &mut failure_delta,
+                    )
                 }
-
-                update_autogenerated(
-                    docid,
-                    external_docid,
-                    extractors,
-                    old_document,
-                    new_document,
-                    &(),
-                    old_must_regenerate,
-                    false,
-                    session,
-                    unused_vectors_distribution,
-                )?
             }
         };
 
-        Ok(())
+        self.set_status(
+            docid,
+            old_is_user_provided,
+            old_must_regenerate,
+            false,
+            new_must_regenerate,
+            failure_delta,
+        );
+
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -917,15 +935,9 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         'a: 'doc,
     {
         let (default_is_user_provided, default_must_regenerate) = (false, true);
-        self.set_status(
-            docid,
-            default_is_user_provided,
-            default_must_regenerate,
-            false,
-            new_must_regenerate,
-        );
 
-        match &mut self.kind {
+        let mut failure_delta = RenderingFailureDelta::default();
+        let result = match &mut self.kind {
             ChunkType::DocumentTemplate {
                 document_template,
                 ignore_document_template_failures,
@@ -937,34 +949,25 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     doc_alloc,
                     new_fields_ids_map,
                 );
-                if *ignore_document_template_failures {
-                    insert_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex.ignore_errors()],
-                        new_document,
-                        &external_docid,
-                        session,
-                        unused_vectors_distribution,
-                    )?;
-                } else {
-                    insert_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex],
-                        new_document,
-                        &external_docid,
-                        session,
-                        unused_vectors_distribution,
-                    )?;
-                }
+                insert_autogenerated(
+                    docid,
+                    external_docid,
+                    [ex],
+                    new_document,
+                    &external_docid,
+                    session,
+                    unused_vectors_distribution,
+                    *ignore_document_template_failures,
+                    &mut failure_delta,
+                )
             }
             ChunkType::Fragments { fragments, session } => {
                 let doc_alloc = session.doc_alloc();
                 let extractors = fragments.iter().map(|fragment| {
                     RequestFragmentExtractor::new(fragment, doc_alloc).ignore_errors()
                 });
-
+                // fragments are always ignored
+                let ignore_document_template_failures = true;
                 insert_autogenerated(
                     docid,
                     external_docid,
@@ -973,10 +976,21 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     &(),
                     session,
                     unused_vectors_distribution,
-                )?;
+                    ignore_document_template_failures,
+                    &mut failure_delta,
+                )
             }
-        }
-        Ok(())
+        };
+
+        self.set_status(
+            docid,
+            default_is_user_provided,
+            default_must_regenerate,
+            false,
+            new_must_regenerate,
+            failure_delta,
+        );
+        result
     }
 
     pub fn drain(self, unused_vectors_distribution: &UnusedVectorsDistributionBump) -> Result<()> {
@@ -1013,12 +1027,15 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         old_must_regenerate: bool,
         new_is_user_provided: bool,
         new_must_regenerate: bool,
+        failure_delta: RenderingFailureDelta,
     ) {
         if EmbeddingStatusDelta::needs_change(
             old_is_user_provided,
             old_must_regenerate,
             new_is_user_provided,
             new_must_regenerate,
+            failure_delta.old_render_failure,
+            failure_delta.new_render_failure,
         ) {
             let mut status_delta = self.status_delta.borrow_mut();
             let status_delta = status_delta.0.entry_ref(self.embedder_name()).or_default();
@@ -1028,6 +1045,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 old_must_regenerate,
                 new_is_user_provided,
                 new_must_regenerate,
+                failure_delta,
             );
         }
     }
@@ -1056,6 +1074,8 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             old_must_regenerate,
             true,
             new_must_regenerate,
+            // Set vectors does not have any failure delta
+            RenderingFailureDelta::default(),
         );
         for (embedding_index, embedding) in embeddings.iter().enumerate() {
             if embedding.len() != self.dimensions {
@@ -1108,6 +1128,8 @@ fn update_autogenerated<'doc, 'a: 'doc, 'b, E, OD, ND>(
     mut must_clear_on_generation: bool,
     session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+    ignore_document_template_failures: bool,
+    status_delta: &mut RenderingFailureDelta,
 ) -> Result<()>
 where
     OD: Document<'doc> + Debug,
@@ -1117,7 +1139,19 @@ where
     crate::Error: From<E::Error>,
 {
     for extractor in extractors {
-        let new_rendered = extractor.extract(&new_document, meta)?;
+        let new_rendered = match extractor.extract(&new_document, meta) {
+            Ok(new_rendered) => new_rendered,
+            Err(e) => {
+                status_delta.new_render_failure = true;
+
+                if ignore_document_template_failures {
+                    None
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
+
         let must_regenerate = if !old_must_regenerate {
             // we just enabled `regenerate`
             true
@@ -1128,6 +1162,7 @@ where
                 // must regenerate if the rendered changed
                 new_rendered != old_rendered
             } else {
+                status_delta.old_render_failure = true;
                 // cannot check previous rendered, better regenerate
                 true
             }
@@ -1165,6 +1200,8 @@ fn insert_autogenerated<'doc, 'a: 'doc, 'b, E, D: Document<'doc> + Debug>(
     meta: &E::DocumentMetadata,
     session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+    ignore_document_template_failures: bool,
+    failure_delta: &mut RenderingFailureDelta,
 ) -> Result<()>
 where
     E: VectorExtractor<'a>,
@@ -1172,7 +1209,17 @@ where
     crate::Error: From<E::Error>,
 {
     for extractor in extractors {
-        let new_rendered = extractor.extract(&new_document, meta)?;
+        let new_rendered = match extractor.extract(&new_document, meta) {
+            Ok(new_rendered) => new_rendered,
+            Err(e) => {
+                failure_delta.new_render_failure = true;
+                if ignore_document_template_failures {
+                    None
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
 
         if let Some(new_rendered) = new_rendered {
             session.request_embedding(
