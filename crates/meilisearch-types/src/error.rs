@@ -791,6 +791,12 @@ r#"This error occurs if:
 - The value of either [`oneTypo`](/reference/api/settings/get-typotolerance) or [`twoTypos`](/reference/api/settings/get-typotolerance) is invalid. It should either be an integer or set to `null`
 "# ;
 
+InvalidSettingsWordPosition                    , InvalidRequest       , BAD_REQUEST,
+r#"This error occurs if:
+
+- The [`enabled`](/reference/api/settings/get-wordposition) field is invalid. It should either be a boolean or set to `null`
+"# ;
+
 InvalidSettingsLocalizedAttributes             , InvalidRequest       , BAD_REQUEST,
 "The [`localizedAttributes`](/reference/api/settings/get-localizedattributes) index setting value is invalid." ;
 

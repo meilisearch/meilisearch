@@ -314,6 +314,18 @@ make_setting_routes!(
         analytics: TypoToleranceAnalytics
     },
     {
+        route: "/word-position",
+        update_verb: patch,
+        value_type: meilisearch_types::settings::WordPositionSettings,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsWordPosition,
+        >,
+        attr: word_position,
+        camelcase_attr: "wordPosition",
+        body_example: json!({"enabled": true}),
+        analytics: WordPositionAnalytics
+    },
+    {
         route: "/searchable-attributes",
         update_verb: put,
         value_type: Vec<String>,
@@ -609,6 +621,7 @@ pub async fn update_all(
                 new_settings.proximity_precision.as_ref().set(),
             ),
             typo_tolerance: TypoToleranceAnalytics::new(new_settings.typo_tolerance.as_ref().set()),
+            word_position: WordPositionAnalytics::new(new_settings.word_position.as_ref().set()),
             faceting: FacetingAnalytics::new(new_settings.faceting.as_ref().set()),
             pagination: PaginationAnalytics::new(new_settings.pagination.as_ref().set()),
             stop_words: StopWordsAnalytics::new(new_settings.stop_words.as_ref().set()),

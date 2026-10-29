@@ -91,6 +91,7 @@ pub mod main_key {
     pub const PREFIX_SEARCH: &str = "prefix_search";
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
+    pub const WORD_POSITION: &str = "word_position";
     pub const CHAT: &str = "chat";
     pub const VECTOR_STORE_BACKEND: &str = "vector_store_backend";
 }
