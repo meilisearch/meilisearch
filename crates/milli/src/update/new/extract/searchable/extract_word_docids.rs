@@ -43,9 +43,18 @@ unsafe impl MostlySend for WordDocidsBalancedCaches<'_> {}
 /// Whether to extract or skip fields during word extraction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FieldDbExtraction {
-    /// Extract the word and put it in to the fid-based databases.
+    /// Extract the word and put it into the fid-based databases.
     Extract,
     /// Do not store the word in the fid-based databases.
+    Skip,
+}
+
+/// Whether to extract or skip word positions during word extraction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WordPositionExtraction {
+    /// Extract the word position and put it into the position-based databases.
+    Extract,
+    /// Do not store the word position in the position-based databases.
     Skip,
 }
 
@@ -70,6 +79,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         word: &str,
         exact: bool,
         field_db_extraction: FieldDbExtraction,
+        word_position_extraction: WordPositionExtraction,
         docid: u32,
         bump: &Bump,
     ) -> Result<()> {
@@ -91,12 +101,14 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
             self.word_fid_docids.insert_add_u32(&buffer, docid)?;
         }
 
-        let position = bucketed_position(position);
-        buffer.clear();
-        buffer.extend_from_slice(word_bytes);
-        buffer.push(0);
-        buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_add_u32(&buffer, docid)?;
+        if word_position_extraction == WordPositionExtraction::Extract {
+            let position = bucketed_position(position);
+            buffer.clear();
+            buffer.extend_from_slice(word_bytes);
+            buffer.push(0);
+            buffer.extend_from_slice(&position.to_be_bytes());
+            self.word_position_docids.insert_add_u32(&buffer, docid)?;
+        }
 
         if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
@@ -122,6 +134,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         word: &str,
         exact: bool,
         field_db_extraction: FieldDbExtraction,
+        word_position_extraction: WordPositionExtraction,
         docid: u32,
         bump: &Bump,
     ) -> Result<()> {
@@ -143,12 +156,14 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
             self.word_fid_docids.insert_del_u32(&buffer, docid)?;
         }
 
-        let position = bucketed_position(position);
-        buffer.clear();
-        buffer.extend_from_slice(word_bytes);
-        buffer.push(0);
-        buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_del_u32(&buffer, docid)?;
+        if word_position_extraction == WordPositionExtraction::Extract {
+            let position = bucketed_position(position);
+            buffer.clear();
+            buffer.extend_from_slice(word_bytes);
+            buffer.push(0);
+            buffer.extend_from_slice(&position.to_be_bytes());
+            self.word_position_docids.insert_del_u32(&buffer, docid)?;
+        }
 
         if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
@@ -704,6 +719,9 @@ impl WordDocidsExtractors {
 
         let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
         let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
+
+        let old_word_position_enabled = settings_delta.old_word_position_enabled();
+        let new_word_position_enabled = settings_delta.new_word_position_enabled();
 
         // we must tokenize twice when we change global parameters like stop words,
         // the language settings, dictionary, separators, non-separators...

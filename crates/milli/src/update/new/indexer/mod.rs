@@ -294,6 +294,11 @@ where
         index.exact_word_prefix_docids.clear(wtxn)?;
     }
 
+    if !settings_delta.new_word_position_enabled() {
+        index.word_position_docids.clear(wtxn)?;
+        index.word_prefix_position_docids.clear(wtxn)?;
+    }
+
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 

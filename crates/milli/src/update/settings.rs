@@ -2616,6 +2616,9 @@ pub trait SettingsDelta {
     fn old_proximity_precision(&self) -> &ProximityPrecision;
     fn new_proximity_precision(&self) -> &ProximityPrecision;
 
+    fn old_word_position_enabled(&self) -> bool; // TODO use a struct instead
+    fn new_word_position_enabled(&self) -> bool; // TODO use a struct instead
+
     fn old_prefix_search(&self) -> &PrefixSearch;
     fn new_prefix_search(&self) -> &PrefixSearch;
 
