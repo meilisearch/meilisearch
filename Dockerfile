@@ -14,7 +14,6 @@ ENV     RUSTFLAGS="-C target-feature=-crt-static"
 
 COPY    . .
 RUN     set -eux; \
-        apkArch="$(apk --print-arch)"; \
         cargo build --release -p meilisearch -p meilitool ${EXTRA_ARGS}
 
 # Run
@@ -43,4 +42,4 @@ WORKDIR /meili_data
 EXPOSE  7700/tcp
 
 ENTRYPOINT ["tini", "--"]
-CMD     /bin/meilisearch
+CMD     ["/bin/meilisearch"]
