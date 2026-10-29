@@ -999,6 +999,7 @@ fn test_correct_settings_init() {
                 sort_facet_values_by,
                 pagination_max_total_hits,
                 proximity_precision,
+                word_position_enabled,
                 embedder_settings,
                 search_cutoff,
                 localized_attributes_rules,
@@ -1029,6 +1030,7 @@ fn test_correct_settings_init() {
             assert!(matches!(sort_facet_values_by, Setting::NotSet));
             assert!(matches!(pagination_max_total_hits, Setting::NotSet));
             assert!(matches!(proximity_precision, Setting::NotSet));
+            assert!(matches!(word_position_enabled, Setting::NotSet));
             assert!(matches!(embedder_settings, Setting::NotSet));
             assert!(matches!(search_cutoff, Setting::NotSet));
             assert!(matches!(localized_attributes_rules, Setting::NotSet));
