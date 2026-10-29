@@ -301,10 +301,31 @@ impl Display for Error {
                 "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
             )?,
             ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
-            ErrorKind::Foreign => writeln!(f, "Was expecting a field name and an condition inside `_foreign(..)` filter but instead found `{escaped_input}`.")?,
+            ErrorKind::Foreign => writeln!(f, "Was expecting a field name and a condition inside `_foreign(..)` filter but instead found `{escaped_input}`.")?,
         }
-        let base_column = self.context.get_utf8_column();
-        let size = self.context.fragment().chars().count();
-        write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra())
+
+        let span = self.context.as_span();
+        let line = span.location_line();
+        let original = self.context.original();
+        let fragment = self.context.fragment();
+
+        let original_is_multiline = (line > 1) || original.contains('\n');
+        if original_is_multiline {
+            write!(f, "{line}:")?;
+        }
+
+        let fragment_is_multiline = fragment.contains('\n');
+        let fragment_character_count = fragment.chars().count();
+        let fragment_is_multi_character = fragment_character_count > 1;
+
+        let column = span.get_utf8_column();
+        write!(f, "{column}")?;
+
+        if fragment_is_multi_character && !fragment_is_multiline {
+            // -1: fragment_character_count > 1
+            let end_column = fragment_character_count + column - 1;
+            write!(f, "-{end_column}")?;
+        }
+        write!(f, " `{original}`")
     }
 }
