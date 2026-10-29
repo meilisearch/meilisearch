@@ -246,6 +246,59 @@ impl<'doc> Update<'doc> {
         VectorDocumentFromVersions::new(self.external_document_id, &self.new, doc_alloc, embedders)
     }
 
+    /// Returns `true` when applying this update would leave the stored document
+    /// strictly identical to its current version: every top-level field of the
+    /// update matches the current document (including field deletions for
+    /// replacements), the `_geo` and `_geojson` fields are unchanged, and the
+    /// update carries no `_vectors` field.
+    ///
+    /// This check is conservative: it may return `false` for updates that would
+    /// in fact leave the document unchanged, but never returns `true` for an
+    /// update that would modify it. In particular, replacements are only
+    /// considered unchanged when no embedder is configured, as replacing a
+    /// document may otherwise alter its stored `_vectors` metadata
+    /// (e.g. dropping user-provided vectors).
+    pub fn is_document_unchanged<'t, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'t RoTxn,
+        index: &'t Index,
+        mapper: &'t Mapper,
+        doc_alloc: &'doc Bump,
+        embedders: &'doc RuntimeEmbedders,
+    ) -> Result<bool> {
+        // A replacement can drop or alter the stored `_vectors` metadata even
+        // when all other fields are identical, so we only consider it when no
+        // embedder is configured on the index.
+        if self.from_scratch && !embedders.is_empty() {
+            return Ok(false);
+        }
+
+        // If the update carries a `_vectors` field, conservatively consider
+        // the document changed rather than deep-comparing embeddings.
+        if self.only_changed_vectors(doc_alloc, embedders)?.is_some() {
+            return Ok(false);
+        }
+
+        if self.has_changed_for_fields(&mut |_| PatternMatch::Match, rtxn, index, mapper)? {
+            return Ok(false);
+        }
+
+        if self.has_changed_for_geo_fields(rtxn, index, mapper)? {
+            return Ok(false);
+        }
+
+        // `_geojson` is excluded from both checks above; compare raw values,
+        // mirroring the conservative shape of `has_changed_for_geo_fields`.
+        let current = self.current(rtxn, index, mapper)?;
+        let current_geojson = current.geojson_field()?;
+        let updated_geojson = self.only_changed_fields().geojson_field()?;
+        match (current_geojson, updated_geojson) {
+            (Some(current), Some(updated)) => Ok(current.get() == updated.get()),
+            (None, None) => Ok(true),
+            _ => Ok(false),
+        }
+    }
+
     pub fn merged_vectors<Mapper: FieldIdMapper>(
         &self,
         rtxn: &'doc RoTxn,
