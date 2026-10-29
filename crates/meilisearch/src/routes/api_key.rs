@@ -29,8 +29,10 @@ use crate::routes::Pagination;
     tag = "Keys",
     tags((
         name = "Keys",
-        description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
-You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
+        description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions. You must have the master key or the default admin key to access the keys route.
+
+More information about the keys and their rights.
+
 Accessing any route under `/keys` without having set a master key will result in an error.",
     )),
 )]
@@ -39,13 +41,6 @@ pub struct ApiKeyApi;
 /// Create API key
 ///
 /// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
-///
-/// **Required fields:** `actions`, `indexes`, `expiresAt`.
-/// **Optional fields:** `name`, `description`, `uid`.
-///
-/// Set `expiresAt` to `null` to create a key that never expires.
-/// Use `"*"` in the `actions` array to grant all permissions (not recommended for production).
-/// Use `["*"]` in the `indexes` array to grant access to all indexes.
 #[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
@@ -105,11 +100,17 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
-    /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
+    /// Number of keys to skip. Use with `limit` for pagination.
+    ///
+    ///
+    /// Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
     #[param(required = false, value_type = usize, default = 0)]
     pub offset: Param<usize>,
-    /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
+    /// Maximum number of keys to return. Use with `offset` for pagination.
+    ///
+    ///
+    /// Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
     #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
@@ -124,6 +125,7 @@ impl ListApiKeys {
 /// List API keys
 ///
 /// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
+///
 ///
 /// **Note:** Expired keys are included in the response but deleted keys are not.
 /// Keys are returned in descending order of creation date.
@@ -265,6 +267,7 @@ pub async fn get_api_key(
 /// Update the name and description of an API key.
 ///
 /// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
+///
 ///
 /// **Note:** Only `name` and `description` can be updated. The fields `actions`, `indexes`,
 /// `expiresAt`, and `uid` cannot be modified after key creation.

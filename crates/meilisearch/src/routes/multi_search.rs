@@ -55,6 +55,7 @@ pub struct SearchResults {
 ///
 /// Each query can target a different index, so you can search across several indexes at once and get one combined response.
 ///
+///
 /// **Warning:** If Meilisearch encounters an error processing any query in the request, it immediately
 /// stops and returns an error message for the first error encountered. Partial results are not returned.
 #[routes::path(

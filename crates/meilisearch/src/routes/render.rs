@@ -56,8 +56,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// chat document template, indexing or search fragment) or provided inline, by injecting the
 /// given input (a document from an index, an inline document, or a search query).
 ///
+///
 /// Returns the template and the rendered result, allowing to preview how Meilisearch renders
 /// templates without indexing any document.
+///
 ///
 /// This route is only available when the `renderRoute` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
 #[routes::path(

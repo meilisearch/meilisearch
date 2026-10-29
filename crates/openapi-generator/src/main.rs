@@ -87,6 +87,8 @@ fn main() -> Result<()> {
     // routes actually declare rather than what post-processing produced.
     mirror_request_body_examples(&mut openapi);
     collapse_single_value_enums(&mut openapi);
+    // Last, so the descriptions the passes above build are normalized too.
+    normalize_descriptions(&mut openapi);
 
     // Determine output path
     let output_path = cli.output_dir.unwrap_or_else(|| PathBuf::from("./"));
@@ -944,6 +946,122 @@ fn single_value_enum(branch: &Value) -> Option<&str> {
     }
 }
 
+/// Applies the Markdown line-break rules to every `description` of the spec.
+///
+/// utoipa copies a doc comment into the spec verbatim, keeping the line breaks
+/// that only exist to fit the Rust line-length budget, and the API reference
+/// renders each of them literally. A paragraph written over four source lines
+/// is then published over four ragged lines. Markdown reads those breaks the
+/// other way around: a single break inside a paragraph is a space, and a blank
+/// line is what separates two paragraphs. One blank line is published as a line
+/// break, and two or more as a line break and the empty line a description uses
+/// to set a callout apart from the prose around it.
+///
+/// Descriptions under `example` and `default` are left alone: those hold
+/// payloads, so a `description` field inside one belongs to the data rather
+/// than to the documentation.
+fn normalize_descriptions(value: &mut Value) {
+    match value {
+        Value::Array(items) => items.iter_mut().for_each(normalize_descriptions),
+        Value::Object(object) => {
+            for (key, child) in object.iter_mut() {
+                match (key.as_str(), child) {
+                    ("example" | "default", _) => {}
+                    ("description", Value::String(description)) => {
+                        *description = reflow_markdown(description)
+                    }
+                    (_, child) => normalize_descriptions(child),
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Joins the lines Markdown joins and keeps the breaks Markdown keeps.
+///
+/// Soft-wrapped lines are joined back into the single line they describe, one
+/// blank line becomes a line break, and two or more become a line break and an
+/// empty line. The empty line stops there: a reference has no use for a wider
+/// gap, and utoipa does not turn a doc comment's blank lines into a predictable
+/// number of breaks anyway. Block structure keeps its own lines: list items,
+/// headings, tables, blockquotes and fenced code blocks, whose content is left
+/// byte for byte as it was written.
+fn reflow_markdown(description: &str) -> String {
+    let mut reflowed = String::new();
+    // Blank lines seen since the last line of text, each standing for a break.
+    let mut blank_lines = 0;
+    // Whether the block being built is a paragraph the next line can continue.
+    let mut open = false;
+    let mut in_code_block = false;
+
+    for raw in description.lines() {
+        // Inside a fence every line is content, blank ones included, and its
+        // indentation is part of the code sample.
+        if in_code_block {
+            reflowed.push('\n');
+            reflowed.push_str(raw);
+            in_code_block = !raw.trim_start().starts_with("```");
+            continue;
+        }
+
+        // A hard break asks for the break explicitly, and is the one case where
+        // the trailing whitespace of a line carries a meaning.
+        let hard_break = raw.ends_with("  ") || raw.trim_end().ends_with('\\');
+        let line = raw.trim_end();
+        let content = line.trim_start();
+
+        // A blank line ends the block, and counts towards the breaks that
+        // separate it from the next one. Those leading the description have
+        // nothing to separate.
+        if content.is_empty() {
+            blank_lines += !reflowed.is_empty() as usize;
+            open = false;
+            continue;
+        }
+
+        if open && !opens_block(content) {
+            reflowed.push(' ');
+            reflowed.push_str(content);
+        } else {
+            // Two blocks the author did not separate still need the one break
+            // their structure implies, and no gap is ever wider than one line.
+            if !reflowed.is_empty() {
+                reflowed.extend(std::iter::repeat_n('\n', blank_lines.clamp(1, 2)));
+            }
+            reflowed.push_str(line);
+        }
+        blank_lines = 0;
+
+        in_code_block = content.starts_with("```");
+        // A fence, a heading and a table row own their line: none of them is
+        // continued by whatever follows.
+        open = !in_code_block && !hard_break && !owns_its_line(content);
+    }
+
+    reflowed
+}
+
+/// Returns true when the line opens a block of its own instead of continuing
+/// the sentence above it.
+fn opens_block(line: &str) -> bool {
+    line.starts_with(['#', '|', '>']) || line.starts_with("```") || is_list_item(line)
+}
+
+/// Returns true for the lines no following line may be joined onto.
+fn owns_its_line(line: &str) -> bool {
+    line.starts_with(['#', '|'])
+}
+
+/// Returns true for `- item`, `* item`, `+ item`, `1. item` and `1) item`.
+fn is_list_item(line: &str) -> bool {
+    if let Some(rest) = line.strip_prefix(['-', '*', '+']) {
+        return rest.starts_with(' ');
+    }
+    let rest = line.trim_start_matches(|c: char| c.is_ascii_digit());
+    rest.len() < line.len() && (rest.starts_with(". ") || rest.starts_with(") "))
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -1236,5 +1354,130 @@ mod tests {
             &mut errors,
         );
         assert!(errors.is_empty(), "expected no errors when required is explicit: {:?}", errors);
+    }
+
+    /// A doc comment wrapped to fit the Rust line-length budget describes one
+    /// paragraph, and Markdown reads its breaks as spaces.
+    #[test]
+    fn test_reflow_markdown_joins_a_wrapped_paragraph() {
+        let wrapped = "Precedence of the rule. Lower numeric values take precedence over higher\nones. If omitted, the rule has the lowest precedence.";
+
+        assert_eq!(
+            reflow_markdown(wrapped),
+            "Precedence of the rule. Lower numeric values take precedence over higher ones. If omitted, the rule has the lowest precedence."
+        );
+    }
+
+    /// The renderer breaks on every newline: one blank line asks for a line
+    /// break, and more than one for the empty line that sets a callout apart.
+    /// utoipa turns a doc comment's blank lines into a number of breaks that
+    /// does not track how many were written, so the gap stops at one line
+    /// however many were asked for.
+    #[test]
+    fn test_reflow_markdown_opens_at_most_one_empty_line() {
+        assert_eq!(
+            reflow_markdown("First paragraph.\n\nSecond one."),
+            "First paragraph.\nSecond one."
+        );
+        for spaced in ["A paragraph.\n\n\nA callout.", "A paragraph.\n\n\n\n\nA callout."] {
+            assert_eq!(reflow_markdown(spaced), "A paragraph.\n\nA callout.");
+        }
+    }
+
+    /// The blank lines around the description separate it from nothing.
+    #[test]
+    fn test_reflow_markdown_drops_the_surrounding_blank_lines() {
+        assert_eq!(reflow_markdown("\n\n\nOne sentence.\n\n\n"), "One sentence.");
+    }
+
+    /// Breaks that Markdown gives a meaning to must survive, or the reference
+    /// would publish lists and code samples flattened into prose.
+    #[test]
+    fn test_reflow_markdown_keeps_block_structure() {
+        for description in [
+            "One sentence on a single line.",
+            "Conflicts are resolved like this:\n- the smallest number wins\n- ties are ordered by precedence",
+            "Steps:\n1. first\n2. second",
+            "# Heading\nBody of the section.",
+            "| column | other |\n| --- | --- |\n| a | b |",
+            "Example:\n```json\n{\n  \"precedence\": 10,\n\n  \"position\": 1\n}\n```",
+            "> a quoted line\n> a second quoted line",
+        ] {
+            assert_eq!(
+                reflow_markdown(description),
+                description,
+                "a deliberate break was dropped in {description:?}"
+            );
+        }
+    }
+
+    /// Two trailing spaces are a hard break, the one case where the trailing
+    /// whitespace of a line carries a meaning.
+    #[test]
+    fn test_reflow_markdown_keeps_a_hard_break() {
+        assert_eq!(
+            reflow_markdown("An explicit line break  \nfollowed by its continuation."),
+            "An explicit line break\nfollowed by its continuation."
+        );
+    }
+
+    /// A list item wrapped over two lines is a wrapped sentence like any other:
+    /// the renderer would otherwise break the bullet in half.
+    #[test]
+    fn test_reflow_markdown_joins_a_wrapped_list_item() {
+        let wrapped = "Conflicts:\n- if the same document is selected by several rules, the smallest\n  number wins\n- otherwise the order is stable";
+
+        assert_eq!(
+            reflow_markdown(wrapped),
+            "Conflicts:\n- if the same document is selected by several rules, the smallest number wins\n- otherwise the order is stable"
+        );
+    }
+
+    /// `example` and `default` hold request and response payloads: a
+    /// `description` field inside one is the data's, not the reference's.
+    #[test]
+    fn test_normalize_descriptions_leaves_payloads_alone() {
+        let mut spec = json!({
+            "components": {
+                "schemas": {
+                    "Rule": {
+                        "description": "A rule.\nWrapped over two lines.",
+                        "properties": {
+                            "description": {"description": "Human readable name of\nthe rule."}
+                        },
+                        "example": {"description": "Black Friday\nrules"},
+                        "default": {"description": "None\nset"}
+                    }
+                }
+            }
+        });
+
+        normalize_descriptions(&mut spec);
+
+        let rule = &spec["components"]["schemas"]["Rule"];
+        assert_eq!(rule["description"], "A rule. Wrapped over two lines.");
+        assert_eq!(
+            rule["properties"]["description"]["description"],
+            "Human readable name of the rule."
+        );
+        assert_eq!(rule["example"]["description"], "Black Friday\nrules");
+        assert_eq!(rule["default"]["description"], "None\nset");
+    }
+
+    /// Descriptions sit in three distant regions of the document, and the
+    /// reference publishes all three. A walk that stops short of one of them
+    /// leaves its descriptions ragged without failing anything else.
+    #[test]
+    fn test_generated_spec_is_reflowed_in_every_region() {
+        let before: Value = serde_json::to_value(MeilisearchApi::openapi()).unwrap();
+        let mut after = before.clone();
+        normalize_descriptions(&mut after);
+
+        for region in ["paths", "components", "tags"] {
+            assert_ne!(
+                after[region], before[region],
+                "the pass left `{region}` untouched, so it never walked into it"
+            );
+        }
     }
 }
