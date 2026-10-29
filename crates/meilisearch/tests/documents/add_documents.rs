@@ -1641,6 +1641,33 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
 }
 
 #[actix_rt::test]
+async fn nested_field_addition() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    index.create(Some("id")).await;
+
+    let (response, code) = index.update_settings(json!({"searchableAttributes": ["title"]})).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, code) =
+        index.update_documents(json!([{"id": 0, "root": {"nested": "toto"}}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, code) =
+        index.update_documents(json!([{"id": 0, "root": {"other_nested": "toto"}}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, code) =
+        index.update_settings(json!({"searchableAttributes": ["title", "root"]})).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+}
+
+#[actix_rt::test]
 async fn error_document_field_limit_reached_in_one_nested_document() {
     let server = Server::new_shared();
     let index = server.unique_index();
