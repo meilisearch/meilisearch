@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     # No need to check the version for dry run (cron or workflow_dispatch)
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.
@@ -86,7 +86,7 @@ jobs:
             use_cross: true
     needs: check-version
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install cross
         if: matrix.use_cross
         run: cargo install cross --locked
@@ -111,7 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Generate OpenAPI file
         run: |
           cd crates/openapi-generator
