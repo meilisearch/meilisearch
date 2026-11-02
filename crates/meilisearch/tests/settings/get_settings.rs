@@ -344,6 +344,9 @@ async fn secrets_are_hidden_in_settings() {
         "disableOnAttributes": [],
         "disableOnNumbers": false
       },
+      "wordPosition": {
+        "enabled": true
+      },
       "faceting": {
         "maxValuesPerFacet": 100,
         "sortFacetValuesBy": {
