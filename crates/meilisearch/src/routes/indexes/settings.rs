@@ -731,6 +731,7 @@ async fn register_new_settings(
                 "disableOnAttributes": ["title"],
                 "disableOnNumbers": false
             },
+            "wordPosition": { "enabled": true },
             "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } },
             "pagination": { "maxTotalHits": 1000 },
             "proximityPrecision": "byWord",

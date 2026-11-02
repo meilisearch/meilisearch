@@ -345,6 +345,7 @@ pub(crate) mod test {
                     btreemap! { S("age") => FacetValuesSort::Count },
                 ),
             }),
+            word_position: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
             search_cutoff_ms: Setting::NotSet,
