@@ -5,6 +5,7 @@ use anyhow::Context;
 use clap::Parser;
 use semver::{Prerelease, Version};
 use xtask::bench::BenchArgs;
+use xtask::relevancy::RelevancyArgs;
 use xtask::test::TestArgs;
 
 /// This is the version of the crate but also the current Meilisearch version
@@ -40,6 +41,7 @@ struct PrototypeArgs {
 enum Command {
     ListFeatures(ListFeaturesArgs),
     Bench(BenchArgs),
+    Relevancy(RelevancyArgs),
     GeneratePrototype(PrototypeArgs),
     Test(TestArgs),
 }
@@ -51,6 +53,7 @@ fn main() -> anyhow::Result<()> {
         Command::Bench(args) => xtask::bench::run(args)?,
         Command::GeneratePrototype(args) => generate_prototype(args)?,
         Command::Test(args) => xtask::test::run(args)?,
+        Command::Relevancy(args) => xtask::relevancy::run(args)?,
     }
     Ok(())
 }
