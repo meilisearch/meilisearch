@@ -36,6 +36,7 @@ pub struct RelevancyWorkload {
 pub struct QueryTemplate {
     query_set_asset: String,
     template: serde_json::Value,
+    primary_key: String,
 }
 
 pub async fn execute(
@@ -140,32 +141,104 @@ async fn run_query_template(
     };
 
     async fn send_query(
-        meili_client: &Arc<Client>,
+        meili_client: Arc<Client>,
         query_entry: QueryEntry,
-        assets: &Arc<BTreeMap<String, Asset>>,
+        template: JsonTemplate,
+        primary_key: String,
+        assets: Arc<BTreeMap<String, Asset>>,
         asset_folder: &'static str,
     ) -> anyhow::Result<RelevancyResult> {
-        let query: serde_json::Value = todo!("fill the query template with the query_entry.query");
+        let mut query: serde_json::Value = template
+            .render_search(Some(query_entry.query.as_str()), None)
+            .map_err(|err| anyhow::anyhow!(err.rendering_error("template")))?;
+
+        query["offset"] = 0.into();
+        query["limit"] = 50.into();
+
+        let ideal_hits = query_entry.ideal_hits();
 
         let ips_at_1 = query_entry.ideal_precision_score_for(1);
         let irs_at_1 = query_entry.ideal_recall_for(1);
-        let ps_at_1: f64 = todo!("run a single search query and retrieve both scores");
-        let rs_at_1: f64 = todo!("run a single search query and retrieve both scores");
 
         let ips_at_5 = query_entry.ideal_precision_score_for(5);
         let irs_at_5 = query_entry.ideal_recall_for(5);
-        let ps_at_5: f64 = todo!("run a single search query and retrieve both scores");
-        let rs_at_5: f64 = todo!("run a single search query and retrieve both scores");
 
         let ips_at_20 = query_entry.ideal_precision_score_for(20);
         let irs_at_20 = query_entry.ideal_recall_for(20);
-        let ps_at_20: f64 = todo!("run a single search query and retrieve both scores");
-        let rs_at_20: f64 = todo!("run a single search query and retrieve both scores");
 
         let ips_at_50 = query_entry.ideal_precision_score_for(50);
         let irs_at_50 = query_entry.ideal_recall_for(50);
-        let ps_at_50: f64 = todo!("run a single search query and retrieve both scores");
-        let rs_at_50: f64 = todo!("run a single search query and retrieve both scores");
+
+        let command = Command {
+            description: query_entry.description,
+            route: "/indexes/relevancy/search".to_string(),
+            method: crate::common::client::Method::Post,
+            body: crate::common::command::Body::Inline { inline: query },
+            expected_status: Some(200),
+            expected_response: None,
+            register: Default::default(),
+            api_key_variable: None,
+            synchronous: crate::common::command::SyncMode::WaitForResponse,
+        };
+        let Some((response, _code)) = crate::common::command::run(
+            meili_client,
+            &command,
+            0,
+            assets,
+            Default::default(),
+            asset_folder,
+            true,
+        )
+        .await?
+        else {
+            anyhow::bail!("missing response for query `{}`", query_entry.id);
+        };
+
+        let hits = response
+            .as_object()
+            .context("response must be an object")?
+            .get("hits")
+            .context("`hits` must be present")?
+            .as_array()
+            .context("`hits` must be an array")?;
+
+        let hits: anyhow::Result<Vec<_>> =
+            hits.into_iter()
+                .map(|hit| {
+                    hit.as_object().context("`hit` must be an object")?.get(primary_key).context(
+                    "the primary key must be present, check the declared pk in your workload",
+                ).and_then(|pk| pk.as_str().context("docid must be a string"))
+                })
+                .collect();
+        let hits = hits?;
+
+        let score_sum = std::cell::Cell::new(0.0);
+        let mut it = hits.iter().map(|hit| {
+            score_sum.update(|score_sum| score_sum + ideal_hits.get(*hit).copied().unwrap_or(0.0))
+        });
+
+        it.next();
+
+        // hits len are always considered to be always 1 so we don't divide by 0
+        let hits_len = usize::max(1, hits.len());
+
+        let ps_at_1: f64 = score_sum.get() / hits_len as f64;
+        let rs_at_1: f64 = score_sum.get();
+
+        it.nth(4);
+
+        let ps_at_5: f64 = score_sum.get() / usize::min(hits_len, 5) as f64;
+        let rs_at_5: f64 = score_sum.get();
+
+        it.nth(15);
+
+        let ps_at_20: f64 = score_sum.get() / usize::min(hits_len, 20) as f64;
+        let rs_at_20: f64 = score_sum.get();
+
+        it.nth(30);
+
+        let ps_at_50: f64 = score_sum.get() / usize::min(hits_len, 20) as f64;
+        let rs_at_50: f64 = score_sum.get();
 
         Ok(RelevancyResult {
             q_id: query_entry.id,
@@ -182,11 +255,28 @@ async fn run_query_template(
 
     let mut unordered: FuturesUnordered<_> = query_set
         .into_iter()
-        .map(|query_entry| send_query(meili_client, query_entry, assets, asset_folder).boxed())
+        .map({
+            let meili_client = meili_client.clone();
+            let template = template.clone();
+            let primary_key = query_template.primary_key.clone();
+            let assets = assets.clone();
+
+            move |query_entry| {
+                tokio::spawn(send_query(
+                    meili_client,
+                    query_entry,
+                    template,
+                    primary_key,
+                    assets,
+                    asset_folder,
+                ))
+            }
+        })
         .collect();
 
     let mut csv_writer = csv::Writer::from_path(report_file)?;
-    while let Some(result) = unordered.next().await.transpose()? {
+    while let Some(result) = unordered.next().await {
+        let result = result.unwrap()?;
         csv_writer.serialize(result)?;
     }
     csv_writer.flush()?;
@@ -214,7 +304,7 @@ impl QueryEntry {
         );
 
         self.hits.iter().take(limit).map(|h| h.score).sum::<f64>()
-            / self.hits.len().min(limit) as f64
+            / usize::max(1, usize::min(self.hits.len(), limit)) as f64
     }
 
     /// Returns the best possible recall score for a query of `limit` documents.
@@ -225,6 +315,10 @@ impl QueryEntry {
         );
 
         self.hits.iter().take(limit).map(|h| h.score).sum::<f64>()
+    }
+
+    fn ideal_hits(&self) -> HashMap<String, f64> {
+        self.hits.iter().map(|hit| (hit.id.clone(), hit.score)).collect()
     }
 }
 
