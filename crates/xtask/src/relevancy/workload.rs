@@ -1,24 +1,21 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::Read as _,
-    path::Path,
-    sync::Arc,
-};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, HashMap};
+use std::io::Read as _;
+use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{bail, Context as _};
+use futures_util::stream::{FuturesUnordered, StreamExt as _};
+use futures_util::FutureExt as _;
 use milli::vector::json_template::JsonTemplate;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    common::{
-        assets::{self, fetch_asset, Asset, AssetFormat},
-        client::Client,
-        command::{run_commands, Command},
-        instance::Binary,
-        process::{self, delete_db, start_meili},
-    },
-    relevancy::RelevancyArgs,
-};
+use crate::common::assets::{self, fetch_asset, Asset, AssetFormat};
+use crate::common::client::Client;
+use crate::common::command::{run_commands, Command};
+use crate::common::instance::Binary;
+use crate::common::process::{self, delete_db, start_meili};
+use crate::relevancy::RelevancyArgs;
 
 /// A relevancy workload.
 /// Not to be confused with [a bench workload](crate::bench::workload::Workload).
@@ -53,6 +50,7 @@ pub async fn execute(
     tracing::info!(workload = workload.name, "Successful workload");
 
     execute_run(meili_client, master_key, &workload, args, binary_path).await?;
+    tracing::info!(workload = workload.name, "Workload done and reports written");
 
     Ok(())
 }
@@ -100,7 +98,9 @@ async fn execute_run(
     )
     .await?;
 
-    run_query_template(meili_client, &workload.query_template, &assets, asset_folder).await?;
+    let report_file = Path::new(&args.report_folder).join(&workload.name).with_extension("csv");
+    run_query_template(meili_client, &workload.query_template, &assets, asset_folder, &report_file)
+        .await?;
 
     process::kill_meili(meilisearch).await;
 
@@ -112,6 +112,7 @@ async fn run_query_template(
     query_template: &QueryTemplate,
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
+    report_file: &Path,
 ) -> anyhow::Result<()> {
     let template = JsonTemplate::new(query_template.template.clone())
         .map_err(|err| anyhow::anyhow!(err.parsing_error("template")))?;
@@ -124,7 +125,7 @@ async fn run_query_template(
         (buf, AssetFormat::auto_detect(name))
     };
 
-    let query_set: QuerySet = match format {
+    let QuerySet(query_set) = match format {
         assets::AssetFormat::Json => serde_json::from_slice(&query_set)
             .context("while trying to deserialize querySet as a JSON object")?,
         assets::AssetFormat::NdJson => {
@@ -137,6 +138,58 @@ async fn run_query_template(
             bail!("unsupported querySet format")
         }
     };
+
+    async fn send_query(
+        meili_client: &Arc<Client>,
+        query_entry: QueryEntry,
+        assets: &Arc<BTreeMap<String, Asset>>,
+        asset_folder: &'static str,
+    ) -> anyhow::Result<RelevancyResult> {
+        let query: serde_json::Value = todo!("fill the query template with the query_entry.query");
+
+        let ips_at_1 = query_entry.ideal_precision_score_for(1);
+        let irs_at_1 = query_entry.ideal_recall_for(1);
+        let ps_at_1: f64 = todo!("run a single search query and retrieve both scores");
+        let rs_at_1: f64 = todo!("run a single search query and retrieve both scores");
+
+        let ips_at_5 = query_entry.ideal_precision_score_for(5);
+        let irs_at_5 = query_entry.ideal_recall_for(5);
+        let ps_at_5: f64 = todo!("run a single search query and retrieve both scores");
+        let rs_at_5: f64 = todo!("run a single search query and retrieve both scores");
+
+        let ips_at_20 = query_entry.ideal_precision_score_for(20);
+        let irs_at_20 = query_entry.ideal_recall_for(20);
+        let ps_at_20: f64 = todo!("run a single search query and retrieve both scores");
+        let rs_at_20: f64 = todo!("run a single search query and retrieve both scores");
+
+        let ips_at_50 = query_entry.ideal_precision_score_for(50);
+        let irs_at_50 = query_entry.ideal_recall_for(50);
+        let ps_at_50: f64 = todo!("run a single search query and retrieve both scores");
+        let rs_at_50: f64 = todo!("run a single search query and retrieve both scores");
+
+        Ok(RelevancyResult {
+            q_id: query_entry.id,
+            precision_at_1: ps_at_1 / ips_at_1,
+            precision_at_5: ps_at_5 / ips_at_5,
+            precision_at_20: ps_at_20 / ips_at_20,
+            precision_at_50: ps_at_50 / ips_at_50,
+            recall_at_1: rs_at_1 / irs_at_1,
+            recall_at_5: rs_at_5 / irs_at_5,
+            recall_at_20: rs_at_20 / irs_at_20,
+            recall_at_50: rs_at_50 / irs_at_50,
+        })
+    }
+
+    let mut unordered: FuturesUnordered<_> = query_set
+        .into_iter()
+        .map(|query_entry| send_query(meili_client, query_entry, assets, asset_folder).boxed())
+        .collect();
+
+    let mut csv_writer = csv::Writer::from_path(report_file)?;
+    while let Some(result) = unordered.next().await.transpose()? {
+        csv_writer.serialize(result)?;
+    }
+    csv_writer.flush()?;
 
     Ok(())
 }
@@ -152,8 +205,60 @@ struct QueryEntry {
     hits: Vec<Hit>,
 }
 
+impl QueryEntry {
+    /// Returns the best possible precision score for a query of `limit` documents.
+    fn ideal_precision_score_for(&self, limit: usize) -> f64 {
+        assert!(
+            self.hits.is_sorted_by_key(|hit| Reverse(hit.score)),
+            "hits must be sorted by descending score"
+        );
+
+        self.hits.iter().take(limit).map(|h| h.score).sum::<f64>()
+            / self.hits.len().min(limit) as f64
+    }
+
+    /// Returns the best possible recall score for a query of `limit` documents.
+    fn ideal_recall_for(&self, limit: usize) -> f64 {
+        assert!(
+            self.hits.is_sorted_by_key(|hit| Reverse(hit.score)),
+            "hits must be sorted by descending score"
+        );
+
+        self.hits.iter().take(limit).map(|h| h.score).sum::<f64>()
+    }
+}
+
 #[derive(Deserialize)]
 struct Hit {
     id: String,
-    score: Option<f64>,
+    #[serde(default = "Hit::default_score")]
+    score: f64,
+}
+
+impl Hit {
+    fn default_score() -> f64 {
+        1.0
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RelevancyResult {
+    q_id: String,
+    #[serde(rename = "precision@1")]
+    precision_at_1: f64,
+    #[serde(rename = "precision@5")]
+    precision_at_5: f64,
+    #[serde(rename = "precision@20")]
+    precision_at_20: f64,
+    #[serde(rename = "precision@50")]
+    precision_at_50: f64,
+    #[serde(rename = "recall@1")]
+    recall_at_1: f64,
+    #[serde(rename = "recall@5")]
+    recall_at_5: f64,
+    #[serde(rename = "recall@20")]
+    recall_at_20: f64,
+    #[serde(rename = "recall@50")]
+    recall_at_50: f64,
 }
