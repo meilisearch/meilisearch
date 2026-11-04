@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::bench::BenchWorkload;
+use crate::relevancy::RelevancyWorkload;
 use crate::test::TestWorkload;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -9,4 +10,5 @@ use crate::test::TestWorkload;
 pub enum Workload {
     Bench(BenchWorkload),
     Test(TestWorkload),
+    Relevancy(RelevancyWorkload),
 }

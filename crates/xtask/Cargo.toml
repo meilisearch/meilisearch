@@ -12,7 +12,8 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.104"
-build-info = { version = "1.7.0", path = "../build-info" }
+build-info = { path = "../build-info" }
+milli = { path = "../milli" }
 cargo_metadata = "0.23.1"
 clap = { version = "4.6.6", features = ["derive"] }
 futures-util = "0.3.34"
@@ -43,3 +44,4 @@ tracing-subscriber = "0.3.23"
 tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 uuid = { version = "1.24.0", features = ["v7", "serde"] }
 similar-asserts = "1.7.0"
+csv = "1.4.0"

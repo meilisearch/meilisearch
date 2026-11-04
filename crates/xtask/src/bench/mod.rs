@@ -22,7 +22,7 @@ pub fn default_dashboard_url() -> String {
     "http://localhost:9001".into()
 }
 
-/// Run benchmarks from a workload
+/// Run performance benchmarks from a workload
 #[derive(Parser, Debug)]
 pub struct BenchArgs {
     /// Common arguments shared with other commands

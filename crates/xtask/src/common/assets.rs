@@ -41,7 +41,7 @@ impl AssetFormat {
         }
     }
 
-    fn auto_detect(filename: &str) -> Self {
+    pub fn auto_detect(filename: &str) -> Self {
         let path = std::path::Path::new(filename);
         match path.extension().and_then(|extension| extension.to_str()) {
             Some(extension) if extension.eq_ignore_ascii_case("json") => Self::Json,
