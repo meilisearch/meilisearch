@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context as _};
 use futures_util::stream::{FuturesUnordered, StreamExt as _};
-use futures_util::FutureExt as _;
 use milli::vector::json_template::JsonTemplate;
 use serde::{Deserialize, Serialize};
 
@@ -85,6 +84,10 @@ async fn execute_run(
         },
     };
 
+    let report_folder = &args.report_folder;
+    std::fs::create_dir_all(report_folder)
+        .with_context(|| format!("could not create report directory at {report_folder}"))?;
+
     let meilisearch =
         start_meili(meili_client, master_key, &binary, &args.common.asset_folder).await?;
 
@@ -120,7 +123,7 @@ async fn run_query_template(
     let (query_set, format) = {
         let name = &query_template.query_set_asset;
         let context = || format!("while getting body from asset '{name}'");
-        let (mut file, format) = fetch_asset(&name, assets, asset_folder).with_context(context)?;
+        let (mut file, _format) = fetch_asset(name, assets, asset_folder).with_context(context)?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf).with_context(context)?;
         (buf, AssetFormat::auto_detect(name))
@@ -143,8 +146,8 @@ async fn run_query_template(
     async fn send_query(
         meili_client: Arc<Client>,
         query_entry: QueryEntry,
-        template: JsonTemplate,
-        primary_key: String,
+        template: Arc<JsonTemplate>,
+        primary_key: Arc<String>,
         assets: Arc<BTreeMap<String, Asset>>,
         asset_folder: &'static str,
     ) -> anyhow::Result<RelevancyResult> {
@@ -181,10 +184,10 @@ async fn run_query_template(
             synchronous: crate::common::command::SyncMode::WaitForResponse,
         };
         let Some((response, _code)) = crate::common::command::run(
-            meili_client,
+            &meili_client,
             &command,
             0,
-            assets,
+            &assets,
             Default::default(),
             asset_folder,
             true,
@@ -202,19 +205,30 @@ async fn run_query_template(
             .as_array()
             .context("`hits` must be an array")?;
 
-        let hits: anyhow::Result<Vec<_>> =
-            hits.into_iter()
-                .map(|hit| {
-                    hit.as_object().context("`hit` must be an object")?.get(primary_key).context(
-                    "the primary key must be present, check the declared pk in your workload",
-                ).and_then(|pk| pk.as_str().context("docid must be a string"))
-                })
-                .collect();
+        let hits: anyhow::Result<Vec<_>> = hits
+            .iter()
+            .map(|hit| {
+                hit.as_object()
+                    .context("`hit` must be an object")?
+                    .get(primary_key.as_str())
+                    .context(
+                        "the primary key must be present, check the declared pk in your workload",
+                    )
+                    .and_then(|pk| pk.as_str().context("docid must be a string"))
+            })
+            .collect();
         let hits = hits?;
 
         let score_sum = std::cell::Cell::new(0.0);
         let mut it = hits.iter().map(|hit| {
-            score_sum.update(|score_sum| score_sum + ideal_hits.get(*hit).copied().unwrap_or(0.0))
+            score_sum.update(|score_sum| {
+                let score = ideal_hits.get(*hit).copied().unwrap_or(0.0);
+                if query_entry.id == "42" {
+                    dbg!(hit);
+                    dbg!(score);
+                }
+                score_sum + score
+            })
         });
 
         it.next();
@@ -222,22 +236,29 @@ async fn run_query_template(
         // hits len are always considered to be always 1 so we don't divide by 0
         let hits_len = usize::max(1, hits.len());
 
-        let ps_at_1: f64 = score_sum.get() / hits_len as f64;
+        let ps_at_1: f64 = score_sum.get() / usize::min(1, hits_len) as f64;
         let rs_at_1: f64 = score_sum.get();
 
-        it.nth(4);
+        it.nth(3);
 
         let ps_at_5: f64 = score_sum.get() / usize::min(hits_len, 5) as f64;
         let rs_at_5: f64 = score_sum.get();
 
-        it.nth(15);
+        if query_entry.id == "42" {
+            dbg!(hits.len());
+            dbg!(ideal_hits.len());
+            dbg!(ips_at_5);
+            dbg!(ps_at_5);
+        }
+
+        it.nth(14);
 
         let ps_at_20: f64 = score_sum.get() / usize::min(hits_len, 20) as f64;
         let rs_at_20: f64 = score_sum.get();
 
-        it.nth(30);
+        it.nth(29);
 
-        let ps_at_50: f64 = score_sum.get() / usize::min(hits_len, 20) as f64;
+        let ps_at_50: f64 = score_sum.get() / usize::min(hits_len, 50) as f64;
         let rs_at_50: f64 = score_sum.get();
 
         Ok(RelevancyResult {
@@ -252,22 +273,20 @@ async fn run_query_template(
             recall_at_50: rs_at_50 / irs_at_50,
         })
     }
+    let template = Arc::new(template);
+    let primary_key = query_template.primary_key.clone();
+    let primary_key = Arc::new(primary_key);
 
     let mut unordered: FuturesUnordered<_> = query_set
         .into_iter()
         .map({
-            let meili_client = meili_client.clone();
-            let template = template.clone();
-            let primary_key = query_template.primary_key.clone();
-            let assets = assets.clone();
-
             move |query_entry| {
                 tokio::spawn(send_query(
-                    meili_client,
+                    meili_client.clone(),
                     query_entry,
-                    template,
-                    primary_key,
-                    assets,
+                    template.clone(),
+                    primary_key.clone(),
+                    assets.clone(),
                     asset_folder,
                 ))
             }
