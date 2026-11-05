@@ -66,8 +66,6 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
     // enter runtime
 
     rt.block_on(async {
-        let max_workloads = args.common.workload_file.len();
-        let reason: Option<&str> = args.reason.as_deref();
 
         tracing::info!(workload_count = args.common.workload_file.len(), "handling workload files");
 
@@ -86,7 +84,6 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
                     bail!("workload file {} is not a relevancy workload", workload_file.display());
                 };
 
-                let workload_name = workload.name.clone();
 
                 workload::execute(
                     &assets_client,
@@ -104,7 +101,7 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
 
         // wait for the end of the main task, handle result
         match workload_runs.await {
-            Ok(Ok(urls)) => {
+            Ok(Ok(())) => {
                 tracing::info!("Success");
                 println!("☀️ Benchmark invocation completed, please find the results for your workloads below:");
                 Ok::<(), anyhow::Error>(())
