@@ -43,9 +43,18 @@ unsafe impl MostlySend for WordDocidsBalancedCaches<'_> {}
 /// Whether to extract or skip fields during word extraction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FieldDbExtraction {
-    /// Extract the word and put it in to the fid-based databases.
+    /// Extract the word and put it into the fid-based databases.
     Extract,
     /// Do not store the word in the fid-based databases.
+    Skip,
+}
+
+/// Whether to extract or skip word positions during word extraction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WordPositionExtraction {
+    /// Extract the word position and put it into the position-based databases.
+    Extract,
+    /// Do not store the word position in the position-based databases.
     Skip,
 }
 
@@ -70,6 +79,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         word: &str,
         exact: bool,
         field_db_extraction: FieldDbExtraction,
+        word_position_extraction: WordPositionExtraction,
         docid: u32,
         bump: &Bump,
     ) -> Result<()> {
@@ -91,12 +101,14 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
             self.word_fid_docids.insert_add_u32(&buffer, docid)?;
         }
 
-        let position = bucketed_position(position);
-        buffer.clear();
-        buffer.extend_from_slice(word_bytes);
-        buffer.push(0);
-        buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_add_u32(&buffer, docid)?;
+        if word_position_extraction == WordPositionExtraction::Extract {
+            let position = bucketed_position(position);
+            buffer.clear();
+            buffer.extend_from_slice(word_bytes);
+            buffer.push(0);
+            buffer.extend_from_slice(&position.to_be_bytes());
+            self.word_position_docids.insert_add_u32(&buffer, docid)?;
+        }
 
         if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
@@ -122,6 +134,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         word: &str,
         exact: bool,
         field_db_extraction: FieldDbExtraction,
+        word_position_extraction: WordPositionExtraction,
         docid: u32,
         bump: &Bump,
     ) -> Result<()> {
@@ -143,12 +156,14 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
             self.word_fid_docids.insert_del_u32(&buffer, docid)?;
         }
 
-        let position = bucketed_position(position);
-        buffer.clear();
-        buffer.extend_from_slice(word_bytes);
-        buffer.push(0);
-        buffer.extend_from_slice(&position.to_be_bytes());
-        self.word_position_docids.insert_del_u32(&buffer, docid)?;
+        if word_position_extraction == WordPositionExtraction::Extract {
+            let position = bucketed_position(position);
+            buffer.clear();
+            buffer.extend_from_slice(word_bytes);
+            buffer.push(0);
+            buffer.extend_from_slice(&position.to_be_bytes());
+            self.word_position_docids.insert_del_u32(&buffer, docid)?;
+        }
 
         if self.current_docid.is_some_and(|id| docid != id) {
             self.flush_fid_word_count(&mut buffer)?;
@@ -368,6 +383,12 @@ impl WordDocidsExtractors {
             Ok((field_id, pattern_match))
         };
 
+        let word_position_enabled = if index.word_position(rtxn)?.enabled {
+            WordPositionExtraction::Extract
+        } else {
+            WordPositionExtraction::Skip
+        };
+
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
@@ -377,6 +398,7 @@ impl WordDocidsExtractors {
                         word,
                         is_exact(fname, word),
                         FieldDbExtraction::Extract,
+                        word_position_enabled,
                         inner.docid(),
                         doc_alloc,
                     )
@@ -406,6 +428,7 @@ impl WordDocidsExtractors {
                         word,
                         is_exact(fname, word),
                         FieldDbExtraction::Extract,
+                        word_position_enabled,
                         inner.docid(),
                         doc_alloc,
                     )
@@ -423,6 +446,7 @@ impl WordDocidsExtractors {
                         word,
                         is_exact(fname, word),
                         FieldDbExtraction::Extract,
+                        word_position_enabled,
                         inner.docid(),
                         doc_alloc,
                     )
@@ -441,6 +465,7 @@ impl WordDocidsExtractors {
                         word,
                         is_exact(fname, word),
                         FieldDbExtraction::Extract,
+                        word_position_enabled,
                         inner.docid(),
                         doc_alloc,
                     )
@@ -596,65 +621,74 @@ impl WordDocidsExtractors {
 
         let mut action = ActionToOperate::SkipDocument;
 
-        match document_tokenizers {
-            OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
-                // Here we do a preliminary check to determine the action to take.
-                // This check doesn't trigger the tokenizer as we never return
-                // PatternMatch::Match.
-                document_tokenizer.tokenize_document(
-                    current_document,
-                    &mut |field_name| {
-                        let fid = match new_fields_ids_map.id(field_name) {
-                            Some(field_id) => field_id,
-                            None => panic!("Expected field `{field_name}` in the fields IDs map"),
-                        };
+        let old_word_position_enabled = settings_delta.old_word_position().enabled;
+        let new_word_position_enabled = settings_delta.new_word_position().enabled;
 
-                        // If the document must be reindexed, early return NoMatch to stop the scanning process.
-                        if action == ActionToOperate::ReindexAllFields {
-                            return Ok((fid, PatternMatch::NoMatch));
-                        }
+        if !old_word_position_enabled && new_word_position_enabled {
+            action = ActionToOperate::ReindexAllFields;
+        } else {
+            match document_tokenizers {
+                OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
+                    // Here we do a preliminary check to determine the action to take.
+                    // This check doesn't trigger the tokenizer as we never return
+                    // PatternMatch::Match.
+                    document_tokenizer.tokenize_document(
+                        current_document,
+                        &mut |field_name| {
+                            let fid = match new_fields_ids_map.id(field_name) {
+                                Some(field_id) => field_id,
+                                None => {
+                                    panic!("Expected field `{field_name}` in the fields IDs map")
+                                }
+                            };
 
-                        let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
-                        let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
-
-                        action = match (old_field_metadata, new_field_metadata) {
-                            // At least one field is added or removed from the exact fields => ReindexAllFields
-                            (
-                                Metadata { exact: old_exact, .. },
-                                Metadata { exact: new_exact, .. },
-                            ) if old_exact != new_exact => ActionToOperate::ReindexAllFields,
-                            // At least one field is removed from the searchable fields => ReindexAllFields
-                            (
-                                Metadata { searchable: (PatternMatch::Match, _), .. },
-                                Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                            )
-                            | (
-                                Metadata { searchable: (PatternMatch::Match, _), .. },
-                                Metadata { searchable: (PatternMatch::Parent, _), .. },
-                            ) => ActionToOperate::ReindexAllFields,
-                            // At least one field is added in the searchable fields => IndexAddedFields
-                            (
-                                Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                                Metadata { searchable: (PatternMatch::Match, _), .. },
-                            )
-                            | (
-                                Metadata { searchable: (PatternMatch::Parent, _), .. },
-                                Metadata { searchable: (PatternMatch::Match, _), .. },
-                            ) => {
-                                // We can safely overwrite the action, because we early return when action is ReindexAllFields.
-                                ActionToOperate::IndexAddedFields
+                            // If the document must be reindexed, early return NoMatch to stop the scanning process.
+                            if action == ActionToOperate::ReindexAllFields {
+                                return Ok((fid, PatternMatch::NoMatch));
                             }
-                            _ => action,
-                        };
 
-                        Ok((fid, PatternMatch::Parent))
-                    },
-                    &mut |_, _, _, _| Ok(()),
-                )?;
-            }
-            OneOrTwoTokenizers::TwoTokenizer { old: _, new: _ } => {
-                // If the tokenizer changed, we need to reindex the whole document.
-                action = ActionToOperate::ReindexAllFields;
+                            let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
+                            let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+
+                            action = match (old_field_metadata, new_field_metadata) {
+                                // At least one field is added or removed from the exact fields => ReindexAllFields
+                                (
+                                    Metadata { exact: old_exact, .. },
+                                    Metadata { exact: new_exact, .. },
+                                ) if old_exact != new_exact => ActionToOperate::ReindexAllFields,
+                                // At least one field is removed from the searchable fields => ReindexAllFields
+                                (
+                                    Metadata { searchable: (PatternMatch::Match, _), .. },
+                                    Metadata { searchable: (PatternMatch::NoMatch, _), .. },
+                                )
+                                | (
+                                    Metadata { searchable: (PatternMatch::Match, _), .. },
+                                    Metadata { searchable: (PatternMatch::Parent, _), .. },
+                                ) => ActionToOperate::ReindexAllFields,
+                                // At least one field is added in the searchable fields => IndexAddedFields
+                                (
+                                    Metadata { searchable: (PatternMatch::NoMatch, _), .. },
+                                    Metadata { searchable: (PatternMatch::Match, _), .. },
+                                )
+                                | (
+                                    Metadata { searchable: (PatternMatch::Parent, _), .. },
+                                    Metadata { searchable: (PatternMatch::Match, _), .. },
+                                ) => {
+                                    // We can safely overwrite the action, because we early return when action is ReindexAllFields.
+                                    ActionToOperate::IndexAddedFields
+                                }
+                                _ => action,
+                            };
+
+                            Ok((fid, PatternMatch::Parent))
+                        },
+                        &mut |_, _, _, _| Ok(()),
+                    )?;
+                }
+                OneOrTwoTokenizers::TwoTokenizer { old: _, new: _ } => {
+                    // If the tokenizer changed, we need to reindex the whole document.
+                    action = ActionToOperate::ReindexAllFields;
+                }
             }
         }
 
@@ -705,6 +739,17 @@ impl WordDocidsExtractors {
         let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
         let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
 
+        let old_word_position_enabled = if settings_delta.old_word_position().enabled {
+            WordPositionExtraction::Extract
+        } else {
+            WordPositionExtraction::Skip
+        };
+        let new_word_position_enabled = if settings_delta.new_word_position().enabled {
+            WordPositionExtraction::Extract
+        } else {
+            WordPositionExtraction::Skip
+        };
+
         // we must tokenize twice when we change global parameters like stop words,
         // the language settings, dictionary, separators, non-separators...
         match document_tokenizers {
@@ -729,6 +774,7 @@ impl WordDocidsExtractors {
                             word,
                             old_exact == Match || old_disabled_typos_terms.is_exact(word),
                             FieldDbExtraction::Extract,
+                            old_word_position_enabled,
                             document.docid(),
                             doc_alloc,
                         ),
@@ -745,6 +791,7 @@ impl WordDocidsExtractors {
                             word,
                             new_exact == Match || new_disabled_typos_terms.is_exact(word),
                             FieldDbExtraction::Extract,
+                            new_word_position_enabled,
                             document.docid(),
                             doc_alloc,
                         ),
@@ -762,6 +809,7 @@ impl WordDocidsExtractors {
                                 old_exact == Match || old_disabled_typos_terms.is_exact(word),
                                 // Should we really have this specific case?
                                 FieldDbExtraction::Skip,
+                                old_word_position_enabled,
                                 document.docid(),
                                 doc_alloc,
                             )?;
@@ -772,6 +820,7 @@ impl WordDocidsExtractors {
                                 new_exact == Match || new_disabled_typos_terms.is_exact(word),
                                 // Should we really have this specific case?
                                 FieldDbExtraction::Skip,
+                                new_word_position_enabled,
                                 document.docid(),
                                 doc_alloc,
                             )
@@ -800,6 +849,7 @@ impl WordDocidsExtractors {
                                 word,
                                 old_exact == Match || old_disabled_typos_terms.is_exact(word),
                                 FieldDbExtraction::Extract,
+                                old_word_position_enabled,
                                 document.docid(),
                                 doc_alloc,
                             ),
@@ -824,6 +874,7 @@ impl WordDocidsExtractors {
                                 word,
                                 new_exact == Match || new_disabled_typos_terms.is_exact(word),
                                 FieldDbExtraction::Extract,
+                                new_word_position_enabled,
                                 document.docid(),
                                 doc_alloc,
                             ),
