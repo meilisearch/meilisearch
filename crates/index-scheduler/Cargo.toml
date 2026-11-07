@@ -49,7 +49,7 @@ tokio = { version = "1.53.1", features = ["full"] }
 
 [dev-dependencies]
 big_s = "1.0.2"
-crossbeam-channel = "0.5.16"
+crossbeam-channel = "0.5.17"
 # fixed version due to format breakages in v1.40
 insta = { version = "=1.39.0", features = ["json", "redactions"] }
 maplit = "1.0.2"
