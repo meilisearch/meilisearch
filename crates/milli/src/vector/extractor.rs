@@ -9,6 +9,7 @@ use super::json_template::{self, JsonTemplate};
 use crate::prompt::error::RenderPromptError;
 use crate::prompt::Prompt;
 use crate::update::new::document::Document;
+use crate::vector::db::RenderingFailureDelta;
 use crate::vector::RuntimeFragment;
 use crate::GlobalFieldsIdsMap;
 
@@ -52,13 +53,21 @@ pub trait Extractor<'doc> {
         old: OD,
         new: ND,
         meta: &Self::DocumentMetadata,
+        ignore_document_template_failures: bool,
+        failure_delta: &mut RenderingFailureDelta,
     ) -> Result<ExtractorDiff<Self::Input>, Self::Error>
     where
         'doc: 'a,
     {
         let old_input = self.extract(old, meta);
+        if old_input.is_err() {
+            failure_delta.old_render_failure = true;
+        }
         let new_input = self.extract(new, meta);
-        to_diff(old_input, new_input)
+        if new_input.is_err() {
+            failure_delta.new_render_failure = true;
+        }
+        to_diff(old_input, new_input, ignore_document_template_failures)
     }
 
     /// The result of diffing the embedder inputs extracted from a document by two versions of this extractor.
@@ -73,11 +82,20 @@ pub trait Extractor<'doc> {
         doc: D,
         meta: &Self::DocumentMetadata,
         old: Option<&Self>,
+        ignore_document_template_failures: bool,
+        failure_delta: &mut RenderingFailureDelta,
     ) -> Result<ExtractorDiff<Self::Input>, Self::Error> {
         let old_input = if let Some(old) = old { old.extract(&doc, meta) } else { Ok(None) };
-        let new_input = self.extract(&doc, meta);
+        if old_input.is_err() {
+            failure_delta.old_render_failure = true;
+        }
 
-        to_diff(old_input, new_input)
+        let new_input = self.extract(&doc, meta);
+        if new_input.is_err() {
+            failure_delta.new_render_failure = true;
+        }
+
+        to_diff(old_input, new_input, ignore_document_template_failures)
     }
 
     /// Returns an extractor wrapping `self` and set to ignore all errors arising from extracting with this extractor.
@@ -92,9 +110,11 @@ pub trait Extractor<'doc> {
 fn to_diff<I: PartialEq, E>(
     old_input: Result<Option<I>, E>,
     new_input: Result<Option<I>, E>,
+    ignore_document_template_failures: bool,
 ) -> Result<ExtractorDiff<I>, E> {
     let old_input = old_input.ok().unwrap_or(None);
-    let new_input = new_input?;
+    let new_input =
+        if ignore_document_template_failures { new_input.ok().unwrap_or(None) } else { new_input? };
     Ok(match (old_input, new_input) {
         (Some(old), Some(new)) if old == new => ExtractorDiff::Unchanged,
         (None, None) => ExtractorDiff::Unchanged,

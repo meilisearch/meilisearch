@@ -23,7 +23,7 @@ use crate::progress::EmbedderStats;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::db::{EmbedderInfo, EmbeddingStatusDelta};
+use crate::vector::db::{EmbedderInfo, EmbeddingStatusDelta, RenderingFailureDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
@@ -540,7 +540,14 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                         )
                                     });
                                     let old = old.as_ref();
-                                    Extractor::diff_settings(&new, &obkv_document, &(), old)
+                                    Extractor::diff_settings(
+                                        &new,
+                                        &obkv_document,
+                                        &(),
+                                        old,
+                                        true,
+                                        &mut RenderingFailureDelta::default(),
+                                    )
                                 }
                                 .expect("ignoring errors so this cannot fail");
                                 fragment_diff.push((name.clone(), diff));
@@ -607,6 +614,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 new_must_regenerate,
                 old_is_user_provided,
                 old_must_regenerate,
+                // TODO: legacy indexer does not support failure delta, so we default to no change
+                RenderingFailureDelta::default(),
             );
 
             // and we finally push the unique vectors into the writer
@@ -665,6 +674,7 @@ fn push_embedding_status_delta(
     new_must_regenerate: bool,
     old_is_user_provided: bool,
     old_must_regenerate: bool,
+    failure_delta: RenderingFailureDelta,
 ) {
     let new_is_user_provided = match delta {
         VectorStateDelta::NoChange => old_is_user_provided,
@@ -684,6 +694,7 @@ fn push_embedding_status_delta(
         old_must_regenerate,
         new_is_user_provided,
         new_must_regenerate,
+        failure_delta,
     );
 }
 
@@ -753,7 +764,13 @@ fn extract_vector_document_diff(
                             RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
 
                         let diff = fragment
-                            .diff_documents(&old_document, &new_document, &())
+                            .diff_documents(
+                                &old_document,
+                                &new_document,
+                                &(),
+                                true,
+                                &mut RenderingFailureDelta::default(),
+                            )
                             .expect("ignoring errors so this cannot fail");
 
                         fragment_diff.push((name.clone(), diff));
