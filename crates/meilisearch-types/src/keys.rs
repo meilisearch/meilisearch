@@ -36,7 +36,7 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for Dese
 #[derive(Debug)]
 pub struct CreateApiKey {
     /// A description for the key. `null` if empty.
-    #[request(default, example = json!(null), error = DeserrJsonError<InvalidApiKeyDescription>)]
+    #[request(default, example = "Use it to search from the frontend", error = DeserrJsonError<InvalidApiKeyDescription>)]
     pub description: Option<String>,
     /// A human-readable name for the key. `null` if empty.
     #[request(default, example = "Indexing Products API key", error = DeserrJsonError<InvalidApiKeyName>)]
@@ -50,10 +50,10 @@ pub struct CreateApiKey {
         try_from(&String) = Uuid::from_str -> uuid::Error
     )]
     pub uid: KeyId,
-    /// A list of actions permitted for the key. `["*"]` for all actions. The
-    /// `*` character can be used as a wildcard when located at the last
-    /// position. e.g. `documents.*` to authorize access on all documents
-    /// endpoints.
+    /// A list of actions permitted for the key. `["*"]` for all actions, which
+    /// is not recommended for production. The `*` character can be used as a
+    /// wildcard when located at the last position. e.g. `documents.*` to
+    /// authorize access on all documents endpoints.
     ///
     /// Valid actions include: `search`, `documents.add`,
     /// `documents.get`, `documents.delete`, `indexes.create`, `indexes.get`,

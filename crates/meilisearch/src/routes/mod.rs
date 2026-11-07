@@ -133,6 +133,7 @@ pub struct MeilisearchApi;
 ///
 /// Returns `true` if the header is present and set to "true" or "1"
 /// (case-insensitive).
+///
 /// Returns `false` if the header is not present or has any other value.
 pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
     req.headers()
@@ -578,16 +579,17 @@ enum HealthStatus {
 
 /// Get health
 ///
-/// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
-///
-/// The engine will return `available` status with a `200` status code when the instance is healthy.
-/// It will return `mustRestart` status with a `500` status code if the instance requires a restart.
-/// This restart is required after a compaction of the task queue for example.
+/// The health check endpoint enables you to periodically test the health of your Meilisearch instance.
 #[routes::path(
     responses(
-        (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "The instance is available.", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
+            }
+        )),
+        (status = 500, description = "The instance needs to be restarted before it answers requests again, so `status` holds `mustRestart`. Compacting the task queue is one of the operations asking for such a restart.", body = HealthResponse, content_type = "application/json", example = json!(
+            {
+                "status": "mustRestart"
             }
         )),
     ),

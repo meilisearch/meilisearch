@@ -53,10 +53,16 @@ pub struct ListRulesFilter {
 #[routes::request]
 #[derive(Debug)]
 pub struct ListRules {
-    /// Number of rules to skip. Defaults to 0.
+    /// Number of rules to skip.
+    ///
+    ///
+    /// Defaults to 0.
     #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
     pub offset: usize,
-    /// Maximum number of rules to return. Default to 20.
+    /// Maximum number of rules to return.
+    ///
+    ///
+    /// Default to 20.
     #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDynamicSearchRuleLimit>)]
     pub limit: usize,
     /// Optional filter to restrict which rules are returned (e.g. by attribute patterns or by properties like if the rule is active or not)

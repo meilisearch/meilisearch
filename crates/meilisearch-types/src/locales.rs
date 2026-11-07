@@ -8,13 +8,19 @@ use milli::{AttributePatterns, LocalizedAttributesRule};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedAttributesRuleView {
     /// Patterns to match attribute names. Use `*` as a wildcard to match any
-    /// characters. For example, `["title_*", "description"]` matches
+    /// characters.
+    ///
+    ///
+    /// For example, `["title_*", "description"]` matches
     /// `title_en`, `title_fr`, and `description`.
     #[request(required, schema_type = Vec<String>, example = json!(["*_ja"]))]
     pub attribute_patterns: AttributePatterns,
     /// The list of locales (languages) to apply to matching attributes. When
     /// these attributes are indexed, Meilisearch will use language-specific
-    /// tokenization rules. Examples: `["en", "fr"]` or `["jpn", "zho"]`.
+    /// tokenization rules.
+    ///
+    ///
+    /// Examples: `["en", "fr"]` or `["jpn", "zho"]`.
     #[request(required)]
     pub locales: Vec<Locale>,
 }

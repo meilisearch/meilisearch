@@ -49,7 +49,10 @@ pub struct FederationOptions {
     ///
     /// Values less than 1.0 make hits from this query less likely to appear in final results; values greater than 1.0 make them more likely.
     ///
-    /// Must be a positive number. Default: `1.0`.
+    /// Must be a positive number.
+    ///
+    ///
+    /// Default: `1.0`.
     #[request(default, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
     pub weight: Weight,
 
