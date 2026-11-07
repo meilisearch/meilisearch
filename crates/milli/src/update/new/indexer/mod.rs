@@ -429,7 +429,7 @@ where
                 )?;
             }
 
-            Ok(()) as Result<_>
+            Ok::<_, crate::Error>(())
         })
         .unwrap()?;
 

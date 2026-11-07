@@ -1015,6 +1015,15 @@
       "synchronous": "DontWait"
     },
     {
+      "binary": {
+        "source": "build",
+        "edition": "enterprise",
+        "extraCliArgs": [
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
       "route": "dynamic-search-rules/scale-rule",
       "method": "PATCH",
       "body": {
@@ -1042,7 +1051,297 @@
         "type": "dsrUpdate",
         "enqueuedAt": "[enqueuedAt]"
       },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/existing-rule-to-migrate",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "conditions": {
+            "query": {
+              "words": "SUPER hero"
+            }
+          }
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "taskUid": 7,
+        "indexUid": ".meili_dsr",
+        "status": "enqueued",
+        "type": "dsrUpdate",
+        "enqueuedAt": "[enqueuedAt]"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/scale-rule/target",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "current": null,
+        "needsProcessing": true,
+        "target": {
+          "actions": {
+            "scale": [
+              {
+                "ids": ["372631"],
+                "weight": 2.0
+              }
+            ]
+          },
+          "active": true,
+          "conditions": {
+            "query": {
+              "words": "HERO SUPER"
+            }
+          }
+        },
+        "taskUids": [6]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/existing-rule-to-migrate/target",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "current": {
+          "actions": {
+            "pin": [
+              {
+                "id": "15242",
+                "indexUid": "movies",
+                "position": 0
+              }
+            ]
+          },
+          "active": true,
+          "conditions": {
+            "query": {
+              "words": "super hero"
+            }
+          }
+        },
+        "needsProcessing": true,
+        "target": {
+          "conditions": {
+            "query": {
+              "words": "SUPER hero"
+            }
+          }
+        },
+        "taskUids": [7]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "showTarget": true
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "limit": 20,
+        "offset": 0,
+        "needsProcessing": true,
+        "results": [
+          {
+            "actions": {},
+            "active": true,
+            "conditions": {
+              "time": {
+                "end": "2032-12-31T09:50:12Z",
+                "start": "2023-01-01T09:50:12Z"
+              }
+            },
+            "lastUpdatedAt": "[lastUpdatedAt]",
+            "needsProcessing": false,
+            "uid": "skips-action-without-selector-id"
+          },
+          {
+            "actions": {
+              "pin": [
+                {
+                  "position": 0,
+                  "id": "15242",
+                  "indexUid": "movies"
+                }
+              ]
+            },
+            "active": true,
+            "conditions": {
+              "query": {
+                "words": "super hero"
+              }
+            },
+            "lastUpdatedAt": "[lastUpdatedAt]",
+            "needsProcessing": true,
+            "uid": "existing-rule-to-migrate"
+          }
+        ],
+        "total": 2,
+        "totalRuleCount": 2,
+        "targetTotalRuleCount": 3,
+        "taskUids": [6, 7]
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "enterprise",
+        "extraCliArgs": []
+      }
+    },
+    {
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
       "synchronous": "WaitForTask"
+    },
+    {
+      "route": "dynamic-search-rules/scale-rule/target",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "current": {
+          "actions": {
+            "scale": [
+              {
+                "ids": [
+                  "372631"
+                ],
+                "weight": 2.0
+              }
+            ]
+          },
+          "active": true,
+          "conditions": {
+            "query": {
+              "words": "HERO SUPER"
+            }
+          }
+        },
+        "target": {},
+        "taskUids": [],
+        "needsProcessing": false
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules/existing-rule-to-migrate/target",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "current": {
+          "actions": {
+            "pin": [
+              {
+                "id": "15242",
+                "indexUid": "movies",
+                "position": 0
+              }
+            ]
+          },
+          "active": true,
+          "conditions": {
+            "query": {
+              "words": "SUPER hero"
+            }
+          }
+        },
+        "target": {},
+        "taskUids": [],
+        "needsProcessing": false
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "dynamic-search-rules",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "showTarget": true
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "limit": 20,
+        "offset": 0,
+        "results": [
+          {
+            "actions": {
+              "pin": [
+                {
+                  "position": 0,
+                  "id": "15242",
+                  "indexUid": "movies"
+                }
+              ]
+            },
+            "active": true,
+            "conditions": {
+              "query": {
+                "words": "SUPER hero"
+              }
+            },
+            "lastUpdatedAt": "[lastUpdatedAt]",
+            "needsProcessing": false,
+            "uid": "existing-rule-to-migrate"
+          },
+          {
+            "actions": {
+              "scale": [
+                {
+                  "ids": ["372631"],
+                  "weight": 2.0
+                }
+              ]
+            },
+            "active": true,
+            "conditions": {
+              "query": {
+                "words": "HERO SUPER"
+              }
+            },
+            "lastUpdatedAt": "[lastUpdatedAt]",
+            "needsProcessing": false,
+            "uid": "scale-rule"
+          },
+          {
+            "actions": {},
+            "active": true,
+            "conditions": {
+              "time": {
+                "end": "2032-12-31T09:50:12Z",
+                "start": "2023-01-01T09:50:12Z"
+              }
+            },
+            "lastUpdatedAt": "[lastUpdatedAt]",
+            "needsProcessing": false,
+            "uid": "skips-action-without-selector-id"
+          }
+        ],
+        "total": 3,
+        "totalRuleCount": 3,
+        "targetTotalRuleCount": 3,
+        "needsProcessing": false,
+        "taskUids": []
+      },
+      "synchronous": "WaitForResponse"
     },
     {
       "route": "indexes/movies/search?q=hero super&limit=3",
@@ -1100,10 +1399,33 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "from": 6,
+        "from": 7,
         "limit": 20,
         "next": null,
         "results": [
+          {
+            "batchUid": 5,
+            "canceledBy": null,
+            "details": {
+              "rule": {
+                "conditions": {
+                  "query": {
+                    "words": "SUPER hero"
+                  }
+                }
+              },
+              "updatedRules": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[enqueuedAt]",
+            "error": null,
+            "finishedAt": "[finishedAt]",
+            "indexUid": ".meili_dsr",
+            "startedAt": "[startedAt]",
+            "status": "succeeded",
+            "type": "dsrUpdate",
+            "uid": 7
+          },
           {
             "batchUid": 5,
             "canceledBy": null,
@@ -1231,7 +1553,7 @@
             "uid": 2
           }
         ],
-        "total": 5
+        "total": 6
       },
       "synchronous": "WaitForResponse"
     }

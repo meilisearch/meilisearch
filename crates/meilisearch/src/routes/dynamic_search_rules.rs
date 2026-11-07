@@ -1,35 +1,37 @@
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, TaskId};
 use itertools::Itertools;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::dynamic_search_rules::{
-    DynamicSearchRule, DynamicSearchRuleUpdateRequest, RuleUid,
+    DynamicSearchRule, DynamicSearchRuleTarget, DynamicSearchRuleUpdateRequest, RuleUid,
 };
 use meilisearch_types::error::deserr_codes::{
     InvalidDynamicSearchRuleFilter, InvalidDynamicSearchRuleFilterActive,
     InvalidDynamicSearchRuleFilterQuery, InvalidDynamicSearchRuleLimit,
-    InvalidDynamicSearchRuleOffset,
+    InvalidDynamicSearchRuleOffset, InvalidDynamicSearchRuleShowTarget,
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::{Filter, IndexFilter, SearchResult};
 use meilisearch_types::tasks::{DsrUpdate, KindWithContent};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::documents::CustomMetadataQuery;
-use crate::routes::{Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
+use crate::routes::{SummarizedTaskView, PAGINATION_DEFAULT_LIMIT};
 
 #[routes::routes(
     routes(
         "" => [post(list_rules), delete(clear_rules)],
         "/{uid}" => [get(get_rule), patch(update_or_create_rule), delete(delete_rule)],
+        "/{uid}/target" => [get(get_target_rule)],
     ),
     tag = "Search rules",
     tags((
@@ -62,6 +64,13 @@ pub struct ListRules {
     /// Optional filter to restrict which rules are returned (e.g. by attribute patterns or by properties like if the rule is active or not)
     #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilter>)]
     pub filter: Option<ListRulesFilter>,
+    /// Show the target state of the dynamic search rules.
+    ///
+    /// - Enabling this boolean adds additional information about the future state of the
+    /// dynamic search rules in the response, such as whether there are pending dynamic search rules tasks or not.
+    /// - Enabling this boolean requires the Enterprise Edition.
+    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleShowTarget>)]
+    pub show_target: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -112,6 +121,62 @@ impl Aggregate for DeleteDynamicSearchRuleAnalytics {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+struct DynamicSearchRuleNeedsProcessing {
+    #[serde(flatten)]
+    rule: DynamicSearchRule,
+    /// Whether the rule has at least one pending update task.
+    ///
+    /// Returned when `showTarget` is present and set to `true` in the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(default)]
+    needs_processing: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+struct DynamicSearchRules {
+    /// Rules for the current page.
+    pub results: Vec<DynamicSearchRuleNeedsProcessing>,
+    /// Number of rules skipped.
+    pub offset: usize,
+    /// Maximum number of rules returned in a single request.
+    pub limit: usize,
+    /// Total number of rules that match the filter.
+    pub total: usize,
+
+    /// Total number of declared rules, including those that don't match the filter.
+    ///
+    /// Returned when `showTarget` is present and set to `true` in the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(default)]
+    pub total_rule_count: Option<usize>,
+
+    /// Total number of declared rules after processing all pending tasks.
+    ///
+    /// Returned when `showTarget` is present and set to `true` in the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(default)]
+    pub target_total_rule_count: Option<usize>,
+
+    /// Whether the dynamic search rules have at least a pending task to process.
+    ///
+    /// Returned when `showTarget` is present and set to `true` in the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(default)]
+    pub needs_processing: Option<bool>,
+
+    /// The [`uid`](https://www.meilisearch.com/docs/reference/api/async-task-management/list-tasks#response-results-items-uid)s of the pending tasks to process.
+    ///
+    /// Returned when `showTarget` is present and set to `true` in the request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(default)]
+    pub task_uids: Option<Vec<TaskId>>,
+}
+
 /// List search rules
 ///
 /// Return all search rules configured on the instance.
@@ -119,7 +184,7 @@ impl Aggregate for DeleteDynamicSearchRuleAnalytics {
     security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
     request_body = ListRules,
     responses(
-        (status = OK, description = "Dynamic search rules are returned.", body = PaginationView<DynamicSearchRule>, content_type = "application/json", example = json!({
+        (status = OK, description = "Dynamic search rules are returned.", body = DynamicSearchRules, content_type = "application/json", example = json!({
             "results": [
                 {
                     "uid": "black-friday",
@@ -170,52 +235,87 @@ async fn list_rules(
         "Calling the `POST /dynamic-search-rules` route",
     )?;
 
-    let ListRules { offset, limit, filter } = body.into_inner();
+    let ListRules { offset, limit, filter, show_target } = body.into_inner();
 
-    let pagination = Pagination { offset, limit };
+    let targets = if show_target { Some(dsrs.targets()?) } else { None };
 
-    let Some(dsrs) = dsrs.milli_dsrs()? else {
-        let pagination_view = pagination.empty();
-        return Ok(HttpResponse::Ok().json(pagination_view));
-    };
-    let mut rule_ids = dsrs.all_rule_ids()?;
+    let (rules, total_rule_count, total) = if let Some(dsrs) = dsrs.milli_dsrs()? {
+        let mut rule_ids = dsrs.all_rule_ids()?;
+        let total_rule_count = dsrs.all_rule_ids()?.len() as usize;
 
-    let query = if let Some(filter) = filter {
-        if let Some(is_active) = filter.active {
-            rule_ids &= dsrs.active_rule_ids(is_active)?;
-        }
-        filter.query
+        let query = if let Some(filter) = filter {
+            if let Some(is_active) = filter.active {
+                rule_ids &= dsrs.active_rule_ids(is_active)?;
+            }
+            filter.query
+        } else {
+            None
+        };
+
+        let SearchResult {
+            matching_words: _,
+            candidates,
+            documents_ids: rule_ids,
+            document_scores: _,
+            degraded: _,
+            used_negative_operator: _,
+            query_vector: _,
+            inline_rule_condition_outcomes: _,
+        } = dsrs.search_in_description_and_words(query, &rule_ids, limit, offset)?;
+
+        let rules = dsrs
+            .rules_from_rule_ids(rule_ids)?
+            .map_ok(|doc| {
+                DynamicSearchRule::try_from_meili_doc(
+                    doc,
+                    meilisearch_types::milli::FaultSource::Runtime,
+                )
+            })
+            .map(|res| res.flatten());
+        let rules: meilisearch_types::milli::Result<Vec<_>> = rules.collect();
+        let rules = rules?;
+        (rules, total_rule_count, candidates.len() as usize)
     } else {
-        None
+        (vec![], 0, 0)
     };
 
-    let SearchResult {
-        matching_words: _,
-        candidates,
-        documents_ids: rule_ids,
-        document_scores: _,
-        degraded: _,
-        used_negative_operator: _,
-        query_vector: _,
-        inline_rule_condition_outcomes: _,
-    } = dsrs.search_in_description_and_words(query, &rule_ids, limit, offset)?;
+    let results = if let Some(targets) = targets {
+        let target_total_rule_count = targets.target_total_rule_count(total_rule_count);
+        let mut results = Vec::new();
+        for rule in rules {
+            let needs_processing = targets.needs_processing(&rule.uid);
+            let rule =
+                DynamicSearchRuleNeedsProcessing { rule, needs_processing: Some(needs_processing) };
+            results.push(rule);
+        }
+        let task_uids = targets.task_uids().to_vec();
 
-    let rules = dsrs
-        .rules_from_rule_ids(rule_ids)?
-        .map_ok(|doc| {
-            DynamicSearchRule::try_from_meili_doc(
-                doc,
-                meilisearch_types::milli::FaultSource::Runtime,
-            )
-        })
-        .map(|res| res.flatten());
-
-    let rules: meilisearch_types::milli::Result<Vec<_>> = rules.collect();
-
-    let pagination_view =
-        PaginationView { results: rules?, offset, limit, total: candidates.len() as usize };
-
-    Ok(HttpResponse::Ok().json(pagination_view))
+        DynamicSearchRules {
+            results,
+            offset,
+            limit,
+            total,
+            total_rule_count: Some(total_rule_count),
+            target_total_rule_count: Some(target_total_rule_count),
+            needs_processing: Some(!task_uids.is_empty()),
+            task_uids: Some(task_uids),
+        }
+    } else {
+        DynamicSearchRules {
+            results: rules
+                .into_iter()
+                .map(|rule| DynamicSearchRuleNeedsProcessing { rule, needs_processing: None })
+                .collect(),
+            offset,
+            limit,
+            total,
+            total_rule_count: None,
+            target_total_rule_count: None,
+            needs_processing: None,
+            task_uids: None,
+        }
+    };
+    Ok(HttpResponse::Ok().json(results))
 }
 
 /// Get a search rule
@@ -279,6 +379,73 @@ async fn get_rule(
     let rule = rules.get(&uid)?.ok_or(DynamicSearchRulesError::NotFound(uid))?;
 
     Ok(HttpResponse::Ok().json(rule))
+}
+
+/// View the target state of a dynamic search rule
+///
+/// Retrieve a single search rule by its unique identifier, as it will be after all pending tasks have been processed.
+#[routes::path(
+    security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
+    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
+    responses(
+        (status = OK, description = "Dynamic search rule target returned.", body = DynamicSearchRuleTarget, content_type = "application/json", example = json!({
+            "current": {
+                "description": "Black Friday 2025 rules",
+                "precedence": 10,
+                "active": true,
+                "conditions": {
+                    "query": {
+                        "isEmpty": true
+                    },
+                    "time": {
+                        "start": "2025-11-28T00:00:00Z",
+                        "end": "2025-11-28T23:59:59Z"
+                    }
+                },
+                "actions": {
+                    "pin": [
+                        {
+                            "indexUid": "products",
+                            "id": "123",
+                            "position": 1
+                        }
+                    ]
+                }
+            },
+            "target": {},
+            "taskUids": [],
+            "needsProcessing": false
+        })),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+            "code": "missing_authorization_header",
+            "type": "auth",
+            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        })),
+        (status = 404, description = "Dynamic search rule does not currently exist, and no task will create it.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "Dynamic search rule `black-friday` not found.",
+            "code": "dynamic_search_rule_not_found",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#dynamic_search_rule_not_found"
+        })),
+    ),
+)]
+async fn get_target_rule(
+    index_scheduler: GuardedData<
+        ActionPolicy<{ actions::DYNAMIC_SEARCH_RULES_GET }>,
+        Data<IndexScheduler>,
+    >,
+    uid: Path<RuleUid>,
+) -> Result<HttpResponse, ResponseError> {
+    let rules = index_scheduler.dynamic_search_rules(
+        index_scheduler.features(),
+        "Calling the `GET /dynamic-search-rules/{:ruleUid}/target` route",
+    )?;
+
+    let uid = uid.into_inner();
+    let rule_target = rules.rule_target(&uid)?.ok_or(DynamicSearchRulesError::NotFound(uid))?;
+
+    Ok(HttpResponse::Ok().json(rule_target))
 }
 
 /// Create or update a search rule

@@ -4,6 +4,11 @@ use meilisearch_types::milli::FaultSource;
 
 use crate::{Error, IndexScheduler, Result};
 
+#[cfg(not(feature = "enterprise"))]
+mod community_edition;
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
+
 pub struct DynamicSearchRules<'a> {
     index_scheduler: &'a IndexScheduler,
 }

@@ -1185,6 +1185,9 @@ InvalidDynamicSearchRuleLimit                  , InvalidRequest       , BAD_REQU
 InvalidDynamicSearchRuleFilter                 , InvalidRequest       , BAD_REQUEST,
 "The [`filter`](/reference/api/search-rules/list-search-rules#body-filter-one-of-1) parameter is invalid." ;
 
+InvalidDynamicSearchRuleShowTarget             , InvalidRequest       , BAD_REQUEST,
+"The [`showTarget`](/reference/api/search-rules/list-search-rules#body-show-target) parameter is invalid. It should be a boolean." ;
+
 InvalidDynamicSearchRuleDescription            , InvalidRequest       , BAD_REQUEST,
 "The [`description`](/reference/api/search-rules/create-or-update-a-search-rule#body-description-one-of-0) parameter is invalid. It should be a string." ;
 
