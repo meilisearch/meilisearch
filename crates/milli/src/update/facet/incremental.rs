@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::BufReader;
 
-use grenad::Merger;
 use heed::types::{Bytes, DecodeIgnore};
 use heed::{BytesDecode, Error, RoTxn, RwTxn};
 use obkv::KvReader;
