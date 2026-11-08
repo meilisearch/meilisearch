@@ -213,97 +213,95 @@ impl ScoreDetails {
     }
 
     pub fn score_values<'a>(
-        mut details: impl Iterator<Item = &'a Self> + 'a,
+        details: impl Iterator<Item = &'a Self> + 'a,
     ) -> impl Iterator<Item = ScoreValue<'a>> + 'a {
-        let weight = std::cell::Cell::new(1.0f64);
+        let weight = std::rc::Rc::new(std::cell::Cell::new(1.0f64));
+        let weight_in_inspect = std::rc::Rc::clone(&weight);
 
-        std::iter::from_fn(move || {
-            details
-                .by_ref()
-                // any scale detail modifies the weight starting from this action,
-                // meaning that a hypothetical score details iterator with some relevancy rules before the scale
-                // detail would have the base weight and not the weight modified by the scale.
-                // In practice, the search implementation guarantees that scale is the first score detail, and as a result
-                // the weight is applied to all relevancy rules.
-                .inspect(|detail| {
-                    if let ScoreDetails::Scale { actions } = detail {
-                        for action in actions {
-                            weight.update(|weight| weight * action.weight);
-                        }
+        details
+            // any scale detail modifies the weight starting from this action,
+            // meaning that a hypothetical score details iterator with some relevancy rules before the scale
+            // detail would have the base weight and not the weight modified by the scale.
+            // In practice, the search implementation guarantees that scale is the first score detail, and as a result
+            // the weight is applied to all relevancy rules.
+            .inspect(move |detail| {
+                if let ScoreDetails::Scale { actions } = detail {
+                    for action in actions {
+                        weight_in_inspect.update(|weight| weight * action.weight);
                     }
-                })
-                .filter_map(ScoreDetails::rank_or_value)
-                .coalesce(|left, right| match (left, right) {
-                    (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
-                        Ok(RankOrValue::Rank(Rank::merge(left, right)))
-                    }
-                    (left, right) => Err((left, right)),
-                })
-                .map(|rank_or_value| match rank_or_value {
-                    RankOrValue::Rank(r) => ScoreValue::Score(r.local_score() * weight.get()),
-                    RankOrValue::Sort(s) => ScoreValue::Sort(s),
-                    RankOrValue::GeoSort(g) => ScoreValue::GeoSort(g),
-                    RankOrValue::Score(s) => ScoreValue::Score(s * weight.get()),
-                })
-                .next()
-        })
+                }
+            })
+            .filter_map(ScoreDetails::rank_or_value)
+            .coalesce(|left, right| match (left, right) {
+                (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
+                    Ok(RankOrValue::Rank(Rank::merge(left, right)))
+                }
+                (left, right) => Err((left, right)),
+            })
+            .map(move |rank_or_value| match rank_or_value {
+                RankOrValue::Rank(r) => ScoreValue::Score(r.local_score() * weight.get()),
+                RankOrValue::Sort(s) => ScoreValue::Sort(s),
+                RankOrValue::GeoSort(g) => ScoreValue::GeoSort(g),
+                RankOrValue::Score(s) => ScoreValue::Score(s * weight.get()),
+            })
     }
 
     pub fn weighted_score_values<'a>(
-        mut details: impl Iterator<Item = &'a Self> + 'a,
+        details: impl Iterator<Item = &'a Self> + 'a,
         weight: f64,
     ) -> impl Iterator<Item = WeightedScoreValue> + 'a {
-        // define a cell that will keep the current weight, and capture it in a from_fn closure to keep the state
+        // define a cell that will keep the current weight, and capture it in the iterator closures to keep the state
         // throughout the entire iteration
-        let weight = std::cell::Cell::new(weight);
+        let weight = std::rc::Rc::new(std::cell::Cell::new(weight));
         // record whether there has been at least one relevancy rule.
         // this allows weight to be effective even if there is no relevancy rule: one final score is then inserted taking into account
         // the current weight.
-        let used_weight = std::cell::Cell::new(false);
+        let used_weight = std::rc::Rc::new(std::cell::Cell::new(false));
 
-        std::iter::from_fn(move || {
-            match details
-                .by_ref()
-                .inspect(|detail| {
-                    if let ScoreDetails::Scale { actions } = detail {
-                        for action in actions {
-                            weight.update(|weight| weight * action.weight);
-                        }
+        let weight_in_inspect = std::rc::Rc::clone(&weight);
+        let weight_in_map = std::rc::Rc::clone(&weight);
+        let used_weight_in_map = std::rc::Rc::clone(&used_weight);
+
+        let mut iter = details
+            .inspect(move |detail| {
+                if let ScoreDetails::Scale { actions } = detail {
+                    for action in actions {
+                        weight_in_inspect.update(|weight| weight * action.weight);
                     }
-                })
-                .filter_map(ScoreDetails::rank_or_value)
-                .coalesce(|left, right| match (left, right) {
-                    (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
-                        Ok(RankOrValue::Rank(Rank::merge(left, right)))
-                    }
-                    (left, right) => Err((left, right)),
-                })
-                .map(|rank_or_value| match rank_or_value {
-                    RankOrValue::Rank(r) => {
-                        used_weight.set(true);
-                        WeightedScoreValue::WeightedScore(r.local_score() * weight.get())
-                    }
-                    RankOrValue::Sort(s) => {
-                        WeightedScoreValue::Sort { asc: s.ascending, value: s.value.clone() }
-                    }
-                    RankOrValue::GeoSort(g) => {
-                        WeightedScoreValue::GeoSort { asc: g.ascending, distance: g.distance() }
-                    }
-                    RankOrValue::Score(s) => {
-                        used_weight.set(true);
-                        WeightedScoreValue::VectorSort(s * weight.get())
-                    }
-                })
-                .next()
-            {
-                Some(details) => Some(details),
-                None => {
-                    if used_weight.get() {
-                        None
-                    } else {
-                        used_weight.set(true);
-                        Some(WeightedScoreValue::WeightedScore(weight.get()))
-                    }
+                }
+            })
+            .filter_map(ScoreDetails::rank_or_value)
+            .coalesce(|left, right| match (left, right) {
+                (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
+                    Ok(RankOrValue::Rank(Rank::merge(left, right)))
+                }
+                (left, right) => Err((left, right)),
+            })
+            .map(move |rank_or_value| match rank_or_value {
+                RankOrValue::Rank(r) => {
+                    used_weight_in_map.set(true);
+                    WeightedScoreValue::WeightedScore(r.local_score() * weight_in_map.get())
+                }
+                RankOrValue::Sort(s) => {
+                    WeightedScoreValue::Sort { asc: s.ascending, value: s.value.clone() }
+                }
+                RankOrValue::GeoSort(g) => {
+                    WeightedScoreValue::GeoSort { asc: g.ascending, distance: g.distance() }
+                }
+                RankOrValue::Score(s) => {
+                    used_weight_in_map.set(true);
+                    WeightedScoreValue::VectorSort(s * weight_in_map.get())
+                }
+            });
+
+        std::iter::from_fn(move || match iter.next() {
+            Some(details) => Some(details),
+            None => {
+                if used_weight.get() {
+                    None
+                } else {
+                    used_weight.set(true);
+                    Some(WeightedScoreValue::WeightedScore(weight.get()))
                 }
             }
         })
@@ -794,5 +792,41 @@ pub struct Vector {
 impl GeoSort {
     pub fn distance(&self) -> Option<f64> {
         self.value.map(|value| distance_between_two_points(&self.target_point, &value))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn score_values_preserves_sort_and_geosort_after_rank_coalesce() {
+        let details = vec![
+            ScoreDetails::Words(Words { matching_words: 1, max_matching_words: 2 }),
+            ScoreDetails::Typo(Typo { typo_count: 0, max_typo_count: 1 }),
+            ScoreDetails::Sort(Sort {
+                field_name: "price".to_string(),
+                ascending: true,
+                value: serde_json::json!(42),
+                redacted: false,
+            }),
+            ScoreDetails::GeoSort(GeoSort {
+                target_point: [0.0, 0.0],
+                ascending: true,
+                value: Some([1.0, 1.0]),
+            }),
+        ];
+
+        let values: Vec<_> = ScoreDetails::score_values(details.iter()).collect();
+        assert_eq!(values.len(), 3);
+        assert!(matches!(values[0], ScoreValue::Score(_)));
+        assert!(matches!(values[1], ScoreValue::Sort(s) if s.field_name == "price"));
+        assert!(matches!(values[2], ScoreValue::GeoSort(_)));
+
+        let weighted: Vec<_> = ScoreDetails::weighted_score_values(details.iter(), 1.0).collect();
+        assert_eq!(weighted.len(), 3);
+        assert!(matches!(weighted[0], WeightedScoreValue::WeightedScore(_)));
+        assert!(matches!(weighted[1], WeightedScoreValue::Sort { asc: true, .. }));
+        assert!(matches!(weighted[2], WeightedScoreValue::GeoSort { asc: true, .. }));
     }
 }
