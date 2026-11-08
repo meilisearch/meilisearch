@@ -102,9 +102,15 @@ async fn execute_run(
     )
     .await?;
 
-    let report_file = Path::new(&args.report_folder).join(&workload.name).with_extension("csv");
-    run_query_template(meili_client, &workload.query_template, &assets, asset_folder, &report_file)
-        .await?;
+    run_query_template(
+        meili_client,
+        &workload.query_template,
+        &assets,
+        asset_folder,
+        &Path::new(&args.report_folder),
+        &workload.name,
+    )
+    .await?;
 
     process::kill_meili(meilisearch).await;
 
@@ -116,7 +122,8 @@ async fn run_query_template(
     query_template: &QueryTemplate,
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
-    report_file: &Path,
+    report_folder: &Path,
+    workload_name: &str,
 ) -> anyhow::Result<()> {
     let template = JsonTemplate::new(query_template.template.clone())
         .map_err(|err| anyhow::anyhow!(err.parsing_error("template")))?;
@@ -293,12 +300,92 @@ async fn run_query_template(
         })
         .collect();
 
-    let mut csv_writer = csv::Writer::from_path(report_file)?;
+    let mut relevancy_results = Vec::new();
+    let report_csv_file = report_folder.join(workload_name).with_extension("csv");
+    let mut csv_writer = csv::Writer::from_path(report_csv_file)?;
     while let Some(result) = unordered.next().await {
         let result = result.unwrap()?;
-        csv_writer.serialize(result)?;
+        csv_writer.serialize(&result)?;
+        relevancy_results.push(result);
     }
     csv_writer.flush()?;
+
+    plot(report_folder, workload_name, relevancy_results)?;
+
+    Ok(())
+}
+
+fn plot(
+    report_folder: &Path,
+    workload_name: &str,
+    relevancy_results: Vec<RelevancyResult>,
+) -> anyhow::Result<()> {
+    use plotters::prelude::*;
+
+    let report_file = report_folder.join(workload_name).with_extension("png");
+    let root = BitMapBackend::new(&report_file, (1000, 850)).into_drawing_area();
+    root.fill(&WHITE)?;
+
+    let quartiles_precision_at_1 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_1).collect::<Vec<_>>());
+    let quartiles_recall_at_1 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_1).collect::<Vec<_>>());
+
+    let quartiles_precision_at_5 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_5).collect::<Vec<_>>());
+    let quartiles_recall_at_5 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_5).collect::<Vec<_>>());
+
+    let quartiles_precision_at_20 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_20).collect::<Vec<_>>());
+    let quartiles_recall_at_20 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_20).collect::<Vec<_>>());
+
+    let quartiles_precision_at_50 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_50).collect::<Vec<_>>());
+    let quartiles_recall_at_50 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_50).collect::<Vec<_>>());
+
+    let axis = [
+        "precision@1",
+        "recall@1",
+        "precision@5",
+        "recall@5",
+        "precision@20",
+        "recall@20",
+        "precision@50",
+        "recall@50",
+    ];
+
+    let mut chart = ChartBuilder::on(&root)
+        .margin(20)
+        .x_label_area_size(40)
+        .y_label_area_size(40)
+        .caption(format!(r#""{workload_name}" Relevancy Boxplot"#), ("sans-serif", 20))
+        .build_cartesian_2d(axis[..].into_segmented(), 0_f32..1.0_f32)?;
+
+    chart.configure_mesh().light_line_style(WHITE).draw()?;
+    chart.draw_series(vec![
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@1"), &quartiles_precision_at_1)
+            .style(&BLUE),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@1"), &quartiles_recall_at_1)
+            .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@5"), &quartiles_precision_at_5)
+            .style(&BLUE),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@5"), &quartiles_recall_at_5)
+            .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@20"), &quartiles_precision_at_20)
+            .style(&BLUE),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@20"), &quartiles_recall_at_20)
+            .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@50"), &quartiles_precision_at_50)
+            .style(&BLUE),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@50"), &quartiles_recall_at_50)
+            .style(&RED),
+    ])?;
+
+    root.present()
+        .with_context(|| format!("while trying to plot into `{}`", report_file.display()))?;
 
     Ok(())
 }

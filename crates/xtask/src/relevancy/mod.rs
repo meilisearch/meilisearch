@@ -28,6 +28,10 @@ pub struct RelevancyArgs {
     #[arg(long, default_value_t = default_report_folder())]
     report_folder: String,
 
+    /// Whether to generate or not a plot of the report alongside it.
+    #[arg(long)]
+    plot: bool,
+
     /// Benchmark dashboard API key
     #[arg(long)]
     api_key: Option<String>,

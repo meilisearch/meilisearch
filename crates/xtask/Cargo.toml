@@ -45,3 +45,7 @@ tracing-trace = { version = "0.1.0", path = "../tracing-trace" }
 uuid = { version = "1.24.0", features = ["v7", "serde"] }
 similar-asserts = "1.7.0"
 csv = "1.4.0"
+
+# We have to use this fork to fix an issue with bocplot fences
+# <https://github.com/plotters-rs/plotters/issues/720>
+plotters = { git = "https://github.com/hunxjunedo/plotters", rev = "02786c8fd7f66ab74d6f1c6c61d78eae0be510d1" }
