@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{bail, Context as _};
@@ -74,6 +75,7 @@ pub async fn start_meili(
     master_key: Option<&str>,
     binary: &Binary,
     asset_folder: &str,
+    db_path: &str,
 ) -> anyhow::Result<tokio::process::Child> {
     let mut command = match &binary.source {
         BinarySource::Build { edition } => {
@@ -100,7 +102,7 @@ pub async fn start_meili(
         BinarySource::Path(binary_path) => tokio::process::Command::new(binary_path),
     };
 
-    command.arg("--db-path").arg("./_xtask_benchmark.ms");
+    command.arg("--db-path").arg(db_path);
     if let Some(master_key) = master_key {
         command.arg("--master-key").arg(master_key);
     }
@@ -165,6 +167,19 @@ async fn wait_for_health(
     bail!("meilisearch is not responding")
 }
 
-pub async fn delete_db() {
+pub async fn delete_temporary_db(reuse_db: Option<&Path>) -> anyhow::Result<String> {
+    if let Some(reuse_db) = reuse_db {
+        if !reuse_db
+            .try_exists()
+            .with_context(|| format!("checking existence of `{}`", reuse_db.display()))?
+        {
+            anyhow::bail!(
+                "Running xtask with `--reuse-db` but target db `{}` does not exist",
+                reuse_db.display()
+            )
+        }
+        return Ok(reuse_db.display().to_string());
+    }
     let _ = tokio::fs::remove_dir_all("./_xtask_benchmark.ms").await;
+    Ok("./_xtask_benchmark.ms".to_string())
 }

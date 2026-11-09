@@ -34,4 +34,10 @@ pub struct CommonArgs {
     /// The maximum time in seconds we allow for fetching the task queue before timing out.
     #[arg(long, default_value_t = 60)]
     pub tasks_queue_timeout_secs: u64,
+
+    /// Reuse an existing DB instead of deleting and creating a temporary one.
+    ///
+    /// This option can break the reentrancy of workloads, so use it with caution.
+    #[arg(long, value_name = "DB_PATH")]
+    pub reuse_db: Option<PathBuf>,
 }

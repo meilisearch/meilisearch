@@ -17,7 +17,7 @@ use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
-use crate::common::process::{self, delete_db, start_meili};
+use crate::common::process::{self, delete_temporary_db, start_meili};
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
@@ -147,7 +147,7 @@ async fn execute_run(
     binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
-    delete_db().await;
+    let db_path = delete_temporary_db(args.common.reuse_db.as_deref()).await?;
 
     let binary = match binary_path {
         Some(binary_path) => Binary {
@@ -165,7 +165,7 @@ async fn execute_run(
     };
 
     let meilisearch =
-        start_meili(meili_client, master_key, &binary, &args.common.asset_folder).await?;
+        start_meili(meili_client, master_key, &binary, &args.common.asset_folder, &db_path).await?;
 
     let processor = run_workload_commands(
         dashboard_client,
