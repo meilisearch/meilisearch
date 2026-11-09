@@ -10,7 +10,7 @@ use crate::common::assets::{fetch_assets, Asset};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
-use crate::common::process::{self, delete_db, kill_meili};
+use crate::common::process::{self, delete_temporary_db, kill_meili};
 use crate::common::workload::Workload;
 use crate::test::TestArgs;
 
@@ -118,12 +118,13 @@ impl TestWorkload {
         fetch_assets(assets_client, &self.assets, &args.common.asset_folder).await?;
 
         // Run server
-        delete_db().await;
+        let db_path = delete_temporary_db(args.common.reuse_db.as_deref()).await?;
         let mut process = process::start_meili(
             meili_client,
             Some("masterKey"),
             &self.binary,
             &args.common.asset_folder,
+            &db_path,
         )
         .await?;
 
@@ -170,6 +171,7 @@ impl TestWorkload {
                         Some("masterKey"),
                         &binary,
                         &args.common.asset_folder,
+                        &db_path,
                     )
                     .await?;
                     tracing::info!("Restarted instance with {binary}");

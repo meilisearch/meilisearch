@@ -13,7 +13,7 @@ use crate::common::assets::{self, fetch_asset, Asset, AssetFormat};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
-use crate::common::process::{self, delete_db, start_meili};
+use crate::common::process::{self, delete_temporary_db, start_meili};
 use crate::relevancy::RelevancyArgs;
 
 /// A relevancy workload.
@@ -64,7 +64,7 @@ async fn execute_run(
     args: &RelevancyArgs,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<()> {
-    delete_db().await;
+    let db_path = delete_temporary_db(args.common.reuse_db.as_deref()).await?;
 
     let assets = Arc::new(workload.assets.clone());
     let asset_folder = args.common.asset_folder.clone().leak();
@@ -89,7 +89,7 @@ async fn execute_run(
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
 
     let meilisearch =
-        start_meili(meili_client, master_key, &binary, &args.common.asset_folder).await?;
+        start_meili(meili_client, master_key, &binary, &args.common.asset_folder, &db_path).await?;
 
     run_commands(
         meili_client,
