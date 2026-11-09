@@ -230,10 +230,6 @@ async fn run_query_template(
         let mut it = hits.iter().map(|hit| {
             score_sum.update(|score_sum| {
                 let score = ideal_hits.get(*hit).copied().unwrap_or(0.0);
-                if query_entry.id == "42" {
-                    dbg!(hit);
-                    dbg!(score);
-                }
                 score_sum + score
             })
         });
@@ -320,10 +316,11 @@ fn plot(
     workload_name: &str,
     relevancy_results: Vec<RelevancyResult>,
 ) -> anyhow::Result<()> {
+    use plotters::prelude::full_palette::GREEN_800;
     use plotters::prelude::*;
 
-    let report_file = report_folder.join(workload_name).with_extension("png");
-    let root = BitMapBackend::new(&report_file, (1000, 850)).into_drawing_area();
+    let report_file = report_folder.join(workload_name).with_extension("svg");
+    let root = SVGBackend::new(&report_file, (1000, 850)).into_drawing_area();
     root.fill(&WHITE)?;
 
     let quartiles_precision_at_1 =
@@ -364,7 +361,7 @@ fn plot(
         .caption(format!(r#""{workload_name}" Relevancy Boxplot"#), ("sans-serif", 20))
         .build_cartesian_2d(axis[..].into_segmented(), 0_f32..1.0_f32)?;
 
-    chart.configure_mesh().light_line_style(WHITE).draw()?;
+    chart.configure_mesh().draw()?;
     chart.draw_series(vec![
         Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@1"), &quartiles_precision_at_1)
             .style(&BLUE),
@@ -383,6 +380,54 @@ fn plot(
         Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@50"), &quartiles_recall_at_50)
             .style(&RED),
     ])?;
+
+    chart.draw_series(PointSeries::of_element(
+        vec![
+            (
+                SegmentValue::CenterOf(&"precision@1"),
+                relevancy_results.iter().map(|rr| rr.precision_at_1).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"recall@1"),
+                relevancy_results.iter().map(|rr| rr.recall_at_1).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"precision@5"),
+                relevancy_results.iter().map(|rr| rr.precision_at_5).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"recall@5"),
+                relevancy_results.iter().map(|rr| rr.recall_at_5).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"precision@20"),
+                relevancy_results.iter().map(|rr| rr.precision_at_20).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"recall@20"),
+                relevancy_results.iter().map(|rr| rr.recall_at_20).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"precision@50"),
+                relevancy_results.iter().map(|rr| rr.precision_at_50).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"recall@50"),
+                relevancy_results.iter().map(|rr| rr.recall_at_50).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+        ],
+        3,
+        &GREEN_800,
+        &|c, s, st| Circle::new(c, s, st.filled()),
+    ))?;
 
     root.present()
         .with_context(|| format!("while trying to plot into `{}`", report_file.display()))?;
