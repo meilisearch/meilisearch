@@ -3,12 +3,12 @@
   "type": "relevancy",
   "extraCliArgs": ["--http-payload-size-limit=200MB"],
   "assets": {
-    "covid-queryset.json": {
-      "local_location": "workloads/assets/trec-covid/covid-queryset.json",
+    "queryset.json": {
+      "local_location": "workloads/assets/trec-covid/queryset.json",
       "remote_location": null
     },
-    "covid-corpus.jsonl": {
-      "local_location": "workloads/assets/trec-covid/covid-corpus.jsonl",
+    "corpus.jsonl": {
+      "local_location": "workloads/assets/trec-covid/corpus.jsonl",
       "remote_location": null,
       "format": "NdJson"
     }
@@ -31,13 +31,13 @@
       "route": "indexes/relevancy/documents",
       "method": "POST",
       "body": {
-        "asset": "covid-corpus.jsonl"
+        "asset": "corpus.jsonl"
       },
       "synchronous": "WaitForTask"
     }
   ],
   "queryTemplate": {
-    "querySetAsset": "covid-queryset.json",
+    "querySetAsset": "queryset.json",
     "template": {
       "q": "{{q}}"
     },

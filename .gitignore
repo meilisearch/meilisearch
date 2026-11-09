@@ -1,7 +1,9 @@
 .idea/
 .vscode/
 /target
+/workloads/assets
 **/*.csv
+**/*.svg
 **/*.json_lines
 **/*.rs.bk
 /*.mdb
