@@ -1426,12 +1426,12 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     assert!(results.candidates.is_empty());
 
     let mut search = index.search(&rtxn, &fields_ids_map);
-    let results = dbg!(search
+    let results = search
         .filter(Some(IndexFilter::from(
-            Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()
+            Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap(),
         )))
-        .execute())
-    .unwrap();
+        .execute()
+        .unwrap();
     assert!(results.candidates.is_empty());
 
     index

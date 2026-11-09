@@ -499,10 +499,6 @@ impl<State> Server<State> {
 
             // wait 0.5 second.
             sleep(Duration::from_millis(500)).await;
-
-            if i == max_attempts - 1 {
-                dbg!(response);
-            }
         }
         panic!("Timeout waiting for update id");
     }
