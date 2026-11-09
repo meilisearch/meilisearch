@@ -367,8 +367,6 @@ fn find_subfields(
                         .id_or_insert(field_buf)
                         .ok_or(UserError::AttributeLimitReached)?;
 
-                    dbg!(&field_buf);
-
                     let value = parse_raw_value(value, alloc)?;
                     find_subfields(value, field_buf, fields_ids_map, alloc)?;
                 }
