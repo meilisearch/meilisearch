@@ -489,7 +489,7 @@ impl<State> Server<State> {
         let url = format!("/tasks/{update_id}");
         let max_attempts = 400; // 200 seconds in total, 0.5secs per attempt
 
-        for i in 0..max_attempts {
+        for _i in 0..max_attempts {
             let (response, status_code) = self.service.get(url.clone()).await;
             assert_eq!(200, status_code, "response: {response}");
 
@@ -499,10 +499,6 @@ impl<State> Server<State> {
 
             // wait 0.5 second.
             sleep(Duration::from_millis(500)).await;
-
-            if i == max_attempts - 1 {
-                dbg!(response);
-            }
         }
         panic!("Timeout waiting for update id");
     }

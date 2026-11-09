@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_macros)]
 use build_info::BuildInfo;
 
 fn main() {

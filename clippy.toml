@@ -1,3 +1,7 @@
 disallowed-methods = [
     { path = "tar::Archive::unpack", reason = "prefer using the ArchiveExt::safe_unpack function" }
 ]
+
+disallowed-macros = [
+    { path = "std::dbg" }
+]
