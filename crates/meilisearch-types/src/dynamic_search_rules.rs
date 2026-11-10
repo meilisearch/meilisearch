@@ -19,6 +19,7 @@ use crate::error::deserr_codes::{
 };
 use crate::error::ParseOffsetDateTimeError;
 use crate::index_uid::IndexUid;
+use crate::tasks::TaskId;
 
 pub type RuleUid = IndexUid;
 
@@ -280,6 +281,16 @@ pub struct DynamicSearchRuleUpdateRequest {
 }
 
 impl DynamicSearchRuleUpdateRequest {
+    pub fn difference(&mut self, from: &Self) {
+        let Self { description, precedence, active, conditions, actions } = from;
+
+        self.description.difference(description);
+        self.precedence.difference(precedence);
+        self.active.difference(active);
+        self.conditions.difference(conditions);
+        self.actions.difference(actions);
+    }
+
     pub fn from_v1_53(
         legacy: milli::dynamic_search_rules::upgrade::v1_53::DynamicSearchRuleUpdateRequest,
     ) -> Self {
@@ -319,6 +330,161 @@ impl DynamicSearchRuleUpdateRequest {
             RuleActions { pin, scale: Default::default() }
         })
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct DynamicSearchRuleTarget {
+    /// Rule object representing the currently processed state of this rule.
+    ///
+    /// `null` if the rule doesn't currently exist.
+    pub current: Option<DynamicSearchRuleUpdateRequest>,
+    /// Rule object representing the target processing state of this rule, as obtained by processing all tasks related to this rule.
+    ///
+    /// Only contains the fields that will be modified by the related tasks.
+    ///
+    /// `null` if the rule will no longer exist after processing all related tasks.
+    /// Empty object if the rule is left unmodified after processing all related tasks.
+    pub target: Option<DynamicSearchRuleUpdateRequest>,
+    /// List of the uids of the pending tasks that will update this DSR.
+    pub task_uids: Vec<TaskId>,
+    /// Set to `true` if there is at least one task that will update this DSR.
+    pub needs_processing: bool,
+}
+
+#[derive(Default)]
+pub struct Targets {
+    pub targeted_rules: BTreeMap<String, TargetOperation>,
+    pub task_uids: Vec<TaskId>,
+    pub clear_all: bool,
+}
+
+impl Targets {
+    pub fn update_rule<F, E>(
+        &mut self,
+        rule_uid: String,
+        task_id: TaskId,
+        in_db: F,
+    ) -> Result<(), E>
+    where
+        F: Fn(&str) -> Result<bool, E>,
+    {
+        self.register_rule_operation(rule_uid, task_id, in_db, false)
+    }
+
+    pub fn delete_rule<F, E>(
+        &mut self,
+        rule_uid: String,
+        task_id: TaskId,
+        in_db: F,
+    ) -> Result<(), E>
+    where
+        F: Fn(&str) -> Result<bool, E>,
+    {
+        self.register_rule_operation(rule_uid, task_id, in_db, true)
+    }
+
+    pub fn target_total_rule_count(&self, current_total_rule_count: usize) -> usize {
+        let mut new;
+        if self.clear_all {
+            new = 0usize;
+            for operation in self.targeted_rules.values() {
+                // db was reset and we count back from 0, so the original presence in db does not matter
+                match operation {
+                    TargetOperation::UpdateNewRule | TargetOperation::UpdateRuleInDb => {
+                        new = new.saturating_add(1)
+                    }
+                    // cannot have deletions from the db because the db was cleared already
+                    TargetOperation::DeleteNewRule | TargetOperation::DeleteRuleInDb => {}
+                }
+            }
+        } else {
+            new = current_total_rule_count;
+            for operation in self.targeted_rules.values() {
+                // only count newly created rules and existing rules that were deleted
+                match operation {
+                    TargetOperation::UpdateNewRule => new = new.saturating_add(1),
+                    TargetOperation::UpdateRuleInDb => {}
+                    TargetOperation::DeleteNewRule => {}
+                    TargetOperation::DeleteRuleInDb => new = new.saturating_sub(1),
+                }
+            }
+        }
+        new
+    }
+
+    pub fn needs_processing(&self, rule_uid: &str) -> bool {
+        self.clear_all || self.targeted_rules.contains_key(rule_uid)
+    }
+
+    pub fn task_uids(&self) -> &[TaskId] {
+        &self.task_uids
+    }
+
+    pub fn clear_rules(&mut self, task_id: TaskId) {
+        self.clear_all = true;
+        self.targeted_rules.clear();
+        self.task_uids.push(task_id);
+    }
+
+    fn register_rule_operation<F, E>(
+        &mut self,
+        rule_uid: String,
+        task_id: TaskId,
+        in_db: F,
+        is_deletion: bool,
+    ) -> Result<(), E>
+    where
+        F: Fn(&str) -> Result<bool, E>,
+    {
+        self.task_uids.push(task_id);
+        let operation = match self.targeted_rules.get(&rule_uid) {
+            // new rule
+            Some(TargetOperation::UpdateNewRule | TargetOperation::DeleteNewRule) => {
+                if is_deletion {
+                    TargetOperation::DeleteNewRule
+                } else {
+                    TargetOperation::UpdateNewRule
+                }
+            }
+
+            // in db rule
+            Some(TargetOperation::UpdateRuleInDb | TargetOperation::DeleteRuleInDb) => {
+                if is_deletion {
+                    TargetOperation::DeleteRuleInDb
+                } else {
+                    TargetOperation::UpdateRuleInDb
+                }
+            }
+
+            None => {
+                if in_db(&rule_uid)? {
+                    if is_deletion {
+                        TargetOperation::DeleteRuleInDb
+                    } else {
+                        TargetOperation::UpdateRuleInDb
+                    }
+                } else {
+                    if is_deletion {
+                        TargetOperation::DeleteNewRule
+                    } else {
+                        TargetOperation::UpdateNewRule
+                    }
+                }
+            }
+        };
+
+        self.targeted_rules.insert(rule_uid, operation);
+        Ok(())
+    }
+}
+
+pub enum TargetOperation {
+    UpdateNewRule,
+    UpdateRuleInDb,
+    DeleteNewRule,
+    DeleteRuleInDb,
 }
 
 #[routes::request(db, validate = validate_condition -> DeserrJsonError, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]

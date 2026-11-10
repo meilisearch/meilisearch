@@ -793,15 +793,11 @@ impl IndexScheduler {
 
         progress.update_progress(DocumentOperationProgress::ReadingPayloadStats);
         let mut candidates_count = 0;
-        for (stats, task) in operation_stats.into_iter().zip(&mut tasks) {
+        for stats in operation_stats {
             candidates_count += stats.document_count;
-            match stats.error {
-                Some(error) => {
-                    task.status = Status::Failed;
-                    task.error = Some(milli::Error::UserError(error).into());
-                }
-                None => task.status = Status::Succeeded,
-            }
+        }
+        for task in &mut tasks {
+            task.status = Status::Succeeded;
         }
 
         progress.update_progress(DocumentOperationProgress::Indexing);
