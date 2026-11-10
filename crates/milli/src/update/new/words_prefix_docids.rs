@@ -32,6 +32,10 @@ impl WordPrefixDocids {
         prefix_to_compute: &BTreeSet<MiniString>,
         prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
+        if self.database.is_empty(wtxn)? {
+            return Ok(());
+        }
+
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
@@ -137,6 +141,10 @@ impl WordPrefixIntegerDocids {
         prefix_to_compute: &BTreeSet<MiniString>,
         prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
+        if self.database.is_empty(wtxn)? {
+            return Ok(());
+        }
+
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
