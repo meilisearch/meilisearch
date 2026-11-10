@@ -109,6 +109,12 @@ impl<'a> DynamicSearchRulesView<'a> {
         self.get_from_internal_id(docid)
     }
 
+    /// `true` if the rule with the specified UID currently exists in the DSR index.
+    pub fn exists(&self, rule_uid: &str) -> Result<bool> {
+        // get_id uses ExternalDocumentIds::get, which deserializes a single BEU32, a rather cheap operation
+        Ok(self.get_id(rule_uid)?.is_some())
+    }
+
     fn get_id(self, rule_uid: &str) -> Result<Option<RuleId>> {
         if rule_uid == METADATA_UID {
             return Ok(None);
@@ -460,6 +466,11 @@ impl DynamicSearchRules {
     /// Get the raw representation of a rule from its uid.
     pub fn get<'t>(&'t self, rule_uid: &str) -> Result<Option<DocumentFromDb<'t, FieldsIdsMap>>> {
         self.as_view().get(rule_uid)
+    }
+
+    /// `true` if the rule with the specified UID currently exists in the DSR index.
+    pub fn exists(&self, rule_uid: &str) -> Result<bool> {
+        self.as_view().exists(rule_uid)
     }
 
     /// Get the raw representation of a rule from its internal id.

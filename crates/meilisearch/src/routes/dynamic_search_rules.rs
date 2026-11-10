@@ -241,7 +241,7 @@ async fn list_rules(
 
     let (rules, total_rule_count, total) = if let Some(dsrs) = dsrs.milli_dsrs()? {
         let mut rule_ids = dsrs.all_rule_ids()?;
-        let total_rule_count = dsrs.all_rule_ids()?.len() as usize;
+        let total_rule_count = rule_ids.len() as usize;
 
         let query = if let Some(filter) = filter {
             if let Some(is_active) = filter.active {

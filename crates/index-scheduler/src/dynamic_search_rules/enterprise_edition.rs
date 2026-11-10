@@ -68,7 +68,10 @@ impl<'a> DynamicSearchRules<'a> {
                     task_ids.push(task_id);
                     new = None
                 }
-                KindWithContent::DsrUpdate(_) => {}
+                KindWithContent::DsrUpdate(
+                    meilisearch_types::tasks::DsrUpdate::Deletion(_)
+                    | meilisearch_types::tasks::DsrUpdate::CreateOrUpdate { .. },
+                ) => {}
 
                 KindWithContent::DocumentAdditionOrUpdate { .. }
                 | KindWithContent::DocumentDeletion { .. }
@@ -97,9 +100,19 @@ impl<'a> DynamicSearchRules<'a> {
         let current = current.map(|current| current.into_uid_update().1);
         let mut target = new.map(|new| new.into_uid_update().1);
 
-        if let (Some(current), Some(target)) = (&current, &mut target) {
-            target.difference(current);
+        match (&current, &mut target) {
+            // rule did not exist and is not created by pending tasks, so exit with `None`
+            (None, None) => return Ok(None),
+            // rule might get updated, so keep only the difference in target
+            (Some(current), Some(target)) => {
+                target.difference(current);
+            }
+            // rule is created
+            (None, Some(_)) => {}
+            // rule is deleted
+            (Some(_), None) => {}
         }
+
         Ok(Some(DynamicSearchRuleTarget {
             current,
             target,
@@ -137,12 +150,10 @@ impl<'a> DynamicSearchRules<'a> {
         let from_milli = |err| Error::from_milli(err, None);
 
         let in_db = |rule_id: &str| -> Result<bool> {
-            Ok(milli
-                .as_ref()
-                .and_then(|dsrs| dsrs.get(rule_id).transpose())
-                .transpose()
-                .map_err(from_milli)?
-                .is_some())
+            let Some(dsrs) = milli.as_ref() else {
+                return Ok(false);
+            };
+            dsrs.exists(rule_id).map_err(from_milli)
         };
 
         for task_id in tasks {
