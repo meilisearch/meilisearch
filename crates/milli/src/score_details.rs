@@ -213,44 +213,50 @@ impl ScoreDetails {
     }
 
     pub fn score_values<'a>(
-        mut details: impl Iterator<Item = &'a Self> + 'a,
+        details: impl Iterator<Item = &'a Self> + 'a,
     ) -> impl Iterator<Item = ScoreValue<'a>> + 'a {
         let weight = std::cell::Cell::new(1.0f64);
 
-        std::iter::from_fn(move || {
-            details
-                .by_ref()
-                // any scale detail modifies the weight starting from this action,
-                // meaning that a hypothetical score details iterator with some relevancy rules before the scale
-                // detail would have the base weight and not the weight modified by the scale.
-                // In practice, the search implementation guarantees that scale is the first score detail, and as a result
-                // the weight is applied to all relevancy rules.
-                .inspect(|detail| {
-                    if let ScoreDetails::Scale { actions } = detail {
-                        for action in actions {
-                            weight.update(|weight| weight * action.weight);
-                        }
+        details
+            // any scale detail modifies the weight starting from this action,
+            // meaning that a hypothetical score details iterator with some relevancy rules before the scale
+            // detail would have the base weight and not the weight modified by the scale.
+            // In practice, the search implementation guarantees that scale is the first score detail, and as a result
+            // the weight is applied to all relevancy rules.
+            .filter_map(|detail| {
+                if let ScoreDetails::Scale { actions } = detail {
+                    let mut weight = 1.0;
+                    for action in actions {
+                        weight *= action.weight;
                     }
-                })
-                .filter_map(ScoreDetails::rank_or_value)
-                .coalesce(|left, right| match (left, right) {
-                    (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
-                        Ok(RankOrValue::Rank(Rank::merge(left, right)))
-                    }
-                    (left, right) => Err((left, right)),
-                })
-                .map(|rank_or_value| match rank_or_value {
-                    RankOrValue::Rank(r) => ScoreValue::Score(r.local_score() * weight.get()),
-                    RankOrValue::Sort(s) => ScoreValue::Sort(s),
-                    RankOrValue::GeoSort(g) => ScoreValue::GeoSort(g),
-                    RankOrValue::Score(s) => ScoreValue::Score(s * weight.get()),
-                })
-                .next()
-        })
+                    return Some(either::Left(weight));
+                }
+
+                detail.rank_or_value().map(either::Right)
+            })
+            .coalesce(|left, right| match (left, right) {
+                (
+                    either::Right(RankOrValue::Rank(left)),
+                    either::Right(RankOrValue::Rank(right)),
+                ) => Ok(either::Right(RankOrValue::Rank(Rank::merge(left, right)))),
+                (left, right) => Err((left, right)),
+            })
+            .filter_map(move |rank_or_value| match rank_or_value {
+                either::Left(new_weight) => {
+                    weight.update(|weight| weight * new_weight);
+                    None
+                }
+                either::Right(RankOrValue::Rank(r)) => {
+                    Some(ScoreValue::Score(r.local_score() * weight.get()))
+                }
+                either::Right(RankOrValue::Sort(s)) => Some(ScoreValue::Sort(s)),
+                either::Right(RankOrValue::GeoSort(g)) => Some(ScoreValue::GeoSort(g)),
+                either::Right(RankOrValue::Score(s)) => Some(ScoreValue::Score(s * weight.get())),
+            })
     }
 
     pub fn weighted_score_values<'a>(
-        mut details: impl Iterator<Item = &'a Self> + 'a,
+        details: impl Iterator<Item = &'a Self> + 'a,
         weight: f64,
     ) -> impl Iterator<Item = WeightedScoreValue> + 'a {
         // define a cell that will keep the current weight, and capture it in a from_fn closure to keep the state
@@ -261,48 +267,58 @@ impl ScoreDetails {
         // the current weight.
         let used_weight = std::cell::Cell::new(false);
 
-        std::iter::from_fn(move || {
-            match details
-                .by_ref()
-                .inspect(|detail| {
-                    if let ScoreDetails::Scale { actions } = detail {
-                        for action in actions {
-                            weight.update(|weight| weight * action.weight);
-                        }
+        let mut it = details
+            .filter_map(|detail| {
+                if let ScoreDetails::Scale { actions } = detail {
+                    let mut weight = 1.0;
+                    for action in actions {
+                        weight *= action.weight;
                     }
-                })
-                .filter_map(ScoreDetails::rank_or_value)
-                .coalesce(|left, right| match (left, right) {
-                    (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
-                        Ok(RankOrValue::Rank(Rank::merge(left, right)))
-                    }
-                    (left, right) => Err((left, right)),
-                })
-                .map(|rank_or_value| match rank_or_value {
-                    RankOrValue::Rank(r) => {
-                        used_weight.set(true);
-                        WeightedScoreValue::WeightedScore(r.local_score() * weight.get())
-                    }
-                    RankOrValue::Sort(s) => {
-                        WeightedScoreValue::Sort { asc: s.ascending, value: s.value.clone() }
-                    }
-                    RankOrValue::GeoSort(g) => {
-                        WeightedScoreValue::GeoSort { asc: g.ascending, distance: g.distance() }
-                    }
-                    RankOrValue::Score(s) => {
-                        used_weight.set(true);
-                        WeightedScoreValue::VectorSort(s * weight.get())
-                    }
-                })
-                .next()
-            {
-                Some(details) => Some(details),
+                    return Some(either::Left(weight));
+                }
+
+                ScoreDetails::rank_or_value(detail).map(either::Right)
+            })
+            .coalesce(|left, right| match (left, right) {
+                (
+                    either::Right(RankOrValue::Rank(left)),
+                    either::Right(RankOrValue::Rank(right)),
+                ) => Ok(either::Right(RankOrValue::Rank(Rank::merge(left, right)))),
+                (left, right) => Err((left, right)),
+            })
+            .fuse();
+        std::iter::from_fn(move || loop {
+            match it.next() {
+                Some(either::Left(new_weight)) => {
+                    weight.update(|weight| weight * new_weight);
+                    continue;
+                }
+                Some(either::Right(RankOrValue::Rank(r))) => {
+                    used_weight.set(true);
+                    return Some(WeightedScoreValue::WeightedScore(r.local_score() * weight.get()));
+                }
+                Some(either::Right(RankOrValue::Sort(s))) => {
+                    return Some(WeightedScoreValue::Sort {
+                        asc: s.ascending,
+                        value: s.value.clone(),
+                    });
+                }
+                Some(either::Right(RankOrValue::GeoSort(g))) => {
+                    return Some(WeightedScoreValue::GeoSort {
+                        asc: g.ascending,
+                        distance: g.distance(),
+                    });
+                }
+                Some(either::Right(RankOrValue::Score(s))) => {
+                    used_weight.set(true);
+                    return Some(WeightedScoreValue::VectorSort(s * weight.get()));
+                }
                 None => {
                     if used_weight.get() {
-                        None
+                        return None;
                     } else {
                         used_weight.set(true);
-                        Some(WeightedScoreValue::WeightedScore(weight.get()))
+                        return Some(WeightedScoreValue::WeightedScore(weight.get()));
                     }
                 }
             }
