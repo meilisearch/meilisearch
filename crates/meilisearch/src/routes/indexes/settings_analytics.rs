@@ -12,6 +12,7 @@ use meilisearch_types::milli::{FilterableAttributesRule, ForeignKey};
 use meilisearch_types::settings::{
     ChatSettings, FacetingSettings, PaginationSettings, PrefixSearchSettings,
     ProximityPrecisionView, RankingRuleView, SettingEmbeddingSettings, TypoSettings,
+    WordPositionSettings,
 };
 use serde::Serialize;
 
@@ -28,6 +29,7 @@ pub struct SettingsAnalytics {
     pub distinct_attribute: DistinctAttributeAnalytics,
     pub proximity_precision: ProximityPrecisionAnalytics,
     pub typo_tolerance: TypoToleranceAnalytics,
+    pub word_position: WordPositionAnalytics,
     pub faceting: FacetingAnalytics,
     pub pagination: PaginationAnalytics,
     pub stop_words: StopWordsAnalytics,
@@ -134,6 +136,9 @@ impl Aggregate for SettingsAnalytics {
                     .typo_tolerance
                     .min_word_size_for_two_typos
                     .or(self.typo_tolerance.min_word_size_for_two_typos),
+            },
+            word_position: WordPositionAnalytics {
+                enabled: new.word_position.enabled.or(self.word_position.enabled),
             },
             faceting: FacetingAnalytics {
                 max_values_per_facet: new
@@ -459,6 +464,20 @@ impl TypoToleranceAnalytics {
     }
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { typo_tolerance: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct WordPositionAnalytics {
+    pub enabled: Option<bool>,
+}
+
+impl WordPositionAnalytics {
+    pub fn new(setting: Option<&WordPositionSettings>) -> Self {
+        Self { enabled: setting.as_ref().map(|s| !matches!(s.enabled, Setting::Set(false))) }
+    }
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { word_position: self, ..Default::default() }
     }
 }
 
