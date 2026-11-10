@@ -107,6 +107,22 @@ impl EmbedderInfo {
     }
 }
 
+#[derive(Default)]
+pub struct EmbeddingFailures {
+    pub render_failure: RoaringBitmap,
+    pub embed_failure: RoaringBitmap,
+}
+
+impl EmbeddingFailures {
+    pub fn render_failure(&mut self, docid: DocumentId) {
+        self.render_failure.insert(docid);
+    }
+
+    pub fn embed_failure(&mut self, docid: DocumentId) {
+        self.embed_failure.insert(docid);
+    }
+}
+
 /// Optimized struct to hold the list of documents that are `user_provided` and `must_regenerate`.
 ///
 /// Because most documents have the same value for `user_provided` and `must_regenerate`, we store only
@@ -165,6 +181,8 @@ impl EmbeddingStatus {
 pub struct EmbeddingStatusDelta {
     del_status: EmbeddingStatus,
     add_status: EmbeddingStatus,
+    del_failures: EmbeddingFailures,
+    add_failures: EmbeddingFailures,
 }
 
 impl EmbeddingStatusDelta {
@@ -188,8 +206,15 @@ impl EmbeddingStatusDelta {
                 != new_skip_regenerate_different_user_provided
     }
 
-    pub fn needs_clear(is_user_provided: bool, must_regenerate: bool) -> bool {
+    pub fn needs_clear(
+        is_user_provided: bool,
+        must_regenerate: bool,
+        render_failure: bool,
+        embed_failure: bool,
+    ) -> bool {
         Self::needs_change(is_user_provided, must_regenerate, false, true)
+            || render_failure
+            || embed_failure
     }
 
     pub fn clear_docid(
@@ -199,6 +224,8 @@ impl EmbeddingStatusDelta {
         must_regenerate: bool,
     ) {
         self.push_delta(docid, is_user_provided, must_regenerate, false, true);
+        self.del_failures.render_failure(docid);
+        self.del_failures.embed_failure(docid);
     }
 
     pub fn push_delta(
@@ -239,16 +266,6 @@ impl EmbeddingStatusDelta {
         }
     }
 
-    pub fn push_new(&mut self, docid: DocumentId, is_user_provided: bool, must_regenerate: bool) {
-        self.push_delta(
-            docid,
-            !is_user_provided,
-            !must_regenerate,
-            is_user_provided,
-            must_regenerate,
-        );
-    }
-
     pub fn apply_to(&self, status: &mut EmbeddingStatus) {
         status.user_provided -= &self.del_status.user_provided;
         status.user_provided |= &self.add_status.user_provided;
@@ -257,6 +274,22 @@ impl EmbeddingStatusDelta {
             &self.del_status.skip_regenerate_different_from_user_provided;
         status.skip_regenerate_different_from_user_provided |=
             &self.add_status.skip_regenerate_different_from_user_provided;
+    }
+
+    pub fn add_rendering_failure(&mut self, docid: DocumentId) {
+        self.add_failures.render_failure(docid);
+    }
+
+    pub fn add_embedding_failure(&mut self, docid: DocumentId) {
+        self.add_failures.embed_failure(docid);
+    }
+
+    pub fn del_rendering_failure(&mut self, docid: DocumentId) {
+        self.del_failures.render_failure(docid);
+    }
+
+    pub fn del_embedding_failure(&mut self, docid: DocumentId) {
+        self.del_failures.embed_failure(docid);
     }
 }
 

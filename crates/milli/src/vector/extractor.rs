@@ -9,8 +9,9 @@ use super::json_template::{self, JsonTemplate};
 use crate::prompt::error::RenderPromptError;
 use crate::prompt::Prompt;
 use crate::update::new::document::Document;
+use crate::vector::session::OnEmbed;
 use crate::vector::RuntimeFragment;
-use crate::GlobalFieldsIdsMap;
+use crate::{DocumentId, GlobalFieldsIdsMap};
 
 /// Trait for types that extract embedder inputs from a document.
 ///
@@ -47,7 +48,7 @@ pub trait Extractor<'doc> {
     /// - `old`: old version of the document
     /// - `new`: new version of the document
     /// - `meta`: metadata associated to the document
-    fn diff_documents<'a, OD: Document<'a> + Debug, ND: Document<'a> + Debug>(
+    fn diff_fragments_documents<'a, OD: Document<'a> + Debug, ND: Document<'a> + Debug>(
         &self,
         old: OD,
         new: ND,
@@ -58,7 +59,9 @@ pub trait Extractor<'doc> {
     {
         let old_input = self.extract(old, meta);
         let new_input = self.extract(new, meta);
-        to_diff(old_input, new_input)
+
+        let ignore_document_template_failures = true;
+        to_diff(old_input, new_input, ignore_document_template_failures)
     }
 
     /// The result of diffing the embedder inputs extracted from a document by two versions of this extractor.
@@ -68,7 +71,7 @@ pub trait Extractor<'doc> {
     /// - `doc`: the document from which to extract the embedder inputs
     /// - `meta`: metadata associated to the document
     /// - `old`: If `Some`, the old version of this extractor. If `None`, this is equivalent to calling `ExtractorDiff::Added(self.extract(_))`.
-    fn diff_settings<'a, D: Document<'a> + Debug>(
+    fn diff_fragments_settings<'a, D: Document<'a> + Debug>(
         &self,
         doc: D,
         meta: &Self::DocumentMetadata,
@@ -77,7 +80,34 @@ pub trait Extractor<'doc> {
         let old_input = if let Some(old) = old { old.extract(&doc, meta) } else { Ok(None) };
         let new_input = self.extract(&doc, meta);
 
-        to_diff(old_input, new_input)
+        let ignore_document_template_failures = true;
+        to_diff(old_input, new_input, ignore_document_template_failures)
+    }
+
+    /// The result of diffing the rendered document extracted from different versions of the document template.
+    ///
+    /// # Parameters
+    ///
+    /// - `docid`: the document id
+    /// - `doc`: the document from which to extract the embedder inputs
+    /// - `meta`: metadata associated to the document
+    /// - `old`: If `Some`, the old version of the document template. If `None`, this is equivalent to calling `ExtractorDiff::Added(self.extract(_))`.
+    /// - `ignore_document_template_failures`: whether to ignore document template failures
+    /// - `on_embed`: the on embed handler to register rendering failures.
+    fn diff_document_template_settings<'a, D: Document<'a> + Debug, C: OnEmbed<'doc>>(
+        &self,
+        docid: DocumentId,
+        doc: D,
+        meta: &Self::DocumentMetadata,
+        old: Option<&Self>,
+        ignore_document_template_failures: bool,
+        on_embed: &mut C,
+    ) -> Result<ExtractorDiff<Self::Input>, Self::Error> {
+        let old_input = if let Some(old) = old { old.extract(&doc, meta) } else { Ok(None) };
+        let new_input = self.extract(&doc, meta);
+        on_embed.process_rendering_result(docid, old_input.is_err(), new_input.is_err());
+
+        to_diff(old_input, new_input, ignore_document_template_failures)
     }
 
     /// Returns an extractor wrapping `self` and set to ignore all errors arising from extracting with this extractor.
@@ -92,9 +122,11 @@ pub trait Extractor<'doc> {
 fn to_diff<I: PartialEq, E>(
     old_input: Result<Option<I>, E>,
     new_input: Result<Option<I>, E>,
+    ignore_document_template_failures: bool,
 ) -> Result<ExtractorDiff<I>, E> {
     let old_input = old_input.ok().unwrap_or(None);
-    let new_input = new_input?;
+    let new_input =
+        if ignore_document_template_failures { new_input.ok().unwrap_or(None) } else { new_input? };
     Ok(match (old_input, new_input) {
         (Some(old), Some(new)) if old == new => ExtractorDiff::Unchanged,
         (None, None) => ExtractorDiff::Unchanged,
