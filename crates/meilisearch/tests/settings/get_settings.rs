@@ -150,6 +150,11 @@ test_setting_routes!(
         default_value: {"maxValuesPerFacet": 100, "sortFacetValuesBy": {"*": "alpha"}}
     },
     {
+        setting: word_position,
+        update_verb: patch,
+        default_value: {"enabled": true}
+    },
+    {
         setting: search_cutoff_ms,
         update_verb: put,
         default_value: null
@@ -218,7 +223,7 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 20);
+    assert_eq!(settings.keys().len(), 21);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["filterableAttributes"], json!([]));
@@ -239,6 +244,12 @@ async fn get_settings() {
             "sortFacetValuesBy": {
                 "*": "alpha"
             }
+        })
+    );
+    assert_eq!(
+        settings["wordPosition"],
+        json!({
+            "enabled": true,
         })
     );
     assert_eq!(
@@ -343,6 +354,9 @@ async fn secrets_are_hidden_in_settings() {
         "disableOnWords": [],
         "disableOnAttributes": [],
         "disableOnNumbers": false
+      },
+      "wordPosition": {
+        "enabled": true
       },
       "faceting": {
         "maxValuesPerFacet": 100,
