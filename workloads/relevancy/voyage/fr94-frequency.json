@@ -1,0 +1,67 @@
+{
+  "name": "fr94-frequency-voyage.json",
+  "type": "relevancy",
+  "extraCliArgs": ["--http-payload-size-limit=1GiB"],
+  "assets": {
+    "queryset.json": {
+      "local_location": "workloads/assets/trec-fr94/queryset.json",
+      "remote_location": null
+    },
+    "corpus.jsonl": {
+      "local_location": "workloads/assets/trec-fr94/corpus.jsonl",
+      "remote_location": null,
+      "format": "NdJson"
+    }
+  },
+  "precommands": [
+    {
+      "route": "indexes/relevancy/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": ["TEXT"],
+          "embedders": {
+            "voyage": {
+              "source": "rest",
+              "apiKey": "$VOYAGE_API_KEY",
+              "documentTemplate": "An article whose text starts with {{doc.TEXT}}",
+              "url": "https://api.voyageai.com/v1/embeddings",
+              "request": {
+                "model": "voyage-4",
+                "input": ["{{text}}", "{{..}}"]
+              },
+              "response": {
+                "data": [
+                  { "embedding": "{{embedding}}" },
+                  "{{..}}"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/relevancy/documents",
+      "method": "POST",
+      "body": {
+        "asset": "corpus.jsonl"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "queryTemplate": {
+    "querySetAsset": "queryset.json",
+    "template": {
+      "q": "{{q}}",
+      "matchingStrategy": "frequency",
+      "hybrid": {
+        "embedder": "voyage",
+        "semanticRatio": 0.5
+      },
+      "rankingScoreThreshold": 0.8
+    },
+    "primaryKey": "id"
+  }
+}

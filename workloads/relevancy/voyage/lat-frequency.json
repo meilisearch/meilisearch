@@ -1,0 +1,66 @@
+{
+  "name": "lat-frequency-voyage.json",
+  "type": "relevancy",
+  "extraCliArgs": ["--http-payload-size-limit=1GiB"],
+  "assets": {
+    "queryset.json": {
+      "local_location": "workloads/assets/trec-lat/queryset.json",
+      "remote_location": null
+    },
+    "corpus.jsonl": {
+      "local_location": "workloads/assets/trec-lat/corpus.jsonl",
+      "remote_location": null,
+      "format": "NdJson"
+    }
+  },
+  "precommands": [
+    {
+      "route": "indexes/relevancy/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": ["HEADLINE.P", "TEXT.P", "GRAPHIC.P", "SUBJECT.P", "BYLINE.P"],
+          "embedders": {
+            "voyage": {
+              "source": "rest",
+              "apiKey": "$VOYAGE_API_KEY",
+              "documentTemplate": "An article {%if doc.SUBJECT.P%}with subject '{{doc.SUBJECT.P}}' {%endif%}{%if doc.GRAPHIC.P%}with graphic description '{{doc.GRAPHIC.P}}' {%endif%}{%if doc.HEADLINE.P%}with headline '{{doc.HEADLINE.P}}' {%endif%}{%if doc.TEXT.P[0]%}whose text starts with {{doc.TEXT.P | join}}{%elsif doc.TEXT.P%}whose text starts with {{doc.TEXT.P}}{%endif%}",
+              "url": "https://api.voyageai.com/v1/embeddings",
+              "request": {
+                "model": "voyage-4",
+                "input": ["{{text}}", "{{..}}"]
+              },
+              "response": {
+                "data": [
+                  { "embedding": "{{embedding}}" },
+                  "{{..}}"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/relevancy/documents",
+      "method": "POST",
+      "body": {
+        "asset": "corpus.jsonl"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "queryTemplate": {
+    "querySetAsset": "queryset.json",
+    "template": {
+      "q": "{{q}}",
+      "matchingStrategy": "frequency",
+      "hybrid": {
+        "embedder": "voyage",
+        "semanticRatio": 0.5
+      }
+    },
+    "primaryKey": "id"
+  }
+}

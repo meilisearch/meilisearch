@@ -1,0 +1,44 @@
+{
+  "name": "lat-frequency.json",
+  "type": "relevancy",
+  "extraCliArgs": ["--http-payload-size-limit=1GiB"],
+  "assets": {
+    "queryset.json": {
+      "local_location": "workloads/assets/trec-lat/queryset.json",
+      "remote_location": null
+    },
+    "corpus.jsonl": {
+      "local_location": "workloads/assets/trec-lat/corpus.jsonl",
+      "remote_location": null,
+      "format": "NdJson"
+    }
+  },
+  "precommands": [
+    {
+      "route": "indexes/relevancy/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": ["HEADLINE.P", "TEXT.P", "GRAPHIC.P", "SUBJECT.P", "BYLINE.P"]
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/relevancy/documents",
+      "method": "POST",
+      "body": {
+        "asset": "corpus.jsonl"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "queryTemplate": {
+    "querySetAsset": "queryset.json",
+    "template": {
+      "q": "{{q}}",
+      "matchingStrategy": "frequency"
+    },
+    "primaryKey": "id"
+  }
+}

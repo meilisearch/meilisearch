@@ -1,0 +1,45 @@
+{
+  "name": "ft-frequency.json",
+  "type": "relevancy",
+  "extraCliArgs": ["--http-payload-size-limit=1GiB"],
+  "assets": {
+    "queryset.json": {
+      "local_location": "workloads/assets/trec-ft/queryset.json",
+      "remote_location": null
+    },
+    "corpus.jsonl": {
+      "local_location": "workloads/assets/trec-ft/corpus.jsonl",
+      "remote_location": null,
+      "format": "NdJson"
+    }
+  },
+  "precommands": [
+    {
+      "route": "indexes/relevancy/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "searchableAttributes": ["HEADLINE", "DATELINE", "TEXT", "CN", "PUB", "IN", "XX", "TP", "BYLINE"]
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/relevancy/documents",
+      "method": "POST",
+      "body": {
+        "asset": "corpus.jsonl"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "queryTemplate": {
+    "querySetAsset": "queryset.json",
+    "template": {
+      "q": "{{q}}",
+      "matchingStrategy": "frequency",
+      "rankingScoreThreshold": 0.8
+    },
+    "primaryKey": "id"
+  }
+}
