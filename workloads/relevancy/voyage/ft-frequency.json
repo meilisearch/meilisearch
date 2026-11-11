@@ -1,14 +1,14 @@
 {
-  "name": "covid-voyage-DONOTCOMMIT.json",
+  "name": "ft-frequency-voyage.json",
   "type": "relevancy",
-  "extraCliArgs": ["--http-payload-size-limit=200MB"],
+  "extraCliArgs": ["--http-payload-size-limit=1GiB"],
   "assets": {
     "queryset.json": {
-      "local_location": "workloads/assets/trec-fbis/queryset.json",
+      "local_location": "workloads/assets/trec-ft/queryset.json",
       "remote_location": null
     },
     "corpus.jsonl": {
-      "local_location": "workloads/assets/trec-fbis/corpus.jsonl",
+      "local_location": "workloads/assets/trec-ft/corpus.jsonl",
       "remote_location": null,
       "format": "NdJson"
     }
@@ -19,15 +19,12 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "searchableAttributes": [
-            "title",
-            "text"
-          ],
+          "searchableAttributes": ["HEADLINE", "DATELINE", "TEXT", "CN", "PUB", "IN", "XX", "TP", "BYLINE"],
           "embedders": {
             "voyage": {
               "source": "rest",
-              "apiKey": "YOUR_VOYAGE_API_KEY",
-              "documentTemplate": "An article named '{{doc.title}}' whose text starts with {{doc.text}}",
+              "apiKey": "$VOYAGE_API_KEY",
+              "documentTemplate": "An article {%if doc.HEADLINE%}with headline '{{doc.HEADLINE}}' {%endif%}{%if doc.DATELINE%}with dateline '{{doc.DATELINE}}' {%endif%}{%if doc.TEXT%}whose text starts with {{doc.TEXT}} {%endif%}{%if doc.PUB%}published in {{doc.PUB}}{%endif%}",
               "url": "https://api.voyageai.com/v1/embeddings",
               "request": {
                 "model": "voyage-4",
@@ -62,9 +59,8 @@
       "hybrid": {
         "embedder": "voyage",
         "semanticRatio": 0.5
-      },
-      "rankingScoreThreshold": 0.8
+      }
     },
-    "primaryKey": "_id"
+    "primaryKey": "id"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "covid-voyage-DONOTCOMMIT.json",
+  "name": "covid-frequency-voyage.json",
   "type": "relevancy",
   "extraCliArgs": ["--http-payload-size-limit=200MB"],
   "assets": {
@@ -26,7 +26,7 @@
           "embedders": {
             "voyage": {
               "source": "rest",
-              "apiKey": "YOUR_VOYAGE_API_KEY",
+              "apiKey": "$VOYAGE_API_KEY",
               "documentTemplate": "An article named '{{doc.title}}' whose text starts with {{doc.text}}",
               "url": "https://api.voyageai.com/v1/embeddings",
               "request": {
