@@ -107,12 +107,12 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
         match workload_runs.await {
             Ok(Ok(())) => {
                 tracing::info!("Success");
-                println!("☀️ Benchmark invocation completed, please find the results for your workloads below:");
+                println!("☀️ Relevancy benchmark invocation completed, please find the results for your workloads below:");
                 Ok::<(), anyhow::Error>(())
             }
             Ok(Err(error)) => {
                 tracing::error!(error = %error, "invocation failed, attempting to report the failure to dashboard");
-                println!("☔️ Benchmark invocation failed...");
+                println!("☔️ Relevancy benchmark invocation failed...");
                 println!("{error}");
                 tracing::warn!("invocation marked as failed following error");
                 Err(error)
@@ -121,7 +121,7 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
                 match join_error.try_into_panic() {
                     Ok(panic) => {
                         tracing::error!("invocation panicked, attempting to report the failure to dashboard");
-                        println!("‼️ Benchmark invocation panicked 😱");
+                        println!("‼️ Relevancy benchmark invocation panicked 😱");
                         let msg = match panic.downcast_ref::<&'static str>() {
                             Some(s) => *s,
                             None => match panic.downcast_ref::<String>() {
@@ -134,7 +134,7 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
                     }
                     Err(_) => {
                         tracing::warn!("task was canceled");
-                        println!("🚫 Benchmark invocation was canceled");
+                        println!("🚫 Relevancy benchmark invocation was canceled");
                         Ok(())
                     }
                 }

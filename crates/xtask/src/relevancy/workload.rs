@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context as _};
 use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use milli::vector::json_template::JsonTemplate;
+use plotters::style::full_palette::AMBER_800;
 use serde::{Deserialize, Serialize};
 
 use crate::common::assets::{self, fetch_asset, Asset, AssetFormat};
@@ -169,15 +170,19 @@ async fn run_query_template(
 
         let ips_at_1 = query_entry.ideal_precision_score_for(1);
         let irs_at_1 = query_entry.ideal_recall_for(1);
+        let idcg_at_1 = query_entry.ideal_discounted_cumulative_gain_for(1);
 
         let ips_at_5 = query_entry.ideal_precision_score_for(5);
         let irs_at_5 = query_entry.ideal_recall_for(5);
+        let idcg_at_5 = query_entry.ideal_discounted_cumulative_gain_for(5);
 
         let ips_at_20 = query_entry.ideal_precision_score_for(20);
         let irs_at_20 = query_entry.ideal_recall_for(20);
+        let idcg_at_20 = query_entry.ideal_discounted_cumulative_gain_for(20);
 
         let ips_at_50 = query_entry.ideal_precision_score_for(50);
         let irs_at_50 = query_entry.ideal_recall_for(50);
+        let idcg_at_50 = query_entry.ideal_discounted_cumulative_gain_for(50);
 
         let command = Command {
             description: query_entry.description,
@@ -227,11 +232,11 @@ async fn run_query_template(
         let hits = hits?;
 
         let score_sum = std::cell::Cell::new(0.0);
-        let mut it = hits.iter().map(|hit| {
-            score_sum.update(|score_sum| {
-                let score = ideal_hits.get(*hit).copied().unwrap_or(0.0);
-                score_sum + score
-            })
+        let dcg_score_sum = std::cell::Cell::new(0.0);
+        let mut it = hits.iter().enumerate().map(|(i, hit)| {
+            let score = ideal_hits.get(*hit).copied().unwrap_or(0.0);
+            score_sum.update(|score_sum| score_sum + score);
+            dcg_score_sum.update(|dcg_score_sum| dcg_score_sum + (score / ((i + 2) as f64).log2()));
         });
 
         it.next();
@@ -241,41 +246,46 @@ async fn run_query_template(
 
         let ps_at_1: f64 = score_sum.get() / usize::min(1, hits_len) as f64;
         let rs_at_1: f64 = score_sum.get();
+        let dcg_at_1: f64 = dcg_score_sum.get();
 
         it.nth(3);
 
         let ps_at_5: f64 = score_sum.get() / usize::min(hits_len, 5) as f64;
         let rs_at_5: f64 = score_sum.get();
-
-        if query_entry.id == "42" {
-            dbg!(hits.len());
-            dbg!(ideal_hits.len());
-            dbg!(ips_at_5);
-            dbg!(ps_at_5);
-        }
+        let dcg_at_5: f64 = dcg_score_sum.get();
 
         it.nth(14);
 
         let ps_at_20: f64 = score_sum.get() / usize::min(hits_len, 20) as f64;
         let rs_at_20: f64 = score_sum.get();
+        let dcg_at_20: f64 = dcg_score_sum.get();
 
         it.nth(29);
 
         let ps_at_50: f64 = score_sum.get() / usize::min(hits_len, 50) as f64;
         let rs_at_50: f64 = score_sum.get();
+        let dcg_at_50: f64 = dcg_score_sum.get();
 
         Ok(RelevancyResult {
             q_id: query_entry.id,
+
             precision_at_1: ps_at_1 / ips_at_1,
             precision_at_5: ps_at_5 / ips_at_5,
             precision_at_20: ps_at_20 / ips_at_20,
             precision_at_50: ps_at_50 / ips_at_50,
+
             recall_at_1: rs_at_1 / irs_at_1,
             recall_at_5: rs_at_5 / irs_at_5,
             recall_at_20: rs_at_20 / irs_at_20,
             recall_at_50: rs_at_50 / irs_at_50,
+
+            ndcg_at_1: dcg_at_1 / idcg_at_1,
+            ndcg_at_5: dcg_at_5 / idcg_at_5,
+            ndcg_at_20: dcg_at_20 / idcg_at_20,
+            ndcg_at_50: dcg_at_50 / idcg_at_50,
         })
     }
+
     let template = Arc::new(template);
     let primary_key = query_template.primary_key.clone();
     let primary_key = Arc::new(primary_key);
@@ -320,38 +330,50 @@ fn plot(
     use plotters::prelude::*;
 
     let report_file = report_folder.join(workload_name).with_extension("svg");
-    let root = SVGBackend::new(&report_file, (1000, 850)).into_drawing_area();
+    let root = SVGBackend::new(&report_file, (1500, 850)).into_drawing_area();
     root.fill(&WHITE)?;
 
     let quartiles_precision_at_1 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_1).collect::<Vec<_>>());
     let quartiles_recall_at_1 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_1).collect::<Vec<_>>());
+    let quartiles_ndcg_at_1 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_1).collect::<Vec<_>>());
 
     let quartiles_precision_at_5 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_5).collect::<Vec<_>>());
     let quartiles_recall_at_5 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_5).collect::<Vec<_>>());
+    let quartiles_ndcg_at_5 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_5).collect::<Vec<_>>());
 
     let quartiles_precision_at_20 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_20).collect::<Vec<_>>());
     let quartiles_recall_at_20 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_20).collect::<Vec<_>>());
+    let quartiles_ndcg_at_20 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_20).collect::<Vec<_>>());
 
     let quartiles_precision_at_50 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_50).collect::<Vec<_>>());
     let quartiles_recall_at_50 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_50).collect::<Vec<_>>());
+    let quartiles_ndcg_at_50 =
+        Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_50).collect::<Vec<_>>());
 
     let axis = [
         "precision@1",
         "recall@1",
+        "nDCG@1",
         "precision@5",
         "recall@5",
+        "nDCG@5",
         "precision@20",
         "recall@20",
+        "nDCG@20",
         "precision@50",
         "recall@50",
+        "nDCG@50",
     ];
 
     let mut chart = ChartBuilder::on(&root)
@@ -367,18 +389,26 @@ fn plot(
             .style(&BLUE),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@1"), &quartiles_recall_at_1)
             .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"nDCG@1"), &quartiles_ndcg_at_1)
+            .style(&AMBER_800),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@5"), &quartiles_precision_at_5)
             .style(&BLUE),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@5"), &quartiles_recall_at_5)
             .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"nDCG@5"), &quartiles_ndcg_at_5)
+            .style(&AMBER_800),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@20"), &quartiles_precision_at_20)
             .style(&BLUE),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@20"), &quartiles_recall_at_20)
             .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"nDCG@20"), &quartiles_ndcg_at_20)
+            .style(&AMBER_800),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@50"), &quartiles_precision_at_50)
             .style(&BLUE),
         Boxplot::new_vertical(SegmentValue::CenterOf(&"recall@50"), &quartiles_recall_at_50)
             .style(&RED),
+        Boxplot::new_vertical(SegmentValue::CenterOf(&"nDCG@50"), &quartiles_ndcg_at_50)
+            .style(&AMBER_800),
     ])?;
 
     chart.draw_series(PointSeries::of_element(
@@ -394,6 +424,11 @@ fn plot(
                     / relevancy_results.len() as f32,
             ),
             (
+                SegmentValue::CenterOf(&"nDCG@1"),
+                relevancy_results.iter().map(|rr| rr.ndcg_at_1).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
                 SegmentValue::CenterOf(&"precision@5"),
                 relevancy_results.iter().map(|rr| rr.precision_at_5).sum::<f64>() as f32
                     / relevancy_results.len() as f32,
@@ -401,6 +436,11 @@ fn plot(
             (
                 SegmentValue::CenterOf(&"recall@5"),
                 relevancy_results.iter().map(|rr| rr.recall_at_5).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"nDCG@5"),
+                relevancy_results.iter().map(|rr| rr.ndcg_at_5).sum::<f64>() as f32
                     / relevancy_results.len() as f32,
             ),
             (
@@ -414,6 +454,11 @@ fn plot(
                     / relevancy_results.len() as f32,
             ),
             (
+                SegmentValue::CenterOf(&"nDCG@20"),
+                relevancy_results.iter().map(|rr| rr.ndcg_at_20).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
                 SegmentValue::CenterOf(&"precision@50"),
                 relevancy_results.iter().map(|rr| rr.precision_at_50).sum::<f64>() as f32
                     / relevancy_results.len() as f32,
@@ -421,6 +466,11 @@ fn plot(
             (
                 SegmentValue::CenterOf(&"recall@50"),
                 relevancy_results.iter().map(|rr| rr.recall_at_50).sum::<f64>() as f32
+                    / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"nDCG@50"),
+                relevancy_results.iter().map(|rr| rr.ndcg_at_50).sum::<f64>() as f32
                     / relevancy_results.len() as f32,
             ),
         ],
@@ -468,6 +518,22 @@ impl QueryEntry {
         self.hits.iter().take(limit).map(|h| h.score).sum::<f64>()
     }
 
+    /// <https://en.wikipedia.org/wiki/Discounted_cumulative_gain#Normalized_DCG>
+    fn ideal_discounted_cumulative_gain_for(&self, limit: usize) -> f64 {
+        assert!(
+            self.hits.is_sorted_by_key(|hit| Reverse(hit.score)),
+            "hits must be sorted by descending score"
+        );
+
+        self.hits
+            .iter()
+            .enumerate()
+            .take(limit)
+            // note that i starts at zero but the formula requires i to start at one
+            .map(|(i, h)| h.score / ((i + 2) as f64).log2())
+            .sum::<f64>()
+    }
+
     fn ideal_hits(&self) -> HashMap<String, f64> {
         self.hits.iter().map(|hit| (hit.id.clone(), hit.score)).collect()
     }
@@ -481,6 +547,7 @@ struct Hit {
 }
 
 impl Hit {
+    /// If the hit is listed in the ideal hits but the score is missing, we consider it's one (1).
     fn default_score() -> f64 {
         1.0
     }
@@ -490,6 +557,7 @@ impl Hit {
 #[serde(rename_all = "camelCase")]
 struct RelevancyResult {
     q_id: String,
+
     #[serde(rename = "precision@1")]
     precision_at_1: f64,
     #[serde(rename = "precision@5")]
@@ -498,6 +566,7 @@ struct RelevancyResult {
     precision_at_20: f64,
     #[serde(rename = "precision@50")]
     precision_at_50: f64,
+
     #[serde(rename = "recall@1")]
     recall_at_1: f64,
     #[serde(rename = "recall@5")]
@@ -506,4 +575,13 @@ struct RelevancyResult {
     recall_at_20: f64,
     #[serde(rename = "recall@50")]
     recall_at_50: f64,
+
+    #[serde(rename = "nDCG@1")]
+    ndcg_at_1: f64,
+    #[serde(rename = "nDCG@5")]
+    ndcg_at_5: f64,
+    #[serde(rename = "nDCG@20")]
+    ndcg_at_20: f64,
+    #[serde(rename = "nDCG@50")]
+    ndcg_at_50: f64,
 }
