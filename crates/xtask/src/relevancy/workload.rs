@@ -1,6 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read as _;
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -9,6 +10,7 @@ use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use milli::vector::json_template::JsonTemplate;
 use plotters::style::full_palette::AMBER_800;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::common::assets::{self, fetch_asset, Asset, AssetFormat};
 use crate::common::client::Client;
@@ -241,38 +243,45 @@ async fn run_query_template(
 
         it.next();
 
-        // hits len are always considered to be always 1 so we don't divide by 0
-        let hits_len = usize::max(1, hits.len());
+        // We track when a page of result is empty to ignore empty pages when computing the precision
+        let hits_len = NonZeroUsize::new(hits.len());
+        if hits_len.is_none() {
+            warn!("Query `{}` returned no result, ignored for precision", query_entry.query);
+        }
 
-        let ps_at_1: f64 = score_sum.get() / usize::min(1, hits_len) as f64;
+        let ps_at_1: Option<f64> =
+            hits_len.map(|hits_len| score_sum.get() / usize::min(hits_len.get(), 1) as f64);
         let rs_at_1: f64 = score_sum.get();
         let dcg_at_1: f64 = dcg_score_sum.get();
 
         it.nth(3);
 
-        let ps_at_5: f64 = score_sum.get() / usize::min(hits_len, 5) as f64;
+        let ps_at_5: Option<f64> =
+            hits_len.map(|hits_len| score_sum.get() / usize::min(hits_len.get(), 5) as f64);
         let rs_at_5: f64 = score_sum.get();
         let dcg_at_5: f64 = dcg_score_sum.get();
 
         it.nth(14);
 
-        let ps_at_20: f64 = score_sum.get() / usize::min(hits_len, 20) as f64;
+        let ps_at_20: Option<f64> =
+            hits_len.map(|hits_len| score_sum.get() / usize::min(hits_len.get(), 20) as f64);
         let rs_at_20: f64 = score_sum.get();
         let dcg_at_20: f64 = dcg_score_sum.get();
 
         it.nth(29);
 
-        let ps_at_50: f64 = score_sum.get() / usize::min(hits_len, 50) as f64;
+        let ps_at_50: Option<f64> =
+            hits_len.map(|hits_len| score_sum.get() / usize::min(hits_len.get(), 50) as f64);
         let rs_at_50: f64 = score_sum.get();
         let dcg_at_50: f64 = dcg_score_sum.get();
 
         Ok(RelevancyResult {
             q_id: query_entry.id,
 
-            precision_at_1: ps_at_1 / ips_at_1,
-            precision_at_5: ps_at_5 / ips_at_5,
-            precision_at_20: ps_at_20 / ips_at_20,
-            precision_at_50: ps_at_50 / ips_at_50,
+            precision_at_1: ps_at_1.map(|ps_at| ps_at / ips_at_1),
+            precision_at_5: ps_at_5.map(|ps_at| ps_at / ips_at_5),
+            precision_at_20: ps_at_20.map(|ps_at| ps_at / ips_at_20),
+            precision_at_50: ps_at_50.map(|ps_at| ps_at / ips_at_50),
 
             recall_at_1: rs_at_1 / irs_at_1,
             recall_at_5: rs_at_5 / irs_at_5,
@@ -333,35 +342,40 @@ fn plot(
     let root = SVGBackend::new(&report_file, (1500, 850)).into_drawing_area();
     root.fill(&WHITE)?;
 
-    let quartiles_precision_at_1 =
-        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_1).collect::<Vec<_>>());
+    let quartiles_precision_at_1 = Quartiles::new(
+        &relevancy_results.iter().flat_map(|rr| rr.precision_at_1).collect::<Vec<_>>(),
+    );
     let quartiles_recall_at_1 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_1).collect::<Vec<_>>());
     let quartiles_ndcg_at_1 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_1).collect::<Vec<_>>());
 
-    let quartiles_precision_at_5 =
-        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_5).collect::<Vec<_>>());
+    let quartiles_precision_at_5 = Quartiles::new(
+        &relevancy_results.iter().flat_map(|rr| rr.precision_at_5).collect::<Vec<_>>(),
+    );
     let quartiles_recall_at_5 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_5).collect::<Vec<_>>());
     let quartiles_ndcg_at_5 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_5).collect::<Vec<_>>());
 
-    let quartiles_precision_at_20 =
-        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_20).collect::<Vec<_>>());
+    let quartiles_precision_at_20 = Quartiles::new(
+        &relevancy_results.iter().flat_map(|rr| rr.precision_at_20).collect::<Vec<_>>(),
+    );
     let quartiles_recall_at_20 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_20).collect::<Vec<_>>());
     let quartiles_ndcg_at_20 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_20).collect::<Vec<_>>());
 
-    let quartiles_precision_at_50 =
-        Quartiles::new(&relevancy_results.iter().map(|rr| rr.precision_at_50).collect::<Vec<_>>());
+    let quartiles_precision_at_50 = Quartiles::new(
+        &relevancy_results.iter().flat_map(|rr| rr.precision_at_50).collect::<Vec<_>>(),
+    );
     let quartiles_recall_at_50 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.recall_at_50).collect::<Vec<_>>());
     let quartiles_ndcg_at_50 =
         Quartiles::new(&relevancy_results.iter().map(|rr| rr.ndcg_at_50).collect::<Vec<_>>());
 
     let axis = [
+        "zrp",
         "precision@1",
         "recall@1",
         "nDCG@1",
@@ -384,6 +398,7 @@ fn plot(
         .build_cartesian_2d(axis[..].into_segmented(), 0_f32..1.0_f32)?;
 
     chart.configure_mesh().draw()?;
+    // Display the box plots
     chart.draw_series(vec![
         Boxplot::new_vertical(SegmentValue::CenterOf(&"precision@1"), &quartiles_precision_at_1)
             .style(&BLUE),
@@ -411,12 +426,20 @@ fn plot(
             .style(&AMBER_800),
     ])?;
 
+    // Display the averages
     chart.draw_series(PointSeries::of_element(
         vec![
             (
-                SegmentValue::CenterOf(&"precision@1"),
-                relevancy_results.iter().map(|rr| rr.precision_at_1).sum::<f64>() as f32
+                SegmentValue::CenterOf(&"zrp"),
+                // any precision@ would be valid
+                relevancy_results.iter().filter(|rr| rr.precision_at_1.is_none()).count() as f32
                     / relevancy_results.len() as f32,
+            ),
+            (
+                SegmentValue::CenterOf(&"precision@1"),
+                relevancy_results.iter().flat_map(|rr| rr.precision_at_1).sum::<f64>() as f32
+                    / relevancy_results.iter().filter(|rr| rr.precision_at_1.is_some()).count()
+                        as f32,
             ),
             (
                 SegmentValue::CenterOf(&"recall@1"),
@@ -430,8 +453,9 @@ fn plot(
             ),
             (
                 SegmentValue::CenterOf(&"precision@5"),
-                relevancy_results.iter().map(|rr| rr.precision_at_5).sum::<f64>() as f32
-                    / relevancy_results.len() as f32,
+                relevancy_results.iter().flat_map(|rr| rr.precision_at_5).sum::<f64>() as f32
+                    / relevancy_results.iter().filter(|rr| rr.precision_at_5.is_some()).count()
+                        as f32,
             ),
             (
                 SegmentValue::CenterOf(&"recall@5"),
@@ -445,8 +469,9 @@ fn plot(
             ),
             (
                 SegmentValue::CenterOf(&"precision@20"),
-                relevancy_results.iter().map(|rr| rr.precision_at_20).sum::<f64>() as f32
-                    / relevancy_results.len() as f32,
+                relevancy_results.iter().flat_map(|rr| rr.precision_at_20).sum::<f64>() as f32
+                    / relevancy_results.iter().filter(|rr| rr.precision_at_20.is_some()).count()
+                        as f32,
             ),
             (
                 SegmentValue::CenterOf(&"recall@20"),
@@ -460,8 +485,9 @@ fn plot(
             ),
             (
                 SegmentValue::CenterOf(&"precision@50"),
-                relevancy_results.iter().map(|rr| rr.precision_at_50).sum::<f64>() as f32
-                    / relevancy_results.len() as f32,
+                relevancy_results.iter().flat_map(|rr| rr.precision_at_50).sum::<f64>() as f32
+                    / relevancy_results.iter().filter(|rr| rr.precision_at_50.is_some()).count()
+                        as f32,
             ),
             (
                 SegmentValue::CenterOf(&"recall@50"),
@@ -559,13 +585,13 @@ struct RelevancyResult {
     q_id: String,
 
     #[serde(rename = "precision@1")]
-    precision_at_1: f64,
+    precision_at_1: Option<f64>,
     #[serde(rename = "precision@5")]
-    precision_at_5: f64,
+    precision_at_5: Option<f64>,
     #[serde(rename = "precision@20")]
-    precision_at_20: f64,
+    precision_at_20: Option<f64>,
     #[serde(rename = "precision@50")]
-    precision_at_50: f64,
+    precision_at_50: Option<f64>,
 
     #[serde(rename = "recall@1")]
     recall_at_1: f64,
