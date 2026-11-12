@@ -35,7 +35,6 @@ jobs:
           flags=$(bash .github/scripts/is-latest-release.sh "$GH_REF_NAME")
           echo "$flags" >> $GITHUB_OUTPUT
 
-          # The "Set as the latest release" GitHub checkbox is only used for display: warn if it is not consistent with the git tags
           github_latest=$(gh release view --json tagName --jq .tagName)
           if grep -qx 'latest=true' <<< "$flags"; then
             [[ $github_latest == "$GH_REF_NAME" ]] || echo "::warning::$GH_REF_NAME is the highest stable version but is not set as the latest GitHub release ($github_latest is)"
