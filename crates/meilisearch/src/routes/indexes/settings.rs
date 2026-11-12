@@ -699,7 +699,7 @@ async fn register_new_settings(
     security(("Bearer" = ["settings.get", "settings.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Returns all settings with their current or default values. Same structure as the PATCH request body.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
+        (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
             "displayedAttributes": ["id", "title", "description", "url"],
             "searchableAttributes": ["title", "description"],
             "filterableAttributes": ["release_date", "genre"],

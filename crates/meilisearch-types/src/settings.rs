@@ -214,8 +214,6 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 
 /// Index settings: every option you can configure for search and index behavior.
 ///
-/// Used as the request body for PATCH settings. Only the fields you send are updated; pass `null` to reset a setting to its default.
-///
 /// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
 #[routes::request(setting)]
 #[derive(Debug, Clone, Default, PartialEq)]

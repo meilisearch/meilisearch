@@ -386,10 +386,6 @@ pub struct AuthParam {
     key: String,
 }
 
-/// Represents an API key used for authenticating requests to Meilisearch.
-/// Each key has specific permissions defined by its actions and can be scoped
-/// to particular indexes. Keys provide fine-grained access control for your
-/// Meilisearch instance.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct KeyView {

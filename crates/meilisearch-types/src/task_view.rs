@@ -15,10 +15,6 @@ use crate::tasks::{
 };
 
 /// Represents the current state and details of an asynchronous task.
-///
-/// Tasks are created when you perform operations like adding documents,
-/// updating settings, or creating indexes. Use this view to monitor task
-/// progress and check for errors.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

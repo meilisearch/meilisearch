@@ -7,7 +7,6 @@ use crate::batches::{Batch, BatchId, BatchStats, EmbedderStatsView};
 use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 
-/// Represents a batch of tasks that were processed together.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
