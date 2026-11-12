@@ -277,8 +277,6 @@ pub struct SearchQuery {
     ///
     /// The `embedder` field (required) must match an embedder name in index settings.
     ///
-    /// The `semanticRatio` field controls the balance: 0.0 means keyword-only results, 1.0 means semantic-only.
-    ///
     /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
     ///
     /// The `semanticRatio` field defaults to `0.5`. A value of `0.0` uses keyword-only results; `1.0` uses semantic-only results.
