@@ -136,10 +136,10 @@ pub struct GetDocument {
     /// When `true`, includes the vector embeddings in the response for this
     /// document. This is useful when you need to inspect or export vector
     /// data. Note that this can significantly increase response size if the
-    /// document has multiple embedders configured. Defaults to `false`.
+    /// document has multiple embedders configured.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
-    #[param(required = false, value_type = Option<bool>)]
-    #[schema(value_type = Option<bool>)]
+    #[param(required = false, value_type = Option<bool>, default = false)]
+    #[schema(value_type = Option<bool>, default = false)]
     retrieve_vectors: Param<bool>,
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
@@ -475,13 +475,12 @@ pub struct BrowseQueryGet {
     /// Number of documents to skip in the response. Use this parameter
     /// together with `limit` to paginate through large document sets. For
     /// example, to get documents 21-40, set `offset=20` and `limit=20`.
-    /// Defaults to `0`.
-    #[param(required = false, default, value_type = Option<usize>)]
+    #[param(required = false, default = 0, value_type = Option<usize>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     /// Maximum number of documents to return in a single response. Use
-    /// together with `offset` for pagination. Defaults to `20`.
-    #[param(required = false, default, value_type = Option<usize>)]
+    /// together with `offset` for pagination.
+    #[param(required = false, default = PAGINATION_DEFAULT_LIMIT_FN, value_type = Option<usize>)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the
@@ -492,8 +491,8 @@ pub struct BrowseQueryGet {
     fields: OptionStarOrList<String>,
     /// When `true`, includes vector embeddings in the response for documents
     /// that have them. This is useful when you need to inspect or export
-    /// vector data. Defaults to `false`.
-    #[param(required = false, default, value_type = Option<bool>)]
+    /// vector data.
+    #[param(required = false, default = false, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
     /// Comma-separated list of document IDs to retrieve. Only documents with
@@ -542,13 +541,12 @@ pub struct BrowseQueryGet {
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
-    /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
+    /// documents 151-170, set `offset=150` and `limit=20`.
     #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
     pub offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
-    /// results but may increase response time and memory usage. Defaults to
-    /// `20`.
+    /// results but may increase response time and memory usage.
     #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     pub limit: usize,
     /// Array of document attributes to include in the response. If not
@@ -560,8 +558,8 @@ pub struct BrowseQuery {
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
-    /// size. Defaults to `false`.
-    #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
+    /// size.
+    #[request(default, schema_default = false, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
     pub retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
     /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
@@ -1214,7 +1212,7 @@ pub struct UpdateDocumentsQuery {
     pub primary_key: Option<String>,
     /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
     /// character. Only valid when the content type is `text/csv`; using this parameter with
-    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
+    /// `application/json` or `application/x-ndjson` will return an error.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,

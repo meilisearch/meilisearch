@@ -49,8 +49,8 @@ pub struct FederationOptions {
     ///
     /// Values less than 1.0 make hits from this query less likely to appear in final results; values greater than 1.0 make them more likely.
     ///
-    /// Must be a positive number. Default: `1.0`.
-    #[request(default, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
+    /// Must be a positive number.
+    #[request(default, schema_default = 1.0, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
     pub weight: Weight,
 
     /// Remote server to send this query to
@@ -97,10 +97,10 @@ impl std::ops::Deref for Weight {
 #[derive(Debug, Clone)]
 pub struct Federation {
     /// Maximum number of results to return across all queries
-    #[request(default = super::super::DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
+    #[request(default = super::super::DEFAULT_SEARCH_LIMIT(), schema_default = super::super::DEFAULT_SEARCH_LIMIT, error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
     /// Number of results to skip
-    #[request(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
+    #[request(default = super::super::DEFAULT_SEARCH_OFFSET(), schema_default = super::super::DEFAULT_SEARCH_OFFSET, error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[request(default, error = DeserrJsonError<InvalidSearchPage>, skip_serializing_if = "Option::is_none")]
     pub page: Option<usize>,
@@ -108,7 +108,7 @@ pub struct Federation {
     pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
     // We hide the fact that it's possible to define facets as null because utoipa::Schema doesn't support BTreeMap<_, Option<_>>.
-    #[request(default, schema_type = BTreeMap<IndexUid, AttributePatterns>, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
+    #[request(default, schema_default = json!({}), schema_type = BTreeMap<IndexUid, AttributePatterns>, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<AttributePatterns>>,
     /// Options for merging facets from multiple indexes
     #[request(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>, skip_serializing_if = "Option::is_none")]
@@ -123,7 +123,7 @@ pub struct Federation {
     pub distinct: Option<String>,
 
     /// Whether to include performance details in the response
-    #[request(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
+    #[request(default, schema_default = false, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
 
     /// Personalize search results

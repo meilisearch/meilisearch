@@ -160,10 +160,10 @@ impl<'a> DynamicSearchRulesView<'a> {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RuleActions {
     /// Pins a selected document.
-    #[request(default, skip_serializing_if = "Vec::is_empty")]
+    #[request(default, schema_default = json!([]), skip_serializing_if = "Vec::is_empty")]
     pub pin: Vec<PinAction>,
     /// Applies a multiplicative factor to the score of selected documents.
-    #[request(default, skip_serializing_if = "Vec::is_empty")]
+    #[request(default, schema_default = json!([]), skip_serializing_if = "Vec::is_empty")]
     pub scale: Vec<ScaleAction>,
 }
 
