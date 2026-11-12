@@ -391,6 +391,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
         dimensions: usize,
         expected_dimensions: usize,
     },
+    #[error("The legacy indexer does not support the `.{setting_name}` setting. Consider removing the `MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS` environment variable to use the new settings indexer.")]
+    UnsupportedSettingForLegacyIndexer { setting_name: &'static str },
     #[error("`.embedders.{embedder_name}.dimensions`: Model `{model}` does not support overriding its dimensions to a value higher than {max_dimensions}. Found {dimensions}")]
     InvalidOpenAiModelDimensionsMax {
         embedder_name: String,

@@ -420,6 +420,9 @@ InvalidDocumentRetrieve                     , InvalidRequest       , BAD_REQUEST
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST,
 "The provided `_geo` field of one or more documents is invalid. Meilisearch expects `_geo` to be an object with two fields, `lat` and `lng`, each containing geographic coordinates expressed as a string or floating-point number. Read more about `_geo` and how to troubleshoot it in [our dedicated guide](/capabilities/geo_search/getting_started)." ;
 
+UnsupportedSettingForLegacyIndexer             , InvalidRequest       , BAD_REQUEST,
+"The legacy indexer does not support the provided setting." ;
+
 InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST,
 "The `geojson` field in one or more documents is invalid or doesn't match the [GeoJSON specification](https://datatracker.ietf.org/doc/html/rfc7946)." ;
 
@@ -1287,6 +1290,9 @@ impl ErrorCode for milli::Error {
                 }
                 UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
                     Code::InvalidDocumentGeoField
+                }
+                UserError::UnsupportedSettingForLegacyIndexer { .. } => {
+                    Code::UnsupportedSettingForLegacyIndexer
                 }
                 UserError::InvalidVectorDimensions { .. }
                 | UserError::InvalidIndexingVectorDimensions { .. } => {

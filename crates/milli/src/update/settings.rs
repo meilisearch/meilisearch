@@ -1069,20 +1069,24 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
-    fn update_word_position(&mut self) -> Result<()> {
+    fn update_word_position(&mut self) -> Result<bool> {
         let mut word_position = self.index.word_position(self.wtxn)?;
-        match self.word_position_enabled {
+        let changed = match self.word_position_enabled {
             Setting::Set(enabled) => {
+                let changed = word_position.enabled != enabled;
                 word_position.enabled = enabled;
+                changed
             }
             Setting::Reset => {
+                let changed = word_position.enabled != WordPosition::default().enabled;
                 word_position.enabled = WordPosition::default().enabled;
+                changed
             }
-            Setting::NotSet => (),
-        }
+            Setting::NotSet => false,
+        };
 
         self.index.put_word_position(self.wtxn, &word_position)?;
-        Ok(())
+        Ok(changed)
     }
 
     fn update_prefix_search(&mut self) -> Result<bool> {
@@ -1544,7 +1548,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
         self.update_disabled_typos_terms()?;
-        self.update_word_position()?;
+        if self.update_word_position()? {
+            return Err(UserError::UnsupportedSettingForLegacyIndexer {
+                setting_name: "wordPosition",
+            }
+            .into());
+        }
         self.update_chat_config()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
