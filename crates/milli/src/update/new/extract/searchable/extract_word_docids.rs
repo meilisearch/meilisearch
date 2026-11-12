@@ -621,10 +621,20 @@ impl WordDocidsExtractors {
 
         let mut action = ActionToOperate::SkipDocument;
 
-        let old_word_position_enabled = settings_delta.old_word_position().enabled;
-        let new_word_position_enabled = settings_delta.new_word_position().enabled;
+        let old_word_position_enabled = if settings_delta.old_word_position().enabled {
+            WordPositionExtraction::Extract
+        } else {
+            WordPositionExtraction::Skip
+        };
+        let new_word_position_enabled = if settings_delta.new_word_position().enabled {
+            WordPositionExtraction::Extract
+        } else {
+            WordPositionExtraction::Skip
+        };
 
-        if !old_word_position_enabled && new_word_position_enabled {
+        if old_word_position_enabled == WordPositionExtraction::Skip
+            && new_word_position_enabled == WordPositionExtraction::Extract
+        {
             action = ActionToOperate::ReindexAllFields;
         } else {
             match document_tokenizers {
@@ -738,17 +748,6 @@ impl WordDocidsExtractors {
 
         let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
         let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
-
-        let old_word_position_enabled = if settings_delta.old_word_position().enabled {
-            WordPositionExtraction::Extract
-        } else {
-            WordPositionExtraction::Skip
-        };
-        let new_word_position_enabled = if settings_delta.new_word_position().enabled {
-            WordPositionExtraction::Extract
-        } else {
-            WordPositionExtraction::Skip
-        };
 
         // we must tokenize twice when we change global parameters like stop words,
         // the language settings, dictionary, separators, non-separators...
