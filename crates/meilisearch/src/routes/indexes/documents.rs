@@ -542,13 +542,12 @@ pub struct BrowseQueryGet {
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
-    /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
+    /// documents 151-170, set `offset=150` and `limit=20`.
     #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
     pub offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
-    /// results but may increase response time and memory usage. Defaults to
-    /// `20`.
+    /// results but may increase response time and memory usage.
     #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     pub limit: usize,
     /// Array of document attributes to include in the response. If not
@@ -1214,7 +1213,7 @@ pub struct UpdateDocumentsQuery {
     pub primary_key: Option<String>,
     /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
     /// character. Only valid when the content type is `text/csv`; using this parameter with
-    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
+    /// `application/json` or `application/x-ndjson` will return an error.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,

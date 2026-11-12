@@ -257,14 +257,13 @@ pub struct SimilarQueryGet {
     pub embedder: String,
     /// Number of similar documents to skip in the response. Use together with
     /// `limit` for pagination through large result sets. For example, to get
-    /// similar documents 21-40, set `offset=20` and `limit=20`. Defaults to
-    /// `0`.
+    /// similar documents 21-40, set `offset=20` and `limit=20`.
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSimilarOffset>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
     /// Maximum number of similar documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
-    /// results but may increase response time. Defaults to `20`.
+    /// results but may increase response time.
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSimilarLimit>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
     limit: Param<usize>,
