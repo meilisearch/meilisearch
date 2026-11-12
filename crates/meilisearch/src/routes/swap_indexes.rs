@@ -65,7 +65,6 @@ impl Aggregate for IndexSwappedAnalytics {
 ///
 /// Indexes are swapped in pairs; a single request can include multiple pairs.
 ///
-///
 /// The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
 /// Enqueued tasks are left unmodified.
 #[routes::path(

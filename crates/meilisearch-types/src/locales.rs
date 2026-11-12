@@ -10,7 +10,6 @@ pub struct LocalizedAttributesRuleView {
     /// Patterns to match attribute names. Use `*` as a wildcard to match any
     /// characters.
     ///
-    ///
     /// For example, `["title_*", "description"]` matches
     /// `title_en`, `title_fr`, and `description`.
     #[request(required, schema_type = Vec<String>, example = json!(["*_ja"]))]
@@ -18,7 +17,6 @@ pub struct LocalizedAttributesRuleView {
     /// The list of locales (languages) to apply to matching attributes. When
     /// these attributes are indexed, Meilisearch will use language-specific
     /// tokenization rules.
-    ///
     ///
     /// Examples: `["en", "fr"]` or `["jpn", "zho"]`.
     #[request(required)]

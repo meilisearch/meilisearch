@@ -102,7 +102,6 @@ pub struct FilterableAttributesPatterns {
     /// Patterns to match attribute names. Use `*` as a wildcard to match any
     /// characters.
     ///
-    ///
     /// For example, `["price_*", "stock"]` matches `price_usd`,
     /// `price_eur`, and `stock`.
     #[schema(value_type = Vec<String>)]
@@ -140,7 +139,6 @@ pub struct FilterableAttributesFeatures {
     /// When `true`, allows searching within facet values for matching
     /// attributes. This enables the facet search feature which lets users
     /// search for specific facet values.
-    ///
     ///
     /// Defaults to `false`.
     #[serde(default)]
@@ -234,7 +232,6 @@ pub struct FilterFeatures {
     /// allow filtering for exact matches or membership in a set of values.
     /// Also enables `IS EMPTY`, `IS NULL`, and `EXISTS` operators.
     ///
-    ///
     /// Defaults to `true`.
     #[serde(default = "default_true")]
     #[deserr(default = true)]
@@ -242,7 +239,6 @@ pub struct FilterFeatures {
     /// When `true`, enables comparison operators: `<`, `>`, `<=`, `>=`, and
     /// `TO` (range). These allow filtering based on numeric or string
     /// comparisons.
-    ///
     ///
     /// Defaults to `false`.
     #[serde(default)]

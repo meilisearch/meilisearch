@@ -51,7 +51,6 @@ pub struct FederationOptions {
     ///
     /// Must be a positive number.
     ///
-    ///
     /// Default: `1.0`.
     #[request(default, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
     pub weight: Weight,

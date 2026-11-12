@@ -65,7 +65,6 @@ pub struct TasksFilterQuery {
 
     /// Permits to filter tasks by their batch uid.
     ///
-    ///
     /// By default, when the
     /// `batchUids` query parameter is not set, all task uids are returned.
     /// It's possible to specify several batch uids by separating them with
@@ -75,7 +74,6 @@ pub struct TasksFilterQuery {
     pub batch_uids: OptionStarOrList<BatchId>,
 
     /// Permits to filter tasks by their uid.
-    ///
     ///
     /// By default, when the uids query
     /// parameter is not set, all task uids are returned. It's possible to
@@ -91,7 +89,6 @@ pub struct TasksFilterQuery {
     pub canceled_by: OptionStarOrList<u32>,
     /// Permits to filter tasks by their related type.
     ///
-    ///
     /// By default, when `types`
     /// query parameter is not set, all task types are returned. It's possible
     /// to specify several types by separating them with the `,` character.
@@ -99,7 +96,6 @@ pub struct TasksFilterQuery {
     #[param(required = false, value_type = Option<Vec<String>>, example = json!([Kind::DocumentAdditionOrUpdate]))]
     pub types: OptionStarOrList<Kind>,
     /// Permits to filter tasks by their status.
-    ///
     ///
     /// By default, when `statuses`
     /// query parameter is not set, all task statuses are returned. It's
@@ -109,7 +105,6 @@ pub struct TasksFilterQuery {
     #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled, Status::Enqueued, Status::Processing]))]
     pub statuses: OptionStarOrList<Status>,
     /// Permits to filter tasks by their related index.
-    ///
     ///
     /// By default, when
     /// `indexUids` query parameter is not set, the tasks of all the indexes
@@ -217,7 +212,6 @@ pub struct TaskDeletionOrCancelationQuery {
     pub canceled_by: OptionStarOrList<u32>,
     /// Permits to filter tasks by their related type.
     ///
-    ///
     /// By default, when `types`
     /// query parameter is not set, all task types are returned. It's possible
     /// to specify several types by separating them with the `,` character.
@@ -225,7 +219,6 @@ pub struct TaskDeletionOrCancelationQuery {
     #[param(required = false, value_type = Option<Vec<Kind>>, example = json!([Kind::DocumentDeletion]))]
     pub types: OptionStarOrList<Kind>,
     /// Permits to filter tasks by their status.
-    ///
     ///
     /// By default, when `statuses`
     /// query parameter is not set, all task statuses are returned. It's
@@ -235,7 +228,6 @@ pub struct TaskDeletionOrCancelationQuery {
     #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled]))]
     pub statuses: OptionStarOrList<Status>,
     /// Permits to filter tasks by their related index.
-    ///
     ///
     /// By default, when
     /// `indexUids` query parameter is not set, the tasks of all the indexes
@@ -360,12 +352,10 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 ///
 /// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
 ///
-///
 /// **Notes:**
 ///
 /// - Task cancellation is atomic: either all matched tasks are canceled or none are.
 /// - Each filter parameter accepts `*` to match all values (e.g., `statuses=*`).
-///
 ///
 /// **Tip:** You can cancel `taskCancelation` type tasks as long as they are `enqueued` or `processing`,
 /// because cancellation tasks are processed in reverse order of enqueueing.
@@ -449,7 +439,6 @@ async fn cancel_tasks(
 /// Delete tasks
 ///
 /// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
-///
 ///
 /// **Notes:**
 ///

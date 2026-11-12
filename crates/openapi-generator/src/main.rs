@@ -953,9 +953,8 @@ fn single_value_enum(branch: &Value) -> Option<&str> {
 /// renders each of them literally. A paragraph written over four source lines
 /// is then published over four ragged lines. Markdown reads those breaks the
 /// other way around: a single break inside a paragraph is a space, and a blank
-/// line is what separates two paragraphs. One blank line is published as a line
-/// break, and two or more as a line break and the empty line a description uses
-/// to set a callout apart from the prose around it.
+/// line is what separates two paragraphs, published as one empty line however
+/// many blank lines the source has.
 ///
 /// Descriptions under `example` and `default` are left alone: those hold
 /// payloads, so a `description` field inside one belongs to the data rather
@@ -980,17 +979,15 @@ fn normalize_descriptions(value: &mut Value) {
 
 /// Joins the lines Markdown joins and keeps the breaks Markdown keeps.
 ///
-/// Soft-wrapped lines are joined back into the single line they describe, one
-/// blank line becomes a line break, and two or more become a line break and an
-/// empty line. The empty line stops there: a reference has no use for a wider
-/// gap, and utoipa does not turn a doc comment's blank lines into a predictable
-/// number of breaks anyway. Block structure keeps its own lines: list items,
+/// Soft-wrapped lines are joined back into the single line they describe, and
+/// any run of blank lines becomes the single empty line that separates two
+/// paragraphs in Markdown. Block structure keeps its own lines: list items,
 /// headings, tables, blockquotes and fenced code blocks, whose content is left
 /// byte for byte as it was written.
 fn reflow_markdown(description: &str) -> String {
     let mut reflowed = String::new();
-    // Blank lines seen since the last line of text, each standing for a break.
-    let mut blank_lines = 0;
+    // Whether a blank line was seen since the last line of text.
+    let mut blank_line = false;
     // Whether the block being built is a paragraph the next line can continue.
     let mut open = false;
     let mut in_code_block = false;
@@ -1015,7 +1012,7 @@ fn reflow_markdown(description: &str) -> String {
         // separate it from the next one. Those leading the description have
         // nothing to separate.
         if content.is_empty() {
-            blank_lines += !reflowed.is_empty() as usize;
+            blank_line |= !reflowed.is_empty();
             open = false;
             continue;
         }
@@ -1027,11 +1024,11 @@ fn reflow_markdown(description: &str) -> String {
             // Two blocks the author did not separate still need the one break
             // their structure implies, and no gap is ever wider than one line.
             if !reflowed.is_empty() {
-                reflowed.extend(std::iter::repeat_n('\n', blank_lines.clamp(1, 2)));
+                reflowed.push_str(if blank_line { "\n\n" } else { "\n" });
             }
             reflowed.push_str(line);
         }
-        blank_lines = 0;
+        blank_line = false;
 
         in_code_block = content.starts_with("```");
         // A fence, a heading and a table row own their line: none of them is
@@ -1368,19 +1365,16 @@ mod tests {
         );
     }
 
-    /// The renderer breaks on every newline: one blank line asks for a line
-    /// break, and more than one for the empty line that sets a callout apart.
-    /// utoipa turns a doc comment's blank lines into a number of breaks that
-    /// does not track how many were written, so the gap stops at one line
-    /// however many were asked for.
+    /// A blank line separates two paragraphs, and Markdown reads any number of
+    /// them as that single separation.
     #[test]
     fn test_reflow_markdown_opens_at_most_one_empty_line() {
-        assert_eq!(
-            reflow_markdown("First paragraph.\n\nSecond one."),
-            "First paragraph.\nSecond one."
-        );
-        for spaced in ["A paragraph.\n\n\nA callout.", "A paragraph.\n\n\n\n\nA callout."] {
-            assert_eq!(reflow_markdown(spaced), "A paragraph.\n\nA callout.");
+        for spaced in [
+            "First paragraph.\n\nSecond one.",
+            "First paragraph.\n\n\nSecond one.",
+            "First paragraph.\n\n\n\n\nSecond one.",
+        ] {
+            assert_eq!(reflow_markdown(spaced), "First paragraph.\n\nSecond one.");
         }
     }
 

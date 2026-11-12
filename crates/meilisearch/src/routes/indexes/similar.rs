@@ -258,10 +258,8 @@ pub struct SimilarQueryGet {
     /// Number of similar documents to skip in the response. Use together with
     /// `limit` for pagination through large result sets.
     ///
-    ///
     /// For example, to get
     /// similar documents 21-40, set `offset=20` and `limit=20`.
-    ///
     ///
     /// Defaults to
     /// `0`.
@@ -272,7 +270,6 @@ pub struct SimilarQueryGet {
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time.
     ///
-    ///
     /// Defaults to `20`.
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSimilarLimit>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
@@ -280,10 +277,8 @@ pub struct SimilarQueryGet {
     /// Comma-separated list of document attributes to include in the response.
     /// Use `*` to retrieve all attributes.
     ///
-    ///
     /// By default, all attributes listed
     /// in the `displayedAttributes` setting are returned.
-    ///
     ///
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarAttributesToRetrieve>)]
@@ -292,7 +287,6 @@ pub struct SimilarQueryGet {
     /// When `true`, includes the vector embeddings for each returned document.
     /// Useful for debugging or when you need to inspect the vector data. Note
     /// that this can significantly increase response size.
-    ///
     ///
     /// Defaults to
     /// `false`.
@@ -303,7 +297,6 @@ pub struct SimilarQueryGet {
     /// similar. Uses the same syntax as search filters. Only documents
     /// matching this filter will be considered when finding similar documents.
     ///
-    ///
     /// Example: `genres = action AND year > 2000`.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarFilter>)]
@@ -311,7 +304,6 @@ pub struct SimilarQueryGet {
     /// When `true`, includes a global `_rankingScore` field in each document
     /// showing how similar it is to the target document. The score is a value
     /// between 0 and 1, where higher values indicate greater similarity.
-    ///
     ///
     /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScore>)]
@@ -321,7 +313,6 @@ pub struct SimilarQueryGet {
     /// document breaking down how the similarity score was calculated. Useful
     /// for debugging and understanding why certain documents are considered
     /// more similar.
-    ///
     ///
     /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScoreDetails>)]

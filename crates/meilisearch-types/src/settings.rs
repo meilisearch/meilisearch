@@ -84,12 +84,10 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 pub struct MinWordSizeTyposSetting {
     /// Minimum word length to accept one typo. Shorter words must match exactly.
     ///
-    ///
     /// For example, if set to 5, "apple" can have one typo but "app" cannot.
     #[request(schema_type = Option<u8>, schema_default = 5, example = json!(5), skip_serializing_if = "Setting::is_not_set")]
     pub one_typo: Setting<u8>,
     /// Minimum word length to accept two typos. Must be greater than or equal to `oneTypo`.
-    ///
     ///
     /// For example, if set to 9, "computing" can have two typos.
     #[request(schema_type = Option<u8>, schema_default = 9, example = json!(9), skip_serializing_if = "Setting::is_not_set")]
@@ -109,7 +107,6 @@ pub struct TypoSettings {
     )]
     pub enabled: Setting<bool>,
     /// Minimum word length before typos are allowed. Contains `oneTypo` (min length for 1 typo) and `twoTypos` (min length for 2 typos).
-    ///
     ///
     /// Example: `{ "oneTypo": 5, "twoTypos": 9 }`.
     #[request(
@@ -137,7 +134,6 @@ pub struct TypoSettings {
     )]
     pub disable_on_attributes: Setting<BTreeSet<String>>,
     /// When true, typo tolerance is disabled on numeric tokens.
-    ///
     ///
     /// For example, 123 will not match 132.
     #[request(

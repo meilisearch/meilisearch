@@ -130,7 +130,6 @@ impl TaskView {
 ///
 /// The fields present depend on the task type.
 ///
-///
 /// For example, document addition
 /// tasks will have `receivedDocuments` and `indexedDocuments`, while settings
 /// update tasks will have the applied settings.

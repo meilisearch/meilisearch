@@ -150,12 +150,10 @@ pub struct FieldLocalizedConfig<'a> {
 pub struct ListFields {
     /// Number of fields to skip.
     ///
-    ///
     /// Defaults to 0.
     #[request(default, error = DeserrJsonError<InvalidIndexOffset>)]
     pub offset: usize,
     /// Maximum number of fields to return.
-    ///
     ///
     /// Defaults to 20.
     #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidIndexLimit>)]

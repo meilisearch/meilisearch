@@ -57,12 +57,10 @@ pub struct ListRulesFilter {
 pub struct ListRules {
     /// Number of rules to skip.
     ///
-    ///
     /// Defaults to 0.
     #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
     pub offset: usize,
     /// Maximum number of rules to return.
-    ///
     ///
     /// Default to 20.
     #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDynamicSearchRuleLimit>)]
