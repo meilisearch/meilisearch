@@ -1902,6 +1902,7 @@ impl InnerIndexSettingsDiff {
         self.cache_reindex_searchable_without_user_defined
             || self.cache_exact_attributes
             || self.cache_user_defined_searchables
+            || self.old.word_position != self.new.word_position
     }
 
     pub fn reindex_proximities(&self) -> bool {
