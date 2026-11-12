@@ -189,7 +189,6 @@ pub struct FederatedSearch {
     pub federation: Option<Federation>,
 }
 
-/// Response from a federated multi-search query
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

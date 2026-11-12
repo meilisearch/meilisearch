@@ -143,7 +143,6 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
         .unwrap_or(false)
 }
 
-/// A summarized view of a task, returned when a task is enqueued
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
@@ -389,7 +388,6 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "Meilisearch is running" }))
 }
 
-/// Global statistics for the Meilisearch instance
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {

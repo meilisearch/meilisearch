@@ -62,7 +62,6 @@ mod similar_analytics;
 )]
 pub struct IndexesApi;
 
-/// An index containing searchable documents
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexView {
@@ -565,7 +564,6 @@ impl Size {
     }
 }
 
-/// Stats of an `Index`, as known to the `stats` route.
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

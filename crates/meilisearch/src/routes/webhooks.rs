@@ -71,7 +71,6 @@ fn deny_immutable_fields_webhook(
     }
 }
 
-/// Webhook object with metadata and redacted authorization headers.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -93,7 +92,6 @@ impl WebhookWithMetadataRedactedAuthorization {
     }
 }
 
-/// Response containing a list of all registered webhooks.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WebhookResults {

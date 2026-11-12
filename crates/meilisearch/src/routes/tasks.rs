@@ -524,7 +524,6 @@ async fn delete_tasks(
     Ok(HttpResponse::Ok().json(task))
 }
 
-/// Response containing a paginated list of tasks
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AllTasks {
     /// Array of task objects matching the query

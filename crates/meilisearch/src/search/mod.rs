@@ -1403,7 +1403,6 @@ pub struct SearchMetadata {
     pub inline_rule_condition_outcomes: Option<ConditionOutcomes>,
 }
 
-/// Search response containing matching documents and metadata.
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -1526,7 +1525,6 @@ impl fmt::Debug for SearchResult {
     }
 }
 
-/// Response containing similar documents
 #[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SimilarResult {
@@ -1615,7 +1613,6 @@ pub struct FacetValueHitSchema {
     pub count: u64,
 }
 
-/// Result of a facet search operation.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
