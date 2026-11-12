@@ -29,7 +29,7 @@ jobs:
         id: is-latest
         if: github.event_name == 'release'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
           GH_REF_NAME: ${{ github.ref_name }}
         run: |
           flags=$(bash .github/scripts/is-latest-release.sh "$GH_REF_NAME")
