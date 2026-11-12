@@ -273,11 +273,7 @@ pub struct SearchQuery {
     /// See also the [localizedAttributes](https://www.meilisearch.com/docs/reference/api/settings/list-all-settings#response-localized-attributes-one-of-0) settings and [Language](https://www.meilisearch.com/docs/learn/resources/language).
     #[request(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
-    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search): combines keyword and semantic search.
-    ///
-    /// The `embedder` field (required) must match an embedder name in index settings.
-    ///
-    /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
+    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
@@ -660,12 +656,12 @@ impl fmt::Debug for SearchQuery {
 pub struct HybridQuery {
     /// Balance between keyword (0.0) and semantic (1.0) search.
     ///
+    /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
+    ///
     /// Defaults to `0.5`.
     #[request(default, schema_type = f32, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     pub semantic_ratio: SemanticRatio,
-    /// Name of the embedder configured in index settings.
-    ///
-    /// Used for semantic part of the search.
+    /// Name of the embedder used for hybrid search. Must match an embedder configured in the index settings.
     #[request(required, error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }

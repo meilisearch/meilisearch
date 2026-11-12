@@ -270,17 +270,17 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(required = false, value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
-    /// Name of the embedder for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
-    ///
-    /// Must match an embedder configured in the index settings.
+    /// Name of the embedder used for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Must match an embedder configured in the index settings.
     ///
     /// Required when `vector` or `hybridSemanticRatio` is set.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
     pub hybrid_embedder: Option<String>,
-    /// Balance between keyword and semantic search: 0.0 means keyword-only results, 1.0 means semantic-only.
+    /// Balance between keyword (0.0) and semantic (1.0) search.
     ///
     /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// Defaults to `0.5`.
     ///
     /// Requires `hybridEmbedder` when set.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
