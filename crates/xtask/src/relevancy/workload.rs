@@ -277,6 +277,7 @@ async fn run_query_template(
 
         Ok(RelevancyResult {
             q_id: query_entry.id,
+            query: query_entry.query,
 
             precision_at_1: ps_at_1.map(|ps_at| ps_at / ips_at_1),
             precision_at_5: ps_at_5.map(|ps_at| ps_at / ips_at_5),
@@ -583,6 +584,7 @@ impl Hit {
 #[serde(rename_all = "camelCase")]
 struct RelevancyResult {
     q_id: String,
+    query: String,
 
     #[serde(rename = "precision@1")]
     precision_at_1: Option<f64>,
