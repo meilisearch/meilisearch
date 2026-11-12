@@ -29,11 +29,7 @@ use crate::routes::Pagination;
     tag = "Keys",
     tags((
         name = "Keys",
-        description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions. You must have the master key or the default admin key to access the keys route.
-
-More information about the keys and their rights.
-
-Accessing any route under `/keys` without having set a master key will result in an error.",
+        description = "Manage the API keys that control access to a Meilisearch instance.",
     )),
 )]
 pub struct ApiKeyApi;

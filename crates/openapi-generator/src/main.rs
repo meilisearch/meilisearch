@@ -1463,7 +1463,10 @@ mod tests {
     /// leaves its descriptions ragged without failing anything else.
     #[test]
     fn test_generated_spec_is_reflowed_in_every_region() {
-        let before: Value = serde_json::to_value(MeilisearchApi::openapi()).unwrap();
+        let mut before: Value = serde_json::to_value(MeilisearchApi::openapi()).unwrap();
+        // Tag descriptions are single sentences, so one is wrapped to give the
+        // pass something to reflow there.
+        before["tags"][0]["description"] = "A tag description\nwrapped over two lines.".into();
         let mut after = before.clone();
         normalize_descriptions(&mut after);
 

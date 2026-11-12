@@ -30,9 +30,7 @@ use crate::search::{
     tags(
         (
             name = "Similar documents",
-            description = "The /similar route uses AI-powered search to return a number of documents similar to a target document.
-
-Meilisearch exposes two routes for retrieving similar documents: POST and GET. In the majority of cases, POST will offer better performance and ease of use.",
+            description = "Retrieve documents similar to a target document using AI-powered search.",
         ),
     ),
 )]
@@ -258,11 +256,10 @@ pub struct SimilarQueryGet {
     /// Number of similar documents to skip in the response. Use together with
     /// `limit` for pagination through large result sets.
     ///
-    /// For example, to get
-    /// similar documents 21-40, set `offset=20` and `limit=20`.
+    /// For example, to get similar documents 21-40, set `offset=20` and
+    /// `limit=20`.
     ///
-    /// Defaults to
-    /// `0`.
+    /// Defaults to `0`.
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSimilarOffset>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
@@ -277,8 +274,8 @@ pub struct SimilarQueryGet {
     /// Comma-separated list of document attributes to include in the response.
     /// Use `*` to retrieve all attributes.
     ///
-    /// By default, all attributes listed
-    /// in the `displayedAttributes` setting are returned.
+    /// By default, all attributes listed in the `displayedAttributes` setting
+    /// are returned.
     ///
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarAttributesToRetrieve>)]
@@ -288,8 +285,7 @@ pub struct SimilarQueryGet {
     /// Useful for debugging or when you need to inspect the vector data. Note
     /// that this can significantly increase response size.
     ///
-    /// Defaults to
-    /// `false`.
+    /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRetrieveVectors>)]
     #[param(required = false, value_type = bool, default)]
     retrieve_vectors: Param<bool>,

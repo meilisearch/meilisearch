@@ -19,9 +19,7 @@ use crate::extractors::authentication::GuardedData;
     tag = "Experimental features",
     tags((
         name = "Experimental features",
-        description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
-
-This route is **synchronous**. This means that no task object will be returned, and any activated or deactivated features will be made available or unavailable immediately.",
+        description = "Activate or deactivate Meilisearch's experimental features.",
     )),
 )]
 pub struct ExperimentalFeaturesApi;

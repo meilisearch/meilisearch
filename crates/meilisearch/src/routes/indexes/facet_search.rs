@@ -41,7 +41,7 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Facet Search",
-            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n**Notes:**\n\n- Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n- Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
+            description = "Search for facet values within a given facet attribute.",
         ),
     ),
 )]

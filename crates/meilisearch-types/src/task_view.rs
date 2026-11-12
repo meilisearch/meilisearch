@@ -130,9 +130,9 @@ impl TaskView {
 ///
 /// The fields present depend on the task type.
 ///
-/// For example, document addition
-/// tasks will have `receivedDocuments` and `indexedDocuments`, while settings
-/// update tasks will have the applied settings.
+/// For example, document addition tasks will have `receivedDocuments` and
+/// `indexedDocuments`, while settings update tasks will have the applied
+/// settings.
 #[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

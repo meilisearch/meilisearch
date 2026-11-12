@@ -23,9 +23,9 @@ pub struct BatchView {
     pub progress: Option<ProgressView>,
     /// Aggregated details from all tasks in this batch.
     ///
-    /// For example, if the
-    /// batch contains multiple document addition tasks, this will show the
-    /// total number of documents received and indexed across all tasks.
+    /// For example, if the batch contains multiple document addition tasks,
+    /// this will show the total number of documents received and indexed across
+    /// all tasks.
 
     // Note: We use Object here because DetailsView has a complex schema with flattened
     // Settings that utoipa doesn't handle correctly (allOf with additionalProperties: false).

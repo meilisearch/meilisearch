@@ -47,7 +47,7 @@ macro_rules! make_setting_routes {
             tags(
                 (
                     name = "Settings",
-                    description = "Configure search and index behavior. Update all settings at once via PATCH /indexes/{indexUid}/settings, or use a sub-route to get, update, or reset a single setting.",
+                    description = "Configure the search and indexing behavior of an index.",
                 ),
             ),
         )]

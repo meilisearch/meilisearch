@@ -114,7 +114,7 @@ pub struct DocumentParam {
     tags(
         (
             name = "Documents",
-            description = "Documents are objects composed of fields that can store any type of data. Each field contains an attribute and its associated value. Documents are stored inside [indexes](https://www.meilisearch.com/docs/learn/getting_started/indexes).",
+            description = "Add, retrieve, update, and delete the documents stored in an index.",
         ),
     ),
 )]
@@ -128,8 +128,8 @@ pub struct GetDocument {
     /// Comma-separated list of document attributes to include in the
     /// response. Use `*` to retrieve all attributes.
     ///
-    /// By default, all
-    /// attributes listed in the `displayedAttributes` setting are returned.
+    /// By default, all attributes listed in the `displayedAttributes` setting
+    /// are returned.
     ///
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
@@ -492,8 +492,7 @@ pub struct BrowseQueryGet {
     /// Comma-separated list of document attributes to include in the
     /// response. Use `*` to retrieve all attributes.
     ///
-    /// By default, all
-    /// attributes are returned.
+    /// By default, all attributes are returned.
     ///
     /// Example: `title,description,price`.
     #[param(required = false, default, value_type = Option<Vec<String>>)]
@@ -553,8 +552,7 @@ pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets.
     ///
-    /// For example, to get
-    /// documents 151-170, set `offset=150` and `limit=20`.
+    /// For example, to get documents 151-170, set `offset=150` and `limit=20`.
     ///
     /// Defaults to `0`.
     #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
@@ -563,8 +561,7 @@ pub struct BrowseQuery {
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time and memory usage.
     ///
-    /// Defaults to
-    /// `20`.
+    /// Defaults to `20`.
     #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     pub limit: usize,
     /// Array of document attributes to include in the response. If not
@@ -1971,8 +1968,8 @@ pub struct DocumentEditionByFunction {
     pub filter: Option<Value>,
     /// Arbitrary data to pass into the function scope.
     ///
-    /// By default the function only has access
-    /// to the current document being edited via the `doc` variable.
+    /// By default the function only has access to the current document being
+    /// edited via the `doc` variable.
     #[request(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
     /// A [RHAI](https://rhai.rs) function string to apply to each document. The function has

@@ -40,7 +40,7 @@ static MEILISEARCH_OPEN_API: LazyLock<OpenApi> = LazyLock::new(MeilisearchApi::o
     ),
     tags((
         name = "MCP",
-        description = "Model Context Protocol (MCP) is an open protocol that enables seamless integration between LLM applications and external data sources and tools.",
+        description = "Interact with Meilisearch through the Model Context Protocol (MCP).",
     )),
 )]
 pub struct McpApi;
