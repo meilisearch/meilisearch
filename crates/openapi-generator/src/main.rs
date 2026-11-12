@@ -1008,9 +1008,8 @@ fn reflow_markdown(description: &str) -> String {
         let line = raw.trim_end();
         let content = line.trim_start();
 
-        // A blank line ends the block, and counts towards the breaks that
-        // separate it from the next one. Those leading the description have
-        // nothing to separate.
+        // A blank line ends the block and separates it from the next one. Those
+        // leading the description have nothing to separate.
         if content.is_empty() {
             blank_line |= !reflowed.is_empty();
             open = false;
@@ -1021,8 +1020,9 @@ fn reflow_markdown(description: &str) -> String {
             reflowed.push(' ');
             reflowed.push_str(content);
         } else {
-            // Two blocks the author did not separate still need the one break
-            // their structure implies, and no gap is ever wider than one line.
+            // Blocks separated by blank lines get one empty line between them, and
+            // two blocks the author did not separate still get the one break
+            // their structure implies.
             if !reflowed.is_empty() {
                 reflowed.push_str(if blank_line { "\n\n" } else { "\n" });
             }
@@ -1368,7 +1368,7 @@ mod tests {
     /// A blank line separates two paragraphs, and Markdown reads any number of
     /// them as that single separation.
     #[test]
-    fn test_reflow_markdown_opens_at_most_one_empty_line() {
+    fn test_reflow_markdown_separates_paragraphs_with_one_empty_line() {
         for spaced in [
             "First paragraph.\n\nSecond one.",
             "First paragraph.\n\n\nSecond one.",
