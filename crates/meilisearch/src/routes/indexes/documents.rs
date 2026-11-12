@@ -753,10 +753,7 @@ impl TryFrom<Document> for MergedDocument {
 /// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
 /// body to specify filters, sort order, and which fields to return.
 ///
-/// **Notes:**
-///
-/// - Sending an empty payload (`{}`) returns all documents in the index.
-/// - Documents are not returned following the order of their primary keys.
+/// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
