@@ -38,6 +38,7 @@
   ],
   "queryTemplate": {
     "querySetAsset": "queryset.json",
+    "rankingScoreThreshold": 0.8,
     "template": {
       "q": "{{q}}"
     },

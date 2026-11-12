@@ -56,6 +56,7 @@
     "template": {
       "q": "{{q}}",
       "matchingStrategy": "frequency",
+      "rankingScoreThreshold": 0.8,
       "hybrid": {
         "embedder": "voyage",
         "semanticRatio": 0.5
