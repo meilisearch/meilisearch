@@ -13,63 +13,73 @@ use crate::search::{SCORE_DOCUMENTS, VECTOR_DOCUMENTS};
 mod metadata;
 mod proxy;
 
+pub async fn movies_index() -> Index<'static> {
+    let server = Server::new_shared();
+    let movies_index = server.unique_index_with_prefix("movies");
+
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = movies_index.add_documents(documents, None).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (value, _) = movies_index
+        .update_settings(json!({
+            "sortableAttributes": ["title"],
+            "filterableAttributes": ["title", "color"],
+            "rankingRules": [
+                "sort",
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "exactness"
+            ]
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+    movies_index
+}
+
 pub async fn shared_movies_index() -> &'static Index<'static, Shared> {
     static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
     INDEX
         .get_or_init(|| async {
-            let server = Server::new_shared();
-            let movies_index = server.unique_index_with_prefix("movies");
-
-            let documents = DOCUMENTS.clone();
-            let (response, _code) = movies_index.add_documents(documents, None).await;
-            server.wait_task(response.uid()).await.succeeded();
-
-            let (value, _) = movies_index
-                .update_settings(json!({
-                    "sortableAttributes": ["title"],
-                    "filterableAttributes": ["title", "color"],
-                    "rankingRules": [
-                        "sort",
-                        "words",
-                        "typo",
-                        "proximity",
-                        "attribute",
-                        "exactness"
-                    ]
-                }))
-                .await;
-            server.wait_task(value.uid()).await.succeeded();
+            let movies_index = movies_index().await;
             movies_index.to_shared()
         })
         .await
+}
+
+pub async fn batman_index() -> Index<'static> {
+    let server = Server::new_shared();
+    let batman_index = server.unique_index_with_prefix("batman");
+
+    let documents = SCORE_DOCUMENTS.clone();
+    let (response, _code) = batman_index.add_documents(documents, None).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (value, _) = batman_index
+        .update_settings(json!({
+            "sortableAttributes": ["id", "title"],
+            "filterableAttributes": ["title"],
+            "rankingRules": [
+                "sort",
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "exactness"
+            ]
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+    batman_index
 }
 
 pub async fn shared_batman_index() -> &'static Index<'static, Shared> {
     static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
     INDEX
         .get_or_init(|| async {
-            let server = Server::new_shared();
-            let batman_index = server.unique_index_with_prefix("batman");
-
-            let documents = SCORE_DOCUMENTS.clone();
-            let (response, _code) = batman_index.add_documents(documents, None).await;
-            server.wait_task(response.uid()).await.succeeded();
-
-            let (value, _) = batman_index
-                .update_settings(json!({
-                    "sortableAttributes": ["id", "title"],
-                    "filterableAttributes": ["title"],
-                    "rankingRules": [
-                        "sort",
-                        "words",
-                        "typo",
-                        "proximity",
-                        "attribute",
-                        "exactness"
-                    ]
-                }))
-                .await;
-            server.wait_task(value.uid()).await.succeeded();
+            let batman_index = batman_index().await;
             batman_index.to_shared()
         })
         .await
@@ -1933,6 +1943,129 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_sort_different_indexes_plus_words() {
+    let server = Server::new_shared();
+    let movies_index = movies_index().await;
+    let batman_index = batman_index().await;
+
+    let (task, _code) = movies_index.update_settings_ranking_rules(json!(["words", "sort"])).await;
+
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = batman_index.update_settings_ranking_rules(json!(["words", "sort"])).await;
+
+    server.wait_task(task.uid()).await.succeeded();
+
+    // return titles ordered across indexes
+    let (response, code) = server
+        .multi_search(json!({"federation": {}, "queries": [
+          {"indexUid" : movies_index.uid, "q": "the", "sort": ["title:asc"], "showRankingScore": true },
+          {"indexUid" : batman_index.uid, "q": "the", "sort": ["title:asc"], "showRankingScore": true },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "id": "A",
+          "_federation": {
+            "indexUid": "batman-[uuid]",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScore": 1.0
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "id": "B",
+          "_federation": {
+            "indexUid": "batman-[uuid]",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScore": 1.0
+        },
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScore": 1.0
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
+    }
+    "###);
+
+    // return titles ordered across indexes
+    let (response, code) = server
+        .multi_search(json!({"federation": {}, "queries": [
+          {"indexUid" : movies_index.uid, "q": "the", "sort": ["title:desc"], "showRankingScore": true },
+          {"indexUid" : batman_index.uid, "q": "the", "sort": ["title:desc"], "showRankingScore": true },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "How to Train Your Dragon: The Hidden World",
+          "id": "166428",
+          "color": [
+            "green",
+            "red"
+          ],
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScore": 1.0
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "id": "B",
+          "_federation": {
+            "indexUid": "batman-[uuid]",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScore": 1.0
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "id": "A",
+          "_federation": {
+            "indexUid": "batman-[uuid]",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0
+          },
+          "_rankingScore": 1.0
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
       "requestUid": "[uuid]"
     }
     "###);
