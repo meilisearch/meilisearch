@@ -162,6 +162,8 @@ pub struct ChatSearchParams {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
     /// Balance between keyword (0.0) and semantic (1.0) search.
+    ///
+    /// Defaults to `0.5`.
     #[request(default, schema_type = f32, example = json!(0.5))]
     pub semantic_ratio: SemanticRatio,
     /// Name of the embedder from the index embedders setting (`embedder` in JSON). Used to vectorize the query.

@@ -278,8 +278,6 @@ pub struct SearchQuery {
     /// The `embedder` field (required) must match an embedder name in index settings.
     ///
     /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
-    ///
-    /// The `semanticRatio` field defaults to `0.5`. A value of `0.0` uses keyword-only results; `1.0` uses semantic-only results.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
@@ -660,9 +658,9 @@ impl fmt::Debug for SearchQuery {
 #[routes::request(proxied, override_error = DeserrJsonError<InvalidSearchHybridQuery>)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
-    /// Balance between keyword search (0.0) and semantic search (1.0).
+    /// Balance between keyword (0.0) and semantic (1.0) search.
     ///
-    /// Defaults to 0.5.
+    /// Defaults to `0.5`.
     #[request(default, schema_type = f32, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     pub semantic_ratio: SemanticRatio,
     /// Name of the embedder configured in index settings.
