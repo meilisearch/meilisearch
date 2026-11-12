@@ -40,7 +40,7 @@ pub struct ApiKeyApi;
 
 /// Create API key
 ///
-/// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
+/// Create a new API key with the specified name, description, actions, and index scopes.
 #[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
@@ -122,7 +122,7 @@ impl ListApiKeys {
 
 /// List API keys
 ///
-/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
+/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit.
 ///
 /// **Note:** Expired keys are included in the response but deleted keys are not.
 /// Keys are returned in descending order of creation date.
@@ -413,9 +413,8 @@ pub(super) struct KeyView {
     /// delete the key. The UID remains constant even if the key's name or
     /// description changes.
     uid: Uuid,
-    /// The list of actions (permissions) this key is allowed to perform.
-    /// Examples include `documents.add`, `search`, `indexes.create`,
-    /// `settings.update`, etc. Use `*` to grant all permissions.
+    /// The list of actions (permissions) this key is allowed to perform. Use
+    /// `*` to grant all permissions.
     actions: Vec<Action>,
     /// The list of index UIDs this key can access. Use `*` to grant access to
     /// all indexes, including future ones. Patterns are also supported, e.g.,
