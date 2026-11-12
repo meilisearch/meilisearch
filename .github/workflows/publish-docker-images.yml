@@ -109,7 +109,8 @@ jobs:
     needs:
       - build
 
-    # Serialize the stable publications so that a lower version can't overwrite the `latest` and `vX` tags pushed by a higher one
+    # Run one release at a time: otherwise, a run could compute the latest flags
+    # before a higher version is tagged, and push the `latest` and `vX` tags after that higher version's run
     concurrency:
       group: ${{ github.event_name == 'push' && format('docker-manifest-{0}', matrix.edition) || format('docker-manifest-{0}-{1}', matrix.edition, github.run_id) }}
       cancel-in-progress: false

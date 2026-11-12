@@ -18,7 +18,8 @@ jobs:
   update-latest-tag:
     runs-on: ubuntu-latest
     needs: check-version
-    # Serialize the updates so that a lower version can't move back the `latest` tag set by a higher one
+    # Run one release at a time: otherwise, a run could compute the latest flags
+    # before a higher version is tagged, and push the `latest` tag after that higher version's run
     concurrency:
       group: latest-git-tag
       cancel-in-progress: false
