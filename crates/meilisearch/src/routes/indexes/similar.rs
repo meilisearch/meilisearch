@@ -282,8 +282,9 @@ pub struct SimilarQueryGet {
     #[param(required = false, value_type = Vec<String>)]
     attributes_to_retrieve: Option<CS<String>>,
     /// When `true`, includes the vector embeddings for each returned document.
-    /// Useful for debugging or when you need to inspect the vector data. Note
-    /// that this can significantly increase response size.
+    /// Useful for debugging or when you need to inspect the vector data.
+    ///
+    /// Note that this can significantly increase response size.
     ///
     /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRetrieveVectors>)]

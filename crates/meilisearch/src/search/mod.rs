@@ -870,8 +870,6 @@ pub struct SearchQueryWithIndex {
     #[request(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
     /// Hybrid search configuration combining keyword and semantic search.
-    /// Set `semanticRatio` to balance between keyword matching (0.0) and
-    /// semantic similarity (1.0). Requires an embedder to be configured.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Search using a custom query vector

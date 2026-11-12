@@ -55,7 +55,9 @@ pub struct FacetSearchApi;
 )]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FacetSearchQuery {
-    /// Query string to search for matching facet values. If not specified, Meilisearch returns all facet values for the `facetName`, limited to 100 results. Note: only the first word is used for matching.
+    /// Query string to search for matching facet values. If not specified, Meilisearch returns all facet values for the `facetName`, limited to 100 results.
+    ///
+    /// Note: only the first word is used for matching.
     #[request(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
     /// Name of the facet attribute to search. Must be present in the index's `filterableAttributes` list.
@@ -71,9 +73,7 @@ pub struct FacetSearchQuery {
     #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<Value>,
     /// Hybrid search configuration that combines keyword search with semantic
-    /// (vector) search. Set `semanticRatio` to balance between keyword
-    /// matching (0.0) and semantic similarity (1.0). Requires an embedder to
-    /// be configured in the index settings.
+    /// (vector) search.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Filter expression to restrict which documents are considered when computing facet values. Attributes must be in `filterableAttributes` before they can be used in filters.

@@ -138,8 +138,10 @@ pub struct GetDocument {
     fields: OptionStarOrList<String>,
     /// When `true`, includes the vector embeddings in the response for this
     /// document. This is useful when you need to inspect or export vector
-    /// data. Note that this can significantly increase response size if the
-    /// document has multiple embedders configured.
+    /// data.
+    ///
+    /// Note that this can significantly increase response size if the document
+    /// has multiple embedders configured.
     ///
     /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
@@ -574,8 +576,9 @@ pub struct BrowseQuery {
     pub fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
-    /// export vector data. Note that this can significantly increase response
-    /// size.
+    /// export vector data.
+    ///
+    /// Note that this can significantly increase response size.
     ///
     /// Defaults to `false`.
     #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
