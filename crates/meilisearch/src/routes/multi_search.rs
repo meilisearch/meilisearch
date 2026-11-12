@@ -51,9 +51,9 @@ pub struct SearchResults {
 
 /// Perform a multi-search
 ///
-/// Run multiple search queries in a single API request.
+/// Run multiple search queries in a single API request, and optionally combine their results into a unified response.
 ///
-/// Each query can target a different index, so you can search across several indexes at once and get one combined response.
+/// Each query can target a different index. Use this for cross-index search scenarios or to reduce network round-trips.
 ///
 /// **Warning:** If Meilisearch encounters an error processing any query in the request, it immediately
 /// stops and returns an error message for the first error encountered. Partial results are not returned.

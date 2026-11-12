@@ -169,10 +169,7 @@ pub struct MergeFacets {
     pub max_values_per_facet: Option<usize>,
 }
 
-/// Request body for federated multi-search across multiple indexes. This
-/// allows you to execute multiple search queries in a single request and
-/// optionally combine their results into a unified response. Use this for
-/// cross-index search scenarios or to reduce network round-trips.
+/// Request body for federated multi-search across multiple indexes.
 #[routes::request(proxied)]
 #[derive(Debug)]
 pub struct FederatedSearch {
