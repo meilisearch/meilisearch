@@ -7,7 +7,6 @@ use crate::batches::{Batch, BatchId, BatchStats, EmbedderStatsView};
 use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 
-/// Represents a batch of tasks that were processed together.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -21,9 +20,11 @@ pub struct BatchView {
     /// percentage of completion. This is `null` for completed batches.
     #[schema(value_type = Option<ProgressView>)]
     pub progress: Option<ProgressView>,
-    /// Aggregated details from all tasks in this batch. For example, if the
-    /// batch contains multiple document addition tasks, this will show the
-    /// total number of documents received and indexed across all tasks.
+    /// Aggregated details from all tasks in this batch.
+    ///
+    /// For example, if the batch contains multiple document addition tasks,
+    /// this will show the total number of documents received and indexed across
+    /// all tasks.
 
     // Note: We use Object here because DetailsView has a complex schema with flattened
     // Settings that utoipa doesn't handle correctly (allOf with additionalProperties: false).

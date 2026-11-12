@@ -37,7 +37,7 @@ use crate::search_queue::SearchQueue;
     tag = "Multi-search",
     tags((
         name = "Multi-search",
-        description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
+        description = "Perform multiple search queries on one or more indexes in a single HTTP request.",
     )),
 )]
 pub struct MultiSearchApi;
@@ -51,9 +51,9 @@ pub struct SearchResults {
 
 /// Perform a multi-search
 ///
-/// Run multiple search queries in a single API request.
+/// Run multiple search queries in a single API request, and optionally combine their results into a unified response.
 ///
-/// Each query can target a different index, so you can search across several indexes at once and get one combined response.
+/// Each query can target a different index. Use this for cross-index search scenarios or to reduce network round-trips.
 ///
 /// **Warning:** If Meilisearch encounters an error processing any query in the request, it immediately
 /// stops and returns an error message for the first error encountered. Partial results are not returned.

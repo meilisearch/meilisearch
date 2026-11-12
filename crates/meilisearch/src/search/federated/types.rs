@@ -49,7 +49,9 @@ pub struct FederationOptions {
     ///
     /// Values less than 1.0 make hits from this query less likely to appear in final results; values greater than 1.0 make them more likely.
     ///
-    /// Must be a positive number. Default: `1.0`.
+    /// Must be a positive number.
+    ///
+    /// Default: `1.0`.
     #[request(default, error = DeserrJsonError<InvalidMultiSearchWeight>, schema_type = f64)]
     pub weight: Weight,
 
@@ -167,10 +169,7 @@ pub struct MergeFacets {
     pub max_values_per_facet: Option<usize>,
 }
 
-/// Request body for federated multi-search across multiple indexes. This
-/// allows you to execute multiple search queries in a single request and
-/// optionally combine their results into a unified response. Use this for
-/// cross-index search scenarios or to reduce network round-trips.
+/// Request body for federated multi-search across multiple indexes.
 #[routes::request(proxied)]
 #[derive(Debug)]
 pub struct FederatedSearch {
@@ -190,7 +189,6 @@ pub struct FederatedSearch {
     pub federation: Option<Federation>,
 }
 
-/// Response from a federated multi-search query
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

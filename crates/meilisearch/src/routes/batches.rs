@@ -112,7 +112,6 @@ async fn get_batch(
     }
 }
 
-/// Response containing a paginated list of batches
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AllBatches {
     /// Array of batch objects

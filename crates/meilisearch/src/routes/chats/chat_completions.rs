@@ -99,7 +99,7 @@ use crate::search_queue::SearchQueue;
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 200, description = "Start a conversation.", body = async_openai::types::CreateChatCompletionResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "The chat completion is returned.", body = async_openai::types::CreateChatCompletionResponse, content_type = "application/json", example = json!(
             {
                 "id": "chatcmpl-abc123",
                 "choices": [

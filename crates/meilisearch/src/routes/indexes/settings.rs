@@ -47,7 +47,7 @@ macro_rules! make_setting_routes {
             tags(
                 (
                     name = "Settings",
-                    description = "Configure search and index behavior. Update all settings at once via PATCH /indexes/{indexUid}/settings, or use a sub-route to get, update, or reset a single setting.",
+                    description = "Configure the search and indexing behavior of an index.",
                 ),
             ),
         )]
@@ -699,7 +699,7 @@ async fn register_new_settings(
     security(("Bearer" = ["settings.get", "settings.*", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Returns all settings with their current or default values. Same structure as the PATCH request body.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
+        (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
             "displayedAttributes": ["id", "title", "description", "url"],
             "searchableAttributes": ["title", "description"],
             "filterableAttributes": ["release_date", "genre"],
@@ -748,7 +748,9 @@ async fn register_new_settings(
 )]
 /// List settings
 ///
-/// Retrieve all settings of an index in a single request. Returns every configurable option and its current or default value.
+/// Retrieve all settings of an index in a single request.
+///
+/// Returns every configurable option and its current or default value.
 pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,

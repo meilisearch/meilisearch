@@ -162,9 +162,13 @@ pub struct ChatSearchParams {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
     /// Balance between keyword (0.0) and semantic (1.0) search.
+    ///
+    /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// Defaults to `0.5`.
     #[request(default, schema_type = f32, example = json!(0.5))]
     pub semantic_ratio: SemanticRatio,
-    /// Name of the embedder from the index embedders setting (`embedder` in JSON). Used to vectorize the query.
+    /// Name of the embedder used for hybrid search. Must match an embedder configured in the index settings.
     #[request(required, example = json!("default"))]
     pub embedder: String,
 }

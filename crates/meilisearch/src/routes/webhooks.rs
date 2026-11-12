@@ -71,7 +71,6 @@ fn deny_immutable_fields_webhook(
     }
 }
 
-/// Webhook object with metadata and redacted authorization headers.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -93,7 +92,6 @@ impl WebhookWithMetadataRedactedAuthorization {
     }
 }
 
-/// Response containing a list of all registered webhooks.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WebhookResults {
@@ -406,7 +404,7 @@ async fn post_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
-        (status = 200, description = "Webhook updated successfully. Returns the webhook with metadata and redacted authorization headers.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook updated successfully.\n\nReturns the webhook with metadata and redacted authorization headers.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {

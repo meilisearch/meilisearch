@@ -41,7 +41,7 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Facet Search",
-            description = "The `/facet-search` route allows you to search for facet values within a given facet attribute.\n\nFacet search supports prefix search and typo tolerance. Results are sorted lexicographically in ascending order by default. You can configure sort order using the `sortFacetValuesBy` property of the faceting index settings.\n\n**Note:** Facet search does not support multi-word queries. Only the first word of `facetQuery` is considered. For example, searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.\n\n**Note:** Meilisearch does not support facet search on numeric values. Convert numeric facets to strings to make them searchable.\n\n**Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list before facet search can be used.",
+            description = "Search for facet values within a given facet attribute.",
         ),
     ),
 )]
@@ -55,7 +55,9 @@ pub struct FacetSearchApi;
 )]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FacetSearchQuery {
-    /// Query string to search for matching facet values. If not specified, Meilisearch returns all facet values for the `facetName`, limited to 100 results. Note: only the first word is used for matching.
+    /// Query string to search for matching facet values. If not specified, Meilisearch returns all facet values for the `facetName`, limited to 100 results.
+    ///
+    /// Note: only the first word is used for matching.
     #[request(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
     /// Name of the facet attribute to search. Must be present in the index's `filterableAttributes` list.
@@ -71,9 +73,7 @@ pub struct FacetSearchQuery {
     #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<Value>,
     /// Hybrid search configuration that combines keyword search with semantic
-    /// (vector) search. Set `semanticRatio` to balance between keyword
-    /// matching (0.0) and semantic similarity (1.0). Requires an embedder to
-    /// be configured in the index settings.
+    /// (vector) search.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Filter expression to restrict which documents are considered when computing facet values. Attributes must be in `filterableAttributes` before they can be used in filters.
@@ -96,6 +96,8 @@ pub struct FacetSearchQuery {
     /// Return exhaustive facet count instead of an estimate
     #[request(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
     pub exhaustive_facet_count: Option<bool>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -104,12 +106,6 @@ pub struct FacetSearchQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
 }
@@ -255,11 +251,10 @@ impl Aggregate for FacetSearchAggregator {
 /// **Prerequisite:** The `facetName` attribute must be in the index's `filterableAttributes` list.
 /// Facet search will not work without this configuration.
 ///
-/// **Note:** Facet search only considers the first word of `facetQuery`. Searching for `Jane`
-/// returns `Jane Austen`, but searching for `Austen` does not.
+/// **Notes:**
 ///
-/// **Note:** Numeric facet values are not searchable. Convert numbers to strings if you need
-/// to search them as facets.
+/// - Facet search only considers the first word of `facetQuery`. Searching for `Jane` returns `Jane Austen`, but searching for `Austen` does not.
+/// - Numeric facet values are not searchable. Convert numbers to strings if you need to search them as facets.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
