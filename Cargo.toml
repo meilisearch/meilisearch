@@ -27,7 +27,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.56.2"
+version = "1.57.0"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",
