@@ -59,7 +59,7 @@ jobs:
             asset_name: macos-amd64
             extra-args: ""
           - release: macos-aarch64
-            os: macos-14
+            os: macos-15
             binary_path: aarch64-apple-darwin/release/meilisearch
             asset_name: macos-apple-silicon
             extra-args: "--target aarch64-apple-darwin"
