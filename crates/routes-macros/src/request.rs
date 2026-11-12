@@ -413,6 +413,7 @@ impl RequestFieldAttr {
         let mut schema_attrs = Vec::new();
         let mut serde_attrs = Vec::new();
         let mut res_default_or_required = None;
+        let mut no_schema_default = false;
         let mut ty = Some(field_type.clone());
 
         attr.parse_nested_meta(|meta| {
@@ -446,6 +447,9 @@ impl RequestFieldAttr {
                         Some(DefaultOrRequired::Required | DefaultOrRequired::Skip) => return Err(ident.span().error("option conflicting with `required` or `skip`").into()),
                         None => Some(DefaultOrRequired::Default { deserr: None, schema: Some(schema_default) }),
                     };
+                }
+                ident if ident == "no_schema_default" => {
+                    no_schema_default = true;
                 }
                 ident if ident == "required" => {
                     res_default_or_required = Some(DefaultOrRequired::Required);
@@ -522,7 +526,7 @@ impl RequestFieldAttr {
                     .path
                     .span()
                     .error(
-                        "unsupported parameter. Supported parameters are: `default`, `schema_default`, `required`, `skip`, `rename`, `example`, `schema_type`, `inline`, `error`, `missing_field_error`, `try_from`, `nullable`, `skip_serializing_if`, `serde_with`",
+                        "unsupported parameter. Supported parameters are: `default`, `schema_default`, `no_schema_default`, `required`, `skip`, `rename`, `example`, `schema_type`, `inline`, `error`, `missing_field_error`, `try_from`, `nullable`, `skip_serializing_if`, `serde_with`",
                     )
                     .into());
                 }
@@ -533,8 +537,36 @@ impl RequestFieldAttr {
         let default_or_required = res_default_or_required
             .ok_or_else(|| attr.span().error("`required` or `default` is mandatory"))?;
 
+        let lacks_schema_default =
+            matches!(default_or_required, DefaultOrRequired::Default { schema: None, .. });
+        if no_schema_default && !lacks_schema_default {
+            return Err(attr
+                .span()
+                .error("`no_schema_default` requires `default` and conflicts with `schema_default`")
+                .into());
+        }
+        // `Option` and `Setting` fields default to "not set", which has no value to document
+        if lacks_schema_default && !no_schema_default && !is_optional_type(field_type) {
+            return Err(attr
+                .span()
+                .error("missing `schema_default` for a field with a default value")
+                .help("add `schema_default = <value>` so the default appears in the OpenAPI schema, or `no_schema_default` if it cannot be expressed as a fixed value")
+                .into());
+        }
+
         Ok(Self { deserr_attrs, schema_attrs, serde_attrs, default_or_required, ty })
     }
+}
+
+fn is_optional_type(ty: &syn::Type) -> bool {
+    let syn::Type::Path(type_path) = ty else {
+        return false;
+    };
+    type_path
+        .path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "Option" || segment.ident == "Setting")
 }
 
 struct RequestItemAttr {

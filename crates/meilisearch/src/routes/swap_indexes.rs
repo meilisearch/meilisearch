@@ -32,7 +32,7 @@ pub struct SwapIndexesPayload {
     #[request(required, error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
     /// If true, rename the first index to the second instead of swapping
-    #[request(default, error = DeserrJsonError<InvalidSwapRename>)]
+    #[request(default, schema_default = false, error = DeserrJsonError<InvalidSwapRename>)]
     rename: bool,
 }
 

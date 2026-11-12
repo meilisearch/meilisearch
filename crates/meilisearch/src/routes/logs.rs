@@ -123,7 +123,7 @@ pub struct GetLogs {
 
     /// Enable memory profiling (only useful with profile mode, significantly
     /// slows down the engine)
-    #[request(default, error = DeserrJsonError<BadRequest>)]
+    #[request(default, schema_default = false, error = DeserrJsonError<BadRequest>)]
     profile_memory: bool,
 }
 

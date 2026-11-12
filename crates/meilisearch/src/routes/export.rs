@@ -101,7 +101,7 @@ async fn export(
 #[derive(Debug)]
 pub struct Export {
     /// URL of the destination Meilisearch instance
-    #[request(default, error = DeserrJsonError<InvalidExportUrl>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
+    #[request(default, no_schema_default, error = DeserrJsonError<InvalidExportUrl>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
     pub url: String,
     /// API key for authenticating with the destination instance
     #[request(default, error = DeserrJsonError<InvalidExportApiKey>, example = json!("1234abcd"))]
@@ -157,6 +157,6 @@ pub struct ExportIndexSettings {
     #[request(default, error = DeserrJsonError<InvalidExportIndexFilter>, schema_type = Option<String>, example = json!("genres = action"))]
     pub filter: Option<Value>,
     /// Whether to override settings on the destination index
-    #[request(default, error = DeserrJsonError<InvalidExportIndexOverrideSettings>, schema_type = Option<bool>, example = json!(true))]
+    #[request(default, schema_default = false, error = DeserrJsonError<InvalidExportIndexOverrideSettings>, schema_type = Option<bool>, example = json!(true))]
     pub override_settings: bool,
 }

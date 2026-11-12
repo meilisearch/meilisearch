@@ -55,11 +55,11 @@ pub struct ListRulesFilter {
 #[routes::request]
 #[derive(Debug)]
 pub struct ListRules {
-    /// Number of rules to skip. Defaults to 0.
-    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
+    /// Number of rules to skip.
+    #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
     pub offset: usize,
-    /// Maximum number of rules to return. Default to 20.
-    #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDynamicSearchRuleLimit>)]
+    /// Maximum number of rules to return.
+    #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = crate::routes::PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDynamicSearchRuleLimit>)]
     pub limit: usize,
     /// Optional filter to restrict which rules are returned (e.g. by attribute patterns or by properties like if the rule is active or not)
     #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilter>)]
@@ -69,7 +69,7 @@ pub struct ListRules {
     /// - Enabling this boolean adds additional information about the future state of the
     /// dynamic search rules in the response, such as whether there are pending dynamic search rules tasks or not.
     /// - Enabling this boolean requires the Enterprise Edition.
-    #[request(default, error = DeserrJsonError<InvalidDynamicSearchRuleShowTarget>)]
+    #[request(default, schema_default = false, error = DeserrJsonError<InvalidDynamicSearchRuleShowTarget>)]
     pub show_target: bool,
 }
 

@@ -276,10 +276,9 @@ pub struct SimilarQueryGet {
     attributes_to_retrieve: Option<CS<String>>,
     /// When `true`, includes the vector embeddings for each returned document.
     /// Useful for debugging or when you need to inspect the vector data. Note
-    /// that this can significantly increase response size. Defaults to
-    /// `false`.
+    /// that this can significantly increase response size.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRetrieveVectors>)]
-    #[param(required = false, value_type = bool, default)]
+    #[param(required = false, value_type = bool, default = false)]
     retrieve_vectors: Param<bool>,
     /// Filter expression to narrow down which documents can be returned as
     /// similar. Uses the same syntax as search filters. Only documents
@@ -291,21 +290,20 @@ pub struct SimilarQueryGet {
     /// When `true`, includes a global `_rankingScore` field in each document
     /// showing how similar it is to the target document. The score is a value
     /// between 0 and 1, where higher values indicate greater similarity.
-    /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScore>)]
-    #[param(required = false, value_type = bool, default)]
+    #[param(required = false, value_type = bool, default = false)]
     show_ranking_score: Param<bool>,
     /// When `true`, includes a detailed `_rankingScoreDetails` object in each
     /// document breaking down how the similarity score was calculated. Useful
     /// for debugging and understanding why certain documents are considered
-    /// more similar. Defaults to `false`.
+    /// more similar.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScoreDetails>)]
-    #[param(required = false, value_type = bool, default)]
+    #[param(required = false, value_type = bool, default = false)]
     show_ranking_score_details: Param<bool>,
     /// When `true`, includes a `_performanceDetails` object showing the
     /// performance details of the search.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowPerformanceDetails>)]
-    #[param(required = false, value_type = bool, default)]
+    #[param(required = false, value_type = bool, default = false)]
     show_performance_details: Param<bool>,
     /// Minimum ranking score threshold (between 0.0 and 1.0) that documents
     /// must meet to be included in results. Documents with a similarity score
