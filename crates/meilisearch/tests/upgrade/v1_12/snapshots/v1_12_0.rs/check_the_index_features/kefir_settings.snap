@@ -52,6 +52,9 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
     ],
     "disableOnNumbers": false
   },
+  "wordPosition": {
+    "enabled": true
+  },
   "faceting": {
     "maxValuesPerFacet": 99,
     "sortFacetValuesBy": {

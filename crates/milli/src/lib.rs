@@ -34,6 +34,7 @@ pub mod sharding;
 mod thread_pool_no_abort;
 pub mod update;
 pub mod vector;
+pub mod word_position_enabled;
 
 #[cfg(test)]
 #[macro_use]

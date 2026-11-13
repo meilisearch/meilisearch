@@ -14,6 +14,7 @@ use milli::proximity::ProximityPrecision;
 pub use milli::update::ChatSettings;
 use milli::update::Setting;
 use milli::vector::db::IndexEmbeddingConfig;
+use milli::word_position_enabled::WordPosition;
 use milli::{
     Criterion, CriterionError, FilterableAttributesRule, ForeignKey, Index,
     DEFAULT_VALUES_PER_FACET,
@@ -135,6 +136,20 @@ pub struct TypoSettings {
         skip_serializing_if = "Setting::is_not_set",
     )]
     pub disable_on_numbers: Setting<bool>,
+}
+
+/// Word position: how position of words in fields are handled.
+#[routes::request(setting, no_error, where_predicate = __Deserr_E: deserr::MergeWithError<DeserrJsonError<InvalidSettingsWordPosition>>)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WordPositionSettings {
+    /// When true, the position of words in documents fields is taken into account.
+    #[request(
+        schema_type = Option<bool>,
+        schema_default = true,
+        example = json!(true),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
+    pub enabled: Setting<bool>,
 }
 
 /// Faceting: maximum number of facet values and how they are sorted.
@@ -352,6 +367,16 @@ pub struct Settings<T> {
     )]
     pub typo_tolerance: Setting<TypoSettings>,
 
+    /// [Word position](https://www.meilisearch.com/docs/learn/relevancy/word_pisition_settings): enabled/disabled.
+    #[request(
+        error = DeserrJsonError<InvalidSettingsWordPosition>,
+        schema_type = Option<WordPositionSettings>,
+        schema_default = json!({ "enabled": true }),
+        example = json!({ "enabled": false }),
+        skip_serializing_if = "Setting::is_not_set",
+    )]
+    pub word_position: Setting<WordPositionSettings>,
+
     /// Related to [faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): max facet values per facet and how facet values are sorted.
     #[request(
         error = DeserrJsonError<InvalidSettingsFaceting>,
@@ -495,6 +520,7 @@ impl Settings<Checked> {
             distinct_attribute: Setting::Reset,
             proximity_precision: Setting::Reset,
             typo_tolerance: Setting::Reset,
+            word_position: Setting::Reset,
             faceting: Setting::Reset,
             pagination: Setting::Reset,
             embedders: Setting::Reset,
@@ -523,6 +549,7 @@ impl Settings<Checked> {
             distinct_attribute,
             proximity_precision,
             typo_tolerance,
+            word_position,
             faceting,
             pagination,
             embedders,
@@ -549,6 +576,7 @@ impl Settings<Checked> {
             distinct_attribute,
             proximity_precision,
             typo_tolerance,
+            word_position,
             faceting,
             pagination,
             embedders,
@@ -601,6 +629,7 @@ impl Settings<Unchecked> {
             distinct_attribute: self.distinct_attribute,
             proximity_precision: self.proximity_precision,
             typo_tolerance: self.typo_tolerance,
+            word_position: self.word_position,
             faceting: self.faceting,
             pagination: self.pagination,
             embedders: self.embedders,
@@ -686,6 +715,7 @@ impl Settings<Unchecked> {
                 .or(self.distinct_attribute.clone()),
             proximity_precision: other.proximity_precision.or(self.proximity_precision),
             typo_tolerance: other.typo_tolerance.clone().or(self.typo_tolerance.clone()),
+            word_position: other.word_position.clone().or(self.word_position.clone()),
             faceting: other.faceting.clone().or(self.faceting.clone()),
             pagination: other.pagination.clone().or(self.pagination.clone()),
             search_cutoff_ms: other.search_cutoff_ms.or(self.search_cutoff_ms),
@@ -741,6 +771,7 @@ pub fn apply_settings_to_builder(
         distinct_attribute,
         proximity_precision,
         typo_tolerance,
+        word_position,
         faceting,
         pagination,
         embedders,
@@ -907,6 +938,19 @@ pub fn apply_settings_to_builder(
         Setting::NotSet => (),
     }
 
+    match word_position {
+        Setting::Set(ref value) => match value.enabled {
+            Setting::Set(val) => builder.set_word_position(val),
+            Setting::Reset => builder.reset_word_position(),
+            Setting::NotSet => (),
+        },
+        Setting::Reset => {
+            // all word position settings need to be reset here.
+            builder.reset_word_position();
+        }
+        Setting::NotSet => (),
+    }
+
     match faceting {
         Setting::Set(FacetingSettings { max_values_per_facet, sort_facet_values_by }) => {
             match max_values_per_facet {
@@ -1038,6 +1082,9 @@ pub fn settings(
         disable_on_numbers: Setting::Set(disable_on_numbers),
     };
 
+    let WordPosition { enabled: word_position_enabled } = index.word_position(rtxn)?;
+    let word_position = WordPositionSettings { enabled: Setting::Set(word_position_enabled) };
+
     let faceting = FacetingSettings {
         max_values_per_facet: Setting::Set(
             index
@@ -1105,6 +1152,7 @@ pub fn settings(
         proximity_precision: Setting::Set(proximity_precision.unwrap_or_default()),
         synonyms: Setting::Set(synonyms),
         typo_tolerance: Setting::Set(typo_tolerance),
+        word_position: Setting::Set(word_position),
         faceting: Setting::Set(faceting),
         pagination: Setting::Set(pagination),
         embedders,
@@ -1360,6 +1408,7 @@ pub(crate) mod test {
             distinct_attribute: Setting::NotSet,
             proximity_precision: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
+            word_position: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,
@@ -1393,6 +1442,7 @@ pub(crate) mod test {
             distinct_attribute: Setting::NotSet,
             proximity_precision: Setting::NotSet,
             typo_tolerance: Setting::NotSet,
+            word_position: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,

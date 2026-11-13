@@ -46,6 +46,7 @@ use crate::vector::settings::{
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
+use crate::word_position_enabled::WordPosition;
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
     LocalizedAttributesRule, MustStopProcessing, Result, MAX_LMDB_KEY_LENGTH,
@@ -221,6 +222,7 @@ pub struct Settings<'a, 't, 'i> {
     sort_facet_values_by: Setting<OrderByMap>,
     pagination_max_total_hits: Setting<usize>,
     proximity_precision: Setting<ProximityPrecision>,
+    word_position_enabled: Setting<bool>,
     embedder_settings: Setting<BTreeMap<String, Setting<EmbeddingSettings>>>,
     search_cutoff: Setting<u64>,
     localized_attributes_rules: Setting<Vec<LocalizedAttributesRule>>,
@@ -261,6 +263,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
             proximity_precision: Setting::NotSet,
+            word_position_enabled: Setting::NotSet,
             embedder_settings: Setting::NotSet,
             search_cutoff: Setting::NotSet,
             localized_attributes_rules: Setting::NotSet,
@@ -463,6 +466,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_proximity_precision(&mut self) {
         self.proximity_precision = Setting::Reset;
+    }
+
+    pub fn set_word_position(&mut self, value: bool) {
+        self.word_position_enabled = Setting::Set(value);
+    }
+
+    pub fn reset_word_position(&mut self) {
+        self.word_position_enabled = Setting::Reset;
     }
 
     pub fn set_embedder_settings(&mut self, value: BTreeMap<String, Setting<EmbeddingSettings>>) {
@@ -1068,6 +1079,26 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(changed)
     }
 
+    fn update_word_position(&mut self) -> Result<bool> {
+        let mut word_position = self.index.word_position(self.wtxn)?;
+        let changed = match self.word_position_enabled {
+            Setting::Set(enabled) => {
+                let changed = word_position.enabled != enabled;
+                word_position.enabled = enabled;
+                changed
+            }
+            Setting::Reset => {
+                let changed = word_position.enabled != WordPosition::default().enabled;
+                word_position.enabled = WordPosition::default().enabled;
+                changed
+            }
+            Setting::NotSet => false,
+        };
+
+        self.index.put_word_position(self.wtxn, &word_position)?;
+        Ok(changed)
+    }
+
     fn update_prefix_search(&mut self) -> Result<bool> {
         let changed = match self.prefix_search {
             Setting::Set(new) => {
@@ -1527,6 +1558,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_facet_search()?;
         self.update_localized_attributes_rules()?;
         self.update_disabled_typos_terms()?;
+        if self.update_word_position()? {
+            return Err(UserError::UnsupportedSettingForLegacyIndexer {
+                setting_name: "wordPosition",
+            }
+            .into());
+        }
         self.update_chat_config()?;
 
         let embedding_config_updates = self.update_embedding_configs()?;
@@ -1614,6 +1651,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_prefix_search()?;
         self.update_exact_words()?;
         self.update_disabled_typos_terms()?;
+        self.update_word_position()?;
         self.update_stop_words()?;
         self.update_non_separator_tokens()?;
         self.update_separator_tokens()?;
@@ -1883,6 +1921,7 @@ impl InnerIndexSettingsDiff {
         self.cache_reindex_searchable_without_user_defined
             || self.cache_exact_attributes
             || self.cache_user_defined_searchables
+            || self.old.word_position != self.new.word_position
     }
 
     pub fn reindex_proximities(&self) -> bool {
@@ -2025,6 +2064,7 @@ pub struct InnerIndexSettings {
     pub exact_attributes: HashSet<FieldId>,
     pub disabled_typos_terms: DisabledTyposTerms,
     pub proximity_precision: ProximityPrecision,
+    pub word_position: WordPosition,
     pub runtime_embedders: RuntimeEmbedders,
     pub embedder_category_id: HashMap<String, u8>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
@@ -2102,6 +2142,8 @@ impl InnerIndexSettings {
         let builder = MetadataBuilder::from_index(index, rtxn)?;
         let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
         let disabled_typos_terms = index.disabled_typos_terms(rtxn)?;
+        let word_position = index.word_position(rtxn)?;
+
         Ok(Self {
             stop_words,
             allowed_separators,
@@ -2115,6 +2157,7 @@ impl InnerIndexSettings {
             sortable_fields,
             exact_attributes,
             proximity_precision,
+            word_position,
             runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
@@ -2626,6 +2669,9 @@ pub trait SettingsDelta {
     fn old_proximity_precision(&self) -> &ProximityPrecision;
     fn new_proximity_precision(&self) -> &ProximityPrecision;
 
+    fn old_word_position(&self) -> &WordPosition;
+    fn new_word_position(&self) -> &WordPosition;
+
     fn old_prefix_search(&self) -> &PrefixSearch;
     fn new_prefix_search(&self) -> &PrefixSearch;
 
@@ -2688,6 +2734,13 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_proximity_precision(&self) -> &ProximityPrecision {
         &self.new.proximity_precision
+    }
+
+    fn old_word_position(&self) -> &WordPosition {
+        &self.old.word_position
+    }
+    fn new_word_position(&self) -> &WordPosition {
+        &self.new.word_position
     }
 
     fn old_prefix_search(&self) -> &PrefixSearch {
