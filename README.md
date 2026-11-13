@@ -198,7 +198,7 @@ The Meilisearch engine is available in two editions. Both can be self-hosted. [M
 
 ### 🧪 Community Edition (CE)
 
-- Fully open source under the [MIT license](./LICENSE)
+- Fully open source under the [MIT license](./LICENSE) and the [OpenLDAP License](./LICENSE-OPENLDAP)
 - Core search engine with fast and relevant full-text, semantic or hybrid search
 - Free to use for anyone, including commercial usage
 
@@ -254,3 +254,7 @@ Meilisearch releases and their associated binaries are available on the project'
 The binaries are versioned following [SemVer conventions](https://semver.org/). To know more, read our [versioning policy](./documentation/versioning-policy.md).
 
 Differently from the binaries, crates in this repository are not currently available on [crates.io](https://crates.io/) and do not follow [SemVer conventions](https://semver.org).
+
+## ⚖️ Licensing
+
+Meilisearch is licensed under MIT and BUSL. By default, Meilisearch statically links with LMDB, which is licensed under [the OpenLDAP license](./LICENSE-OPENLDAP). By using Meilisearch, you need to make sure you comply with the terms of both the MIT or BUSL and the OpenLDAP license.
