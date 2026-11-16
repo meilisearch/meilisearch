@@ -11,7 +11,7 @@ use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
 use crate::common::process::{self, delete_temporary_db, kill_meili};
-use crate::common::workload::Workload;
+use crate::common::workload::{EngineType, Workload};
 use crate::test::TestArgs;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -90,6 +90,7 @@ impl TestWorkload {
         let mut commands_or_instance = Vec::new();
         let mut current_commands = Vec::new();
         let mut all_releases = Vec::new();
+        let engine = EngineType::Meilisearch;
 
         if let Some(release) = self.binary.as_release() {
             all_releases.push(release);
@@ -121,6 +122,7 @@ impl TestWorkload {
         let db_path = delete_temporary_db(args.common.reuse_db.as_deref()).await?;
         let mut process = process::start_meili(
             meili_client,
+            engine,
             Some("masterKey"),
             &self.binary,
             &args.common.asset_folder,
@@ -138,6 +140,7 @@ impl TestWorkload {
                     let cloned: Vec<_> = commands.iter().map(|c| (*c).clone()).collect();
                     let responses = run_commands(
                         meili_client,
+                        engine,
                         &cloned,
                         first_command_index,
                         &assets,
@@ -169,6 +172,7 @@ impl TestWorkload {
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     process = process::start_meili(
                         meili_client,
+                        engine,
                         Some("masterKey"),
                         &binary,
                         &args.common.asset_folder,

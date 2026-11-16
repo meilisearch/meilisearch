@@ -10,6 +10,7 @@ use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use milli::vector::json_template::JsonTemplate;
 use plotters::style::full_palette::AMBER_800;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use tracing::warn;
 
 use crate::common::args::fetch_env_variables;
@@ -18,14 +19,18 @@ use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
 use crate::common::process::{self, delete_temporary_db, start_meili};
+use crate::common::workload::EngineType;
 use crate::relevancy::RelevancyArgs;
 
 /// A relevancy workload.
 /// Not to be confused with [a bench workload](crate::bench::workload::Workload).
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelevancyWorkload {
     pub name: String,
+    #[serde(default)]
+    pub engine: EngineType,
+    pub binary: Binary,
     pub extra_cli_args: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assets: BTreeMap<String, Asset>,
@@ -34,16 +39,56 @@ pub struct RelevancyWorkload {
     pub query_template: QueryTemplate,
 }
 
+impl EngineType {
+    pub fn search_route(self, index_name: &str) -> String {
+        match self {
+            EngineType::Meilisearch => format!("/indexes/{index_name}/search"),
+            EngineType::ElasticSearch => format!("/{index_name}/_search"),
+        }
+    }
+
+    fn setup_search_offset_and_limit(self, query: &mut Value, offset: usize, limit: usize) {
+        match self {
+            EngineType::Meilisearch => {
+                query["offset"] = offset.into();
+                query["limit"] = limit.into();
+            }
+            EngineType::ElasticSearch => {
+                query["from"] = offset.into();
+                query["size"] = limit.into();
+            }
+        }
+    }
+
+    fn fetch_hits(self, response: &Map<String, Value>) -> anyhow::Result<&Vec<Value>> {
+        match self {
+            EngineType::Meilisearch => Ok(response
+                .get("hits")
+                .context("`hits` must be present")?
+                .as_array()
+                .context("`hits` must be an array")?),
+            EngineType::ElasticSearch => Ok(response
+                .get("hits")
+                .context("`hits` must be present")?
+                .get("hits")
+                .context("`hits.hits` must be present")?
+                .as_array()
+                .context("`hits` must be an array")?),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryTemplate {
     query_set_asset: String,
-    template: serde_json::Value,
+    template: Value,
     primary_key: String,
 }
 
 pub async fn execute(
     assets_client: &Client,
+    engine: EngineType,
     meili_client: &Arc<Client>,
     master_key: Option<&str>,
     workload: RelevancyWorkload,
@@ -53,7 +98,7 @@ pub async fn execute(
     assets::fetch_assets(assets_client, &workload.assets, &args.common.asset_folder).await?;
     tracing::info!(workload = workload.name, "Successful workload");
 
-    execute_run(meili_client, master_key, &workload, args, binary_path).await?;
+    execute_run(meili_client, engine, master_key, &workload, args, binary_path).await?;
     tracing::info!(workload = workload.name, "Workload done and reports written");
 
     Ok(())
@@ -63,6 +108,7 @@ pub async fn execute(
 #[tracing::instrument(skip(meili_client, workload, master_key, args), fields(workload = %workload.name))]
 async fn execute_run(
     meili_client: &Arc<Client>,
+    engine: EngineType,
     master_key: Option<&str>,
     workload: &RelevancyWorkload,
     args: &RelevancyArgs,
@@ -77,7 +123,7 @@ async fn execute_run(
     let binary = match binary_path {
         Some(binary_path) => Binary {
             description: Some("initial binary for the workload".into()),
-            source: crate::common::instance::BinarySource::Path(binary_path.to_owned()),
+            source: crate::common::instance::BinarySource::Path { path: binary_path.to_owned() },
             extra_cli_args: workload.extra_cli_args.clone(),
         },
         None => Binary {
@@ -94,10 +140,12 @@ async fn execute_run(
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
 
     let meilisearch =
-        start_meili(meili_client, master_key, &binary, &args.common.asset_folder, &db_path).await?;
+        start_meili(meili_client, engine, master_key, &binary, &args.common.asset_folder, &db_path)
+            .await?;
 
     run_commands(
         meili_client,
+        engine,
         &workload.precommands,
         0,
         &assets,
@@ -110,6 +158,7 @@ async fn execute_run(
 
     run_query_template(
         meili_client,
+        workload.engine,
         &workload.query_template,
         &env_registered,
         &assets,
@@ -126,6 +175,7 @@ async fn execute_run(
 
 async fn run_query_template(
     meili_client: &Arc<Client>,
+    engine: EngineType,
     query_template: &QueryTemplate,
     env_registered: &Arc<HashMap<String, String>>,
     assets: &Arc<BTreeMap<String, Asset>>,
@@ -160,6 +210,7 @@ async fn run_query_template(
 
     async fn send_query(
         meili_client: Arc<Client>,
+        engine: EngineType,
         query_entry: QueryEntry,
         template: Arc<JsonTemplate>,
         primary_key: Arc<String>,
@@ -167,12 +218,11 @@ async fn run_query_template(
         assets: Arc<BTreeMap<String, Asset>>,
         asset_folder: &'static str,
     ) -> anyhow::Result<RelevancyResult> {
-        let mut query: serde_json::Value = template
+        let mut query: Value = template
             .render_search(Some(query_entry.query.as_str()), None)
             .map_err(|err| anyhow::anyhow!(err.rendering_error("template")))?;
 
-        query["offset"] = 0.into();
-        query["limit"] = 50.into();
+        engine.setup_search_offset_and_limit(&mut query, 0, 50);
 
         let ideal_hits = query_entry.ideal_hits();
 
@@ -194,7 +244,7 @@ async fn run_query_template(
 
         let command = Command {
             description: query_entry.description,
-            route: "/indexes/relevancy/search".to_string(),
+            route: engine.search_route("relevancy"),
             method: crate::common::client::Method::Post,
             body: crate::common::command::Body::Inline { inline: query },
             expected_status: Some(200),
@@ -203,8 +253,10 @@ async fn run_query_template(
             api_key_variable: None,
             synchronous: crate::common::command::SyncMode::WaitForResponse,
         };
+
         let Some((response, _code)) = crate::common::command::run(
             &meili_client,
+            engine,
             &command,
             0,
             &assets,
@@ -218,14 +270,8 @@ async fn run_query_template(
             anyhow::bail!("missing response for query `{}`", query_entry.id);
         };
 
-        let hits = response
-            .as_object()
-            .context("response must be an object")?
-            .get("hits")
-            .context("`hits` must be present")?
-            .as_array()
-            .context("`hits` must be an array")?;
-
+        let response = response.as_object().context("response must be an object")?;
+        let hits = engine.fetch_hits(response)?;
         let hits: anyhow::Result<Vec<_>> = hits
             .iter()
             .map(|hit| {
@@ -313,6 +359,7 @@ async fn run_query_template(
             move |query_entry| {
                 tokio::spawn(send_query(
                     meili_client.clone(),
+                    engine,
                     query_entry,
                     template.clone(),
                     primary_key.clone(),

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
 use std::io::Read as _;
@@ -11,6 +12,7 @@ use similar_asserts::SimpleDiff;
 
 use crate::common::assets::{fetch_asset, Asset};
 use crate::common::client::{Client, Method};
+use crate::common::workload::EngineType;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -31,6 +33,42 @@ pub struct Command {
     pub api_key_variable: Option<String>,
     #[serde(default)]
     pub synchronous: SyncMode,
+}
+
+impl EngineType {
+    fn health_route(self) -> String {
+        match self {
+            EngineType::Meilisearch => "/health".into(),
+            EngineType::ElasticSearch => "_cluster/health".into(),
+        }
+    }
+
+    async fn sync_for(self, sync: SyncMode, client: &Client) -> anyhow::Result<()> {
+        match self {
+            EngineType::Meilisearch => match sync {
+                SyncMode::DontWait => Ok(()),
+                SyncMode::WaitForResponse => Ok(()),
+                SyncMode::WaitForTask => wait_for_tasks(client).await,
+            },
+            // For elasticSearch we directly set the wait status in a query parameter.
+            EngineType::ElasticSearch => Ok(()),
+        }
+    }
+
+    fn sync_for_route<'r>(self, sync: SyncMode, route: &'r str) -> Cow<'r, str> {
+        match self {
+            EngineType::Meilisearch => route.into(),
+            EngineType::ElasticSearch => match sync {
+                SyncMode::WaitForResponse => route.into(),
+                SyncMode::WaitForTask => {
+                    let mut new_route = route.to_owned();
+                    new_route.push_str("?refresh=wait_for");
+                    Cow::Owned(new_route)
+                }
+                SyncMode::DontWait => route.into(),
+            },
+        }
+    }
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
@@ -104,6 +142,7 @@ pub enum SyncMode {
 
 async fn run_batch(
     client: &Arc<Client>,
+    engine: EngineType,
     batch: &[Command],
     first_command_index: usize,
     assets: &Arc<BTreeMap<String, Asset>>,
@@ -126,6 +165,7 @@ async fn run_batch(
         tasks.push(tokio::spawn(async move {
             run(
                 &client2,
+                engine,
                 &command,
                 first_command_index + index,
                 &assets2,
@@ -157,11 +197,7 @@ async fn run_batch(
         }
     }
 
-    match sync {
-        SyncMode::DontWait => {}
-        SyncMode::WaitForResponse => {}
-        SyncMode::WaitForTask => wait_for_tasks(client).await?,
-    }
+    engine.sync_for(sync, client).await?;
 
     Ok(outputs)
 }
@@ -248,6 +284,7 @@ fn json_eq_ignore(reference: &Value, value: &Value) -> bool {
 #[tracing::instrument(skip(client, command, assets, registered, asset_folder), fields(command = %command))]
 pub async fn run(
     client: &Client,
+    engine: EngineType,
     command: &Command,
     command_index: usize,
     assets: &BTreeMap<String, Asset>,
@@ -277,6 +314,8 @@ pub async fn run(
         }
     }
 
+    let route = engine.sync_for_route(command.synchronous, route);
+
     // memtake the body here to leave an empty body in its place, so that command is not partially moved-out
     let body = command
         .body
@@ -284,7 +323,7 @@ pub async fn run(
         .get(assets, &registered, env_registered, asset_folder)
         .with_context(|| format!("while getting body for command {command}"))?;
 
-    let mut request = client.request(command.method.into(), route);
+    let mut request = client.request(command.method.into(), &route);
 
     // Replace the api key
     if let Some(var_name) = &command.api_key_variable {
@@ -378,6 +417,7 @@ pub async fn run(
 
 pub async fn run_commands(
     client: &Arc<Client>,
+    engine: EngineType,
     commands: &[Command],
     mut first_command_index: usize,
     assets: &Arc<BTreeMap<String, Asset>>,
@@ -392,6 +432,7 @@ pub async fn run_commands(
     {
         let mut new_responses = run_batch(
             client,
+            engine,
             batch,
             first_command_index,
             assets,
@@ -409,10 +450,10 @@ pub async fn run_commands(
     Ok(responses)
 }
 
-pub fn health_command() -> Command {
+pub fn health_command(engine: EngineType) -> Command {
     Command {
         description: Some("Waiting for the Meilisearch server to be up.".into()),
-        route: "/health".into(),
+        route: engine.health_route(),
         method: crate::common::client::Method::Get,
         body: Default::default(),
         register: HashMap::new(),

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{bail, Context};
 use clap::Parser;
@@ -39,12 +39,6 @@ pub struct RelevancyArgs {
     /// Reason for the benchmark invocation
     #[arg(short, long)]
     reason: Option<String>,
-
-    /// The path to the binary to run.
-    ///
-    /// If unspecified, runs `cargo run` after building Meilisearch with `cargo build`.
-    #[arg(long)]
-    binary_path: Option<PathBuf>,
 }
 
 pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
@@ -61,14 +55,7 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
         Some(std::time::Duration::from_secs(3600)), // 1h
     )?;
 
-    let meili_client = Arc::new(Client::new(
-        Some("http://127.0.0.1:7700".into()),
-        args.master_key.as_deref(),
-        Some(std::time::Duration::from_secs(args.common.tasks_queue_timeout_secs)),
-    )?);
-
     // enter runtime
-
     rt.block_on(async {
 
         tracing::info!(workload_count = args.common.workload_file.len(), "handling workload files");
@@ -88,14 +75,24 @@ pub fn run(args: RelevancyArgs) -> anyhow::Result<()> {
                     bail!("workload file {} is not a relevancy workload", workload_file.display());
                 };
 
+                let base_url = workload.engine.base_url();
+                let meili_client = Arc::new(Client::new(
+                    Some(base_url),
+                    args.master_key.as_deref(),
+                    Some(std::time::Duration::from_secs(args.common.tasks_queue_timeout_secs)),
+                )?);
+
+                let binary_path = workload.binary.binary_path(&args.common.asset_folder)?;
+                // TODO fetch a binary here from the workload.
 
                 workload::execute(
                     &assets_client,
+                    workload.engine,
                     &meili_client,
                     args.master_key.as_deref(),
                     workload,
                     &args,
-                    args.binary_path.as_deref(),
+                    binary_path.as_deref(),
                 )
                 .await?;
 

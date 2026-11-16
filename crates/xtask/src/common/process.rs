@@ -9,6 +9,7 @@ use tokio::time;
 use crate::common::client::Client;
 use crate::common::command::{health_command, run as run_command};
 use crate::common::instance::{Binary, BinarySource, Edition};
+use crate::common::workload::EngineType;
 
 #[tracing::instrument]
 pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
@@ -72,12 +73,13 @@ async fn build(edition: Edition) -> anyhow::Result<()> {
 #[tracing::instrument(skip(client, master_key))]
 pub async fn start_meili(
     client: &Client,
+    engine: EngineType,
     master_key: Option<&str>,
     binary: &Binary,
     asset_folder: &str,
     db_path: &str,
 ) -> anyhow::Result<tokio::process::Child> {
-    let mut command = match &binary.source {
+    let mut command = match dbg!(&binary.source) {
         BinarySource::Build { edition } => {
             build(*edition).await?;
             let mut command = tokio::process::Command::new("cargo");
@@ -99,8 +101,10 @@ pub async fn start_meili(
             let binary_path = release.binary_path(asset_folder)?;
             tokio::process::Command::new(binary_path)
         }
-        BinarySource::Path(binary_path) => tokio::process::Command::new(binary_path),
+        BinarySource::Path { path: binary_path } => tokio::process::Command::new(binary_path),
     };
+
+    // let command = engine.setup_command();
 
     command.arg("--db-path").arg(db_path);
     if let Some(master_key) = master_key {
@@ -129,21 +133,23 @@ pub async fn start_meili(
         }
     }
 
-    let mut meilisearch = command.spawn().context("Error starting Meilisearch")?;
+    let mut meilisearch = dbg!(command).spawn().context("Error starting Meilisearch")?;
 
-    wait_for_health(client, &mut meilisearch).await?;
+    wait_for_health(client, engine, &mut meilisearch).await?;
 
     Ok(meilisearch)
 }
 
 async fn wait_for_health(
     client: &Client,
+    engine: EngineType,
     meilisearch: &mut tokio::process::Child,
 ) -> anyhow::Result<()> {
-    for i in 0..100 {
+    for i in 0..300 {
         let res = run_command(
             client,
-            &health_command(),
+            engine,
+            &health_command(engine),
             0,
             &BTreeMap::new(),
             HashMap::new(),

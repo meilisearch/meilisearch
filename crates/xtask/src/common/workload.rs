@@ -12,3 +12,20 @@ pub enum Workload {
     Test(TestWorkload),
     Relevancy(RelevancyWorkload),
 }
+
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum EngineType {
+    #[default]
+    Meilisearch,
+    ElasticSearch,
+}
+
+impl EngineType {
+    pub fn base_url(self) -> String {
+        match self {
+            EngineType::Meilisearch => "http://127.0.0.1:7700".into(),
+            EngineType::ElasticSearch => "http://127.0.0.1:9200".into(),
+        }
+    }
+}

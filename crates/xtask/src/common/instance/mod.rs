@@ -67,7 +67,7 @@ pub enum BinarySource {
     /// Get a release from GitHub
     Release(Release),
     /// Run the binary from the specified local path.
-    Path(PathBuf),
+    Path { path: PathBuf },
 }
 
 impl Display for BinarySource {
@@ -80,7 +80,7 @@ impl Display for BinarySource {
                 f.write_str("git with enterprise edition")
             }
             BinarySource::Release(release) => write!(f, "{release}"),
-            BinarySource::Path(path) => write!(f, "binary at `{}`", path.display()),
+            BinarySource::Path { path } => write!(f, "binary at `{}`", path.display()),
         }
     }
 }
@@ -96,7 +96,7 @@ impl BinarySource {
         Ok(match self {
             Self::Release(release) => Some(release.binary_path(asset_folder)?),
             Self::Build { .. } => None,
-            Self::Path(path) => Some(path.clone()),
+            Self::Path { path } => Some(path.clone()),
         })
     }
 }

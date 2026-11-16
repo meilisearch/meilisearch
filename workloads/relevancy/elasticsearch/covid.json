@@ -1,0 +1,72 @@
+{
+  "name": "elasticsearch-covid.json",
+  "type": "relevancy",
+  "engine": "elasticSearch",
+  "extraCliArgs": [],
+  "binary": {
+    "source": "path",
+    "path": "/Users/clementrenault/Downloads/elasticsearch-9.5.6/bin/elasticsearch"
+  },
+  "assets": {
+    "queryset.json": {
+      "local_location": "workloads/assets/trec-covid/queryset.json",
+      "remote_location": null
+    },
+    "corpus.jsonl": {
+      "local_location": "workloads/assets/trec-covid/corpus.jsonl",
+      "remote_location": null,
+      "format": "NdJson"
+    }
+  },
+  "precommands": [
+    {
+      "route": "relevancy",
+      "method": "PUT",
+      "body": {
+        "inline": {
+          "settings": {
+            "index": {
+              "number_of_shards": 1,
+              "number_of_replicas": 0
+            }
+          },
+          "mappings": {
+            "properties": {
+              "title": {
+                "type": "text",
+                "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
+              },
+              "text": {
+                "type": "text"
+              }
+            }
+          }
+        }
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "relevancy/_bulk",
+      "method": "POST",
+      "body": {
+        "asset": "corpus.jsonl"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ],
+  "queryTemplate": {
+    "querySetAsset": "queryset.json",
+    "rankingScoreThreshold": 0.8,
+    "template": {
+      "query": {
+        "multi_match": {
+          "query": "{{q}}",
+          "fields": ["title^2", "text"],
+          "type": "best_fields",
+          "operator": "and"
+        }
+      }
+    },
+    "primaryKey": "_id"
+  }
+}

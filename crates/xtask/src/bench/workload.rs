@@ -19,6 +19,7 @@ use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
 use crate::common::process::{self, delete_temporary_db, start_meili};
+use crate::common::workload::EngineType;
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
@@ -49,9 +50,11 @@ async fn run_workload_commands(
     let assets = Arc::new(workload.assets.clone());
     let asset_folder = args.common.asset_folder.clone().leak();
     let env_registered = Arc::new(fetch_env_variables(args.common.env_variables.clone())?);
+    let engine = EngineType::Meilisearch;
 
     run_commands(
         meili_client,
+        engine,
         &workload.precommands,
         0,
         &assets,
@@ -72,6 +75,7 @@ async fn run_workload_commands(
 
     run_commands(
         meili_client,
+        engine,
         &workload.commands,
         0,
         &assets,
@@ -152,11 +156,12 @@ async fn execute_run(
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
     let db_path = delete_temporary_db(args.common.reuse_db.as_deref()).await?;
+    let engine = EngineType::Meilisearch;
 
     let binary = match binary_path {
         Some(binary_path) => Binary {
             description: Some("initial binary for the workload".into()),
-            source: crate::common::instance::BinarySource::Path(binary_path.to_owned()),
+            source: crate::common::instance::BinarySource::Path { path: binary_path.to_owned() },
             extra_cli_args: workload.extra_cli_args.clone(),
         },
         None => Binary {
@@ -169,7 +174,8 @@ async fn execute_run(
     };
 
     let meilisearch =
-        start_meili(meili_client, master_key, &binary, &args.common.asset_folder, &db_path).await?;
+        start_meili(meili_client, engine, master_key, &binary, &args.common.asset_folder, &db_path)
+            .await?;
 
     let processor = run_workload_commands(
         dashboard_client,
