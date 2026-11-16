@@ -4,6 +4,6 @@ Copyright (c) 2019-2025 Meili SAS
 
 Part of this work fall under the Meilisearch Enterprise Edition (EE) and are licensed under the Business Source License 1.1, please refer to [LICENSE-EE](./LICENSE-EE) for details.
 
-The other parts of this work are licensed under the [MIT license](./LICENSE-MIT).
+The other parts of this work are licensed under the [MIT license](./LICENSE-MIT) and the LMDB connector (heed) is licensed with an additional [OpenLDAP license](./LICENSE-OPENLDAP).
 
-`SPDX-License-Identifier: MIT AND BUSL-1.1`
+`SPDX-License-Identifier: MIT AND OpenLDAP AND BUSL-1.1`
