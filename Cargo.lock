@@ -4201,6 +4201,7 @@ dependencies = [
  "insta",
  "md5",
  "regex-lite",
+ "uuid",
 ]
 
 [[package]]
