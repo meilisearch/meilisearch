@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use super::dashboard::DashboardClient;
 use super::BenchArgs;
+use crate::common::args::fetch_env_variables;
 use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
@@ -47,6 +48,7 @@ async fn run_workload_commands(
     let workload_name = &workload.name;
     let assets = Arc::new(workload.assets.clone());
     let asset_folder = args.common.asset_folder.clone().leak();
+    let env_registered = Arc::new(fetch_env_variables(args.common.env_variables.clone())?);
 
     run_commands(
         meili_client,
@@ -55,6 +57,7 @@ async fn run_workload_commands(
         &assets,
         asset_folder,
         &mut HashMap::new(),
+        &env_registered,
         false,
     )
     .await?;
@@ -74,6 +77,7 @@ async fn run_workload_commands(
         &assets,
         asset_folder,
         &mut HashMap::new(),
+        &env_registered,
         false,
     )
     .await?;

@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
+use anyhow::Context as _;
 use clap::Parser;
 
 pub fn default_asset_folder() -> String {
@@ -40,4 +41,22 @@ pub struct CommonArgs {
     /// This option can break the reentrancy of workloads, so use it with caution.
     #[arg(long, value_name = "DB_PATH")]
     pub reuse_db: Option<PathBuf>,
+
+    /// A list of env variables to hydrate in bodies and expected answers. Variables declared
+    /// in bodies or expected answers must be prefixed by a dollar ($) sign.
+    #[arg(long)]
+    pub env_variables: Vec<String>,
+}
+
+pub fn fetch_env_variables(env_keys: Vec<String>) -> anyhow::Result<HashMap<String, String>> {
+    env_keys
+        .into_iter()
+        .map(|env_key| {
+            Ok((
+                env_key.clone(),
+                std::env::var(&env_key)
+                    .with_context(|| format!("Cannot find value for the `{env_key}` variable"))?,
+            ))
+        })
+        .collect()
 }

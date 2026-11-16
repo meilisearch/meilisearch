@@ -51,12 +51,17 @@ impl Body {
         self,
         assets: &BTreeMap<String, Asset>,
         registered: &HashMap<String, Value>,
+        env_registered: &HashMap<String, String>,
         asset_folder: &str,
     ) -> anyhow::Result<Option<(Vec<u8>, &'static str)>> {
         Ok(match self {
             Body::Inline { inline: mut body } => {
                 if !registered.is_empty() {
-                    insert_variables(&mut body, registered);
+                    insert_json_value_variables(&mut body, registered);
+                }
+
+                if !env_registered.is_empty() {
+                    insert_body_env_variables(&mut body, env_registered);
                 }
 
                 Some((
@@ -104,6 +109,7 @@ async fn run_batch(
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
     registered: &mut HashMap<String, Value>,
+    env_registered: &Arc<HashMap<String, String>>,
     return_response: bool,
 ) -> anyhow::Result<Vec<(Value, StatusCode)>> {
     let [.., last] = batch else { return Ok(Vec::new()) };
@@ -116,6 +122,7 @@ async fn run_batch(
         let assets2 = Arc::clone(assets);
         let needs_response = return_response || !command.register.is_empty();
         let registered2 = registered.clone(); // FIXME: cloning the whole map for each command is inefficient
+        let env_registered2 = Arc::clone(env_registered);
         tasks.push(tokio::spawn(async move {
             run(
                 &client2,
@@ -123,6 +130,7 @@ async fn run_batch(
                 first_command_index + index,
                 &assets2,
                 registered2,
+                &env_registered2,
                 asset_folder,
                 needs_response,
             )
@@ -244,6 +252,7 @@ pub async fn run(
     command_index: usize,
     assets: &BTreeMap<String, Asset>,
     registered: HashMap<String, Value>,
+    env_registered: &HashMap<String, String>,
     asset_folder: &str,
     return_value: bool,
 ) -> anyhow::Result<Option<(Value, StatusCode)>> {
@@ -272,7 +281,7 @@ pub async fn run(
     let body = command
         .body
         .clone()
-        .get(assets, &registered, asset_folder)
+        .get(assets, &registered, env_registered, asset_folder)
         .with_context(|| format!("while getting body for command {command}"))?;
 
     let mut request = client.request(command.method.into(), route);
@@ -333,7 +342,7 @@ pub async fn run(
 
         let expected_response = if !registered.is_empty() {
             evaluated_expected_response = expected_response.clone();
-            insert_variables(&mut evaluated_expected_response, &registered);
+            insert_json_value_variables(&mut evaluated_expected_response, &registered);
             &evaluated_expected_response
         } else {
             expected_response
@@ -374,6 +383,7 @@ pub async fn run_commands(
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
     registered: &mut HashMap<String, Value>,
+    env_registered: &Arc<HashMap<String, String>>,
     return_response: bool,
 ) -> anyhow::Result<Vec<(Value, StatusCode)>> {
     let mut responses = Vec::new();
@@ -387,6 +397,7 @@ pub async fn run_commands(
             assets,
             asset_folder,
             registered,
+            env_registered,
             return_response,
         )
         .await?;
@@ -412,7 +423,7 @@ pub fn health_command() -> Command {
     }
 }
 
-pub fn insert_variables(value: &mut Value, registered: &HashMap<String, Value>) {
+pub fn insert_json_value_variables(value: &mut Value, registered: &HashMap<String, Value>) {
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) => (),
         Value::String(s) => {
@@ -425,12 +436,33 @@ pub fn insert_variables(value: &mut Value, registered: &HashMap<String, Value>) 
         }
         Value::Array(values) => {
             for value in values {
-                insert_variables(value, registered);
+                insert_json_value_variables(value, registered);
             }
         }
         Value::Object(map) => {
             for (_key, value) in map.iter_mut() {
-                insert_variables(value, registered);
+                insert_json_value_variables(value, registered);
+            }
+        }
+    }
+}
+
+pub fn insert_body_env_variables(value: &mut Value, registered: &HashMap<String, String>) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) => (),
+        Value::String(s) => {
+            if let Some(replacement) = s.strip_prefix('$').and_then(|key| registered.get(key)) {
+                *value = Value::String(replacement.clone());
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                insert_body_env_variables(value, registered);
+            }
+        }
+        Value::Object(map) => {
+            for (_key, value) in map.iter_mut() {
+                insert_body_env_variables(value, registered);
             }
         }
     }

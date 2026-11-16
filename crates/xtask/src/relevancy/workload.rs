@@ -12,6 +12,7 @@ use plotters::style::full_palette::AMBER_800;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
+use crate::common::args::fetch_env_variables;
 use crate::common::assets::{self, fetch_asset, Asset, AssetFormat};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
@@ -71,6 +72,7 @@ async fn execute_run(
 
     let assets = Arc::new(workload.assets.clone());
     let asset_folder = args.common.asset_folder.clone().leak();
+    let env_registered = Arc::new(fetch_env_variables(args.common.env_variables.clone())?);
 
     let binary = match binary_path {
         Some(binary_path) => Binary {
@@ -101,6 +103,7 @@ async fn execute_run(
         &assets,
         asset_folder,
         &mut HashMap::new(),
+        &env_registered,
         false,
     )
     .await?;
@@ -108,6 +111,7 @@ async fn execute_run(
     run_query_template(
         meili_client,
         &workload.query_template,
+        &env_registered,
         &assets,
         asset_folder,
         &Path::new(&args.report_folder),
@@ -123,6 +127,7 @@ async fn execute_run(
 async fn run_query_template(
     meili_client: &Arc<Client>,
     query_template: &QueryTemplate,
+    env_registered: &Arc<HashMap<String, String>>,
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
     report_folder: &Path,
@@ -158,6 +163,7 @@ async fn run_query_template(
         query_entry: QueryEntry,
         template: Arc<JsonTemplate>,
         primary_key: Arc<String>,
+        env_registered: Arc<HashMap<String, String>>,
         assets: Arc<BTreeMap<String, Asset>>,
         asset_folder: &'static str,
     ) -> anyhow::Result<RelevancyResult> {
@@ -203,6 +209,7 @@ async fn run_query_template(
             0,
             &assets,
             Default::default(),
+            &env_registered,
             asset_folder,
             true,
         )
@@ -309,6 +316,7 @@ async fn run_query_template(
                     query_entry,
                     template.clone(),
                     primary_key.clone(),
+                    env_registered.clone(),
                     assets.clone(),
                     asset_folder,
                 ))

@@ -143,6 +143,7 @@ impl TestWorkload {
                         &assets,
                         asset_folder,
                         &mut registered,
+                        &Arc::new(HashMap::default()),
                         return_responses,
                     )
                     .await?;

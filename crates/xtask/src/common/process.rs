@@ -141,9 +141,17 @@ async fn wait_for_health(
     meilisearch: &mut tokio::process::Child,
 ) -> anyhow::Result<()> {
     for i in 0..100 {
-        let res =
-            run_command(client, &health_command(), 0, &BTreeMap::new(), HashMap::new(), "", false)
-                .await;
+        let res = run_command(
+            client,
+            &health_command(),
+            0,
+            &BTreeMap::new(),
+            HashMap::new(),
+            &HashMap::new(),
+            "",
+            false,
+        )
+        .await;
         if res.is_ok() {
             // check that this is actually the current Meilisearch instance that answered us
             if let Some(exit_code) =
