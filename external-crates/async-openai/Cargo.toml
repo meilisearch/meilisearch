@@ -8,7 +8,6 @@ description = "Rust library for OpenAI"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/64bit/async-openai"
 repository = "https://github.com/64bit/async-openai"
 
 [features]
