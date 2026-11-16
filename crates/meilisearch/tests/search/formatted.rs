@@ -106,7 +106,7 @@ async fn formatted_contain_wildcard() {
                   "id": 852,
                   "cattos": "pésti"
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -136,7 +136,7 @@ async fn formatted_contain_wildcard() {
                       ]
                     }
                   }
-                  "#)
+                  "#);
              }
         })
         .await;
@@ -179,7 +179,7 @@ async fn formatted_contain_wildcard() {
                     "cattos": "pésti"
                   }
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -208,7 +208,7 @@ async fn format_nested() {
                     }
                   ]
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -232,7 +232,7 @@ async fn format_nested() {
                         }
                       ]
                     }
-                    "###)
+                    "###);
                 }
             },
         )
@@ -268,7 +268,7 @@ async fn format_nested() {
                         ]
                       }
                     }
-                    "###)
+                    "###);
                 }
             }
         )
@@ -294,7 +294,7 @@ async fn format_nested() {
                     ]
                   }
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -319,7 +319,7 @@ async fn format_nested() {
                     ]
                   }
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -354,7 +354,7 @@ async fn format_nested() {
             ]
           }
         }
-        "###)
+        "###);
     }
     })
         .await;
@@ -381,7 +381,7 @@ async fn format_nested() {
                         ]
                       }
                     }
-                    "###)
+                    "###);
                 }
             }
         )
@@ -411,7 +411,7 @@ async fn displayedattr_2_smol() {
         {
           "id": 852
         }
-        "###)
+        "###);
     }
         })
         .await;
@@ -426,7 +426,7 @@ async fn displayedattr_2_smol() {
                 {
                   "id": 852
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -444,7 +444,7 @@ async fn displayedattr_2_smol() {
                     "id": "852"
                   }
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -462,7 +462,7 @@ async fn displayedattr_2_smol() {
                     "id": "852"
                   }
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -482,7 +482,7 @@ async fn displayedattr_2_smol() {
                         "id": "852"
                       }
                     }
-                    "###)
+                    "###);
                 }
             },
         )
@@ -498,7 +498,7 @@ async fn displayedattr_2_smol() {
                 {
                   "id": 852
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -513,7 +513,7 @@ async fn displayedattr_2_smol() {
                 {
                   "id": 852
                 }
-                "###)
+                "###);
             }
         })
         .await;
@@ -524,7 +524,7 @@ async fn displayedattr_2_smol() {
             allow_duplicates! {
                 assert_json_snapshot!(response["hits"][0],
                 { "._rankingScore" => "[score]" },
-                @"{}")
+                @"{}");
             }
         })
         .await;
@@ -537,7 +537,7 @@ async fn displayedattr_2_smol() {
     allow_duplicates! {
         assert_json_snapshot!(response["hits"][0],
         { "._rankingScore" => "[score]" },
-        @"{}")
+        @"{}");
     }
 
             }
@@ -558,7 +558,7 @@ async fn displayedattr_2_smol() {
                         "id": "852"
                       }
                     }
-                    "###)
+                    "###);
                 }
             },
         )
@@ -578,7 +578,7 @@ async fn displayedattr_2_smol() {
                         "id": "852"
                       }
                     }
-                    "###)
+                    "###);
                 }
             },
         )

@@ -6,7 +6,6 @@ keywords = ["openai", "macros", "ai"]
 description = "Macros for async-openai"
 edition = "2021"
 license = "MIT"
-homepage = "https://github.com/64bit/async-openai"
 repository = "https://github.com/64bit/async-openai"
 
 [lib]

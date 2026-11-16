@@ -15,4 +15,6 @@ license.workspace = true
 insta = { version = "=1.39.0", features = ["json", "redactions"] }
 md5 = "0.8.1"
 regex-lite = "0.1.9"
+
+[dev-dependencies]
 uuid = { version = "1.24.0", features = ["v4"] }
