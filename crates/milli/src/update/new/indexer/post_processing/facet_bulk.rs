@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::{iter, mem};
 
-use grenad::CompressionType;
 use heed::types::{Bytes, LazyDecode};
 use heed::{Database, RwTxn};
 use rayon::prelude::*;
@@ -13,7 +12,6 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
-use crate::update::{create_writer, writer_into_reader};
 use crate::{CboRoaringBitmapCodec, FieldId, Index};
 
 /// Generate the facet level based on the level 0.
@@ -74,7 +72,7 @@ fn compute_level(
     db: Database<FacetGroupKeyCodec<BytesRefCodec>, LazyDecode<FacetGroupValueCodec>>,
     field_id: FieldId,
     base_level: u8,
-) -> Result<Vec<grenad::Reader<BufReader<File>>>, crate::Error> {
+) -> Result<Vec<Reader<BufReader<File>>>, crate::Error> {
     let thread_count = rayon::current_num_threads();
     let rtxns = iter::repeat_with(|| wtxn.nested_read_txn())
         .take(thread_count)
