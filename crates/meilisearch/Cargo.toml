@@ -136,7 +136,6 @@ reqwest = { version = "0.12.28", features = [
 ], default-features = false, optional = true }
 sha-1 = { version = "0.10.1", optional = true }
 static-files = { version = "0.3.1", optional = true }
-tempfile = { version = "3.27.0", optional = true }
 zip = { version = "6.0.0", optional = true, default-features = false, features = ["deflate-flate2"] }
 
 [features]
@@ -150,7 +149,6 @@ mini-dashboard = [
     "hex",
     "reqwest",
     "sha-1",
-    "tempfile",
     "zip",
 ]
 chinese = ["meilisearch-types/chinese"]
