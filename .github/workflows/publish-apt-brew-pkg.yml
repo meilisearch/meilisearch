@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: check-version
     container:
-      # Use ubuntu-22.04 to compile with glibc 2.35
-      image: ubuntu:22.04
+      # Use ubuntu-24.04 to compile with glibc 2.39
+      image: ubuntu:24.04
     steps:
       - name: Install needed dependencies
         run: |
