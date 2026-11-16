@@ -62,6 +62,7 @@ use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::RetrieveIndexDataStep;
 use crate::vector::Embedder;
+use crate::word_position_enabled::WordPosition;
 use crate::{
     AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, Result,
     TermsMatchingStrategy, UserError, Weight,
@@ -530,6 +531,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
         words = true;
     }
 
+    let WordPosition { enabled: enabled_word_position } = ctx.index.word_position(ctx.txn)?;
+
     let mut ranking_rules: Vec<BoxRankingRule<'ctx, QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
@@ -579,7 +582,9 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 }
                 attribute = true;
                 ranking_rules.push(Box::new(Fid::new(None)));
-                ranking_rules.push(Box::new(Position::new(None)));
+                if enabled_word_position {
+                    ranking_rules.push(Box::new(Position::new(None)));
+                }
             }
             crate::Criterion::AttributeRank => {
                 if attribute || attribute_rank {
@@ -589,7 +594,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Fid::new(None)));
             }
             crate::Criterion::WordPosition => {
-                if attribute || word_position {
+                if attribute || word_position || !enabled_word_position {
                     continue;
                 }
                 word_position = true;

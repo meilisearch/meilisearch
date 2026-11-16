@@ -221,6 +221,9 @@
             "oneTypo": 5,
             "twoTypos": 9
           }
+        },
+        "wordPosition": {
+          "enabled": true
         }
       },
       "synchronous": "DontWait"
@@ -409,6 +412,9 @@
             "oneTypo": 5,
             "twoTypos": 9
           }
+        },
+        "wordPosition": {
+          "enabled": true
         }
       },
       "synchronous": "DontWait"

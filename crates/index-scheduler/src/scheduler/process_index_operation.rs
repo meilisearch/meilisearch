@@ -645,6 +645,7 @@ impl IndexScheduler {
                 disable_on_attributes: Setting::NotSet,
                 disable_on_numbers: Setting::Set(true),
             }),
+            word_position: Setting::NotSet,
             faceting: Setting::NotSet,
             pagination: Setting::NotSet,
             embedders: Setting::NotSet,

@@ -402,6 +402,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
                 v5::Setting::Reset => v6::Setting::Reset,
                 v5::Setting::NotSet => v6::Setting::NotSet,
             },
+            word_position: v6::Setting::NotSet,
             faceting: match settings.faceting {
                 v5::Setting::Set(faceting) => v6::Setting::Set(v6::FacetingSettings {
                     max_values_per_facet: faceting.max_values_per_facet.into(),
