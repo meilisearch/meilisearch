@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::bench::BenchWorkload;
@@ -26,6 +28,15 @@ impl EngineType {
         match self {
             EngineType::Meilisearch => "http://127.0.0.1:7700".into(),
             EngineType::ElasticSearch => "http://127.0.0.1:9200".into(),
+        }
+    }
+}
+
+impl fmt::Display for EngineType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EngineType::Meilisearch => f.write_str("Meilisearch"),
+            EngineType::ElasticSearch => f.write_str("Elastic Search"),
         }
     }
 }

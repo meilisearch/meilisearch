@@ -11,6 +11,46 @@ use crate::common::command::{health_command, run as run_command};
 use crate::common::instance::{Binary, BinarySource, Edition};
 use crate::common::workload::EngineType;
 
+impl EngineType {
+    fn prepare_command(
+        self,
+        command: &mut tokio::process::Command,
+        db_path: &str,
+        master_key: Option<&str>,
+        extra_args: &[String],
+    ) {
+        match self {
+            EngineType::Meilisearch => {
+                command.arg("--db-path").arg(db_path);
+                if let Some(master_key) = master_key {
+                    command.arg("--master-key").arg(master_key);
+                }
+                command.arg("--experimental-enable-logs-route");
+            }
+            EngineType::ElasticSearch => {
+                // It would be better to support elasticsearch yml configs
+                // through workload assets instead.
+                //
+                //    "elasticsearch.yml": {
+                //      "local_location": "workloads/assets/elasticsearch/elasticsearch.yml",
+                //      "remote_location": null
+                //    }
+                command.env("ES_PATH_CONF", "workloads/relevancy/elasticsearch");
+                let data_path =
+                    std::env::current_dir().unwrap().join("elasticsearch").join(db_path);
+                command.arg(format!("-Epath.data={}", data_path.display()));
+                if let Some(_master_key) = master_key {
+                    unimplemented!("implement master key support for elasticsearch")
+                }
+            }
+        }
+
+        for extra_arg in extra_args {
+            command.arg(extra_arg);
+        }
+    }
+}
+
 #[tracing::instrument]
 pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
@@ -79,7 +119,7 @@ pub async fn start_meili(
     asset_folder: &str,
     db_path: &str,
 ) -> anyhow::Result<tokio::process::Child> {
-    let mut command = match dbg!(&binary.source) {
+    let mut command = match &binary.source {
         BinarySource::Build { edition } => {
             build(*edition).await?;
             let mut command = tokio::process::Command::new("cargo");
@@ -104,18 +144,7 @@ pub async fn start_meili(
         BinarySource::Path { path: binary_path } => tokio::process::Command::new(binary_path),
     };
 
-    // let command = engine.setup_command();
-
-    command.arg("--db-path").arg(db_path);
-    if let Some(master_key) = master_key {
-        command.arg("--master-key").arg(master_key);
-    }
-    command.arg("--experimental-enable-logs-route");
-
-    for extra_arg in binary.extra_cli_args.iter() {
-        command.arg(extra_arg);
-    }
-
+    engine.prepare_command(&mut command, db_path, master_key, &binary.extra_cli_args);
     command.kill_on_drop(true);
 
     #[cfg(unix)]
@@ -133,7 +162,8 @@ pub async fn start_meili(
         }
     }
 
-    let mut meilisearch = dbg!(command).spawn().context("Error starting Meilisearch")?;
+    let mut meilisearch =
+        dbg!(command).spawn().with_context(|| format!("Error starting {engine}"))?;
 
     wait_for_health(client, engine, &mut meilisearch).await?;
 

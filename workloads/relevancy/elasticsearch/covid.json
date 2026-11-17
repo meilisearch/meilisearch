@@ -43,7 +43,7 @@
           }
         }
       },
-      "synchronous": "WaitForTask"
+      "synchronous": "DontWait"
     },
     {
       "route": "relevancy/_bulk",

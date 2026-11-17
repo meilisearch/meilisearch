@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Display;
-use std::io::Read as _;
+use std::io::{Cursor, Read as _};
 use std::sync::Arc;
 
 use anyhow::{bail, Context as _};
@@ -323,6 +323,9 @@ pub async fn run(
         .get(assets, &registered, env_registered, asset_folder)
         .with_context(|| format!("while getting body for command {command}"))?;
 
+    // TODO implement the Elastic Search format to send the documents
+    // <https://stackoverflow.com/a/43720942>
+
     let mut request = client.request(command.method.into(), &route);
 
     // Replace the api key
@@ -357,11 +360,14 @@ pub async fn run(
             }
         } else if code.is_client_error() {
             tracing::error!(%command, %code, "error in workload file");
-            let response: serde_json::Value = response
-                .json()
-                .await
+            let bytes = response.bytes().await?;
+
+            dbg!(&bytes);
+
+            let response: serde_json::Value = serde_json::from_reader(Cursor::new(&bytes[..]))
                 .context("could not deserialize response as JSON")
                 .context("parsing error in workload file when sending command")?;
+
             bail!(
                 "command #{command_index} {command}: error in workload file: server responded with error code {code} and '{response}'"
             )
