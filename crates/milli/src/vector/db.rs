@@ -314,8 +314,63 @@ struct EmbedderInfoCodec;
 impl<'a> heed::BytesDecode<'a> for EmbedderInfoCodec {
     type DItem = EmbedderInfo;
 
-    fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, heed::BoxedError> {
-        Ok(LegacyEmbedderInfoCodec::bytes_decode(bytes)?)
+    fn bytes_decode(mut bytes: &'a [u8]) -> Result<Self::DItem, heed::BoxedError> {
+        let embedder_id = bytes.read_u8()?;
+
+        let user_provided = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes = bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`user_provided` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        let skip_regenerate_different_from_user_provided = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes =
+                bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`skip_regenerate_different_from_user_provided` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        let render_failure = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes = bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`render_failure` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        let embed_failure = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes = bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`embed_failure` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        Ok(EmbedderInfo {
+            embedder_id,
+            embedding_status: EmbeddingStatus {
+                user_provided,
+                skip_regenerate_different_from_user_provided,
+                render_failure,
+                embed_failure,
+            },
+        })
     }
 }
 
@@ -323,7 +378,70 @@ impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
     type EItem = EmbedderInfo;
 
     fn bytes_encode(item: &'a Self::EItem) -> Result<Cow<'a, [u8]>, heed::BoxedError> {
-        Ok(LegacyEmbedderInfoCodec::bytes_encode(item)?)
+        let EmbedderInfo {
+            embedder_id,
+            embedding_status:
+                EmbeddingStatus {
+                    user_provided,
+                    skip_regenerate_different_from_user_provided,
+                    render_failure,
+                    embed_failure,
+                },
+        } = item;
+
+        // Calculate the size of each bitmap
+        let user_provided_size = CboRoaringBitmapCodec::serialized_size(user_provided);
+        let skip_regenerate_different_from_user_provided_size =
+            CboRoaringBitmapCodec::serialized_size(skip_regenerate_different_from_user_provided);
+        let render_failure_size = CboRoaringBitmapCodec::serialized_size(render_failure);
+        let embed_failure_size = CboRoaringBitmapCodec::serialized_size(embed_failure);
+
+        // Allocate the capacity for the encoded embedder info
+        let embedder_id_size = 1;
+        let bitmap_sizes_size = 4;
+        let mut bytes = Vec::with_capacity(
+            embedder_id_size
+                // Bitmap sizes prepends each bitmap
+                // user_provided
+                + bitmap_sizes_size
+                + user_provided_size
+                // skip_regenerate_different_from_user_provided
+                + bitmap_sizes_size
+                + skip_regenerate_different_from_user_provided_size
+                // render_failure
+                + bitmap_sizes_size
+                + render_failure_size
+                // embed_failure
+                + bitmap_sizes_size
+                + embed_failure_size,
+        );
+
+        // Write the embedder id
+        bytes.write_u8(*embedder_id)?;
+
+        // Write each bitmap prepended by its size
+        // user_provided
+        bytes.write_u32::<BigEndian>(user_provided_size.try_into()?)?;
+        CboRoaringBitmapCodec::serialize_into_writer(user_provided, &mut bytes)?;
+
+        // skip_regenerate_different_from_user_provided
+        bytes.write_u32::<BigEndian>(
+            skip_regenerate_different_from_user_provided_size.try_into()?,
+        )?;
+        CboRoaringBitmapCodec::serialize_into_writer(
+            skip_regenerate_different_from_user_provided,
+            &mut bytes,
+        )?;
+
+        // render_failure
+        bytes.write_u32::<BigEndian>(render_failure_size.try_into()?)?;
+        CboRoaringBitmapCodec::serialize_into_writer(render_failure, &mut bytes)?;
+
+        // embed_failure
+        bytes.write_u32::<BigEndian>(embed_failure_size.try_into()?)?;
+        CboRoaringBitmapCodec::serialize_into_writer(embed_failure, &mut bytes)?;
+
+        Ok(bytes.into())
     }
 }
 
