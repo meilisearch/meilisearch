@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use heed::types::{SerdeJson, Str, U8};
-use heed::{BytesEncode, Database, RoTxn, RwTxn, Unspecified};
+use heed::types::{Bytes, SerdeJson, Str, U8};
+use heed::{BytesDecode, BytesEncode, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
@@ -574,4 +574,28 @@ impl IndexEmbeddingConfigs {
             .get(rtxn, crate::index::main_key::VERSION_KEY)?
             .map_or(true, |version| version < (1, 59, 0)))
     }
+}
+
+pub(crate) fn migrate_embedder_info_format(
+    wtxn: &mut RwTxn<'_>,
+    index: &crate::Index,
+) -> crate::Result<()> {
+    let embedder_info = index.embedder_category_id.remap_types::<Str, Bytes>();
+    let mut it = embedder_info.iter_mut(wtxn)?;
+
+    while let Some(result) = it.next() {
+        let (embedder_name, value) = result?;
+        let embedder_info =
+            LegacyEmbedderInfoCodec::bytes_decode(&value).map_err(heed::Error::Decoding)?;
+        let embedder_info =
+            EmbedderInfoCodec::bytes_encode(&embedder_info).map_err(heed::Error::Encoding)?;
+        let embedder_name = embedder_name.to_owned();
+
+        // SAFETY: we copied the `embedder_name` so are not using the reference while using put
+        unsafe {
+            it.put_current(&embedder_name, &embedder_info)?;
+        }
+    }
+
+    Ok(())
 }
