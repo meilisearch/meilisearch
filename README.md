@@ -23,6 +23,14 @@
   <a href="https://github.com/meilisearch/meilisearch/queue"><img alt="Merge Queues enabled" src="https://img.shields.io/badge/Merge_Queues-enabled-%2357cf60?logo=github"></a>
 </p>
 
+<p align="center">
+  🚀 <strong>Meilisearch Searchandising is live on Product Hunt today</strong>, now on Meilisearch Cloud.
+  <a href="https://www.producthunt.com/products/meilisearch-cloud?launch=meilisearch-searchandising">Check it out →</a>
+</p>
+<p align="center">
+  <a href="https://www.producthunt.com/products/meilisearch-cloud?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-meilisearch-cloud" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=532742&theme=light" alt="Follow Meilisearch on Product Hunt" width="250" height="54" /></a>
+</p>
+
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
 
 [Meilisearch](https://www.meilisearch.com?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro) is a search engine for fast, relevant full-text, semantic, and hybrid search. The easiest way to get started and run it in production is [Meilisearch Cloud](https://cloud.meilisearch.com/register?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=intro): create a project and run your first search in minutes, with no servers to deploy, upgrade, or maintain. The engine is open source under the MIT license, so you can also self-host it.
