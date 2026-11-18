@@ -3,8 +3,8 @@
 use std::borrow::Cow;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use heed::types::{SerdeJson, Str, U8};
-use heed::{BytesEncode, Database, RoTxn, RwTxn, Unspecified};
+use heed::types::{Bytes, SerdeJson, Str, U8};
+use heed::{BytesDecode, BytesEncode, Database, RoTxn, RwTxn, Unspecified};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
@@ -93,7 +93,7 @@ pub struct FragmentConfig {
 
 pub struct IndexEmbeddingConfigs {
     main: Database<'static, Unspecified, Unspecified>,
-    embedder_info: Database<'static, Str, EmbedderInfoCodec>,
+    embedder_info: Database<'static, Str, Unspecified>,
 }
 
 pub struct EmbedderInfo {
@@ -103,7 +103,24 @@ pub struct EmbedderInfo {
 
 impl EmbedderInfo {
     pub fn to_bytes(&self) -> Result<Cow<'_, [u8]>, heed::BoxedError> {
+        // TODO: use the correct codec based on the version of the DB
         EmbedderInfoCodec::bytes_encode(self)
+    }
+}
+
+#[derive(Default)]
+pub struct EmbeddingFailures {
+    pub render_failure: RoaringBitmap,
+    pub embed_failure: RoaringBitmap,
+}
+
+impl EmbeddingFailures {
+    pub fn render_failure(&mut self, docid: DocumentId) {
+        self.render_failure.insert(docid);
+    }
+
+    pub fn embed_failure(&mut self, docid: DocumentId) {
+        self.embed_failure.insert(docid);
     }
 }
 
@@ -116,6 +133,8 @@ impl EmbedderInfo {
 pub struct EmbeddingStatus {
     user_provided: RoaringBitmap,
     skip_regenerate_different_from_user_provided: RoaringBitmap,
+    render_failure: RoaringBitmap,
+    embed_failure: RoaringBitmap,
 }
 
 impl EmbeddingStatus {
@@ -127,7 +146,12 @@ impl EmbeddingStatus {
     ///
     /// Used for migration from v1.15 and earlier DBs.
     pub(crate) fn from_user_provided(user_provided: RoaringBitmap) -> Self {
-        Self { user_provided, skip_regenerate_different_from_user_provided: Default::default() }
+        Self {
+            user_provided,
+            skip_regenerate_different_from_user_provided: Default::default(),
+            render_failure: Default::default(),
+            embed_failure: Default::default(),
+        }
     }
 
     /// Whether the document contains user-provided vectors for that embedder.
@@ -137,12 +161,14 @@ impl EmbeddingStatus {
 
     /// Whether vectors should be regenerated for that document and that embedder.
     pub fn must_regenerate(&self, docid: DocumentId) -> bool {
+        // TODO: force regenerate in case of embed failure?
         let invert = self.skip_regenerate_different_from_user_provided.contains(docid);
         let user_provided = self.user_provided.contains(docid);
         !(user_provided ^ invert)
     }
 
     pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
+        // TODO: force regenerate in case of embed failure?
         let invert = self.skip_regenerate_different_from_user_provided.contains(docid);
         let user_provided = self.user_provided.contains(docid);
         (user_provided, !(user_provided ^ invert))
@@ -165,6 +191,8 @@ impl EmbeddingStatus {
 pub struct EmbeddingStatusDelta {
     del_status: EmbeddingStatus,
     add_status: EmbeddingStatus,
+    del_failures: EmbeddingFailures,
+    add_failures: EmbeddingFailures,
 }
 
 impl EmbeddingStatusDelta {
@@ -188,8 +216,15 @@ impl EmbeddingStatusDelta {
                 != new_skip_regenerate_different_user_provided
     }
 
-    pub fn needs_clear(is_user_provided: bool, must_regenerate: bool) -> bool {
+    pub fn needs_clear(
+        is_user_provided: bool,
+        must_regenerate: bool,
+        render_failure: bool,
+        embed_failure: bool,
+    ) -> bool {
         Self::needs_change(is_user_provided, must_regenerate, false, true)
+            || render_failure
+            || embed_failure
     }
 
     pub fn clear_docid(
@@ -199,6 +234,8 @@ impl EmbeddingStatusDelta {
         must_regenerate: bool,
     ) {
         self.push_delta(docid, is_user_provided, must_regenerate, false, true);
+        self.del_failures.render_failure(docid);
+        self.del_failures.embed_failure(docid);
     }
 
     pub fn push_delta(
@@ -239,16 +276,6 @@ impl EmbeddingStatusDelta {
         }
     }
 
-    pub fn push_new(&mut self, docid: DocumentId, is_user_provided: bool, must_regenerate: bool) {
-        self.push_delta(
-            docid,
-            !is_user_provided,
-            !must_regenerate,
-            is_user_provided,
-            must_regenerate,
-        );
-    }
-
     pub fn apply_to(&self, status: &mut EmbeddingStatus) {
         status.user_provided -= &self.del_status.user_provided;
         status.user_provided |= &self.add_status.user_provided;
@@ -257,12 +284,173 @@ impl EmbeddingStatusDelta {
             &self.del_status.skip_regenerate_different_from_user_provided;
         status.skip_regenerate_different_from_user_provided |=
             &self.add_status.skip_regenerate_different_from_user_provided;
+
+        status.render_failure -= &self.del_status.render_failure;
+        status.render_failure |= &self.add_status.render_failure;
+
+        status.embed_failure -= &self.del_status.embed_failure;
+        status.embed_failure |= &self.add_status.embed_failure;
+    }
+
+    pub fn add_rendering_failure(&mut self, docid: DocumentId) {
+        self.add_failures.render_failure(docid);
+    }
+
+    pub fn add_embedding_failure(&mut self, docid: DocumentId) {
+        self.add_failures.embed_failure(docid);
+    }
+
+    pub fn del_rendering_failure(&mut self, docid: DocumentId) {
+        self.del_failures.render_failure(docid);
+    }
+
+    pub fn del_embedding_failure(&mut self, docid: DocumentId) {
+        self.del_failures.embed_failure(docid);
     }
 }
 
 struct EmbedderInfoCodec;
 
 impl<'a> heed::BytesDecode<'a> for EmbedderInfoCodec {
+    type DItem = EmbedderInfo;
+
+    fn bytes_decode(mut bytes: &'a [u8]) -> Result<Self::DItem, heed::BoxedError> {
+        let embedder_id = bytes.read_u8()?;
+
+        let user_provided = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes = bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`user_provided` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        let skip_regenerate_different_from_user_provided = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes =
+                bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`skip_regenerate_different_from_user_provided` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        let render_failure = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes = bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`render_failure` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        let embed_failure = {
+            let bitmap_size = bytes.read_u32::<BigEndian>()?;
+            let bitmap_bytes = bytes.split_off(..bitmap_size as usize).ok_or_else(|| {
+                heed::Error::Decoding(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "`embed_failure` bitmap size does not match the serialized size",
+                )))
+            })?;
+            CboRoaringBitmapCodec::bytes_decode(bitmap_bytes)?
+        };
+
+        Ok(EmbedderInfo {
+            embedder_id,
+            embedding_status: EmbeddingStatus {
+                user_provided,
+                skip_regenerate_different_from_user_provided,
+                render_failure,
+                embed_failure,
+            },
+        })
+    }
+}
+
+impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
+    type EItem = EmbedderInfo;
+
+    fn bytes_encode(item: &'a Self::EItem) -> Result<Cow<'a, [u8]>, heed::BoxedError> {
+        let EmbedderInfo {
+            embedder_id,
+            embedding_status:
+                EmbeddingStatus {
+                    user_provided,
+                    skip_regenerate_different_from_user_provided,
+                    render_failure,
+                    embed_failure,
+                },
+        } = item;
+
+        // Calculate the size of each bitmap
+        let user_provided_size = CboRoaringBitmapCodec::serialized_size(user_provided);
+        let skip_regenerate_different_from_user_provided_size =
+            CboRoaringBitmapCodec::serialized_size(skip_regenerate_different_from_user_provided);
+        let render_failure_size = CboRoaringBitmapCodec::serialized_size(render_failure);
+        let embed_failure_size = CboRoaringBitmapCodec::serialized_size(embed_failure);
+
+        // Allocate the capacity for the encoded embedder info
+        let embedder_id_size = 1;
+        let bitmap_sizes_size = 4;
+        let mut bytes = Vec::with_capacity(
+            embedder_id_size
+                // Bitmap sizes prepends each bitmap
+                // user_provided
+                + bitmap_sizes_size
+                + user_provided_size
+                // skip_regenerate_different_from_user_provided
+                + bitmap_sizes_size
+                + skip_regenerate_different_from_user_provided_size
+                // render_failure
+                + bitmap_sizes_size
+                + render_failure_size
+                // embed_failure
+                + bitmap_sizes_size
+                + embed_failure_size,
+        );
+
+        // Write the embedder id
+        bytes.write_u8(*embedder_id)?;
+
+        // Write each bitmap prepended by its size
+        // user_provided
+        bytes.write_u32::<BigEndian>(user_provided_size.try_into()?)?;
+        CboRoaringBitmapCodec::serialize_into_writer(user_provided, &mut bytes)?;
+
+        // skip_regenerate_different_from_user_provided
+        bytes.write_u32::<BigEndian>(
+            skip_regenerate_different_from_user_provided_size.try_into()?,
+        )?;
+        CboRoaringBitmapCodec::serialize_into_writer(
+            skip_regenerate_different_from_user_provided,
+            &mut bytes,
+        )?;
+
+        // render_failure
+        bytes.write_u32::<BigEndian>(render_failure_size.try_into()?)?;
+        CboRoaringBitmapCodec::serialize_into_writer(render_failure, &mut bytes)?;
+
+        // embed_failure
+        bytes.write_u32::<BigEndian>(embed_failure_size.try_into()?)?;
+        CboRoaringBitmapCodec::serialize_into_writer(embed_failure, &mut bytes)?;
+
+        Ok(bytes.into())
+    }
+}
+
+/// Codec for the legacy embedder info format.
+/// this codec can only store two bitmaps and cannot be extended because we don't encode the size of the second bitmap.
+/// deprecated since v1.59.0
+struct LegacyEmbedderInfoCodec;
+
+impl<'a> heed::BytesDecode<'a> for LegacyEmbedderInfoCodec {
     type DItem = EmbedderInfo;
 
     fn bytes_decode(mut bytes: &'a [u8]) -> Result<Self::DItem, heed::BoxedError> {
@@ -281,12 +469,15 @@ impl<'a> heed::BytesDecode<'a> for EmbedderInfoCodec {
             embedding_status: EmbeddingStatus {
                 user_provided,
                 skip_regenerate_different_from_user_provided,
+                // render and embed failures are not supported in the legacy format
+                render_failure: Default::default(),
+                embed_failure: Default::default(),
             },
         })
     }
 }
 
-impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
+impl<'a> heed::BytesEncode<'a> for LegacyEmbedderInfoCodec {
     type EItem = EmbedderInfo;
 
     fn bytes_encode(item: &'a Self::EItem) -> Result<Cow<'a, [u8]>, heed::BoxedError> {
@@ -369,8 +560,8 @@ impl IndexEmbeddingConfigs {
     ) -> crate::Result<()> {
         let mut free_indices: [bool; u8::MAX as usize] = [true; u8::MAX as usize];
 
-        for res in self.embedder_info.iter(wtxn)? {
-            let (_name, EmbedderInfo { embedder_id, embedding_status: _ }) = res?;
+        for res in self.iter_embedder_id(wtxn)? {
+            let (_name, embedder_id) = res?;
             free_indices[embedder_id as usize] = false;
         }
 
@@ -399,26 +590,52 @@ impl IndexEmbeddingConfigs {
         rtxn: &RoTxn<'_>,
         name: &str,
     ) -> heed::Result<Option<EmbedderInfo>> {
-        self.embedder_info.get(rtxn, name)
+        if self.use_legacy_embedder_info_codec(rtxn)? {
+            self.embedder_info.remap_types::<Str, LegacyEmbedderInfoCodec>().get(rtxn, name)
+        } else {
+            self.embedder_info.remap_types::<Str, EmbedderInfoCodec>().get(rtxn, name)
+        }
     }
 
     /// Clear the list of docids that are `user_provided` or `must_regenerate` across all embedders.
     pub fn clear_embedder_info_docids(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<()> {
-        let mut it = self.embedder_info.iter_mut(wtxn)?;
-        while let Some(res) = it.next() {
-            let (embedder_name, info) = res?;
-            let embedder_name = embedder_name.to_owned();
-            // SAFETY: we copied the `embedder_name` so are not using the reference while using put
-            unsafe {
-                it.put_current(
-                    &embedder_name,
-                    &EmbedderInfo {
-                        embedder_id: info.embedder_id,
-                        embedding_status: EmbeddingStatus::new(),
-                    },
-                )?;
+        if self.use_legacy_embedder_info_codec(wtxn)? {
+            let mut it =
+                self.embedder_info.remap_types::<Str, LegacyEmbedderInfoCodec>().iter_mut(wtxn)?;
+
+            while let Some(res) = it.next() {
+                let (embedder_name, info) = res?;
+                let embedder_name = embedder_name.to_owned();
+                // SAFETY: we copied the `embedder_name` so are not using the reference while using put
+                unsafe {
+                    it.put_current(
+                        &embedder_name,
+                        &EmbedderInfo {
+                            embedder_id: info.embedder_id,
+                            embedding_status: EmbeddingStatus::new(),
+                        },
+                    )?;
+                }
             }
-        }
+        } else {
+            let mut it =
+                self.embedder_info.remap_types::<Str, EmbedderInfoCodec>().iter_mut(wtxn)?;
+
+            while let Some(res) = it.next() {
+                let (embedder_name, info) = res?;
+                let embedder_name = embedder_name.to_owned();
+                // SAFETY: we copied the `embedder_name` so are not using the reference while using put
+                unsafe {
+                    it.put_current(
+                        &embedder_name,
+                        &EmbedderInfo {
+                            embedder_id: info.embedder_id,
+                            embedding_status: EmbeddingStatus::new(),
+                        },
+                    )?;
+                }
+            }
+        };
         Ok(())
     }
 
@@ -426,7 +643,16 @@ impl IndexEmbeddingConfigs {
         &self,
         rtxn: &'a RoTxn<'_>,
     ) -> heed::Result<impl Iterator<Item = heed::Result<(&'a str, EmbedderInfo)>>> {
-        self.embedder_info.iter(rtxn)
+        // TODO: are we forced to box the iterator?
+        let embedder_info = if self.use_legacy_embedder_info_codec(rtxn)? {
+            Box::new(self.embedder_info.remap_types::<Str, LegacyEmbedderInfoCodec>().iter(rtxn)?)
+                as Box<dyn Iterator<Item = heed::Result<(&str, EmbedderInfo)>>>
+        } else {
+            Box::new(self.embedder_info.remap_types::<Str, EmbedderInfoCodec>().iter(rtxn)?)
+                as Box<dyn Iterator<Item = heed::Result<(&str, EmbedderInfo)>>>
+        };
+
+        Ok(embedder_info)
     }
 
     pub fn iter_embedder_id<'a>(
@@ -441,7 +667,7 @@ impl IndexEmbeddingConfigs {
         wtxn: &mut RwTxn<'_>,
         name: &str,
     ) -> heed::Result<Option<EmbedderInfo>> {
-        let info = self.embedder_info.get(wtxn, name)?;
+        let info = self.embedder_info(wtxn, name)?;
         self.embedder_info.delete(wtxn, name)?;
         Ok(info)
     }
@@ -452,6 +678,42 @@ impl IndexEmbeddingConfigs {
         name: &str,
         info: &EmbedderInfo,
     ) -> heed::Result<()> {
-        self.embedder_info.put(wtxn, name, info)
+        if self.use_legacy_embedder_info_codec(wtxn)? {
+            self.embedder_info.remap_types::<Str, LegacyEmbedderInfoCodec>().put(wtxn, name, info)
+        } else {
+            self.embedder_info.remap_types::<Str, EmbedderInfoCodec>().put(wtxn, name, info)
+        }
     }
+
+    fn use_legacy_embedder_info_codec(&self, rtxn: &RoTxn<'_>) -> heed::Result<bool> {
+        Ok(self
+            .main
+            .remap_types::<Str, crate::heed_codec::version::VersionCodec>()
+            .get(rtxn, crate::index::main_key::VERSION_KEY)?
+            .map_or(true, |version| version < (1, 59, 0)))
+    }
+}
+
+pub(crate) fn migrate_embedder_info_format(
+    wtxn: &mut RwTxn<'_>,
+    index: &crate::Index,
+) -> crate::Result<()> {
+    let embedder_info = index.embedder_category_id.remap_types::<Str, Bytes>();
+    let mut it = embedder_info.iter_mut(wtxn)?;
+
+    while let Some(result) = it.next() {
+        let (embedder_name, value) = result?;
+        let embedder_info =
+            LegacyEmbedderInfoCodec::bytes_decode(&value).map_err(heed::Error::Decoding)?;
+        let embedder_info =
+            EmbedderInfoCodec::bytes_encode(&embedder_info).map_err(heed::Error::Encoding)?;
+        let embedder_name = embedder_name.to_owned();
+
+        // SAFETY: we copied the `embedder_name` so are not using the reference while using put
+        unsafe {
+            it.put_current(&embedder_name, &embedder_info)?;
+        }
+    }
+
+    Ok(())
 }

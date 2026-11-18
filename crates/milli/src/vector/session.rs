@@ -27,10 +27,16 @@ pub trait OnEmbed<'doc> {
     fn process_embedding_error(
         &mut self,
         error: EmbedError,
-        embedder_name: &'doc str,
         unused_vectors_distribution: &Self::ErrorMetadata,
         metadata: BVec<'doc, Metadata<'doc>>,
     ) -> crate::Error;
+
+    fn process_rendering_result(
+        &mut self,
+        docid: DocumentId,
+        old_render_failure: bool,
+        new_render_failure: bool,
+    );
 }
 
 pub struct EmbedSession<'doc, C, I> {
@@ -154,7 +160,6 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
                 );
                 Err(self.on_embed.process_embedding_error(
                     error,
-                    self.embedder_name,
                     unused_vectors_distribution,
                     metadata,
                 ))
@@ -185,5 +190,9 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
 
     pub(crate) fn on_embed_mut(&mut self) -> &mut C {
         &mut self.on_embed
+    }
+
+    pub(crate) fn on_embed_ref(&self) -> &C {
+        &self.on_embed
     }
 }

@@ -540,7 +540,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                         )
                                     });
                                     let old = old.as_ref();
-                                    Extractor::diff_settings(&new, &obkv_document, &(), old)
+                                    Extractor::diff_fragments_settings(
+                                        &new,
+                                        &obkv_document,
+                                        &(),
+                                        old,
+                                    )
                                 }
                                 .expect("ignoring errors so this cannot fail");
                                 fragment_diff.push((name.clone(), diff));
@@ -753,7 +758,7 @@ fn extract_vector_document_diff(
                             RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
 
                         let diff = fragment
-                            .diff_documents(&old_document, &new_document, &())
+                            .diff_fragments_documents(&old_document, &new_document, &())
                             .expect("ignoring errors so this cannot fail");
 
                         fragment_diff.push((name.clone(), diff));
@@ -1161,6 +1166,7 @@ pub fn extract_embeddings_from_fragments<R: io::Read + io::Seek>(
     }
 
     let on_embed = WriteGrenadOnEmbed {
+        embedder_name,
         waiting_responses: Default::default(),
         vector_writer,
         scratch: Default::default(),
@@ -1203,6 +1209,7 @@ pub fn extract_embeddings_from_fragments<R: io::Read + io::Seek>(
 }
 
 struct WriteGrenadOnEmbed<'a> {
+    embedder_name: &'a str,
     // list of (document_id, extractor_id) for which vectors should be removed.
     // these are written whenever a response arrives that has a larger (docid, extractor_id).
     waiting_responses: VecDeque<(DocumentId, u8)>,
@@ -1245,6 +1252,16 @@ impl WriteGrenadOnEmbed<'_> {
 
 impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
     type ErrorMetadata = UnusedVectorsDistribution;
+
+    fn process_rendering_result(
+        &mut self,
+        _docid: DocumentId,
+        _old_render_failure: bool,
+        _new_render_failure: bool,
+    ) {
+        // legacy indexer does not support failure delta, so we default to no change
+    }
+
     fn process_embedding_response(
         &mut self,
         response: crate::vector::session::EmbeddingResponse<'doc>,
@@ -1266,10 +1283,10 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
     fn process_embedding_error(
         &mut self,
         error: crate::vector::error::EmbedError,
-        embedder_name: &'doc str,
         unused_vectors_distribution: &crate::vector::error::UnusedVectorsDistribution,
         _metadata: bumpalo::collections::Vec<'doc, crate::vector::session::Metadata<'doc>>,
     ) -> crate::Error {
+        let embedder_name = self.embedder_name;
         if let FaultSource::Bug = error.fault {
             crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))
         } else {
