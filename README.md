@@ -24,8 +24,8 @@
 </p>
 
 <p align="center">
-  🚀 <strong>Meilisearch Searchandising is launching on Product Hunt!</strong> Show your support and follow us for updates.
-  <a href="https://www.producthunt.com/products/meilisearch-cloud?launch=meilisearch-searchandising">Support the launch →</a>
+  🚀 <strong>We’re launching Searchandising on Product Hunt!</strong> Pin, boost and hide results with search rules. We’d love your feedback and a follow.
+  <a href="https://www.producthunt.com/products/meilisearch-cloud?launch=meilisearch-searchandising">Check us out on Product Hunt →</a>
 </p>
 <p align="center">
   <a href="https://www.producthunt.com/products/meilisearch-cloud?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-meilisearch-cloud" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=532742&theme=light" alt="Meilisearch - Fast search and AI retrieval for your apps and sites | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
