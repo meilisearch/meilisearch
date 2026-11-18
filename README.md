@@ -24,11 +24,11 @@
 </p>
 
 <p align="center">
-  🚀 <strong>Meilisearch Searchandising is live on Product Hunt today</strong>, now on Meilisearch Cloud.
-  <a href="https://www.producthunt.com/products/meilisearch-cloud?launch=meilisearch-searchandising">Check it out →</a>
+  🚀 <strong>Meilisearch Searchandising is launching on Product Hunt!</strong> Show your support and follow us for updates.
+  <a href="https://www.producthunt.com/products/meilisearch-cloud?launch=meilisearch-searchandising">Support the launch →</a>
 </p>
 <p align="center">
-  <a href="https://www.producthunt.com/products/meilisearch-cloud?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-meilisearch-cloud" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=532742&theme=light" alt="Follow Meilisearch on Product Hunt" width="250" height="54" /></a>
+  <a href="https://www.producthunt.com/products/meilisearch-cloud?utm_source=badge-follow&utm_medium=badge&utm_campaign=badge-meilisearch-cloud" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/follow.svg?product_id=532742&theme=light" alt="Meilisearch - Fast search and AI retrieval for your apps and sites | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 </p>
 
 <p align="center">⚡ A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow 🔍</p>
