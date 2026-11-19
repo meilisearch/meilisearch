@@ -103,7 +103,6 @@ pub struct EmbedderInfo {
 
 impl EmbedderInfo {
     pub fn to_bytes(&self) -> Result<Cow<'_, [u8]>, heed::BoxedError> {
-        // TODO: use the correct codec based on the version of the DB
         EmbedderInfoCodec::bytes_encode(self)
     }
 }
@@ -137,6 +136,14 @@ pub struct EmbeddingStatus {
     embed_failure: RoaringBitmap,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocumentEmbeddingStatus {
+    pub user_provided: bool,
+    pub must_regenerate: bool,
+    pub render_failure: bool,
+    pub embed_failure: bool,
+}
+
 impl EmbeddingStatus {
     pub fn new() -> Self {
         Default::default()
@@ -161,17 +168,28 @@ impl EmbeddingStatus {
 
     /// Whether vectors should be regenerated for that document and that embedder.
     pub fn must_regenerate(&self, docid: DocumentId) -> bool {
-        // TODO: force regenerate in case of embed failure?
         let invert = self.skip_regenerate_different_from_user_provided.contains(docid);
         let user_provided = self.user_provided.contains(docid);
         !(user_provided ^ invert)
     }
 
-    pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
-        // TODO: force regenerate in case of embed failure?
-        let invert = self.skip_regenerate_different_from_user_provided.contains(docid);
-        let user_provided = self.user_provided.contains(docid);
-        (user_provided, !(user_provided ^ invert))
+    /// Whether the document failed to render for that embedder.
+    pub fn failed_to_render(&self, docid: DocumentId) -> bool {
+        self.render_failure.contains(docid)
+    }
+
+    /// Whether the document failed to embed for that embedder.
+    pub fn failed_to_embed(&self, docid: DocumentId) -> bool {
+        self.embed_failure.contains(docid)
+    }
+
+    pub fn document_embedding_status(&self, docid: DocumentId) -> DocumentEmbeddingStatus {
+        DocumentEmbeddingStatus {
+            user_provided: self.is_user_provided(docid),
+            must_regenerate: self.must_regenerate(docid),
+            render_failure: self.failed_to_render(docid),
+            embed_failure: self.failed_to_embed(docid),
+        }
     }
 
     pub fn user_provided_docids(&self) -> &RoaringBitmap {
@@ -217,12 +235,9 @@ impl EmbeddingStatusDelta {
     }
 
     pub fn needs_clear(
-        is_user_provided: bool,
-        must_regenerate: bool,
-        render_failure: bool,
-        embed_failure: bool,
+        DocumentEmbeddingStatus { user_provided, must_regenerate, render_failure, embed_failure }: DocumentEmbeddingStatus,
     ) -> bool {
-        Self::needs_change(is_user_provided, must_regenerate, false, true)
+        Self::needs_change(user_provided, must_regenerate, false, true)
             || render_failure
             || embed_failure
     }
@@ -643,16 +658,17 @@ impl IndexEmbeddingConfigs {
         &self,
         rtxn: &'a RoTxn<'_>,
     ) -> heed::Result<impl Iterator<Item = heed::Result<(&'a str, EmbedderInfo)>>> {
-        // TODO: are we forced to box the iterator?
-        let embedder_info = if self.use_legacy_embedder_info_codec(rtxn)? {
-            Box::new(self.embedder_info.remap_types::<Str, LegacyEmbedderInfoCodec>().iter(rtxn)?)
-                as Box<dyn Iterator<Item = heed::Result<(&str, EmbedderInfo)>>>
+        if self.use_legacy_embedder_info_codec(rtxn)? {
+            self.embedder_info
+                .remap_types::<Str, LegacyEmbedderInfoCodec>()
+                .iter(rtxn)
+                .map(either::Either::Left)
         } else {
-            Box::new(self.embedder_info.remap_types::<Str, EmbedderInfoCodec>().iter(rtxn)?)
-                as Box<dyn Iterator<Item = heed::Result<(&str, EmbedderInfo)>>>
-        };
-
-        Ok(embedder_info)
+            self.embedder_info
+                .remap_types::<Str, EmbedderInfoCodec>()
+                .iter(rtxn)
+                .map(either::Either::Right)
+        }
     }
 
     pub fn iter_embedder_id<'a>(

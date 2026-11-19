@@ -17,7 +17,9 @@ use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::update::settings::SettingsDelta;
-use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
+use crate::vector::db::{
+    DocumentEmbeddingStatus, EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta,
+};
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
@@ -115,17 +117,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                     // vector deletion is handled by document sender,
                     // we still need to accomodate deletion from embedding_status
                     for chunks in &mut all_chunks {
-                        // TODO: we must remove the document id from render and embed failures.
-                        let old_render_failure = false;
-
-                        let (is_user_provided, must_regenerate) =
-                            chunks.is_user_provided_must_regenerate(deletion.docid());
-                        chunks.clear_status(
-                            deletion.docid(),
-                            is_user_provided,
-                            must_regenerate,
-                            old_render_failure,
-                        );
+                        let document_embedding_status =
+                            chunks.document_embedding_status(deletion.docid());
+                        chunks.clear_status(deletion.docid(), document_embedding_status);
                     }
                 }
                 DocumentChange::Update(update) => {
@@ -137,8 +131,12 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                     }
 
                     for chunks in &mut all_chunks {
-                        let (old_is_user_provided, old_must_regenerate) =
-                            chunks.is_user_provided_must_regenerate(update.docid());
+                        let DocumentEmbeddingStatus {
+                            user_provided: old_is_user_provided,
+                            must_regenerate: old_must_regenerate,
+                            render_failure: _,
+                            embed_failure: _,
+                        } = chunks.document_embedding_status(update.docid());
 
                         let embedder_name = chunks.embedder_name();
 
@@ -395,8 +393,12 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
             for (chunks, reindex_action) in &mut all_chunks {
                 let embedder_name = chunks.embedder_name();
                 let current_vectors = current_vectors.vectors_for_key(embedder_name)?;
-                let (old_is_user_provided, _) =
-                    chunks.is_user_provided_must_regenerate(document.docid());
+                let DocumentEmbeddingStatus {
+                    user_provided: old_is_user_provided,
+                    must_regenerate: _,
+                    render_failure: _,
+                    embed_failure: _,
+                } = chunks.document_embedding_status(document.docid());
                 let old_has_fragments = old_embedders
                     .get(embedder_name)
                     .map(|embedder| !embedder.fragments().is_empty())
@@ -528,7 +530,6 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_, '_> {
         response: crate::vector::session::EmbeddingResponse<'doc>,
     ) {
         // Register document id in embedding failures for this embedder.
-        // TODO: this may not be optimal to borrow_mut here because we have to do it for each document
         if let Some(failure_delta) = self.status_delta.borrow_mut().0.get_mut(self.embedder_name) {
             failure_delta.del_embedding_failure(response.metadata.docid);
         }
@@ -694,8 +695,8 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         Self { dimensions, status: embedder_info.embedding_status, kind }
     }
 
-    pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
-        self.status.is_user_provided_must_regenerate(docid)
+    pub fn document_embedding_status(&self, docid: DocumentId) -> DocumentEmbeddingStatus {
+        self.status.document_embedding_status(docid)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1070,23 +1071,12 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         }
     }
 
-    pub fn clear_status(
-        &self,
-        docid: DocumentId,
-        is_user_provided: bool,
-        must_regenerate: bool,
-        render_failure: bool,
-    ) {
+    pub fn clear_status(&self, docid: DocumentId, status: DocumentEmbeddingStatus) {
         // these value ensure both roaring are at 0.
-        if EmbeddingStatusDelta::needs_clear(
-            is_user_provided,
-            must_regenerate,
-            render_failure,
-            false,
-        ) {
+        if EmbeddingStatusDelta::needs_clear(status) {
             let mut status_delta = self.kind.on_embed_ref().status_delta.borrow_mut();
             let status_delta = status_delta.0.entry_ref(self.embedder_name()).or_default();
-            status_delta.clear_docid(docid, is_user_provided, must_regenerate);
+            status_delta.clear_docid(docid, status.user_provided, status.must_regenerate);
         }
     }
 

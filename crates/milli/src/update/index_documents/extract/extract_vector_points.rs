@@ -23,7 +23,7 @@ use crate::progress::EmbedderStats;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::db::{EmbedderInfo, EmbeddingStatusDelta};
+use crate::vector::db::{DocumentEmbeddingStatus, EmbedderInfo, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
@@ -441,8 +441,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         {
             let embedder_is_manual = matches!(*runtime.embedder, Embedder::UserProvided(_));
 
-            let (old_is_user_provided, old_must_regenerate) =
-                embedder_info.embedding_status.is_user_provided_must_regenerate(docid);
+            let DocumentEmbeddingStatus {
+                user_provided: old_is_user_provided,
+                must_regenerate: old_must_regenerate,
+                render_failure: _,
+                embed_failure: _,
+            } = embedder_info.embedding_status.document_embedding_status(docid);
             let (old, new) = parsed_vectors.remove(embedder_name);
             let new_must_regenerate = new.must_regenerate();
             let delta = match action {
