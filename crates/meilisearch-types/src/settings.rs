@@ -367,7 +367,7 @@ pub struct Settings<T> {
     )]
     pub typo_tolerance: Setting<TypoSettings>,
 
-    /// [Word position](https://www.meilisearch.com/docs/capabilities/full_text_search/relevancy/ranking_rules#disable-word-positions): enabled/disabled.
+    /// [Word position](https://www.meilisearch.com/docs/capabilities/full_text_search/relevancy/ranking_rules#6-word-position): enabled/disabled.
     #[request(
         error = DeserrJsonError<InvalidSettingsWordPosition>,
         schema_type = Option<WordPositionSettings>,
