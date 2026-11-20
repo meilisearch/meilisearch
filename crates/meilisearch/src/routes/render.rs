@@ -37,7 +37,7 @@ use crate::routes::render_analytics::RenderAggregator;
     tag = "Render templates",
     tags((
         name = "Render templates",
-        description = "The /render-template route allows rendering templates used by Meilisearch.",
+        description = "Render the templates used by Meilisearch.",
         external_docs(
             url = "https://www.meilisearch.com/docs/reference/api/render-template",
             description = "Render template API reference"
