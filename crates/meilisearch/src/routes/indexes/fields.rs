@@ -148,11 +148,11 @@ pub struct FieldLocalizedConfig<'a> {
 #[routes::request]
 #[derive(Debug, Clone)]
 pub struct ListFields {
-    /// Number of fields to skip. Defaults to 0.
-    #[request(default, error = DeserrJsonError<InvalidIndexOffset>)]
+    /// Number of fields to skip.
+    #[request(default, schema_default = 0, error = DeserrJsonError<InvalidIndexOffset>)]
     pub offset: usize,
-    /// Maximum number of fields to return. Defaults to 20.
-    #[request(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidIndexLimit>)]
+    /// Maximum number of fields to return.
+    #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = crate::routes::PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidIndexLimit>)]
     pub limit: usize,
     /// Optional filter to restrict which fields are returned (e.g. by attribute patterns or by capability: displayed, searchable, sortable, filterable, etc.).
     #[request(default, error = DeserrJsonError<InvalidIndexFieldsFilter>)]

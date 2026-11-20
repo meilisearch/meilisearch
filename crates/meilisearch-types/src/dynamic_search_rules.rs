@@ -574,7 +574,7 @@ impl QueryCondition {
 #[routes::request(db, override_error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterCondition {
-    #[request(default)]
+    #[request(default, schema_default = json!({}))]
     pub values: BTreeMap<String, serde_json::Value>,
 }
 

@@ -80,7 +80,7 @@ pub struct FacetSearchQuery {
     #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Strategy used to match query terms
-    #[request(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
+    #[request(default, schema_default = json!("last"), error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to specified attributes
     #[request(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
