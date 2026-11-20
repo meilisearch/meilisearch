@@ -64,11 +64,10 @@ Why? GitHub Merge Queue does not work with branch patterns yet, so we have to ad
 - Ensure each line makes sense for external people reading the changelogs. Add more details of usage if needed.
 - Thank the external contributors at the end of the changelogs.
 
-⚠️ <ins>If doing a patch release that should NOT be the `latest` release</s>:
+⚠️ <ins>If doing a patch release that should NOT be the `latest` release</ins>:
 
-- Do NOT check `Set as the latest release` when creating the GitHub release. If you did, quickly interrupt all CIs and delete the GitHub release!
-- Once the release is created, you don't have to care about Homebrew, APT and Docker CIs: they will not consider this new release as the latest; the CIs are already adapted for this situation.
-- However, the [CI updating the `latest` git tag](https://github.com/meilisearch/meilisearch/actions/workflows/latest-git-tag.yml) is not working for this situation currently and will attach the `latest` git tag to the just-created release, which is something we don't want! If you don't succeed in stopping the CI on time, don't worry, you just have to re-run the [old CI](https://github.com/meilisearch/meilisearch/actions/workflows/latest-git-tag.yml) corresponding to the real latest release, and the `latest` git tag will be attached back to the right commit.
+- Do NOT check `Set as the latest release` when creating the GitHub release, so that GitHub displays the right latest release. If you did, just edit the release to uncheck it: no CI relies on this checkbox.
+- The Docker `latest` and `vX` tags and the `latest` git tag are only moved if the release is the highest stable version (or the highest stable version of its major for `vX`), based on the semver order of the git tags. The [CI updating the `latest` git tag](https://github.com/meilisearch/meilisearch/actions/workflows/latest-git-tag.yml) displays a warning if the checkbox is not consistent with the git tags.
 
 6. Bring the new commits back from `release-vX.Y.Z+1` to `main` by merging a PR originating `release-vX.Y.Z+1` and pointing to `main`.
 

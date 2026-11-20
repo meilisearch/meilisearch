@@ -1,48 +1,21 @@
-#!/bin/sh
+#!/usr/bin/env bash
+set -eu -o pipefail
 
-# Used in our CIs to publish the latest Docker image.
+# Used in our CIs to know if a stable release should move the `latest` and `vX` tags (Docker and git).
+# Relies only on the semver order of the git tags, so it doesn't depend on when the CIs run.
+#
+# Usage: is-latest-release.sh vX.Y.Z
+# Outputs, in the `$GITHUB_OUTPUT` format:
+# - latest=true|false: the tag is the highest stable version
+# - latest_major=true|false: the tag is the highest stable version of its major
 
-# Checks if the current tag ($GITHUB_REF) corresponds to the latest release tag on GitHub
-# Returns "true" or "false" (as a string).
+current_tag=$1
+major=${current_tag%%.*}
 
-GITHUB_API='https://api.github.com/repos/meilisearch/meilisearch/releases'
-PNAME='meilisearch'
+# Listing the remote tags works whatever the checkout configuration (shallow clone, no tags fetched...)
+stable_tags=$(git ls-remote --tags --refs origin | cut -f 2 | sed 's|^refs/tags/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)
+highest=$(tail -n 1 <<< "$stable_tags")
+highest_major=$(grep "^$major\." <<< "$stable_tags" | tail -n 1)
 
-# FUNCTIONS
-
-# Returns the version of the latest stable version of Meilisearch by setting the $latest variable.
-get_latest() {
-    # temp_file is needed because the grep would start before the download is over
-    temp_file=$(mktemp -q /tmp/$PNAME.XXXXXXXXX)
-    latest_release="$GITHUB_API/latest"
-
-    if [ $? -ne 0 ]; then
-        echo "$0: Can't create temp file."
-        exit 1
-    fi
-
-    if [ -z "$GITHUB_PAT" ]; then
-        curl -s "$latest_release" > "$temp_file" || return 1
-    else
-        curl -H "Authorization: token $GITHUB_PAT" -s "$latest_release" > "$temp_file" || return 1
-    fi
-
-    latest="$(cat "$temp_file" | grep '"tag_name":' | cut -d ':' -f2 | tr -d '"' | tr -d ',' | tr -d ' ')"
-
-    rm -f "$temp_file"
-    return 0
-}
-
-# MAIN
-current_tag="$(echo $GITHUB_REF | tr -d 'refs/tags/')"
-get_latest
-
-if [ "$current_tag" != "$latest" ]; then
-    # The current release tag is not the latest
-    echo "false"
-else
-    # The current release tag is the latest
-    echo "true"
-fi
-
-exit 0
+echo "latest=$([[ $current_tag == "$highest" ]] && echo true || echo false)"
+echo "latest_major=$([[ $current_tag == "$highest_major" ]] && echo true || echo false)"
