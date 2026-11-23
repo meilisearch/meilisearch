@@ -196,6 +196,14 @@ impl EmbeddingStatus {
         &self.user_provided
     }
 
+    pub fn rendering_error_docids(&self) -> &RoaringBitmap {
+        &self.render_failure
+    }
+
+    pub fn embedding_error_docids(&self) -> &RoaringBitmap {
+        &self.embed_failure
+    }
+
     pub fn skip_regenerate_docids(&self) -> RoaringBitmap {
         &self.user_provided ^ &self.skip_regenerate_different_from_user_provided
     }

@@ -151,6 +151,8 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
         value(VectorFilter::UserProvided, tag(".userProvided")),
         value(VectorFilter::DocumentTemplate, tag(".documentTemplate")),
         value(VectorFilter::Regenerate, tag(".regenerate")),
+        value(VectorFilter::RenderingError, tag(".renderingError")),
+        value(VectorFilter::EmbeddingError, tag(".embeddingError")),
         value(VectorFilter::None, nom::combinator::success("")),
     ))(input)?;
 
@@ -166,6 +168,8 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
             VectorFilter::DocumentTemplate => Some("documentTemplate"),
             VectorFilter::UserProvided => Some("userProvided"),
             VectorFilter::Regenerate => Some("regenerate"),
+            VectorFilter::RenderingError => Some("renderingError"),
+            VectorFilter::EmbeddingError => Some("embeddingError"),
             VectorFilter::None => None,
         };
         return Err(Error::failure_from_kind(
