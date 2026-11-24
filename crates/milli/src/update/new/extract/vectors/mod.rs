@@ -51,9 +51,9 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
         field_distribution: &'a FieldDistribution,
         embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
+        failure_modes: EmbedderFailureModes,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        let failure_modes = EmbedderFailureModes::from_env();
         Self {
             embedders,
             sender,
@@ -298,9 +298,9 @@ impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
         sender: EmbeddingSender<'a, 'b>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
+        failure_modes: EmbedderFailureModes,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        let failure_modes = EmbedderFailureModes::from_env();
 
         Self {
             settings_delta,
@@ -1250,27 +1250,14 @@ where
     Ok(())
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
-struct EmbedderFailureModes {
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub struct EmbedderFailureModes {
     pub ignore_document_template_failures: bool,
     pub ignore_embedder_failures: bool,
 }
 
 impl EmbedderFailureModes {
-    fn from_env() -> Self {
-        match std::env::var("MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES") {
-            Ok(failure_modes) => Self::parse_from_str(
-                &failure_modes,
-                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES`",
-            ),
-            Err(std::env::VarError::NotPresent) => Self::default(),
-            Err(std::env::VarError::NotUnicode(_)) => panic!(
-                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES` contains a non-unicode value"
-            ),
-        }
-    }
-
-    fn parse_from_str(failure_modes: &str, provenance: &'static str) -> Self {
+    pub fn parse_from_str(failure_modes: &str) -> Self {
         let Self { mut ignore_document_template_failures, mut ignore_embedder_failures } =
             Default::default();
         for segment in failure_modes.split(',') {
@@ -1281,7 +1268,7 @@ impl EmbedderFailureModes {
                 }
                 "ignore_embedder_failures" => ignore_embedder_failures = true,
                 "" => continue,
-                segment => panic!("Unrecognized segment value for {provenance}: {segment}"),
+                segment => panic!("Unrecognized segment value for {segment}"),
             }
         }
         Self { ignore_document_template_failures, ignore_embedder_failures }

@@ -99,6 +99,7 @@ pub fn create_metadata(
         progress,
         ip_policy,
         &Default::default(),
+        Default::default(),
     )?;
     Ok(())
 }

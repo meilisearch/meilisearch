@@ -248,6 +248,7 @@ struct Infos {
     ssl_require_auth: bool,
     ssl_resumption: bool,
     ssl_tickets: bool,
+    experimental_config_embedder_failure_modes: bool,
 }
 
 impl Infos {
@@ -314,6 +315,7 @@ impl Infos {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
+            experimental_config_embedder_failure_modes,
         } = indexer_options;
 
         let RuntimeTogglableFeatures {
@@ -398,6 +400,8 @@ impl Infos {
             ssl_tickets,
             experimental_no_edition_2024_for_settings,
             experimental_personalization: experimental_personalization_api_key.is_some(),
+            experimental_config_embedder_failure_modes: experimental_config_embedder_failure_modes
+                .is_some(),
         }
     }
 }

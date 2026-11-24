@@ -102,7 +102,8 @@ pub use self::search::{
     DEFAULT_VALUES_PER_FACET,
 };
 pub use self::update::{
-    ChannelCongestion, FragmentDiff, InnerIndexSettings, InnerIndexSettingsDiff, SettingsDelta,
+    ChannelCongestion, EmbedderFailureModes, FragmentDiff, InnerIndexSettings,
+    InnerIndexSettingsDiff, SettingsDelta,
 };
 
 pub type Result<T, E = error::Error> = std::result::Result<T, E>;

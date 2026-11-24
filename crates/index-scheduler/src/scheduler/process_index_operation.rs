@@ -227,6 +227,7 @@ impl IndexScheduler {
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
+                            indexer_config.embedder_failure_modes,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
                     );
@@ -355,6 +356,7 @@ impl IndexScheduler {
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
+                            indexer_config.embedder_failure_modes,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -510,6 +512,7 @@ impl IndexScheduler {
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
+                            indexer_config.embedder_failure_modes,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
                     );
@@ -820,6 +823,7 @@ impl IndexScheduler {
                     progress,
                     self.ip_policy(),
                     &embedder_stats,
+                    indexer_config.embedder_failure_modes,
                 )
                 .map_err(from_milli)?,
             );

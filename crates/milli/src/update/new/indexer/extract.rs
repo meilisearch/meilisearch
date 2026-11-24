@@ -269,6 +269,7 @@ where
             field_distribution,
             embedder_stats,
             request_threads(),
+            indexing_context.embedder_failure_modes,
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
         {
@@ -581,6 +582,7 @@ where
             embedding_sender,
             field_distribution,
             request_threads(),
+            indexing_context.embedder_failure_modes,
         );
         let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
         {

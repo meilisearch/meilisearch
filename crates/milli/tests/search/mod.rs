@@ -129,6 +129,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
 

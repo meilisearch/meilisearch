@@ -126,6 +126,7 @@ impl TempIndex {
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
+                Default::default(),
             )
         })
         .unwrap()?;
@@ -225,6 +226,7 @@ impl TempIndex {
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
+                Default::default(),
             )
         })
         .unwrap()?;
@@ -314,6 +316,7 @@ fn aborting_indexation() {
                 // NO DANGER: test
                 &IpPolicy::danger_always_allow(),
                 &Default::default(),
+                Default::default(),
             )
         })
         .unwrap()

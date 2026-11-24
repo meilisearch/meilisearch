@@ -575,6 +575,7 @@ impl IndexScheduler {
             progress,
             self.ip_policy(),
             &EmbedderStats::default(),
+            Default::default(),
         )?;
 
         Ok(())

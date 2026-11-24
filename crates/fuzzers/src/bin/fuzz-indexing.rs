@@ -154,6 +154,7 @@ fn main() {
                                 &Progress::quiet(),
                                 &IpPolicy::deny_all_local_ips(),
                                 &Default::default(),
+                                Default::default(),
                             )
                             .unwrap();
 
