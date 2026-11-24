@@ -18,9 +18,32 @@ jobs:
   update-latest-tag:
     runs-on: ubuntu-latest
     needs: check-version
+    # Run one release at a time: otherwise, a run could compute the latest flags
+    # before a higher version is tagged, and push the `latest` tag after that higher version's run
+    concurrency:
+      group: latest-git-tag
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check if the release is the latest one
+        id: is-latest
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.MEILI_BOT_GH_PAT }}
+          GH_REF_NAME: ${{ github.ref_name }}
+        run: |
+          flags=$(bash .github/scripts/is-latest-release.sh "$GH_REF_NAME")
+          echo "$flags" >> $GITHUB_OUTPUT
+
+          github_latest=$(gh release view --json tagName --jq .tagName)
+          if grep -qx 'latest=true' <<< "$flags"; then
+            [[ $github_latest == "$GH_REF_NAME" ]] || echo "::warning::$GH_REF_NAME is the highest stable version but is not set as the latest GitHub release ($github_latest is)"
+          elif [[ $github_latest == "$GH_REF_NAME" ]]; then
+            echo "::warning::$GH_REF_NAME is set as the latest GitHub release but is not the highest stable version"
+          fi
       - uses: rickstaa/action-create-tag@a1c7777fcb2fee4f19b0f283ba888afa11678b72 # v1
+        # A manual run always moves the tag, to fix it if needed
+        if: github.event_name == 'workflow_dispatch' || steps.is-latest.outputs.latest == 'true'
         with:
           tag: "latest"
           message: "Latest stable release of Meilisearch"
