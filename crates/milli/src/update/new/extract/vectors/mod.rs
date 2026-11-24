@@ -515,13 +515,14 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_, '_> {
         old_render_failure: bool,
         new_render_failure: bool,
     ) {
-        if let Some(failure_delta) = self.status_delta.borrow_mut().0.get_mut(self.embedder_name) {
-            if old_render_failure {
-                failure_delta.del_rendering_failure(docid);
-            }
-            if new_render_failure {
-                failure_delta.add_rendering_failure(docid);
-            }
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+
+        if old_render_failure {
+            failure_delta.del_rendering_failure(docid);
+        }
+        if new_render_failure {
+            failure_delta.add_rendering_failure(docid);
         }
     }
 
@@ -530,9 +531,10 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_, '_> {
         response: crate::vector::session::EmbeddingResponse<'doc>,
     ) {
         // Register document id in embedding failures for this embedder.
-        if let Some(failure_delta) = self.status_delta.borrow_mut().0.get_mut(self.embedder_name) {
-            failure_delta.del_embedding_failure(response.metadata.docid);
-        }
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+        failure_delta.del_embedding_failure(response.metadata.docid);
+
         self.sender
             .set_vector(
                 response.metadata.docid,
@@ -550,10 +552,10 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_, '_> {
     ) -> crate::Error {
         let embedder_name = self.embedder_name;
         // Register document ids in embedding failures for this embedder.
-        if let Some(failure_delta) = self.status_delta.borrow_mut().0.get_mut(embedder_name) {
-            for metadata in metadata.iter() {
-                failure_delta.add_embedding_failure(metadata.docid);
-            }
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+        for metadata in metadata.iter() {
+            failure_delta.add_embedding_failure(metadata.docid);
         }
 
         if let FaultSource::Bug = error.fault {

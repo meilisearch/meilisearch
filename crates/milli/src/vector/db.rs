@@ -96,6 +96,7 @@ pub struct IndexEmbeddingConfigs {
     embedder_info: Database<'static, Str, Unspecified>,
 }
 
+#[derive(Debug)]
 pub struct EmbedderInfo {
     pub embedder_id: u8,
     pub embedding_status: EmbeddingStatus,
@@ -107,28 +108,12 @@ impl EmbedderInfo {
     }
 }
 
-#[derive(Default)]
-pub struct EmbeddingFailures {
-    pub render_failure: RoaringBitmap,
-    pub embed_failure: RoaringBitmap,
-}
-
-impl EmbeddingFailures {
-    pub fn render_failure(&mut self, docid: DocumentId) {
-        self.render_failure.insert(docid);
-    }
-
-    pub fn embed_failure(&mut self, docid: DocumentId) {
-        self.embed_failure.insert(docid);
-    }
-}
-
 /// Optimized struct to hold the list of documents that are `user_provided` and `must_regenerate`.
 ///
 /// Because most documents have the same value for `user_provided` and `must_regenerate`, we store only
 /// the `user_provided` and a list of the documents for which `must_regenerate` assumes the other value
 /// than `user_provided`.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EmbeddingStatus {
     user_provided: RoaringBitmap,
     skip_regenerate_different_from_user_provided: RoaringBitmap,
@@ -213,12 +198,10 @@ impl EmbeddingStatus {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EmbeddingStatusDelta {
     del_status: EmbeddingStatus,
     add_status: EmbeddingStatus,
-    del_failures: EmbeddingFailures,
-    add_failures: EmbeddingFailures,
 }
 
 impl EmbeddingStatusDelta {
@@ -257,8 +240,8 @@ impl EmbeddingStatusDelta {
         must_regenerate: bool,
     ) {
         self.push_delta(docid, is_user_provided, must_regenerate, false, true);
-        self.del_failures.render_failure(docid);
-        self.del_failures.embed_failure(docid);
+        self.del_status.render_failure.insert(docid);
+        self.del_status.embed_failure.insert(docid);
     }
 
     pub fn push_delta(
@@ -316,19 +299,19 @@ impl EmbeddingStatusDelta {
     }
 
     pub fn add_rendering_failure(&mut self, docid: DocumentId) {
-        self.add_failures.render_failure(docid);
+        self.add_status.render_failure.insert(docid);
     }
 
     pub fn add_embedding_failure(&mut self, docid: DocumentId) {
-        self.add_failures.embed_failure(docid);
+        self.add_status.embed_failure.insert(docid);
     }
 
     pub fn del_rendering_failure(&mut self, docid: DocumentId) {
-        self.del_failures.render_failure(docid);
+        self.del_status.render_failure.insert(docid);
     }
 
     pub fn del_embedding_failure(&mut self, docid: DocumentId) {
-        self.del_failures.embed_failure(docid);
+        self.del_status.embed_failure.insert(docid);
     }
 }
 
