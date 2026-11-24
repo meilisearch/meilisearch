@@ -67,7 +67,7 @@ Why? GitHub Merge Queue does not work with branch patterns yet, so we have to ad
 ⚠️ <ins>If doing a patch release that should NOT be the `latest` release</ins>:
 
 - Do NOT check `Set as the latest release` when creating the GitHub release, so that GitHub displays the right latest release. If you did, just edit the release to uncheck it: no CI relies on this checkbox.
-- The Docker `latest` and `vX` tags and the `latest` git tag are only moved if the release is the highest stable version (or the highest stable version of its major for `vX`), based on the semver order of the git tags. The [CI updating the `latest` git tag](https://github.com/meilisearch/meilisearch/actions/workflows/latest-git-tag.yml) displays a warning if the checkbox is not consistent with the git tags.
+- The Docker `latest`, `vX` and `vX.Y` tags and the `latest` git tag are only moved if the release is the highest stable version (or the highest stable version of its major for `vX`, of its minor for `vX.Y`), based on the semver order of the git tags. The [CI updating the `latest` git tag](https://github.com/meilisearch/meilisearch/actions/workflows/latest-git-tag.yml) displays a warning if the checkbox is not consistent with the git tags.
 
 6. Bring the new commits back from `release-vX.Y.Z+1` to `main` by merging a PR originating `release-vX.Y.Z+1` and pointing to `main`.
 

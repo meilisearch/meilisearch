@@ -64,7 +64,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=raw,value=nightly,enable=${{ github.event_name != 'push' }}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest_minor == 'true' }}
             type=semver,pattern=v{{major}},enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest_major == 'true' }}
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
@@ -124,7 +124,7 @@ jobs:
       # If we are running a cron or manual job ('schedule' or 'workflow_dispatch' event), it means we are publishing the `nightly` tag, so not considered stable.
       # If we have pushed a tag, and the tag has the v<nmumber>.<number>.<number> format, it means we are publishing an official release, so considered stable.
       # In this situation, we need to set `output.stable` to create/update the following tags (additionally to the `vX.Y.Z` Docker tag):
-      # - a `vX.Y` (without patch version) Docker tag
+      # - a `vX.Y` (without patch version) Docker tag, only if it is the highest stable version of its minor
       # - a `vX` (without minor and patch versions) Docker tag, only if it is the highest stable version of its major
       # - a `latest` Docker tag, only if it is the highest stable version
       # For any other tag pushed, this is not considered stable.
@@ -137,6 +137,7 @@ jobs:
           escaped_tag=$(printf "%q" "$GH_REF_NAME")
           echo "latest=false" >> $GITHUB_OUTPUT
           echo "latest_major=false" >> $GITHUB_OUTPUT
+          echo "latest_minor=false" >> $GITHUB_OUTPUT
 
           if [[ "$GH_EVENT_NAME" != 'push' ]]; then
             echo "stable=false" >> $GITHUB_OUTPUT
@@ -190,7 +191,7 @@ jobs:
           tags: |
             type=ref,event=tag
             type=raw,value=nightly,enable=${{ github.event_name != 'push' }}
-            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest_minor == 'true' }}
             type=semver,pattern=v{{major}},enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest_major == 'true' }}
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
