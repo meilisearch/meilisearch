@@ -1723,6 +1723,8 @@ impl SearchByIndex {
                         };
 
                         if let Some(distinct) = self.federation.distinct.as_deref() {
+                            let _step =
+                                progress.update_progress_scoped(RetrieveIndexDataStep::Distinct);
                             let mut facet_values = Vec::new();
                             hit.facet_values(distinct, |value| facet_values.push(value));
                             let is_rejected = facet_values
