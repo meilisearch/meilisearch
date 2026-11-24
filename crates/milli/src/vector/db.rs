@@ -697,7 +697,7 @@ impl IndexEmbeddingConfigs {
             .main
             .remap_types::<Str, crate::heed_codec::version::VersionCodec>()
             .get(rtxn, crate::index::main_key::VERSION_KEY)?
-            .map_or(true, |version| version < (1, 59, 0)))
+            .is_none_or(|version| version < (1, 59, 0)))
     }
 }
 
@@ -711,7 +711,7 @@ pub(crate) fn migrate_embedder_info_format(
     while let Some(result) = it.next() {
         let (embedder_name, value) = result?;
         let embedder_info =
-            LegacyEmbedderInfoCodec::bytes_decode(&value).map_err(heed::Error::Decoding)?;
+            LegacyEmbedderInfoCodec::bytes_decode(value).map_err(heed::Error::Decoding)?;
         let embedder_info =
             EmbedderInfoCodec::bytes_encode(&embedder_info).map_err(heed::Error::Encoding)?;
         let embedder_name = embedder_name.to_owned();

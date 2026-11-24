@@ -881,7 +881,7 @@ impl IndexerOpts {
         {
             export_to_env_if_not_present(
                 MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES,
-                experimental_config_embedder_failure_modes.to_string(),
+                &experimental_config_embedder_failure_modes,
             );
         }
     }
