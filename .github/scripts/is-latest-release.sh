@@ -16,10 +16,12 @@ minor=${current_tag%.*}
 
 # Listing the remote tags works whatever the checkout configuration (shallow clone, no tags fetched...)
 stable_tags=$(git ls-remote --tags --refs origin | cut -f 2 | sed 's|^refs/tags/||' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)
-highest=$(tail -n 1 <<< "$stable_tags")
-highest_major=$(grep "^$major\." <<< "$stable_tags" | tail -n 1)
-highest_minor=$(grep "^$minor\." <<< "$stable_tags" | tail -n 1)
 
-echo "latest=$([[ $current_tag == "$highest" ]] && echo true || echo false)"
-echo "latest_major=$([[ $current_tag == "$highest_major" ]] && echo true || echo false)"
-echo "latest_minor=$([[ $current_tag == "$highest_minor" ]] && echo true || echo false)"
+# Outputs true if the current tag is the highest stable tag starting with the given prefix
+is_highest() {
+    [[ $current_tag == "$(grep "^$1" <<< "$stable_tags" | tail -n 1)" ]] && echo true || echo false
+}
+
+echo "latest=$(is_highest v)"
+echo "latest_major=$(is_highest "$major\.")"
+echo "latest_minor=$(is_highest "$minor\.")"
