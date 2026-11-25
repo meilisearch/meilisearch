@@ -576,6 +576,39 @@
       "synchronous": "WaitForTask"
     },
     {
+      "description": "enable multimodal",
+      "route": "experimental-features",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "multimodal": true
+        }
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "description": "Test vector filters",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "attributesToRetrieve": ["id"],
+          "limit": 5,
+          "filter": "_vectors.default.regenerate EXISTS"
+        }
+      },
+      "expectedStatus": 200,
+      "register": {
+        "filteredHit0": "/hits/0/id",
+        "filteredHit1": "/hits/1/id",
+        "filteredHit2": "/hits/2/id",
+        "filteredHit3": "/hits/3/id",
+        "filteredHit4": "/hits/4/id"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
       "binary": {
         "description": "current binary migrates arroy indexes to hannoy indexes, no upgrade task",
         "source": "build",
@@ -585,6 +618,45 @@
           "--experimental-max-number-of-batched-tasks=0"
         ]
       }
+    },
+    {
+      "description": "Test vector filters",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "attributesToRetrieve": ["id"],
+          "limit": 5,
+          "filter": "_vectors.default.regenerate EXISTS"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 99,
+        "hits": [
+          {
+            "id": "{{ filteredHit0 }}"
+          },
+          {
+            "id": "{{ filteredHit1 }}"
+          },
+          {
+            "id": "{{ filteredHit2 }}"
+          },
+          {
+            "id": "{{ filteredHit3 }}"
+          },
+          {
+            "id": "{{ filteredHit4 }}"
+          }
+        ],
+        "limit": 5,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "WaitForResponse"
     },
     {
       "description": "results didn't change for arroy index because no upgrade",
@@ -752,6 +824,45 @@
         "query": "Police",
         "requestUid": "[uuid]",
         "semanticHitCount": 5
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "description": "Test vector filters",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "attributesToRetrieve": ["id"],
+          "limit": 5,
+          "filter": "_vectors.default.regenerate EXISTS"
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 99,
+        "hits": [
+          {
+            "id": "{{ filteredHit0 }}"
+          },
+          {
+            "id": "{{ filteredHit1 }}"
+          },
+          {
+            "id": "{{ filteredHit2 }}"
+          },
+          {
+            "id": "{{ filteredHit3 }}"
+          },
+          {
+            "id": "{{ filteredHit4 }}"
+          }
+        ],
+        "limit": 5,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "",
+        "requestUid": "[uuid]"
       },
       "synchronous": "WaitForResponse"
     },
