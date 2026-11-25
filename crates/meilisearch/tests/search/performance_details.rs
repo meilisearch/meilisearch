@@ -177,3 +177,57 @@ async fn federated_search() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn federated_search_multiple_indexes_query_steps() {
+    let server = Server::new_shared();
+    let index_a = server.unique_index();
+    let index_b = server.unique_index();
+
+    let documents = DOCUMENTS.clone();
+    let (task, _code) = index_a.add_documents(documents.clone(), Some("id")).await;
+    server.wait_task(task.uid()).await.succeeded();
+    let (task, _code) = index_b.add_documents(documents, Some("id")).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Interleave queries across indexes so that global and per-index positions differ
+    let (response, code) = server
+        .multi_search(json!({
+            "federation": { "showPerformanceDetails": true },
+            "queries": [
+                {"indexUid": index_a.uid, "q": "glass"},
+                {"indexUid": index_b.uid, "q": "glass"},
+                {"indexUid": index_a.uid, "q": "dragon"}
+            ]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    // Each query must get its own step, named after its position in the federated request,
+    // so that the durations of queries targeting different indexes are not merged together.
+    // Keys are sorted because indexes are processed in an order that depends on their (random) uid.
+    let mut query_steps: Vec<&str> = response["performanceDetails"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .filter(|step| step.contains("query["))
+        .collect();
+    query_steps.sort_unstable();
+    snapshot!(json_string!(query_steps), @r###"
+    [
+      "process > execute local > query[0]",
+      "process > execute local > query[0] > evaluate query",
+      "process > execute local > query[0] > keyword ranking",
+      "process > execute local > query[0] > tokenize query",
+      "process > execute local > query[1]",
+      "process > execute local > query[1] > evaluate query",
+      "process > execute local > query[1] > keyword ranking",
+      "process > execute local > query[1] > tokenize query",
+      "process > execute local > query[2]",
+      "process > execute local > query[2] > evaluate query",
+      "process > execute local > query[2] > keyword ranking",
+      "process > execute local > query[2] > tokenize query"
+    ]
+    "###);
+}

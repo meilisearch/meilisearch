@@ -119,6 +119,7 @@ pub async fn perform_federated_search(
     // 1. partition queries by host and index
     let mut partitioned_queries = PartitionedQueries::new();
 
+    let request_query_count = queries.len();
     let mut federation = federation;
     for (query_index, federated_query) in queries.into_iter().enumerate() {
         partitioned_queries
@@ -127,6 +128,15 @@ pub async fn perform_federated_search(
             .with_index(query_index)?;
     }
     let federation = federation;
+
+    // Local query indexes can exceed the number of queries in this request when they come from
+    // `federationOptions.queryPosition`, e.g. when this node serves a proxied federated search.
+    let query_count = partitioned_queries
+        .local_queries_by_index
+        .values()
+        .flatten()
+        .map(|query| query.query_index.saturating_add(1))
+        .fold(request_query_count, usize::max);
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
@@ -148,6 +158,7 @@ pub async fn perform_federated_search(
         has_remote: partitioned_queries.has_remote,
         is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
+        query_count,
     };
     let mut search_by_index = SearchByIndex::new(
         federation,
@@ -1313,6 +1324,9 @@ struct SearchByIndexParams {
     auth_filter: AuthFilter,
     local_name: Option<String>,
     required_hit_count: usize,
+    /// Total used for the per-query progress steps: the number of queries in this request,
+    /// raised if needed so that it is always greater than the `query_index` of any local query.
+    query_count: usize,
     is_exhaustive: bool,
     features: RoFeatures,
     is_proxy: bool,
@@ -1449,9 +1463,11 @@ impl SearchByIndex {
             }
         }
 
-        let queries_len = queries.len();
         for QueryByIndex { mut query, weight, query_index } in queries {
-            let _step = progress.update_progress_scoped(QueryStep::new(query_index, queries_len));
+            // `query_index` is the position of the query in the whole federated request,
+            // so the total must be the number of queries in the request, not just for this index.
+            let _step =
+                progress.update_progress_scoped(QueryStep::new(query_index, params.query_count));
             // use an immediately invoked lambda to capture the result without returning from the function
             let res: Result<(), ResponseError> = (|| {
                 let search_kind =
