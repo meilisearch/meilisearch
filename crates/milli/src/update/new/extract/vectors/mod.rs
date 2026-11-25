@@ -518,11 +518,13 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_, '_> {
         let mut status_delta = self.status_delta.borrow_mut();
         let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
 
-        if old_render_failure {
-            failure_delta.del_rendering_failure(docid);
-        }
-        if new_render_failure {
-            failure_delta.add_rendering_failure(docid);
+        match (old_render_failure, new_render_failure) {
+            // failed to render, now it's ok
+            (true, false) => failure_delta.del_rendering_failure(docid),
+            // now it's failing to render
+            (false, true) => failure_delta.add_rendering_failure(docid),
+            // fail or success both ways, do nothing
+            (true, true) | (false, false) => (),
         }
     }
 
