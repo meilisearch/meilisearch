@@ -452,6 +452,7 @@ impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
 }
 
 /// Codec for the legacy embedder info format.
+///
 /// this codec can only store two bitmaps and cannot be extended because we don't encode the size of the second bitmap.
 /// deprecated since v1.59.0
 struct LegacyEmbedderInfoCodec;
