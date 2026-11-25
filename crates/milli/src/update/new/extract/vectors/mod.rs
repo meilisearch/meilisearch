@@ -134,7 +134,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                         let DocumentEmbeddingStatus {
                             user_provided: old_is_user_provided,
                             must_regenerate: old_must_regenerate,
-                            render_failure: _,
+                            render_failure: old_render_failure,
                             embed_failure: _,
                         } = chunks.document_embedding_status(update.docid());
 
@@ -182,6 +182,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     old_is_user_provided,
                                     old_must_regenerate,
                                     true,
+                                    old_render_failure,
                                 )?;
                             }
                         // no `_vectors` field, so only regenerate if the document is already set to in the DB.
@@ -206,6 +207,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 old_is_user_provided,
                                 old_must_regenerate,
                                 true,
+                                old_render_failure,
                             )?;
                         }
                     }
@@ -396,7 +398,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                 let DocumentEmbeddingStatus {
                     user_provided: old_is_user_provided,
                     must_regenerate: _,
-                    render_failure: _,
+                    render_failure: old_render_failure,
                     embed_failure: _,
                 } = chunks.document_embedding_status(document.docid());
                 let old_has_fragments = old_embedders
@@ -434,6 +436,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                             &new_fields_ids_map,
                             &unused_vectors_distribution,
                             old_is_user_provided,
+                            old_render_failure,
                             fragments_changed,
                         )?;
                     }
@@ -471,6 +474,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                                 &new_fields_ids_map,
                                 &unused_vectors_distribution,
                                 old_is_user_provided,
+                                old_render_failure,
                                 true,
                             )?;
                         } else if is_new_embedder {
@@ -714,6 +718,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         new_fields_ids_map: &'a RefCell<GlobalFieldsIdsMap<'a>>,
         unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
         old_is_user_provided: bool,
+        old_render_failure: bool,
         full_reindex: bool,
     ) -> Result<()>
     where
@@ -744,6 +749,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         extractors,
                         document,
                         &(),
+                        old_render_failure,
                         session,
                         unused_vectors_distribution,
                         ignore_document_template_failures,
@@ -870,6 +876,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         old_is_user_provided: bool,
         old_must_regenerate: bool,
         new_must_regenerate: bool,
+        old_render_failure: bool,
     ) -> Result<()>
     where
         'a: 'doc,
@@ -895,6 +902,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     new_document,
                     &external_docid,
                     old_must_regenerate,
+                    old_render_failure,
                     old_is_user_provided,
                     session,
                     unused_vectors_distribution,
@@ -921,6 +929,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         extractors,
                         new_document,
                         &(),
+                        old_render_failure,
                         session,
                         unused_vectors_distribution,
                         ignore_document_template_failures,
@@ -934,6 +943,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         new_document,
                         &(),
                         old_must_regenerate,
+                        old_render_failure,
                         false,
                         session,
                         unused_vectors_distribution,
@@ -967,6 +977,13 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     where
         'a: 'doc,
     {
+        let DocumentEmbeddingStatus {
+            user_provided: _,
+            must_regenerate: _,
+            render_failure: old_render_failure,
+            embed_failure: _,
+        } = self.document_embedding_status(docid);
+
         let (default_is_user_provided, default_must_regenerate) = (false, true);
 
         let result = match &mut self.kind {
@@ -987,6 +1004,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     [ex],
                     new_document,
                     &external_docid,
+                    old_render_failure,
                     session,
                     unused_vectors_distribution,
                     *ignore_document_template_failures,
@@ -1005,6 +1023,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     extractors,
                     new_document,
                     &(),
+                    old_render_failure,
                     session,
                     unused_vectors_distribution,
                     ignore_document_template_failures,
@@ -1148,6 +1167,7 @@ fn update_autogenerated<'doc, 'a: 'doc, 'b, 'extractor, E, OD, ND>(
     new_document: ND,
     meta: &E::DocumentMetadata,
     old_must_regenerate: bool,
+    old_render_failure: bool,
     mut must_clear_on_generation: bool,
     session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b, 'extractor>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
@@ -1162,9 +1182,13 @@ where
 {
     for extractor in extractors {
         let new_rendered = match extractor.extract(&new_document, meta) {
-            Ok(new_rendered) => new_rendered,
+            Ok(new_rendered) => {
+                session.on_embed_mut().process_rendering_result(docid, old_render_failure, false);
+
+                new_rendered
+            }
             Err(e) => {
-                session.on_embed_mut().process_rendering_result(docid, false, true);
+                session.on_embed_mut().process_rendering_result(docid, old_render_failure, true);
 
                 if ignore_document_template_failures {
                     None
@@ -1184,7 +1208,6 @@ where
                 // must regenerate if the rendered changed
                 new_rendered != old_rendered
             } else {
-                session.on_embed_mut().process_rendering_result(docid, true, false);
                 // cannot check previous rendered, better regenerate
                 true
             }
@@ -1221,6 +1244,7 @@ fn insert_autogenerated<'doc, 'a: 'doc, 'b, 'extractor, E, D: Document<'doc> + D
     extractors: impl IntoIterator<Item = E>,
     new_document: D,
     meta: &E::DocumentMetadata,
+    old_render_failure: bool,
     session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b, 'extractor>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
     ignore_document_template_failures: bool,
@@ -1234,7 +1258,7 @@ where
         let new_rendered = match extractor.extract(&new_document, meta) {
             Ok(new_rendered) => new_rendered,
             Err(e) => {
-                session.on_embed_mut().process_rendering_result(docid, false, true);
+                session.on_embed_mut().process_rendering_result(docid, old_render_failure, true);
                 if ignore_document_template_failures {
                     None
                 } else {
