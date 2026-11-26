@@ -3077,4 +3077,135 @@ async fn embedder_failure_filtering() {
       "total": 1
     }
     "###);
+
+    // Disable embedder for the failing document
+    let (value, code) = index
+        .add_documents(json!([{"id": 1, "name": "kefir", "_vectors" : { "rest": null }}]), None)
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "###);
+
+    // Re-enable embedder for the failing document
+    let (value, code) = index
+        .add_documents(
+            json!([{"id": 1, "name": "kefir", "_vectors" : { "rest": { "regenerate": true } }}]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+        {
+          "results": [
+            {
+              "id": 1,
+              "name": "kefir"
+            }
+          ],
+          "offset": 0,
+          "limit": 20,
+          "total": 1
+        }
+        "###);
+
+    // Disable embedder for the failing document other format
+    let (value, code) = index
+        .add_documents(json!([{"id": 1, "name": "kefir", "_vectors" : { "rest": [] }}]), None)
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "###);
 }
