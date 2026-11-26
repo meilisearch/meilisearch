@@ -205,6 +205,8 @@ pub struct SearchQuery {
     /// You can pass a string (e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`) or an array (e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`).
     ///
     /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch), use `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, or `_geoPolygon([lat,lng], ...)` (GeoJSON only for polygon).
+    ///
+    /// Some filters require an [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features): `CONTAINS` requires `containsFilter`, filters on a foreign index require `foreignKeys`, `_shard` requires `network`, and `_vectors` requires `multimodal`.
     #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Sort results by one or more attributes and their order.
@@ -307,6 +309,8 @@ pub struct SearchQuery {
     /// An embedder is required; this parameter is incompatible with `vector`.
     ///
     /// POST only.
+    ///
+    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
     /// [Personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries): provide an object with a `userContext` field (a string describing the user, e.g. preferences or behavior).
@@ -325,7 +329,7 @@ pub struct SearchQuery {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    /// It also requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
@@ -891,6 +895,8 @@ pub struct SearchQueryWithIndex {
     #[request(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
     /// Perform AI-powered search queries with multimodal content
+    ///
+    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
     /// Personalize search results
@@ -905,7 +911,7 @@ pub struct SearchQueryWithIndex {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    /// It also requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///

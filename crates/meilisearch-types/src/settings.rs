@@ -268,6 +268,8 @@ pub struct Settings<T> {
     pub sortable_attributes: Setting<BTreeSet<String>>,
 
     /// Foreign keys to use for cross-index filtering search.
+    ///
+    /// Requires the `foreignKeys` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(
         default,
         schema_type = Option<Vec<ForeignKey>>,
@@ -447,6 +449,8 @@ pub struct Settings<T> {
     pub prefix_search: Setting<PrefixSearchSettings>,
 
     /// [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: index description, document template, and search parameters used when the LLM queries this index.
+    ///
+    /// Requires the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(
         error = DeserrJsonError<InvalidSettingsIndexChat>,
         schema_type = Option<ChatSettings>,

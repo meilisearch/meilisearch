@@ -150,7 +150,7 @@ pub struct GetDocument {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    /// It also requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
@@ -523,7 +523,7 @@ pub struct BrowseQueryGet {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    /// It also requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
@@ -574,6 +574,8 @@ pub struct BrowseQuery {
     /// or an array of arrays of strings for AND/OR combinations.
     /// Example string: `"genres = action AND rating > 4"`.
     /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
+    ///
+    /// Some filters require an [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features): `CONTAINS` requires `containsFilter`, filters on a foreign index require `foreignKeys`, `_shard` requires `network`, and `_vectors` requires `multimodal`.
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
     pub filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
@@ -591,7 +593,7 @@ pub struct BrowseQuery {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    /// It also requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
@@ -1994,7 +1996,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 ///
 /// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch. The function receives each document and returns the modified document.
 ///
-/// This feature is experimental and must be enabled through the experimental route.
+/// This route requires the `editDocumentsByFunction` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["documents.*", "*"])),
     params(

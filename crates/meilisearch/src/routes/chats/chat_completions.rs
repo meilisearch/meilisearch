@@ -74,7 +74,7 @@ use crate::search_queue::SearchQueue;
 /// using the documents of the authorized indexes as context.
 /// Only streamed responses (`stream: true`) are supported.
 ///
-/// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
+/// This route requires the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     params(
         ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),

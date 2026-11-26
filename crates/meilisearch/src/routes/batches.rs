@@ -212,6 +212,8 @@ async fn get_batches(
 /// The `/batches/stream` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
 ///
 /// Batches are sent throught an SSE stream any time their progress or status changes, i.e., enqueued, processing, succeeded, failed.
+///
+/// This route requires the `tasksStreamingRoute` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     responses(
