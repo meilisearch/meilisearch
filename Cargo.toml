@@ -43,6 +43,7 @@ tikv-jemallocator = {version = "0.7.0", features = ["override_allocator_on_suppo
 
 [profile.release]
 codegen-units = 1
+lto = true
 
 [profile.release-with-debug]
 inherits = "release"
