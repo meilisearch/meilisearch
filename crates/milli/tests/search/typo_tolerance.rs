@@ -227,6 +227,7 @@ fn test_typo_disabled_on_word() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
 

@@ -750,6 +750,7 @@ fn import_dump(
             &progress,
             index_scheduler.ip_policy(),
             &embedder_stats,
+            indexer_config.embedder_failure_modes,
         )?;
 
         wtxn.commit()?;

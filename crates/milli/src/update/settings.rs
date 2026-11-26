@@ -1692,6 +1692,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 progress,
                 ip_policy,
                 embedder_stats,
+                self.indexer_config.embedder_failure_modes,
             )
             .map(Some)
         } else {

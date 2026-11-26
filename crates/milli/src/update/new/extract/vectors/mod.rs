@@ -17,7 +17,9 @@ use crate::update::new::thread_local::MostlySend;
 use crate::update::new::vector_document::VectorDocument;
 use crate::update::new::DocumentChange;
 use crate::update::settings::SettingsDelta;
-use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
+use crate::vector::db::{
+    DocumentEmbeddingStatus, EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta,
+};
 use crate::vector::error::{
     EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistributionBump,
 };
@@ -49,9 +51,9 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
         field_distribution: &'a FieldDistribution,
         embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
+        failure_modes: EmbedderFailureModes,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        let failure_modes = EmbedderFailureModes::from_env();
         Self {
             embedders,
             sender,
@@ -115,9 +117,9 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                     // vector deletion is handled by document sender,
                     // we still need to accomodate deletion from embedding_status
                     for chunks in &mut all_chunks {
-                        let (is_user_provided, must_regenerate) =
-                            chunks.is_user_provided_must_regenerate(deletion.docid());
-                        chunks.clear_status(deletion.docid(), is_user_provided, must_regenerate);
+                        let document_embedding_status =
+                            chunks.document_embedding_status(deletion.docid());
+                        chunks.clear_status(deletion.docid(), document_embedding_status);
                     }
                 }
                 DocumentChange::Update(update) => {
@@ -129,8 +131,12 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                     }
 
                     for chunks in &mut all_chunks {
-                        let (old_is_user_provided, old_must_regenerate) =
-                            chunks.is_user_provided_must_regenerate(update.docid());
+                        let DocumentEmbeddingStatus {
+                            user_provided: old_is_user_provided,
+                            must_regenerate: old_must_regenerate,
+                            render_failure: old_render_failure,
+                            embed_failure: old_embedding_failure,
+                        } = chunks.document_embedding_status(update.docid());
 
                         let embedder_name = chunks.embedder_name();
 
@@ -153,6 +159,8 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     old_is_user_provided,
                                     old_must_regenerate,
                                     new_vectors.regenerate,
+                                    old_render_failure,
+                                    old_embedding_failure,
                                 )?;
                             // regenerate if the new `_vectors` fields is set to.
                             } else if new_vectors.regenerate {
@@ -176,6 +184,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     old_is_user_provided,
                                     old_must_regenerate,
                                     true,
+                                    old_render_failure,
                                 )?;
                             }
                         // no `_vectors` field, so only regenerate if the document is already set to in the DB.
@@ -200,12 +209,18 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 old_is_user_provided,
                                 old_must_regenerate,
                                 true,
+                                old_render_failure,
                             )?;
                         }
                     }
                 }
                 DocumentChange::Insertion(insertion) => {
-                    let (default_is_user_provided, default_must_regenerate) = (false, true);
+                    let (
+                        default_is_user_provided,
+                        default_must_regenerate,
+                        default_render_failure,
+                        default_embedding_failure,
+                    ) = (false, true, false, false);
                     let new_vectors =
                         insertion.inserted_vectors(&context.doc_alloc, self.embedders)?;
                     if let Some(new_vectors) = &new_vectors {
@@ -234,6 +249,8 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     default_is_user_provided,
                                     default_must_regenerate,
                                     new_vectors.regenerate,
+                                    default_render_failure,
+                                    default_embedding_failure,
                                 )?;
                             } else if new_vectors.regenerate {
                                 chunks.insert_autogenerated(
@@ -292,9 +309,9 @@ impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
         sender: EmbeddingSender<'a, 'b>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
+        failure_modes: EmbedderFailureModes,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        let failure_modes = EmbedderFailureModes::from_env();
 
         Self {
             settings_delta,
@@ -387,8 +404,12 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
             for (chunks, reindex_action) in &mut all_chunks {
                 let embedder_name = chunks.embedder_name();
                 let current_vectors = current_vectors.vectors_for_key(embedder_name)?;
-                let (old_is_user_provided, _) =
-                    chunks.is_user_provided_must_regenerate(document.docid());
+                let DocumentEmbeddingStatus {
+                    user_provided: old_is_user_provided,
+                    must_regenerate: _,
+                    render_failure: old_render_failure,
+                    embed_failure: old_embedding_failure,
+                } = chunks.document_embedding_status(document.docid());
                 let old_has_fragments = old_embedders
                     .get(embedder_name)
                     .map(|embedder| !embedder.fragments().is_empty())
@@ -424,6 +445,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                             &new_fields_ids_map,
                             &unused_vectors_distribution,
                             old_is_user_provided,
+                            old_render_failure,
                             fragments_changed,
                         )?;
                     }
@@ -446,6 +468,8 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                                 old_is_user_provided,
                                 true,
                                 must_regenerate,
+                                old_render_failure,
+                                old_embedding_failure,
                             )?;
                         } else if must_regenerate {
                             chunks.settings_change_autogenerated(
@@ -461,6 +485,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                                 &new_fields_ids_map,
                                 &unused_vectors_distribution,
                                 old_is_user_provided,
+                                old_render_failure,
                                 true,
                             )?;
                         } else if is_new_embedder {
@@ -479,13 +504,15 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
     }
 }
 
-pub struct OnEmbeddingDocumentUpdates<'doc, 'b> {
+pub struct OnEmbeddingDocumentUpdates<'doc, 'b, 'extractor> {
+    embedder_name: &'doc str,
     embedder_id: u8,
     sender: EmbeddingSender<'doc, 'b>,
     possible_embedding_mistakes: &'doc PossibleEmbeddingMistakes,
+    status_delta: &'doc RefCell<EmbeddingExtractorData<'extractor>>,
 }
 
-impl OnEmbeddingDocumentUpdates<'_, '_> {
+impl OnEmbeddingDocumentUpdates<'_, '_, '_> {
     fn clear_vectors(&self, docid: DocumentId) {
         self.sender.set_vectors(docid, self.embedder_id, vec![]).unwrap();
     }
@@ -495,12 +522,52 @@ impl OnEmbeddingDocumentUpdates<'_, '_> {
     }
 }
 
-impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
+impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_, '_> {
     type ErrorMetadata = UnusedVectorsDistributionBump<'doc>;
+    fn process_rendering_result(
+        &mut self,
+        docid: DocumentId,
+        old_render_failure: bool,
+        new_render_failure: bool,
+    ) {
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+
+        match (old_render_failure, new_render_failure) {
+            // failed to render, now it's ok
+            (true, false) => failure_delta.del_rendering_failure(docid),
+            // now it's failing to render
+            (false, true) => failure_delta.add_rendering_failure(docid),
+            // fail or success both ways, do nothing
+            (true, true) | (false, false) => (),
+        }
+    }
+
+    fn reset_autogenerated_failures(
+        &self,
+        docid: DocumentId,
+        old_render_failure: bool,
+        old_embedding_failure: bool,
+    ) {
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+        if old_render_failure {
+            failure_delta.del_rendering_failure(docid);
+        }
+        if old_embedding_failure {
+            failure_delta.del_embedding_failure(docid);
+        }
+    }
+
     fn process_embedding_response(
         &mut self,
         response: crate::vector::session::EmbeddingResponse<'doc>,
     ) {
+        // Register document id in embedding failures for this embedder.
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+        failure_delta.del_embedding_failure(response.metadata.docid);
+
         self.sender
             .set_vector(
                 response.metadata.docid,
@@ -510,13 +577,21 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
             )
             .unwrap();
     }
+
     fn process_embedding_error(
         &mut self,
         error: crate::vector::error::EmbedError,
-        embedder_name: &'doc str,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
         metadata: BVec<'doc, Metadata<'doc>>,
     ) -> crate::Error {
+        let embedder_name = self.embedder_name;
+        // Register document ids in embedding failures for this embedder.
+        let mut status_delta = self.status_delta.borrow_mut();
+        let failure_delta = status_delta.0.entry_ref(self.embedder_name).or_default();
+        for metadata in metadata.iter() {
+            failure_delta.add_embedding_failure(metadata.docid);
+        }
+
         if let FaultSource::Bug = error.fault {
             crate::Error::InternalError(crate::InternalError::VectorEmbeddingError(error.into()))
         } else {
@@ -568,21 +643,30 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
 
 struct Chunks<'a, 'b, 'extractor> {
     dimensions: usize,
-    status_delta: &'a RefCell<EmbeddingExtractorData<'extractor>>,
     status: EmbeddingStatus,
-    kind: ChunkType<'a, 'b>,
+    kind: ChunkType<'a, 'b, 'extractor>,
 }
 
-enum ChunkType<'a, 'b> {
+enum ChunkType<'a, 'b, 'extractor> {
     DocumentTemplate {
         document_template: &'a Prompt,
         ignore_document_template_failures: bool,
-        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, &'a str>,
+        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b, 'extractor>, &'a str>,
     },
     Fragments {
         fragments: &'a [RuntimeFragment],
-        session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, serde_json::Value>,
+        session:
+            EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b, 'extractor>, serde_json::Value>,
     },
+}
+
+impl<'a, 'b, 'extractor> ChunkType<'a, 'b, 'extractor> {
+    fn on_embed_ref(&self) -> &OnEmbeddingDocumentUpdates<'a, 'b, 'extractor> {
+        match self {
+            ChunkType::DocumentTemplate { session, .. } => session.on_embed_ref(),
+            ChunkType::Fragments { session, .. } => session.on_embed_ref(),
+        }
+    }
 }
 
 impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
@@ -615,9 +699,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     embedder_stats,
                     failure_modes.ignore_embedder_failures,
                     OnEmbeddingDocumentUpdates {
+                        embedder_name,
                         embedder_id: embedder_info.embedder_id,
                         sender,
                         possible_embedding_mistakes,
+                        status_delta,
                     },
                 ),
             }
@@ -632,19 +718,21 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     embedder_stats,
                     failure_modes.ignore_embedder_failures,
                     OnEmbeddingDocumentUpdates {
+                        embedder_name,
                         embedder_id: embedder_info.embedder_id,
                         sender,
                         possible_embedding_mistakes,
+                        status_delta,
                     },
                 ),
             }
         };
 
-        Self { dimensions, status: embedder_info.embedding_status, status_delta, kind }
+        Self { dimensions, status: embedder_info.embedding_status, kind }
     }
 
-    pub fn is_user_provided_must_regenerate(&self, docid: DocumentId) -> (bool, bool) {
-        self.status.is_user_provided_must_regenerate(docid)
+    pub fn document_embedding_status(&self, docid: DocumentId) -> DocumentEmbeddingStatus {
+        self.status.document_embedding_status(docid)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -658,14 +746,13 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         new_fields_ids_map: &'a RefCell<GlobalFieldsIdsMap<'a>>,
         unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
         old_is_user_provided: bool,
+        old_render_failure: bool,
         full_reindex: bool,
     ) -> Result<()>
     where
         'a: 'doc,
     {
-        self.set_status(docid, old_is_user_provided, true, false, true);
-
-        match &mut self.kind {
+        let result = match &mut self.kind {
             ChunkType::Fragments { fragments, session } => {
                 let doc_alloc = session.doc_alloc();
                 let reindex_all_fragments =
@@ -682,59 +769,63 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     let extractors = fragments.iter().map(|fragment| {
                         RequestFragmentExtractor::new(fragment, doc_alloc).ignore_errors()
                     });
+                    // fragments render failures are always ignored
+                    let ignore_document_template_failures = true;
                     insert_autogenerated(
                         docid,
                         external_docid,
                         extractors,
                         document,
                         &(),
+                        old_render_failure,
                         session,
                         unused_vectors_distribution,
-                    )?;
-                    return Ok(());
-                }
+                        ignore_document_template_failures,
+                    )
+                } else {
+                    settings_delta.try_for_each_fragment_diff(
+                        session.embedder_name(),
+                        |fragment_diff| -> Result<()> {
+                            let extractor =
+                                RequestFragmentExtractor::new(fragment_diff.new, doc_alloc)
+                                    .ignore_errors();
+                            let old = if full_reindex {
+                                None
+                            } else {
+                                fragment_diff.old.map(|old| {
+                                    RequestFragmentExtractor::new(old, doc_alloc).ignore_errors()
+                                })
+                            };
+                            let metadata = Metadata {
+                                docid,
+                                external_docid,
+                                extractor_id: extractor.extractor_id(),
+                            };
 
-                settings_delta.try_for_each_fragment_diff(
-                    session.embedder_name(),
-                    |fragment_diff| -> Result<()> {
-                        let extractor = RequestFragmentExtractor::new(fragment_diff.new, doc_alloc)
-                            .ignore_errors();
-                        let old = if full_reindex {
-                            None
-                        } else {
-                            fragment_diff.old.map(|old| {
-                                RequestFragmentExtractor::new(old, doc_alloc).ignore_errors()
-                            })
-                        };
-                        let metadata = Metadata {
-                            docid,
-                            external_docid,
-                            extractor_id: extractor.extractor_id(),
-                        };
-
-                        match extractor.diff_settings(&document, &(), old.as_ref())? {
-                            ExtractorDiff::Removed => {
-                                OnEmbed::process_embedding_response(
-                                    session.on_embed_mut(),
-                                    crate::vector::session::EmbeddingResponse {
+                            match extractor.diff_fragments_settings(&document, &(), old.as_ref())? {
+                                ExtractorDiff::Removed => {
+                                    OnEmbed::process_embedding_response(
+                                        session.on_embed_mut(),
+                                        crate::vector::session::EmbeddingResponse {
+                                            metadata,
+                                            embedding: None,
+                                        },
+                                    );
+                                }
+                                ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
+                                    session.request_embedding(
                                         metadata,
-                                        embedding: None,
-                                    },
-                                );
+                                        input,
+                                        unused_vectors_distribution,
+                                    )?;
+                                }
+                                ExtractorDiff::Unchanged => { /* nothing to do */ }
                             }
-                            ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
-                                session.request_embedding(
-                                    metadata,
-                                    input,
-                                    unused_vectors_distribution,
-                                )?;
-                            }
-                            ExtractorDiff::Unchanged => { /* nothing to do */ }
-                        }
 
-                        Result::Ok(())
-                    },
-                )?;
+                            Result::Ok(())
+                        },
+                    )
+                }
             }
             ChunkType::DocumentTemplate {
                 document_template,
@@ -765,13 +856,14 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 let metadata =
                     Metadata { docid, external_docid, extractor_id: extractor.extractor_id() };
 
-                let extractor_diff = if *ignore_document_template_failures {
-                    let extractor = extractor.ignore_errors();
-                    let old_extractor = old_extractor.map(DocumentTemplateExtractor::ignore_errors);
-                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
-                } else {
-                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
-                };
+                let extractor_diff = extractor.diff_document_template_settings(
+                    docid,
+                    document,
+                    &external_docid,
+                    old_extractor.as_ref(),
+                    *ignore_document_template_failures,
+                    session.on_embed_mut(),
+                )?;
 
                 match extractor_diff {
                     ExtractorDiff::Removed => {
@@ -782,19 +874,22 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                             session.on_embed_mut(),
                             crate::vector::session::EmbeddingResponse { metadata, embedding: None },
                         );
+
+                        Ok(())
                     }
                     ExtractorDiff::Added(input) | ExtractorDiff::Updated(input) => {
                         if old_is_user_provided || full_reindex {
                             session.on_embed_mut().clear_vectors(docid);
                         }
-                        session.request_embedding(metadata, input, unused_vectors_distribution)?;
+                        session.request_embedding(metadata, input, unused_vectors_distribution)
                     }
-                    ExtractorDiff::Unchanged => { /* do nothing */ }
+                    ExtractorDiff::Unchanged => Ok(()),
                 }
-                self.set_status(docid, old_is_user_provided, true, false, true);
             }
-        }
-        Ok(())
+        };
+
+        self.set_status(docid, old_is_user_provided, true, false, true);
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -809,18 +904,12 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         old_is_user_provided: bool,
         old_must_regenerate: bool,
         new_must_regenerate: bool,
+        old_render_failure: bool,
     ) -> Result<()>
     where
         'a: 'doc,
     {
-        self.set_status(
-            docid,
-            old_is_user_provided,
-            old_must_regenerate,
-            false,
-            new_must_regenerate,
-        );
-        match &mut self.kind {
+        let result = match &mut self.kind {
             ChunkType::DocumentTemplate {
                 document_template,
                 ignore_document_template_failures,
@@ -833,35 +922,24 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     new_fields_ids_map,
                 );
 
-                if *ignore_document_template_failures {
-                    update_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex.ignore_errors()],
-                        old_document,
-                        new_document,
-                        &external_docid,
-                        old_must_regenerate,
-                        old_is_user_provided,
-                        session,
-                        unused_vectors_distribution,
-                    )
-                } else {
-                    update_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex],
-                        old_document,
-                        new_document,
-                        &external_docid,
-                        old_must_regenerate,
-                        old_is_user_provided,
-                        session,
-                        unused_vectors_distribution,
-                    )
-                }?
+                update_autogenerated(
+                    docid,
+                    external_docid,
+                    [ex],
+                    old_document,
+                    new_document,
+                    &external_docid,
+                    old_must_regenerate,
+                    old_render_failure,
+                    old_is_user_provided,
+                    session,
+                    unused_vectors_distribution,
+                    *ignore_document_template_failures,
+                )
             }
             ChunkType::Fragments { fragments, session } => {
+                // fragments render failures are always ignored
+                let ignore_document_template_failures = true;
                 let doc_alloc = session.doc_alloc();
                 let extractors = fragments.iter().map(|fragment| {
                     RequestFragmentExtractor::new(fragment, doc_alloc).ignore_errors()
@@ -879,28 +957,39 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         extractors,
                         new_document,
                         &(),
+                        old_render_failure,
                         session,
                         unused_vectors_distribution,
-                    )?;
-                    return Ok(());
+                        ignore_document_template_failures,
+                    )
+                } else {
+                    update_autogenerated(
+                        docid,
+                        external_docid,
+                        extractors,
+                        old_document,
+                        new_document,
+                        &(),
+                        old_must_regenerate,
+                        old_render_failure,
+                        false,
+                        session,
+                        unused_vectors_distribution,
+                        ignore_document_template_failures,
+                    )
                 }
-
-                update_autogenerated(
-                    docid,
-                    external_docid,
-                    extractors,
-                    old_document,
-                    new_document,
-                    &(),
-                    old_must_regenerate,
-                    false,
-                    session,
-                    unused_vectors_distribution,
-                )?
             }
         };
 
-        Ok(())
+        self.set_status(
+            docid,
+            old_is_user_provided,
+            old_must_regenerate,
+            false,
+            new_must_regenerate,
+        );
+
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -916,16 +1005,16 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     where
         'a: 'doc,
     {
-        let (default_is_user_provided, default_must_regenerate) = (false, true);
-        self.set_status(
-            docid,
-            default_is_user_provided,
-            default_must_regenerate,
-            false,
-            new_must_regenerate,
-        );
+        let DocumentEmbeddingStatus {
+            user_provided: _,
+            must_regenerate: _,
+            render_failure: old_render_failure,
+            embed_failure: _,
+        } = self.document_embedding_status(docid);
 
-        match &mut self.kind {
+        let (default_is_user_provided, default_must_regenerate) = (false, true);
+
+        let result = match &mut self.kind {
             ChunkType::DocumentTemplate {
                 document_template,
                 ignore_document_template_failures,
@@ -937,46 +1026,47 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     doc_alloc,
                     new_fields_ids_map,
                 );
-                if *ignore_document_template_failures {
-                    insert_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex.ignore_errors()],
-                        new_document,
-                        &external_docid,
-                        session,
-                        unused_vectors_distribution,
-                    )?;
-                } else {
-                    insert_autogenerated(
-                        docid,
-                        external_docid,
-                        [ex],
-                        new_document,
-                        &external_docid,
-                        session,
-                        unused_vectors_distribution,
-                    )?;
-                }
+                insert_autogenerated(
+                    docid,
+                    external_docid,
+                    [ex],
+                    new_document,
+                    &external_docid,
+                    old_render_failure,
+                    session,
+                    unused_vectors_distribution,
+                    *ignore_document_template_failures,
+                )
             }
             ChunkType::Fragments { fragments, session } => {
                 let doc_alloc = session.doc_alloc();
                 let extractors = fragments.iter().map(|fragment| {
                     RequestFragmentExtractor::new(fragment, doc_alloc).ignore_errors()
                 });
-
+                // fragments are always ignored
+                let ignore_document_template_failures = true;
                 insert_autogenerated(
                     docid,
                     external_docid,
                     extractors,
                     new_document,
                     &(),
+                    old_render_failure,
                     session,
                     unused_vectors_distribution,
-                )?;
+                    ignore_document_template_failures,
+                )
             }
-        }
-        Ok(())
+        };
+
+        self.set_status(
+            docid,
+            default_is_user_provided,
+            default_must_regenerate,
+            false,
+            new_must_regenerate,
+        );
+        result
     }
 
     pub fn drain(self, unused_vectors_distribution: &UnusedVectorsDistributionBump) -> Result<()> {
@@ -1020,7 +1110,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             new_is_user_provided,
             new_must_regenerate,
         ) {
-            let mut status_delta = self.status_delta.borrow_mut();
+            let mut status_delta = self.kind.on_embed_ref().status_delta.borrow_mut();
             let status_delta = status_delta.0.entry_ref(self.embedder_name()).or_default();
             status_delta.push_delta(
                 docid,
@@ -1032,15 +1122,16 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         }
     }
 
-    pub fn clear_status(&self, docid: DocumentId, is_user_provided: bool, must_regenerate: bool) {
+    pub fn clear_status(&self, docid: DocumentId, status: DocumentEmbeddingStatus) {
         // these value ensure both roaring are at 0.
-        if EmbeddingStatusDelta::needs_clear(is_user_provided, must_regenerate) {
-            let mut status_delta = self.status_delta.borrow_mut();
+        if EmbeddingStatusDelta::needs_clear(status) {
+            let mut status_delta = self.kind.on_embed_ref().status_delta.borrow_mut();
             let status_delta = status_delta.0.entry_ref(self.embedder_name()).or_default();
-            status_delta.clear_docid(docid, is_user_provided, must_regenerate);
+            status_delta.clear_docid(docid, status.user_provided, status.must_regenerate);
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn set_vectors(
         &mut self,
         external_docid: &'a str,
@@ -1049,6 +1140,8 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         old_is_user_provided: bool,
         old_must_regenerate: bool,
         new_must_regenerate: bool,
+        old_render_failure: bool,
+        old_embedding_failure: bool,
     ) -> Result<()> {
         self.set_status(
             docid,
@@ -1075,15 +1168,27 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 ignore_document_template_failures: _,
                 session,
             } => {
-                session.on_embed_mut().process_embeddings(
+                let on_embed_mut = session.on_embed_mut();
+                on_embed_mut.process_embeddings(
                     Metadata { docid, external_docid, extractor_id: 0 },
                     embeddings,
                 );
+                on_embed_mut.reset_autogenerated_failures(
+                    docid,
+                    old_render_failure,
+                    old_embedding_failure,
+                );
             }
             ChunkType::Fragments { fragments: _, session } => {
-                session.on_embed_mut().process_embeddings(
+                let on_embed_mut = session.on_embed_mut();
+                on_embed_mut.process_embeddings(
                     Metadata { docid, external_docid, extractor_id: 0 },
                     embeddings,
+                );
+                on_embed_mut.reset_autogenerated_failures(
+                    docid,
+                    old_render_failure,
+                    old_embedding_failure,
                 );
             }
         }
@@ -1097,7 +1202,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn update_autogenerated<'doc, 'a: 'doc, 'b, E, OD, ND>(
+fn update_autogenerated<'doc, 'a: 'doc, 'b, 'extractor, E, OD, ND>(
     docid: DocumentId,
     external_docid: &'a str,
     extractors: impl IntoIterator<Item = E>,
@@ -1105,9 +1210,11 @@ fn update_autogenerated<'doc, 'a: 'doc, 'b, E, OD, ND>(
     new_document: ND,
     meta: &E::DocumentMetadata,
     old_must_regenerate: bool,
+    old_render_failure: bool,
     mut must_clear_on_generation: bool,
-    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
+    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b, 'extractor>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+    ignore_document_template_failures: bool,
 ) -> Result<()>
 where
     OD: Document<'doc> + Debug,
@@ -1117,7 +1224,23 @@ where
     crate::Error: From<E::Error>,
 {
     for extractor in extractors {
-        let new_rendered = extractor.extract(&new_document, meta)?;
+        let new_rendered = match extractor.extract(&new_document, meta) {
+            Ok(new_rendered) => {
+                session.on_embed_mut().process_rendering_result(docid, old_render_failure, false);
+
+                new_rendered
+            }
+            Err(e) => {
+                session.on_embed_mut().process_rendering_result(docid, old_render_failure, true);
+
+                if ignore_document_template_failures {
+                    None
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
+
         let must_regenerate = if !old_must_regenerate {
             // we just enabled `regenerate`
             true
@@ -1157,14 +1280,17 @@ where
     Ok(())
 }
 
-fn insert_autogenerated<'doc, 'a: 'doc, 'b, E, D: Document<'doc> + Debug>(
+#[allow(clippy::too_many_arguments)]
+fn insert_autogenerated<'doc, 'a: 'doc, 'b, 'extractor, E, D: Document<'doc> + Debug>(
     docid: DocumentId,
     external_docid: &'a str,
     extractors: impl IntoIterator<Item = E>,
     new_document: D,
     meta: &E::DocumentMetadata,
-    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
+    old_render_failure: bool,
+    session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b, 'extractor>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+    ignore_document_template_failures: bool,
 ) -> Result<()>
 where
     E: VectorExtractor<'a>,
@@ -1172,7 +1298,17 @@ where
     crate::Error: From<E::Error>,
 {
     for extractor in extractors {
-        let new_rendered = extractor.extract(&new_document, meta)?;
+        let new_rendered = match extractor.extract(&new_document, meta) {
+            Ok(new_rendered) => new_rendered,
+            Err(e) => {
+                session.on_embed_mut().process_rendering_result(docid, old_render_failure, true);
+                if ignore_document_template_failures {
+                    None
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
 
         if let Some(new_rendered) = new_rendered {
             session.request_embedding(
@@ -1186,27 +1322,14 @@ where
     Ok(())
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
-struct EmbedderFailureModes {
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub struct EmbedderFailureModes {
     pub ignore_document_template_failures: bool,
     pub ignore_embedder_failures: bool,
 }
 
 impl EmbedderFailureModes {
-    fn from_env() -> Self {
-        match std::env::var("MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES") {
-            Ok(failure_modes) => Self::parse_from_str(
-                &failure_modes,
-                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES`",
-            ),
-            Err(std::env::VarError::NotPresent) => Self::default(),
-            Err(std::env::VarError::NotUnicode(_)) => panic!(
-                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES` contains a non-unicode value"
-            ),
-        }
-    }
-
-    fn parse_from_str(failure_modes: &str, provenance: &'static str) -> Self {
+    pub fn parse_from_str(failure_modes: &str) -> Self {
         let Self { mut ignore_document_template_failures, mut ignore_embedder_failures } =
             Default::default();
         for segment in failure_modes.split(',') {
@@ -1217,7 +1340,7 @@ impl EmbedderFailureModes {
                 }
                 "ignore_embedder_failures" => ignore_embedder_failures = true,
                 "" => continue,
-                segment => panic!("Unrecognized segment value for {provenance}: {segment}"),
+                segment => panic!("Unrecognized segment value for {segment}"),
             }
         }
         Self { ignore_document_template_failures, ignore_embedder_failures }

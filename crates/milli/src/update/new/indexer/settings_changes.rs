@@ -87,6 +87,7 @@ pub fn settings_change_extract<
         must_stop_processing,
         progress,
         grenad_parameters: _,
+        embedder_failure_modes: _,
     }: IndexingContext<'fid, 'indexer, 'index>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,

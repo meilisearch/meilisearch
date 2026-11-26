@@ -41,9 +41,9 @@ use crate::update::{GrenadParameters, WordsPrefixesFst};
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{
-    CboRoaringBitmapCodec, Error, FieldsIdsMap, FilterFeatures, FilterableAttributesFeatures,
-    GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing, PatternMatch, Result,
-    ThreadPoolNoAbort,
+    CboRoaringBitmapCodec, EmbedderFailureModes, Error, FieldsIdsMap, FilterFeatures,
+    FilterableAttributesFeatures, GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing,
+    PatternMatch, Result, ThreadPoolNoAbort,
 };
 
 pub(crate) mod de;
@@ -81,6 +81,7 @@ pub fn index<'pl, 'indexer, 'index, DC>(
     progress: &'indexer Progress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: &'indexer EmbedderStats,
+    embedder_failure_modes: EmbedderFailureModes,
 ) -> Result<ChannelCongestion>
 where
     DC: DocumentChanges<'pl>,
@@ -113,6 +114,7 @@ where
         must_stop_processing,
         progress,
         grenad_parameters: &grenad_parameters,
+        embedder_failure_modes,
     };
 
     let index_embeddings = index.embedding_configs().embedding_configs(wtxn)?;
@@ -258,6 +260,7 @@ pub fn reindex<'indexer, 'index, SD>(
     progress: &'indexer Progress,
     embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: Arc<EmbedderStats>,
+    embedder_failure_modes: EmbedderFailureModes,
 ) -> Result<ChannelCongestion>
 where
     SD: SettingsDelta + Sync,
@@ -328,6 +331,7 @@ where
         must_stop_processing,
         progress,
         grenad_parameters: &grenad_parameters,
+        embedder_failure_modes,
     };
 
     let index_embeddings = index.embedding_configs().embedding_configs(wtxn)?;

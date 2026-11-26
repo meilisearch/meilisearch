@@ -149,6 +149,14 @@ fn evaluate_inner(
             let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
             stats.documents - skip_regenerate
         }
+        VectorFilter::RenderingError => {
+            let rendering_error_docids = embedder_info.embedding_status.rendering_error_docids();
+            rendering_error_docids.clone()
+        }
+        VectorFilter::EmbeddingError => {
+            let embedding_error_docids = embedder_info.embedding_status.embedding_error_docids();
+            embedding_error_docids.clone()
+        }
         VectorFilter::None => {
             let mut stats = VectorStoreStats::default();
             vector_store.aggregate_stats(rtxn, &mut stats)?;

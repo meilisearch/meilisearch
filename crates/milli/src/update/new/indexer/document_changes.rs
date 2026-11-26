@@ -14,7 +14,10 @@ use crate::update::new::parallel_iterator_ext::ParallelIteratorExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::GrenadParameters;
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, MustStopProcessing, Result};
+use crate::{
+    EmbedderFailureModes, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError,
+    MustStopProcessing, Result,
+};
 
 /// An internal iterator (i.e. using `foreach`) of `DocumentChange`s
 pub trait Extractor<'extractor>: Sync {
@@ -71,6 +74,7 @@ pub struct IndexingContext<
     pub must_stop_processing: &'indexer MustStopProcessing,
     pub progress: &'indexer Progress,
     pub grenad_parameters: &'indexer GrenadParameters,
+    pub embedder_failure_modes: EmbedderFailureModes,
 }
 
 impl Copy
@@ -117,6 +121,7 @@ pub fn extract<
         must_stop_processing,
         progress,
         grenad_parameters: _,
+        embedder_failure_modes: _,
     }: IndexingContext<'fid, 'indexer, 'index>,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     datastore: &'data ThreadLocal<EX::Data>,

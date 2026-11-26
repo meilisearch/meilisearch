@@ -95,7 +95,7 @@ pub(crate) enum TypedChunk {
         expected_dimension: usize,
         manual_vectors: grenad::Reader<BufReader<File>>,
         embedder_name: String,
-        embedding_status_delta: EmbeddingStatusDelta,
+        embedding_status_delta: Box<EmbeddingStatusDelta>,
     },
 }
 

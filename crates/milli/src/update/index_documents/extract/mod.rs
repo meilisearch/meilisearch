@@ -332,7 +332,7 @@ fn send_original_documents_data(
                                 expected_dimension: runtime.embedder.dimensions(),
                                 manual_vectors,
                                 embedder_name,
-                                embedding_status_delta,
+                                embedding_status_delta: Box::new(embedding_status_delta),
                             }));
                         }
                     }

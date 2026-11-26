@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{Server, Value};
+use crate::common::{default_settings, Server, Value};
 use crate::json;
 use crate::vector::GetAllDocumentsOptions;
 
@@ -2475,6 +2475,737 @@ async fn revoked_api_key() {
       "offset": 0,
       "limit": 20,
       "total": 2
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn embedder_failure_filtering() {
+    let (_mock, setting, unrevocable_settings, revoked) = create_mock_with_revocable_key().await;
+
+    let temp = tempfile::tempdir().unwrap();
+    let mut options = default_settings(temp.path());
+
+    // skip the test if we are using the legacy indexer
+    if options.indexer_options.experimental_no_edition_2024_for_settings {
+        return;
+    }
+
+    options.indexer_options.experimental_config_embedder_failure_modes =
+        Some(String::from("ignore_document_template_failures,ignore_embedder_failures"));
+    let server = Server::new_with_options(options).await.unwrap();
+
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "rest": setting,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    let (value, code) = index.add_documents(json!([{"id": 0, "name": "kefir"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task["status"], @r###""succeeded""###);
+
+    revoked.store(true, Ordering::SeqCst);
+
+    // Add a new document that will fail to embed
+    let (value, code) = index.add_documents(json!([{"id": 1, "name": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @r###"{"total":1,"failed":1,"lastError":"user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"invalid api key: Bearer my-api-key\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration"}"###);
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.embeddingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "name": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    // Modify the document that will fail to embed
+    let (value, code) = index.add_documents(json!([{"id": 0, "name": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @r###"{"total":1,"failed":1,"lastError":"user error: could not authenticate against embedding server\n  - server replied with `{\"error\":\"invalid api key: Bearer my-api-key\"}`\n  - Hint: Check the `apiKey` parameter in the embedder configuration"}"###);
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.embeddingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "intel"
+        },
+        {
+          "id": 1,
+          "name": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    // Delete the document that will fail to embed
+    let (value, code) = index.delete_document(1).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentDeletion",
+      "canceledBy": null,
+      "details": {
+        "providedIds": 1,
+        "deletedDocuments": 1,
+        "originalFilter": null
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.embeddingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    // Update the settings to unrevocable settings
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "rest": unrevocable_settings,
+        }
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+      {
+        "uid": "[uid]",
+        "batchUid": "[batch_uid]",
+        "indexUid": "doggo",
+        "status": "succeeded",
+        "type": "settingsUpdate",
+        "canceledBy": null,
+        "details": {
+          "embedders": {
+            "rest": {
+              "source": "rest",
+              "apiKey": "myXXXX...",
+              "documentTemplate": "toto {{doc.name}}",
+              "url": "[url]",
+              "request": "{{text}}",
+              "response": {
+                "data": "{{embedding}}"
+              }
+            }
+          }
+        },
+        "error": null,
+        "duration": "[duration]",
+        "enqueuedAt": "[date]",
+        "startedAt": "[date]",
+        "finishedAt": "[date]"
+      }
+    "###);
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.embeddingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "###);
+
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "intel",
+          "_vectors": {
+            "rest": {
+              "embeddings": [
+                [
+                  1.0,
+                  0.5,
+                  1.0
+                ]
+              ],
+              "regenerate": true
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    // add a new document missing the name field
+    let (value, code) = index.add_documents(json!([{"id": 1, "name1": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "name1": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    // modify a document missing the name field
+    let (value, code) = index.add_documents(json!([{"id": 0, "name1": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name1": "intel"
+        },
+        {
+          "id": 1,
+          "name1": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    // modify a document without fixing it
+    let (value, code) =
+        index.add_documents(json!([{"id": 1, "name1": "intel", "name3": "intel"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name1": "intel"
+        },
+        {
+          "id": 1,
+          "name1": "intel",
+          "name3": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    // fix a document missing the name field + add a failing document
+    let (value, code) = index
+        .add_documents(json!([{"id": 1, "name": "intel"}, {"id": 2, "name1": "intel"}]), None)
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 2,
+        "indexedDocuments": 2
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @r###"{"total":1,"failed":0}"###);
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name1": "intel"
+        },
+        {
+          "id": 2,
+          "name1": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    // modify a valid document
+    let (value, code) = index.add_documents(json!([{"id": 1, "name": "kefir"}]), None).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @r###"{"total":1,"failed":0}"###);
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name1": "intel"
+        },
+        {
+          "id": 2,
+          "name1": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+
+    // Delete the document
+    let (value, code) = index.delete_document(2).await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+     {
+       "uid": "[uid]",
+       "batchUid": "[batch_uid]",
+       "indexUid": "doggo",
+       "status": "succeeded",
+       "type": "documentDeletion",
+       "canceledBy": null,
+       "details": {
+         "providedIds": 1,
+         "deletedDocuments": 1,
+         "originalFilter": null
+       },
+       "error": null,
+       "duration": "[duration]",
+       "enqueuedAt": "[date]",
+       "startedAt": "[date]",
+       "finishedAt": "[date]"
+     }
+     "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name1": "intel"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    // fix the template to not fail to embed
+    let mut settings = unrevocable_settings.clone();
+    settings["documentTemplate"] = serde_json::Value::String("toto {{doc.name1}}".to_string());
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+            "rest": settings,
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(response.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "rest": {
+            "source": "rest",
+            "apiKey": "myXXXX...",
+            "documentTemplate": "toto {{doc.name1}}",
+            "url": "[url]",
+            "request": "{{text}}",
+            "response": {
+              "data": "{{embedding}}"
+            }
+          }
+        }
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "name": "kefir"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "###);
+
+    // Disable embedder for the failing document
+    let (value, code) = index
+        .add_documents(json!([{"id": 1, "name": "kefir", "_vectors" : { "rest": null }}]), None)
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "###);
+
+    // Re-enable embedder for the failing document
+    let (value, code) = index
+        .add_documents(
+            json!([{"id": 1, "name": "kefir", "_vectors" : { "rest": { "regenerate": true } }}]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+        {
+          "results": [
+            {
+              "id": 1,
+              "name": "kefir"
+            }
+          ],
+          "offset": 0,
+          "limit": 20,
+          "total": 1
+        }
+        "###);
+
+    // Disable embedder for the failing document other format
+    let (value, code) = index
+        .add_documents(json!([{"id": 1, "name": "kefir", "_vectors" : { "rest": [] }}]), None)
+        .await;
+    snapshot!(code, @"202 Accepted");
+    let task = server.wait_task(value.uid()).await;
+    snapshot!(task, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "doggo",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "###);
+
+    let batch_uid = task["batchUid"].as_u64().unwrap();
+    let (batch, _) = index.get_batch(batch_uid as u32).await;
+    snapshot!(batch["stats"]["embedderRequests"], @"null");
+
+    let (documents, _code) =
+        index.fetch_documents(json!({"filter": "_vectors.rest.renderingError EXISTS"})).await;
+    snapshot!(json_string!(documents), @r###"
+    {
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
     }
     "###);
 }

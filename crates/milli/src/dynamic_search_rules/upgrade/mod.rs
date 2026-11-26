@@ -101,6 +101,7 @@ pub fn upgrade_dsrs(
                 progress,
                 ip_policy,
                 embedder_stats,
+                Default::default(),
             )?;
         }
         // already newer actions => only update metadata
@@ -121,6 +122,7 @@ pub fn upgrade_dsrs(
                 progress,
                 ip_policy,
                 embedder_stats,
+                Default::default(),
             )?;
         }
         _ => {}

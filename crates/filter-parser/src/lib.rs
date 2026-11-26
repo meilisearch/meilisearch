@@ -235,6 +235,8 @@ pub enum VectorFilter {
     DocumentTemplate,
     UserProvided,
     Regenerate,
+    RenderingError,
+    EmbeddingError,
     None,
 }
 
@@ -245,6 +247,8 @@ impl VectorFilter {
             Self::DocumentTemplate => VectorFilter::DocumentTemplate,
             Self::UserProvided => VectorFilter::UserProvided,
             Self::Regenerate => VectorFilter::Regenerate,
+            Self::RenderingError => VectorFilter::RenderingError,
+            Self::EmbeddingError => VectorFilter::EmbeddingError,
             Self::None => VectorFilter::None,
         }
     }
@@ -971,6 +975,8 @@ impl std::fmt::Display for IndexFilterCondition {
                     VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                     VectorFilter::UserProvided => write!(f, ".userProvided")?,
                     VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                    VectorFilter::RenderingError => write!(f, ".renderingError")?,
+                    VectorFilter::EmbeddingError => write!(f, ".embeddingError")?,
                     VectorFilter::None => (),
                 }
                 write!(f, " EXISTS")
@@ -1047,6 +1053,8 @@ impl std::fmt::Display for FilterCondition {
                     VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                     VectorFilter::UserProvided => write!(f, ".userProvided")?,
                     VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                    VectorFilter::RenderingError => write!(f, ".renderingError")?,
+                    VectorFilter::EmbeddingError => write!(f, ".embeddingError")?,
                     VectorFilter::None => (),
                 }
                 write!(f, " EXISTS")

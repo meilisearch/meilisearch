@@ -15,7 +15,7 @@ use clap::Parser;
 use itertools::Itertools as _;
 use meilisearch_types::features::InstanceTogglableFeatures;
 use meilisearch_types::milli::update::{IndexerConfig, S3SnapshotOptions};
-use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
+use meilisearch_types::milli::{EmbedderFailureModes, ThreadPoolNoAbortBuilder};
 use rustls::server::{ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
 use rustls_pemfile::{certs, ec_private_keys, rsa_private_keys};
@@ -58,6 +58,8 @@ const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LO
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS";
+const MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES: &str =
+    "MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_LEGACY_SEARCH_DEFAULT: &str = "MEILI_EXPERIMENTAL_LEGACY_SEARCH";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
@@ -838,6 +840,12 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS)]
     #[serde(default)]
     pub experimental_no_edition_2024_for_settings: bool,
+
+    /// Experimental embedder failure modes feature.
+    ///
+    #[clap(long, env = MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES)]
+    #[serde(default)]
+    pub experimental_config_embedder_failure_modes: Option<String>,
 }
 
 impl IndexerOpts {
@@ -848,6 +856,7 @@ impl IndexerOpts {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
+            experimental_config_embedder_failure_modes,
         } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
@@ -867,6 +876,14 @@ impl IndexerOpts {
                 experimental_no_edition_2024_for_settings.to_string(),
             );
         }
+        if let Some(experimental_config_embedder_failure_modes) =
+            experimental_config_embedder_failure_modes
+        {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES,
+                &experimental_config_embedder_failure_modes,
+            );
+        }
     }
 }
 
@@ -879,11 +896,16 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             max_indexing_threads,
             skip_index_budget,
             experimental_no_edition_2024_for_settings,
+            experimental_config_embedder_failure_modes,
         } = other;
 
         let thread_pool = ThreadPoolNoAbortBuilder::new_for_indexing()
             .num_threads(other.max_indexing_threads.unwrap_or_else(|| num_cpus::get() / 2))
             .build()?;
+
+        let experimental_config_embedder_failure_modes = experimental_config_embedder_failure_modes
+            .as_ref()
+            .map_or_default(|failure_modes| EmbedderFailureModes::parse_from_str(failure_modes));
 
         Ok(Self {
             thread_pool,
@@ -898,6 +920,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             documents_chunk_size: Default::default(),
             max_nb_chunks: Default::default(),
             s3_snapshot_options: None,
+            embedder_failure_modes: experimental_config_embedder_failure_modes,
         })
     }
 }

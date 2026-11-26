@@ -6,7 +6,7 @@ use grenad::CompressionType;
 
 use super::GrenadParameters;
 use crate::thread_pool_no_abort::ThreadPoolNoAbort;
-use crate::ThreadPoolNoAbortBuilder;
+use crate::{EmbedderFailureModes, ThreadPoolNoAbortBuilder};
 
 #[derive(Debug)]
 pub struct IndexerConfig {
@@ -22,6 +22,7 @@ pub struct IndexerConfig {
     pub skip_index_budget: bool,
     pub experimental_no_edition_2024_for_settings: bool,
     pub s3_snapshot_options: Option<S3SnapshotOptions>,
+    pub embedder_failure_modes: EmbedderFailureModes,
 }
 
 impl IndexerConfig {
@@ -88,6 +89,7 @@ impl Default for IndexerConfig {
             skip_index_budget: false,
             experimental_no_edition_2024_for_settings: false,
             s3_snapshot_options: None,
+            embedder_failure_modes: EmbedderFailureModes::default(),
         }
     }
 }

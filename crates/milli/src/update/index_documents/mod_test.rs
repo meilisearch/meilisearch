@@ -1316,6 +1316,7 @@ fn mixing_documents_replace_with_updates() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1407,6 +1408,7 @@ fn mixing_documents_replace_with_updates_even_more() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1595,6 +1597,7 @@ fn add_and_delete_documents_in_single_transform() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1661,6 +1664,7 @@ fn add_update_and_delete_documents_in_single_transform() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1718,6 +1722,7 @@ fn add_document_and_in_another_transform_update_and_delete_documents() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1774,6 +1779,7 @@ fn add_document_and_in_another_transform_update_and_delete_documents() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1832,6 +1838,7 @@ fn delete_document_and_then_add_documents_in_the_same_transform() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1895,6 +1902,7 @@ fn delete_the_same_document_multiple_time() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -1951,6 +1959,7 @@ fn add_document_and_in_another_transform_delete_the_document_then_add_it_again()
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -2007,6 +2016,7 @@ fn add_document_and_in_another_transform_delete_the_document_then_add_it_again()
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -2226,6 +2236,7 @@ fn reproduce_the_bug() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -2289,6 +2300,7 @@ fn reproduce_the_bug() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();
@@ -2349,6 +2361,7 @@ fn reproduce_the_bug() {
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),
         &Default::default(),
+        Default::default(),
     )
     .unwrap();
     wtxn.commit().unwrap();

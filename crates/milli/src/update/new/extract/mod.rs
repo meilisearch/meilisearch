@@ -12,7 +12,7 @@ pub use documents::*;
 pub use faceted::*;
 pub use geo::*;
 pub use searchable::*;
-pub use vectors::{EmbeddingExtractor, SettingsChangeEmbeddingExtractor};
+pub use vectors::{EmbedderFailureModes, EmbeddingExtractor, SettingsChangeEmbeddingExtractor};
 
 // TODO move in permissive json pointer
 // can't be done for now because of the use of `PatternMatch`

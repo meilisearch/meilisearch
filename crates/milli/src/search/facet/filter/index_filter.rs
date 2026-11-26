@@ -840,6 +840,8 @@ fn serialize_index_filter_condition(
                 VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                 VectorFilter::UserProvided => write!(f, ".userProvided")?,
                 VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                VectorFilter::RenderingError => write!(f, ".renderingError")?,
+                VectorFilter::EmbeddingError => write!(f, ".embeddingError")?,
                 VectorFilter::None => (),
             }
             write!(f, " EXISTS")?;

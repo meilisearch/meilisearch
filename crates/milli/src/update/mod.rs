@@ -6,7 +6,7 @@ pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
 pub use self::index_documents::{request_threads, *};
 pub use self::indexer_config::{default_thread_pool_and_threads, IndexerConfig, S3SnapshotOptions};
-pub use self::new::ChannelCongestion;
+pub use self::new::{ChannelCongestion, EmbedderFailureModes};
 pub use self::settings::{
     validate_embedding_settings, FragmentDiff, InnerIndexSettings, InnerIndexSettingsDiff, Setting,
     Settings, SettingsDelta,

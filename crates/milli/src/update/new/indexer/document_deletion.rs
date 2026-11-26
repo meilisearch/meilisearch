@@ -110,7 +110,7 @@ mod test {
     use crate::update::new::steps::IndexingStep;
     use crate::update::new::thread_local::{MostlySend, ThreadLocal};
     use crate::update::new::DocumentChange;
-    use crate::{DocumentId, MustStopProcessing};
+    use crate::{DocumentId, EmbedderFailureModes, MustStopProcessing};
 
     #[test]
     fn test_deletions() {
@@ -177,6 +177,7 @@ mod test {
             must_stop_processing: &MustStopProcessing::default(),
             progress: &Progress::quiet(),
             grenad_parameters: &Default::default(),
+            embedder_failure_modes: EmbedderFailureModes::default(),
         };
 
         for _ in 0..3 {
