@@ -3,7 +3,6 @@ use std::collections::{BTreeSet, HashMap};
 
 use charabia::normalizer::NormalizerOption;
 use charabia::{Language, Normalize, StrDetection, Token};
-use grenad::Sorter;
 use heed::types::{Bytes, SerdeJson};
 use heed::{BytesDecode, BytesEncode, RoTxn, RwTxn};
 
@@ -12,7 +11,6 @@ use super::KvReaderDelAdd;
 use crate::attribute_patterns::PatternMatch;
 use crate::heed_codec::facet::FacetGroupKey;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
-use crate::update::{create_sorter, MergeDeladdBtreesetString};
 use crate::{
     BEU16StrCodec, FieldId, FieldIdMapMissingEntry, FilterableAttributesFeatures,
     FilterableAttributesRule, GlobalFieldsIdsMap, Index, InternalError, LocalizedAttributesRule,
@@ -38,9 +36,9 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     ) -> Self {
         let registered_facets = HashMap::new();
         let normalized_facet_string_docids_sorter = create_sorter(
-            grenad::SortAlgorithm::Stable,
+            SortAlgorithm::Stable,
             MergeDeladdBtreesetString,
-            grenad::CompressionType::None,
+            CompressionType::None,
             None,
             None,
             Some(0),
@@ -136,7 +134,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
         tracing::trace!("merge facet strings for facet search: {:?}", self.registered_facets);
 
         let reader = self.normalized_facet_string_docids_sorter.into_reader_cursors()?;
-        let mut builder = grenad::MergerBuilder::new(MergeDeladdBtreesetString);
+        let mut builder = MergerBuilder::new(MergeDeladdBtreesetString);
         builder.extend(reader);
 
         let database = index.facet_id_normalized_string_strings.remap_types::<Bytes, Bytes>();

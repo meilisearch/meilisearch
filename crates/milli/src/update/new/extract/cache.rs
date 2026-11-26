@@ -73,7 +73,6 @@ use bumparaw_collections::bbbul::{BitPacker, BitPacker4x};
 use bumparaw_collections::frozen::Freezable;
 use bumparaw_collections::map::FrozenMap;
 use bumparaw_collections::{Bbbul, FrozenBbbul};
-use grenad::ReaderCursor;
 use hashbrown::hash_map::RawEntryMut;
 use hashbrown::HashMap;
 use roaring::RoaringBitmap;
@@ -82,7 +81,6 @@ use rustc_hash::FxBuildHasher;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::KvReaderDelAdd;
-use crate::update::MergeDeladdCboRoaringBitmaps;
 use crate::{CboRoaringBitmapCodec, Result};
 
 /// A cache that stores bytes keys associated to CboDelAddRoaringBitmaps.
@@ -202,7 +200,7 @@ impl<'extractor> BalancedCaches<'extractor> {
                         .into_iter()
                         .map(ReaderCursor::into_inner)
                         .map(BufReader::new)
-                        .map(|bufreader| grenad::Reader::new(bufreader).map_err(Into::into))
+                        .map(|bufreader| Reader::new(bufreader).map_err(Into::into))
                         .collect::<Result<_>>()?;
                     Ok(FrozenCache { source_id, bucket_id, cache: FrozenMap::new(map), spilled })
                 })
@@ -285,7 +283,7 @@ struct SpillingCaches<'extractor> {
             &'extractor Bump,
         >,
     >,
-    spilled_entries: Vec<grenad::Sorter<MergeDeladdCboRoaringBitmaps>>,
+    spilled_entries: Vec<Sorter<MergeDeladdCboRoaringBitmaps>>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
 }
@@ -303,7 +301,7 @@ impl<'extractor> SpillingCaches<'extractor> {
     ) -> SpillingCaches<'extractor> {
         SpillingCaches {
             spilled_entries: iter::repeat_with(|| {
-                let mut builder = grenad::SorterBuilder::new(MergeDeladdCboRoaringBitmaps);
+                let mut builder = SorterBuilder::new(MergeDeladdCboRoaringBitmaps);
                 builder.dump_threshold(0);
                 builder.allow_realloc(false);
                 builder.build()
@@ -373,7 +371,7 @@ fn compute_bucket_from_hash(buckets: usize, hash: u64) -> usize {
 }
 
 fn spill_entry_to_sorter(
-    spilled_entries: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
+    spilled_entries: &mut Sorter<MergeDeladdCboRoaringBitmaps>,
     deladd_buffer: &mut Vec<u8>,
     cbo_buffer: &mut Vec<u8>,
     key: &[u8],
@@ -419,7 +417,7 @@ pub struct FrozenCache<'a, 'extractor> {
         DelAddBbbul<'extractor, BitPacker4x>,
         FxBuildHasher,
     >,
-    spilled: Vec<grenad::Reader<BufReader<File>>>,
+    spilled: Vec<Reader<BufReader<File>>>,
 }
 
 pub fn transpose_and_freeze_caches<'a, 'extractor>(
