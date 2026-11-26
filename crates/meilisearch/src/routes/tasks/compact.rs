@@ -56,6 +56,8 @@ pub struct TaskCompactionSummary {
 /// Trigger a compaction process on the task queue database and return its size before and
 /// after compaction. A successful compaction requires restarting the instance before it can
 /// safely resume normal writes.
+///
+/// This route requires the `taskQueueCompactionRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["tasks.compact", "tasks.*", "*"])),
     no_request_body,

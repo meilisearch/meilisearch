@@ -599,6 +599,8 @@ async fn get_tasks(
 /// The `/tasks/stream` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
 ///
 /// Tasks are sent throught an SSE stream any time their status changes, i.e., enqueued, processing, succeeded, failed.
+///
+/// This route requires the `tasksStreamingRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     responses(
@@ -745,6 +747,8 @@ async fn get_task(
 ///
 /// Retrieve the document payload that was sent with this [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
 /// Only available for document-related tasks that are enqueued or processing.
+///
+/// This route requires the `getTaskDocumentsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("task_id" = u32, format = UInt32, example = 0, description = "The task identifier.", nullable = false)),

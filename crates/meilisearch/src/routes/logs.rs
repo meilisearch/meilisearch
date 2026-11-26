@@ -285,6 +285,8 @@ fn entry_stream(
 /// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload. The logs are sent as multi-part, and the stream never stops, so ensure your client can handle a long-lived connection. To stop receiving logs, call the `DELETE /logs/stream` route.
 ///
 /// Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
+///
+/// This route requires the `logsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     request_body = GetLogs,
@@ -355,6 +357,8 @@ pub async fn get_logs(
 /// Stop retrieving logs
 ///
 /// Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
+///
+/// This route requires the `logsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
@@ -401,6 +405,8 @@ pub struct UpdateStderrLogs {
 /// Update target of the console logs
 ///
 /// Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
+///
+/// This route requires the `logsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     request_body = UpdateStderrLogs,
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),

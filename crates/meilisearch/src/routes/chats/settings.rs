@@ -23,7 +23,7 @@ use crate::extractors::authentication::GuardedData;
 /// Get the settings of a chat workspace, such as the LLM source, the base prompts,
 /// and the search parameters. The API key is never returned.
 ///
-/// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
+/// This route requires the `chatCompletions` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["chats.settings.get", "*"])),
     params(
@@ -92,7 +92,7 @@ pub async fn get_settings(
 /// and the search parameters. Fields set to `null` are reset to their default value,
 /// and missing fields are left unchanged.
 ///
-/// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
+/// This route requires the `chatCompletions` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
     request_body = ChatWorkspaceSettings,
@@ -238,7 +238,7 @@ pub async fn patch_settings(
 ///
 /// Reset all the settings of a chat workspace to their default value.
 ///
-/// This route is only available when the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/resources/help/experimental_features_overview) is enabled.
+/// This route requires the `chatCompletions` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
