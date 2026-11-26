@@ -92,6 +92,16 @@ get_archi() {
     return 0
 }
 
+# Checks whether the current Linux system uses the musl C library
+# (e.g. Alpine Linux), for which Meilisearch does not ship a binary.
+# Returns 0 if musl is detected, 1 otherwise.
+is_musl() {
+    if [ "$os" != 'linux' ]; then
+        return 1
+    fi
+    ldd --version 2>&1 | grep -qi musl
+}
+
 success_usage() {
     printf "$GREEN%s\n$DEFAULT" "Meilisearch $latest binary successfully downloaded as '$binary_name' file."
     echo ''
@@ -103,6 +113,13 @@ success_usage() {
 
 not_available_failure_usage() {
     printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch binary is not available for your OS distribution or your architecture yet.'
+    echo ''
+    echo 'However, you can easily compile the binary from the source files.'
+    echo 'Follow the steps at the page ("Source" tab): https://www.meilisearch.com/docs/learn/getting_started/installation'
+}
+
+musl_failure_usage() {
+    printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch does not provide a binary for musl-based Linux distributions (e.g. Alpine Linux).'
     echo ''
     echo 'However, you can easily compile the binary from the source files.'
     echo 'Follow the steps at the page ("Source" tab): https://www.meilisearch.com/docs/learn/getting_started/installation'
@@ -129,6 +146,11 @@ fill_release_variables() {
      # Fill $os variable.
      if ! get_os; then
         not_available_failure_usage
+        exit 1
+     fi
+     # Reject musl-based Linux distributions early, since no binary is shipped for them.
+     if is_musl; then
+        musl_failure_usage
         exit 1
      fi
      # Fill $archi variable.
