@@ -29,23 +29,14 @@ use crate::routes::Pagination;
     tag = "Keys",
     tags((
         name = "Keys",
-        description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
-You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
-Accessing any route under `/keys` without having set a master key will result in an error.",
+        description = "Manage the API keys that control access to a Meilisearch instance.",
     )),
 )]
 pub struct ApiKeyApi;
 
 /// Create API key
 ///
-/// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
-///
-/// **Required fields:** `actions`, `indexes`, `expiresAt`.
-/// **Optional fields:** `name`, `description`, `uid`.
-///
-/// Set `expiresAt` to `null` to create a key that never expires.
-/// Use `"*"` in the `actions` array to grant all permissions (not recommended for production).
-/// Use `["*"]` in the `indexes` array to grant access to all indexes.
+/// Create a new API key with the specified name, description, actions, and index scopes.
 #[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
@@ -105,11 +96,15 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
-    /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
+    /// Number of keys to skip. Use with `limit` for pagination.
+    ///
+    /// Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
     #[param(required = false, value_type = usize, default = 0)]
     pub offset: Param<usize>,
-    /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
+    /// Maximum number of keys to return. Use with `offset` for pagination.
+    ///
+    /// Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
     #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
@@ -123,7 +118,7 @@ impl ListApiKeys {
 
 /// List API keys
 ///
-/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
+/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit.
 ///
 /// **Note:** Expired keys are included in the response but deleted keys are not.
 /// Keys are returned in descending order of creation date.
@@ -391,10 +386,6 @@ pub struct AuthParam {
     key: String,
 }
 
-/// Represents an API key used for authenticating requests to Meilisearch.
-/// Each key has specific permissions defined by its actions and can be scoped
-/// to particular indexes. Keys provide fine-grained access control for your
-/// Meilisearch instance.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct KeyView {
@@ -414,9 +405,8 @@ pub(super) struct KeyView {
     /// delete the key. The UID remains constant even if the key's name or
     /// description changes.
     uid: Uuid,
-    /// The list of actions (permissions) this key is allowed to perform.
-    /// Examples include `documents.add`, `search`, `indexes.create`,
-    /// `settings.update`, etc. Use `*` to grant all permissions.
+    /// The list of actions (permissions) this key is allowed to perform. Use
+    /// `*` to grant all permissions.
     actions: Vec<Action>,
     /// The list of index UIDs this key can access. Use `*` to grant access to
     /// all indexes, including future ones. Patterns are also supported, e.g.,

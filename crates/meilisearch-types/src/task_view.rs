@@ -15,10 +15,6 @@ use crate::tasks::{
 };
 
 /// Represents the current state and details of an asynchronous task.
-///
-/// Tasks are created when you perform operations like adding documents,
-/// updating settings, or creating indexes. Use this view to monitor task
-/// progress and check for errors.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -71,7 +67,7 @@ pub struct TaskView {
     /// The total time spent processing this task, formatted as an ISO-8601
     /// duration (e.g., `PT0.5S` for 0.5 seconds). This is `null` for tasks
     /// that haven't finished processing yet.
-    #[schema(value_type = Option<String>, example = json!(null))]
+    #[schema(value_type = Option<String>, example = json!("PT0.5S"))]
     #[serde(serialize_with = "serialize_duration", default)]
     pub duration: Option<Duration>,
     /// The timestamp when this task was added to the queue, formatted as an
@@ -128,9 +124,11 @@ impl TaskView {
 
 /// Contains type-specific details about a task's execution.
 ///
-/// The fields present depend on the task type. For example, document addition
-/// tasks will have `receivedDocuments` and `indexedDocuments`, while settings
-/// update tasks will have the applied settings.
+/// The fields present depend on the task type.
+///
+/// For example, document addition tasks will have `receivedDocuments` and
+/// `indexedDocuments`, while settings update tasks will have the applied
+/// settings.
 #[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

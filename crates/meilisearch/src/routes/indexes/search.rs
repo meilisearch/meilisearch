@@ -43,10 +43,7 @@ use crate::search_queue::SearchQueue;
     tags(
         (
             name = "Search",
-            description = "Meilisearch exposes two routes to perform searches:
-
-- A POST route: this is the preferred route when using API authentication, as it allows [preflight request](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request) caching and better performance.
-- A GET route: the usage of this route is discouraged, unless you have good reason to do otherwise (specific caching abilities for example)",
+            description = "Search the documents of an index.",
             external_docs(
                 url = "https://www.meilisearch.com/docs/reference/api/search",
                 description = "Search API reference",
@@ -273,17 +270,17 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(required = false, value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
-    /// Name of the embedder for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
-    ///
-    /// Must match an embedder configured in the index settings.
+    /// Name of the embedder used for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Must match an embedder configured in the index settings.
     ///
     /// Required when `vector` or `hybridSemanticRatio` is set.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
     pub hybrid_embedder: Option<String>,
-    /// Balance between keyword and semantic search: 0.0 means keyword-only results, 1.0 means semantic-only.
+    /// Balance between keyword (0.0) and semantic (1.0) search.
     ///
     /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// Defaults to `0.5`.
     ///
     /// Requires `hybridEmbedder` when set.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
@@ -315,15 +312,11 @@ pub struct SearchQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
     ///
     /// When `false` or omitted, the query runs locally.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` or omitted = local (default).
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     ///
     /// Documents with the same id are assumed identical for deduplication.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
@@ -492,9 +485,10 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 ///
 /// > Equivalent to the [search with POST route](/docs/reference/api/search/search-with-post) in the Meilisearch API.
 ///
-/// **Note:** By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+/// **Notes:**
 ///
-/// **Note:** The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
+/// - By default this endpoint returns at most 1000 results. Configure `pagination.maxTotalHits` in index settings to change this limit.
+/// - The GET route only accepts string filter expressions. Use the POST route if you need array-of-array filter syntax.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(

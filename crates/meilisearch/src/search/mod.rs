@@ -273,15 +273,7 @@ pub struct SearchQuery {
     /// See also the [localizedAttributes](https://www.meilisearch.com/docs/reference/api/settings/list-all-settings#response-localized-attributes-one-of-0) settings and [Language](https://www.meilisearch.com/docs/learn/resources/language).
     #[request(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
-    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search): combines keyword and semantic search.
-    ///
-    /// The `embedder` field (required) must match an embedder name in index settings.
-    ///
-    /// The `semanticRatio` field controls the balance: 0.0 means keyword-only results, 1.0 means semantic-only.
-    ///
-    /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
-    ///
-    /// The `semanticRatio` field defaults to `0.5`. A value of `0.0` uses keyword-only results; `1.0` uses semantic-only results.
+    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
@@ -316,6 +308,8 @@ pub struct SearchQuery {
     /// Personalization must be [enabled](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted instances).
     #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>)]
     pub personalize: Option<Personalize>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -324,12 +318,6 @@ pub struct SearchQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
@@ -666,12 +654,14 @@ impl fmt::Debug for SearchQuery {
 #[routes::request(proxied, override_error = DeserrJsonError<InvalidSearchHybridQuery>)]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct HybridQuery {
-    /// Balance between keyword search (0.0) and semantic search (1.0). Defaults to 0.5.
+    /// Balance between keyword (0.0) and semantic (1.0) search.
+    ///
+    /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// Defaults to `0.5`.
     #[request(default, schema_type = f32, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     pub semantic_ratio: SemanticRatio,
-    /// Name of the embedder configured in index settings.
-    ///
-    /// Used for semantic part of the search.
+    /// Name of the embedder used for hybrid search. Must match an embedder configured in the index settings.
     #[request(required, error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }
@@ -880,8 +870,6 @@ pub struct SearchQueryWithIndex {
     #[request(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
     /// Hybrid search configuration combining keyword and semantic search.
-    /// Set `semanticRatio` to balance between keyword matching (0.0) and
-    /// semantic similarity (1.0). Requires an embedder to be configured.
     #[request(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Search using a custom query vector
@@ -896,6 +884,8 @@ pub struct SearchQueryWithIndex {
     /// Personalize search results
     #[request(default, error = DeserrJsonError<InvalidSearchPersonalize>, skip_serializing_if = "Option::is_none", )]
     pub personalize: Option<Personalize>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -904,12 +894,6 @@ pub struct SearchQueryWithIndex {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// Display the global ranking score of a document
@@ -1419,7 +1403,6 @@ pub struct SearchMetadata {
     pub inline_rule_condition_outcomes: Option<ConditionOutcomes>,
 }
 
-/// Search response containing matching documents and metadata.
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -1542,7 +1525,6 @@ impl fmt::Debug for SearchResult {
     }
 }
 
-/// Response containing similar documents
 #[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SimilarResult {
@@ -1631,7 +1613,6 @@ pub struct FacetValueHitSchema {
     pub count: u64,
 }
 
-/// Result of a facet search operation.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

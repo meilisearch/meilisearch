@@ -116,7 +116,7 @@ mod webhooks;
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
         (name = "Health", description = "The health check endpoint enables you to periodically test the health of your Meilisearch instance."),
         (name = "Version", description = "Returns the version of the running Meilisearch instance."),
-        (name = "Backups", description = "Meilisearch offers two types of backups: snapshots and dumps. Snapshots are mainly intended as a safeguard, while dumps are useful when migrating Meilisearch."),
+        (name = "Backups", description = "Create snapshots and dumps of a Meilisearch instance."),
         (name = "Export", description = "Export documents and settings from this instance to a remote Meilisearch server."),
         (name = "Async task management", description = "Routes for listing and managing batches and tasks (asynchronous operations)."),
     ),
@@ -133,6 +133,7 @@ pub struct MeilisearchApi;
 ///
 /// Returns `true` if the header is present and set to "true" or "1"
 /// (case-insensitive).
+///
 /// Returns `false` if the header is not present or has any other value.
 pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
     req.headers()
@@ -142,7 +143,6 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
         .unwrap_or(false)
 }
 
-/// A summarized view of a task, returned when a task is enqueued
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
@@ -388,7 +388,6 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "Meilisearch is running" }))
 }
 
-/// Global statistics for the Meilisearch instance
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
@@ -578,16 +577,17 @@ enum HealthStatus {
 
 /// Get health
 ///
-/// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
-///
-/// The engine will return `available` status with a `200` status code when the instance is healthy.
-/// It will return `mustRestart` status with a `500` status code if the instance requires a restart.
-/// This restart is required after a compaction of the task queue for example.
+/// The health check endpoint enables you to periodically test the health of your Meilisearch instance.
 #[routes::path(
     responses(
-        (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "The instance is available.", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
+            }
+        )),
+        (status = 500, description = "The instance needs to be restarted before it answers requests again, so `status` holds `mustRestart`. Compacting the task queue is one of the operations asking for such a restart.", body = HealthResponse, content_type = "application/json", example = json!(
+            {
+                "status": "mustRestart"
             }
         )),
     ),

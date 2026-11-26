@@ -114,7 +114,7 @@ pub struct DocumentParam {
     tags(
         (
             name = "Documents",
-            description = "Documents are objects composed of fields that can store any type of data. Each field contains an attribute and its associated value. Documents are stored inside [indexes](https://www.meilisearch.com/docs/learn/getting_started/indexes).",
+            description = "Add, retrieve, update, and delete the documents stored in an index.",
         ),
     ),
 )]
@@ -126,8 +126,11 @@ pub struct DocumentsApi;
 #[schema(rename_all = "camelCase")]
 pub struct GetDocument {
     /// Comma-separated list of document attributes to include in the
-    /// response. Use `*` to retrieve all attributes. By default, all
-    /// attributes listed in the `displayedAttributes` setting are returned.
+    /// response. Use `*` to retrieve all attributes.
+    ///
+    /// By default, all attributes listed in the `displayedAttributes` setting
+    /// are returned.
+    ///
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     #[param(required = false, value_type = Option<Vec<String>>)]
@@ -135,12 +138,18 @@ pub struct GetDocument {
     fields: OptionStarOrList<String>,
     /// When `true`, includes the vector embeddings in the response for this
     /// document. This is useful when you need to inspect or export vector
-    /// data. Note that this can significantly increase response size if the
-    /// document has multiple embedders configured. Defaults to `false`.
+    /// data.
+    ///
+    /// Note that this can significantly increase response size if the document
+    /// has multiple embedders configured.
+    ///
+    /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -149,12 +158,6 @@ pub struct GetDocument {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
     use_network: Option<bool>,
@@ -473,26 +476,35 @@ pub async fn delete_document(
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct BrowseQueryGet {
     /// Number of documents to skip in the response. Use this parameter
-    /// together with `limit` to paginate through large document sets. For
-    /// example, to get documents 21-40, set `offset=20` and `limit=20`.
+    /// together with `limit` to paginate through large document sets.
+    ///
+    /// For example, to get documents 21-40, set `offset=20` and `limit=20`.
+    ///
     /// Defaults to `0`.
     #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     /// Maximum number of documents to return in a single response. Use
-    /// together with `offset` for pagination. Defaults to `20`.
+    /// together with `offset` for pagination.
+    ///
+    /// Defaults to `20`.
     #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the
-    /// response. Use `*` to retrieve all attributes. By default, all
-    /// attributes are returned. Example: `title,description,price`.
+    /// response. Use `*` to retrieve all attributes.
+    ///
+    /// By default, all attributes are returned.
+    ///
+    /// Example: `title,description,price`.
     #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
     /// When `true`, includes vector embeddings in the response for documents
     /// that have them. This is useful when you need to inspect or export
-    /// vector data. Defaults to `false`.
+    /// vector data.
+    ///
+    /// Defaults to `false`.
     #[param(required = false, default, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
@@ -504,16 +516,21 @@ pub struct BrowseQueryGet {
     ids: Option<CS<String>>,
     /// Filter expression to select which documents to return. Attributes must be added to the
     /// `filterableAttributes` index setting before they can be used in filters. Only accepts
-    /// string expressions (not array syntax). Example: `genres = action AND rating > 4`.
+    /// string expressions (not array syntax).
+    ///
+    /// Example: `genres = action AND rating > 4`.
     #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
     /// Attribute(s) to sort the documents by. Format: `attribute:asc` or
     /// `attribute:desc`. Multiple sort criteria can be comma-separated.
+    ///
     /// Example: `price:asc,rating:desc`.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -522,12 +539,6 @@ pub struct BrowseQueryGet {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentUseNetwork>)]
     pub use_network: Option<bool>,
@@ -541,26 +552,35 @@ pub struct BrowseQueryGet {
 #[derive(Debug, Clone)]
 pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
-    /// for pagination through large document sets. For example, to get
-    /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
+    /// for pagination through large document sets.
+    ///
+    /// For example, to get documents 151-170, set `offset=150` and `limit=20`.
+    ///
+    /// Defaults to `0`.
     #[request(default, schema_default = 0, error = DeserrJsonError<InvalidDocumentOffset>, example = 150)]
     pub offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
-    /// results but may increase response time and memory usage. Defaults to
-    /// `20`.
+    /// results but may increase response time and memory usage.
+    ///
+    /// Defaults to `20`.
     #[request(default = PAGINATION_DEFAULT_LIMIT, schema_default = PAGINATION_DEFAULT_LIMIT_FN, error = DeserrJsonError<InvalidDocumentLimit>, example = 1)]
     pub limit: usize,
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
-    /// fields you need. Example: `["title", "description", "price"]`.
+    /// fields you need.
+    ///
+    /// Example: `["title", "description", "price"]`.
     #[request(default, error = DeserrJsonError<InvalidDocumentFields>, example = json!(["title, description"]))]
     pub fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
-    /// export vector data. Note that this can significantly increase response
-    /// size. Defaults to `false`.
+    /// export vector data.
+    ///
+    /// Note that this can significantly increase response size.
+    ///
+    /// Defaults to `false`.
     #[request(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>, example = true)]
     pub retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
@@ -572,16 +592,21 @@ pub struct BrowseQuery {
     /// Filter expression to select which documents to return. Attributes must be added to the
     /// `filterableAttributes` index setting before they can be used in filters. Accepts a string
     /// or an array of arrays of strings for AND/OR combinations.
+    ///
     /// Example string: `"genres = action AND rating > 4"`.
+    ///
     /// Example array: `[["genres = action", "genres = comedy"], "rating > 4"]` (inner array = OR, outer = AND).
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>, example = "popularity > 1000")]
     pub filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
-    /// (ascending) or `desc` (descending). Example: `["price:asc",
-    /// "rating:desc"]` sorts by price ascending, then by rating descending.
+    /// (ascending) or `desc` (descending).
+    ///
+    /// Example: `["price:asc", "rating:desc"]` sorts by price ascending, then by rating descending.
     #[request(default, error = DeserrJsonError<InvalidDocumentSort>, example = json!(["title:asc", "rating:desc"]))]
     pub sort: Option<Vec<String>>,
+    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features).
+    ///
     /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
     /// When `false`, the query runs locally.
@@ -590,12 +615,6 @@ pub struct BrowseQuery {
     ///
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
-    ///
-    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
-    ///
-    /// Values: `true` = use the whole network; `false` = local, default = see above.
-    ///
-    /// When using the network, the index must exist with compatible settings on all remotes.
     #[request(default, error = DeserrJsonError<InvalidDocumentUseNetwork>)]
     pub use_network: Option<bool>,
 }
@@ -733,8 +752,6 @@ impl TryFrom<Document> for MergedDocument {
 ///
 /// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request
 /// body to specify filters, sort order, and which fields to return.
-///
-/// **Note:** Sending an empty payload (`{}`) returns all documents in the index.
 ///
 /// **Note:** Documents are not returned following the order of their primary keys.
 #[routes::path(
@@ -1214,7 +1231,9 @@ pub struct UpdateDocumentsQuery {
     pub primary_key: Option<String>,
     /// Customize the CSV column delimiter when importing CSV documents. Must be a single ASCII
     /// character. Only valid when the content type is `text/csv`; using this parameter with
-    /// `application/json` or `application/x-ndjson` will return an error. Default: `,`.
+    /// `application/json` or `application/x-ndjson` will return an error.
+    ///
+    /// Default: `,`.
     #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
@@ -1950,8 +1969,10 @@ pub struct DocumentEditionByFunction {
     /// index will be processed. Attributes must be in `filterableAttributes` to be used.
     #[request(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
-    /// Arbitrary data to pass into the function scope. By default the function only has access
-    /// to the current document being edited via the `doc` variable.
+    /// Arbitrary data to pass into the function scope.
+    ///
+    /// By default the function only has access to the current document being
+    /// edited via the `doc` variable.
     #[request(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
     /// A [RHAI](https://rhai.rs) function string to apply to each document. The function has
