@@ -241,9 +241,7 @@ pub struct SearchQueryGet {
     /// **`all`**: Only returns documents that contain all query terms. Meilisearch does not relax the query even if fewer than `limit` documents match.
     ///
     /// **`frequency`**: Returns documents containing all query terms first. If there are not enough, removes one term at a time starting with the word that is most frequent in the dataset, giving more weight to rarer terms (e.g. in "white cotton shirt", prioritizes documents containing "white" if "shirt" is very common).
-    ///
-    /// Default: `last`.
-    #[param(required = false)]
+    #[param(required = false, default = json!("last"))]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
     /// Restrict the search to the listed attributes only.

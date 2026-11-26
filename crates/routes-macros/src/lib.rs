@@ -203,6 +203,12 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Specifies a default value for use by `schema`. Will be interpreted exactly as `default` in the `schema` attribute.
 /// Implies `default`.
 ///
+/// Mandatory for fields with a `default` whose type is not an `Option` or a `Setting`, unless `no_schema_default` is set.
+///
+/// ## `no_schema_default`
+///
+/// Opts out of the mandatory `schema_default`, for defaults that cannot be expressed as a fixed value (e.g. a random identifier).
+///
 /// ## `skip`
 ///
 /// Skips the attribute for serde, deserr and ignore the attribute in schema.
