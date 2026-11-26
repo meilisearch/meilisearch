@@ -11,6 +11,7 @@ make_enum_progress! {
         PlaceholderRanking,
         SemanticRanking,
         Format,
+        Distinct,
         PinHits,
         FacetDistribution,
         Personalization,
