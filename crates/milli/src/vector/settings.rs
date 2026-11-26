@@ -28,7 +28,7 @@ pub struct EmbeddingSettings {
     /// - `rest`: configurable integration with a remote embedder via its REST API.
     /// - `composite`: combine two embedding providers at indexing and search time.
     ///   The generated embeddings must be **exactly the same** regardless of the embedding provider.
-    ///   Requires the `compositeEmbedders` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    ///   Requires the `compositeEmbedders` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     /// - `userProvided`: manually provide embeddings in documents.
     ///
     /// - Determines which other fields are required or allowed.
@@ -164,7 +164,7 @@ pub struct EmbeddingSettings {
     /// - 🏗️ When a fragment is deleted by passing `null` to its name, the corresponding embeddings are removed from documents.
     /// - 🏗️ When a fragment is modified, the corresponding embeddings are regenerated if their rendered version changes.
     ///
-    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(
         skip_serializing_if = "Setting::is_not_set",
         schema_type = Option<BTreeMap<String, serde_json::Value>>, schema_default = json!({})
@@ -179,7 +179,7 @@ pub struct EmbeddingSettings {
     ///
     /// - 🌱 Changing the value of this parameter never regenerates embeddings
     ///
-    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(
         skip_serializing_if = "Setting::is_not_set",
         schema_type = Option<BTreeMap<String, serde_json::Value>>, schema_default = json!({})
@@ -228,7 +228,7 @@ pub struct EmbeddingSettings {
     ///
     /// Same sub-parameters as a top-level embedder (`source`, `model`, `url`, etc.); no `documentTemplate`/`documentTemplateMaxBytes`.
     ///
-    /// Requires the `compositeEmbedders` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `compositeEmbedders` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
@@ -240,7 +240,7 @@ pub struct EmbeddingSettings {
     ///
     /// Same sub-parameters as a top-level embedder (`source`, `model`, `documentTemplate`, `url`, etc.).
     ///
-    /// Requires the `compositeEmbedders` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `compositeEmbedders` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(
         default,
         skip_serializing_if = "Setting::is_not_set",
@@ -387,7 +387,7 @@ pub struct SubEmbeddingSettings {
     /// - 🏗️ When a fragment is deleted by passing `null` to its name, the corresponding embeddings are removed from documents.
     /// - 🏗️ When a fragment is modified, the corresponding embeddings are regenerated if their rendered version changes.
     ///
-    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
@@ -401,7 +401,7 @@ pub struct SubEmbeddingSettings {
     ///
     /// - 🌱 Changing the value of this parameter never regenerates embeddings
     ///
-    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]

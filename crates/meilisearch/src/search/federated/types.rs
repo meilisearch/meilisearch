@@ -55,13 +55,13 @@ pub struct FederationOptions {
 
     /// Remote server to send this query to
     ///
-    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `network` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(default, error = DeserrJsonError<InvalidMultiSearchRemote>)]
     pub remote: Option<String>,
 
     /// Position of this query in the list of queries
     ///
-    /// Requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `network` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(default, error = DeserrJsonError<InvalidMultiSearchQueryPosition>)]
     pub query_position: Option<usize>,
 }

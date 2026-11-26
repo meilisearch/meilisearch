@@ -181,7 +181,7 @@ struct DynamicSearchRules {
 ///
 /// Return all search rules configured on the instance.
 ///
-/// This route requires the `dynamicSearchRules` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `dynamicSearchRules` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
     request_body = ListRules,
@@ -324,7 +324,7 @@ async fn list_rules(
 ///
 /// Retrieve a single search rule by its unique identifier.
 ///
-/// This route requires the `dynamicSearchRules` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `dynamicSearchRules` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
     params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
@@ -389,7 +389,7 @@ async fn get_rule(
 ///
 /// Retrieve a single search rule by its unique identifier, as it will be after all pending tasks have been processed.
 ///
-/// This route requires the `dynamicSearchRules` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `dynamicSearchRules` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
     params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
@@ -458,7 +458,7 @@ async fn get_target_rule(
 ///
 /// Partially update a search rule by replacing the provided fields. If the rule doesn't exist, it will be created.
 ///
-/// This route requires the `dynamicSearchRules` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `dynamicSearchRules` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.update", "dynamicSearchRules.*", "*"])),
     request_body = DynamicSearchRuleUpdateRequest,
@@ -582,7 +582,7 @@ fn check_rule(rule: &DynamicSearchRuleUpdateRequest) -> Result<(), ResponseError
 ///
 /// Delete a search rule by its unique identifier.
 ///
-/// This route requires the `dynamicSearchRules` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `dynamicSearchRules` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.delete", "dynamicSearchRules.*", "*.delete", "*"])),
     params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
@@ -645,7 +645,7 @@ async fn delete_rule(
 ///
 /// This will delete **all** the currently defined search rules.
 ///
-/// This route requires the `dynamicSearchRules` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `dynamicSearchRules` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.delete", "dynamicSearchRules.*", "*.delete", "*"])),
     responses(

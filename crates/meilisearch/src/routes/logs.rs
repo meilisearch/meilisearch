@@ -286,7 +286,7 @@ fn entry_stream(
 ///
 /// Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
 ///
-/// This route requires the `logsRoute` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `logsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     request_body = GetLogs,
@@ -358,7 +358,7 @@ pub async fn get_logs(
 ///
 /// Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
 ///
-/// This route requires the `logsRoute` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `logsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
@@ -406,7 +406,7 @@ pub struct UpdateStderrLogs {
 ///
 /// Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
 ///
-/// This route requires the `logsRoute` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `logsRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     request_body = UpdateStderrLogs,
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),

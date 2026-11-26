@@ -27,7 +27,7 @@ pub struct MetricApi;
 
 /// Get Prometheus metrics
 ///
-/// Return metrics for the engine in Prometheus format. This route requires the `metrics` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// Return metrics for the engine in Prometheus format. This route requires the `metrics` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(

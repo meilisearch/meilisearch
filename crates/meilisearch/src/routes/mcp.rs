@@ -50,7 +50,7 @@ pub struct McpApi;
 /// The `/mcp` route exposes an [MCP server](https://www.meilisearch.com/docs/getting_started/integrations/mcp) for
 /// LLM applications to search Meilisearch.
 ///
-/// This route requires the `mcpRoute` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `mcpRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(),
     request_body = McpQuery,

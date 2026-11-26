@@ -69,7 +69,7 @@ pub struct FacetSearchQuery {
     pub vector: Option<Vec<f32>>,
     /// Multimodal content for AI-powered search
     ///
-    /// Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<Value>,
     /// Hybrid search configuration that combines keyword search with semantic
@@ -80,7 +80,7 @@ pub struct FacetSearchQuery {
     pub hybrid: Option<HybridQuery>,
     /// Filter expression to restrict which documents are considered when computing facet values. Attributes must be in `filterableAttributes` before they can be used in filters.
     ///
-    /// Some filters require an [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features): `CONTAINS` requires `containsFilter`, filters on a foreign index require `foreignKeys`, `_shard` requires `network`, and `_vectors` requires `multimodal`.
+    /// Some filters require an experimental feature: `CONTAINS` requires `containsFilter`, filters on a foreign index require `foreignKeys`, `_shard` requires `network`, and `_vectors` requires `multimodal`. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     #[request(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Strategy used to match query terms
@@ -109,7 +109,7 @@ pub struct FacetSearchQuery {
     /// - If the instance has sharding enabled (has a leader), defaults to `true`.
     /// - Otherwise defaults to `false`.
     ///
-    /// It also requires the `network` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+    /// It also requires the `network` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ///
     /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///

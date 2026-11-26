@@ -59,7 +59,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// Returns the template and the rendered result, allowing to preview how Meilisearch renders
 /// templates without indexing any document.
 ///
-/// This route requires the `renderRoute` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
+/// This route requires the `renderRoute` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
 #[routes::path(
     security(("Bearer" = ["settings.get,documents.get", "*.get", "*"])),
     request_body = RenderQuery,
@@ -1048,17 +1048,17 @@ pub enum RenderQueryTemplateKind {
     /// Fetches the template associated with the `chat.documentTemplate` setting of the specified index
     ///
     /// - Requires `indexUid` to be present and not `null`
-    /// - Requires the `chatCompletions` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features)
+    /// - Requires the `chatCompletions` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     ChatDocumentTemplate,
     /// Fetches the fragment associated with the `embedders.embedder.indexingFragments.fragment` setting of the specified index
     ///
     /// - Requires `indexUid`, `embedder`, `fragment` to be present and not `null`
-    /// - Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features)
+    /// - Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     IndexingFragment,
     /// Fetches the fragment associated with the `embedders.embedder.searchFragments.fragment` setting of the specified index
     ///
     /// - Requires `indexUid`, `embedder`, `fragment` to be present and not `null`
-    /// - Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features)
+    /// - Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     SearchFragment,
     /// Uses the document template provided inline.
     ///
@@ -1067,7 +1067,7 @@ pub enum RenderQueryTemplateKind {
     /// Uses the fragment provided inline.
     ///
     /// - Requires `inline` to be present and not `null`
-    /// - Requires the `multimodal` [experimental feature](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features)
+    /// - Requires the `multimodal` experimental feature. See [how to enable experimental features](https://www.meilisearch.com/docs/capabilities/platform/management/experimental_features).
     InlineFragment,
 }
 
